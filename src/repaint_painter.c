@@ -233,8 +233,8 @@ void GenSolidityP(Image* img, float sol, float sol2op, int16_t noisex, int16_t n
 }
 
 static Image GenBMask_CPU(d_Brush* brush, float fx, float fy) {
-    int wd = (int)ceilf(brush->Realb.rad_out * 2.0f) + 2;
-    if (wd < 4) wd = 4;
+    int wd = (int)ceilf(brush->Realb.rad_out * 2.0f);
+    if (wd < 2) wd = 2;
 
     Image img = GenImageColor(wd, wd, (Color){0, 0, 0, 0});
     float cx = (float)wd / 2.0f;
@@ -269,7 +269,7 @@ static Image GenBMask_CPU(d_Brush* brush, float fx, float fy) {
                 alpha = (t * t * t - t) * crv + t;
             }
             alpha = CLAMP(alpha, 0.0f, 1.0f);
-            px[x] = (Color){col.r, col.g, col.b, FROUND(alpha)};
+            px[x] = (Color){255, 255, 255, FROUND(alpha)};
         }
     }
 

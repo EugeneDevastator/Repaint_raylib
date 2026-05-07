@@ -195,6 +195,7 @@ typedef struct {
     bool leftMouseDown, rightMouseDown;
     Vector2 lastMousePos;
     Texture2D* layerTextures;
+    RenderTexture2D* layerRTs;
     bool* texDirty;
     int texCount;
 } AppState;
@@ -301,5 +302,10 @@ void App_Draw(AppState* state);
 void App_Close(AppState* state);
 void UpdateUI(AppState* state);
 void HandleCanvasInput(AppState* state);
+void EnsureRTs(AppState* state);
+void SyncRTFromImage(AppState* state, int layer);
+void SyncImageFromRT(AppState* state, int layer);
+void SyncAllImages(AppState* state);
+void SyncAllRTs(AppState* state);
 
 #endif

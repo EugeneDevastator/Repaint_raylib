@@ -36,11 +36,11 @@ static void DrawLayerEntry(AppState* state, int idx, int x, int y) {
         DrawRectangleLinesEx(thumbRect, 1, (Color){80, 80, 90, 255});
     }
 
-    if (idx < state->texCount && state->layerTextures[idx].id > 0) {
+    if (idx < state->texCount && state->layerRTs && state->layerRTs[idx].id > 0) {
         float scale = fminf(44.0f / state->canvas.width, 44.0f / state->canvas.height);
-        Rectangle src = {0, 0, (float)state->canvas.width, (float)state->canvas.height};
+        Rectangle src = {0, 0, (float)state->canvas.width, (float)-state->canvas.height};
         Rectangle dst = {(float)x + 36, (float)y + 4, state->canvas.width * scale, state->canvas.height * scale};
-        DrawTexturePro(state->layerTextures[idx], src, dst, (Vector2){0, 0}, 0, WHITE);
+        DrawTexturePro(state->layerRTs[idx].texture, src, dst, (Vector2){0, 0}, 0, WHITE);
     }
 
     char lname[32];
@@ -59,8 +59,7 @@ void LayerPanel_HandleInput(AppState* state, Vector2 mousePos) {
     Rectangle delRect = {(float)rpx + 100, 40, 80, 36};
     if (CheckCollisionPointRec(mousePos, addRect) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         Canvas_InsertLayer(&state->canvas, state->activeLayer + 1);
-        for (int i = 0; i < state->canvas.layerCount; i++)
-            state->texDirty[i] = true;
+        SyncAllRTs(state);
     }
     if (CheckCollisionPointRec(mousePos, delRect) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         if (state->canvas.layerCount > 1) {
@@ -126,9 +125,9 @@ void LayerPanel_HandleInput(AppState* state, Vector2 mousePos) {
                     } else if (dragFromIdx > to && prevActive >= to && prevActive < dragFromIdx) {
                         state->activeLayer = prevActive + 1;
                     }
-                    Canvas_MoveLayer(&state->canvas, dragFromIdx, to);
-                    for (int i = 0; i < state->canvas.layerCount; i++)
-                        state->texDirty[i] = true;
+                    int f = dragFromIdx;
+                    Canvas_MoveLayer(&state->canvas, f, to);
+                    SyncAllRTs(state);
                 }
             }
             dragFromIdx = -1;
