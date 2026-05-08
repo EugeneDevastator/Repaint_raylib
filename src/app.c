@@ -15,26 +15,27 @@ bool wasMouseDown = false;
 Vector2 lastDabPos = {0, 0};
 
 static bool debugShowStamps = false;
+static RenderTexture2D stampPrev = {0};
+static bool stampPrevInited = false;
 
 void EnsureRTs(AppState* state) {
     int newCount = state->canvas.layerCount;
-    if (state->texCount != newCount) {
-        int old = state->texCount;
-        state->layerRTs = realloc(state->layerRTs, newCount * sizeof(RenderTexture2D));
-        state->layerTextures = realloc(state->layerTextures, newCount * sizeof(Texture2D));
-        state->texDirty = realloc(state->texDirty, newCount * sizeof(bool));
-        if (newCount > old) {
-            memset(&state->layerRTs[old], 0, (newCount - old) * sizeof(RenderTexture2D));
-            memset(&state->layerTextures[old], 0, (newCount - old) * sizeof(Texture2D));
+    if (state->texCount == newCount) return;
+    int old = state->texCount;
+    state->layerRTs = realloc(state->layerRTs, newCount * sizeof(RenderTexture2D));
+    state->layerTextures = realloc(state->layerTextures, newCount * sizeof(Texture2D));
+    state->texDirty = realloc(state->texDirty, newCount * sizeof(bool));
+    if (newCount > old) {
+        memset(&state->layerRTs[old], 0, (newCount - old) * sizeof(RenderTexture2D));
+        memset(&state->layerTextures[old], 0, (newCount - old) * sizeof(Texture2D));
+        for (int i = old; i < newCount; i++) {
+            state->layerRTs[i] = LoadRenderTexture(state->canvas.width, state->canvas.height);
+            BeginTextureMode(state->layerRTs[i]);
+            ClearBackground(BLANK);
+            EndTextureMode();
         }
-        state->texCount = newCount;
     }
-}
-
-void SyncAllRTs(AppState* state) {
-    EnsureRTs(state);
-    for (int i = 0; i < state->texCount; i++)
-        SyncRTFromImage(state, i);
+    state->texCount = newCount;
 }
 
 void SyncRTFromImage(AppState* state, int layer) {
@@ -45,10 +46,14 @@ void SyncRTFromImage(AppState* state, int layer) {
     }
     Texture2D tmp = LoadTextureFromImage(*img);
     BeginTextureMode(state->layerRTs[layer]);
+    rlSetBlendMode(RL_BLEND_CUSTOM);
+    rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
     DrawTexture(tmp, 0, 0, WHITE);
+    rlSetBlendMode(RL_BLEND_ALPHA);   // restore INSIDE the texture mode
     EndTextureMode();
     UnloadTexture(tmp);
 }
+
 
 void SyncImageFromRT(AppState* state, int layer) {
     if (layer < 0 || layer >= state->texCount) return;
@@ -65,25 +70,18 @@ void SyncAllImages(AppState* state) {
         SyncImageFromRT(state, i);
 }
 
-static void DrawStamp(Texture2D stampTex, Vector2 pos, d_Brush* brush) {
-    float sw = (float)stampTex.width;
-    float sh = (float)stampTex.height;
-    float op = brush->Realb.opacity;
-    Color bcol = brush->Realb.col;
-    Color tint = {bcol.r, bcol.g, bcol.b, (unsigned char)(op * 255.0f)};
-    Rectangle dst = {pos.x - sw/2.0f, pos.y - sh/2.0f, sw, sh};
-    DrawTexturePro(stampTex, (Rectangle){0, 0, sw, sh}, dst, (Vector2){0, 0}, 0, tint);
+void SyncAllRTs(AppState* state) {
+    EnsureRTs(state);
+    for (int i = 0; i < state->texCount; i++)
+        SyncRTFromImage(state, i);
 }
 
-static void BeginStampBlend(void) {
-    rlSetBlendMode(RL_BLEND_CUSTOM_SEPARATE);
-    rlSetBlendFactorsSeparate(RL_SRC_ALPHA, RL_ONE_MINUS_SRC_ALPHA,
-                              RL_ONE, RL_ONE_MINUS_SRC_ALPHA,
-                              RL_FUNC_ADD, RL_FUNC_ADD);
-}
-
-static void EndStampBlend(void) {
-    rlSetBlendMode(RL_BLEND_ALPHA);
+static void SyncLayerTexture(AppState* state, int layer) {
+    if (layer < 0 || layer >= state->texCount) return;
+    if (state->layerRTs[layer].id == 0) return;
+    SyncImageFromRT(state, layer);
+    if (state->layerTextures[layer].id > 0) UnloadTexture(state->layerTextures[layer]);
+    state->layerTextures[layer] = LoadTextureFromImage(state->canvas.layerImages[layer]);
 }
 
 static void FinalizeStroke(AppState* state) {
@@ -98,18 +96,11 @@ static void FinalizeStroke(AppState* state) {
             state->canvas.width, state->canvas.height);
     }
 
-    Image stampImg = Painter_GenBMask(brush, 0, 0);
-    Texture2D stampTex = LoadTextureFromImage(stampImg);
-    UnloadImage(stampImg);
-    SetTextureFilter(stampTex, TEXTURE_FILTER_POINT);
-
-    BeginTextureMode(state->layerRTs[active]);
-    BeginStampBlend();
-
     float spacing = fmaxf(brush->Realb.rad_out * 0.15f, 1.0f);
 
     if (strokeLen == 1) {
-        DrawStamp(stampTex, strokePts[0], brush);
+        BrushBlend_ApplyStamp(state->layerRTs[active], brush,
+            strokePts[0].x, strokePts[0].y);
     } else {
         for (int i = 1; i < strokeLen; i++) {
             Vector2 from = strokePts[i-1];
@@ -120,15 +111,13 @@ static void FinalizeStroke(AppState* state) {
             for (int s = 0; s < segSteps; s++) {
                 float t = (float)s / (float)segSteps;
                 Vector2 pos = {from.x + (to.x - from.x) * t, from.y + (to.y - from.y) * t};
-                DrawStamp(stampTex, pos, brush);
+                BrushBlend_ApplyStamp(state->layerRTs[active], brush,
+                    pos.x, pos.y);
             }
         }
-        DrawStamp(stampTex, strokePts[strokeLen-1], brush);
+        BrushBlend_ApplyStamp(state->layerRTs[active], brush,
+            strokePts[strokeLen-1].x, strokePts[strokeLen-1].y);
     }
-
-    EndStampBlend();
-    EndTextureMode();
-    UnloadTexture(stampTex);
 }
 
 void UpdateUI(AppState* state) {
@@ -189,20 +178,13 @@ void HandleCanvasInput(AppState* state) {
             return;
     }
 
-    Vector2 canvasPos = {
-        (mousePos.x - UI_PANEL_WIDTH - state->scrollPos.x) / state->zoomK,
-        (mousePos.y - state->scrollPos.y) / state->zoomK
-    };
+    Vector2 canvasPos = GetScreenToWorld2D(mousePos, state->camera);
 
     bool leftDown = IsMouseButtonDown(MOUSE_LEFT_BUTTON);
 
-    static Texture2D liveStamp = {0};
-    static bool liveStampReady = false;
-    static Vector2 liveLast = {0, 0};
-
     int active = state->activeLayer;
 
-    if (state->mode == eBrush && inCanvas && leftDown) {
+    if (inCanvas && leftDown && (state->mode == eBrush || state->mode == eSmudge || state->mode == eDisp || state->mode == eCont)) {
         if (active >= 0 && active < state->texCount) {
             EnsureRTs(state);
             if (state->layerRTs[active].id == 0) {
@@ -210,104 +192,107 @@ void HandleCanvasInput(AppState* state) {
                     state->canvas.width, state->canvas.height);
             }
 
-            if (strokeLen == 0) {
-                strokePts[0] = canvasPos;
-                strokeLen = 1;
-
-                if (liveStampReady) { UnloadTexture(liveStamp); liveStampReady = false; }
-                Image stampImg = Painter_GenBMask(&state->currentBrush, 0, 0);
-                liveStamp = LoadTextureFromImage(stampImg);
-                liveStampReady = true;
-                UnloadImage(stampImg);
-                SetTextureFilter(liveStamp, TEXTURE_FILTER_POINT);
-                liveLast = canvasPos;
-
-                BeginTextureMode(state->layerRTs[active]);
-                BeginStampBlend();
-                DrawStamp(liveStamp, canvasPos, &state->currentBrush);
-                EndStampBlend();
-                EndTextureMode();
-            } else {
-                float minDist = fmaxf(state->currentBrush.Realb.rad_out * 0.15f, 1.0f);
-                if (Dist2D(strokePts[strokeLen - 1], canvasPos) >= minDist) {
-                    if (strokeLen < MAX_STROKE_PTS)
-                        strokePts[strokeLen++] = canvasPos;
-                }
-
-                if (liveStampReady && Dist2D(liveLast, canvasPos) >= minDist) {
-                    BeginTextureMode(state->layerRTs[active]);
-                    BeginStampBlend();
-                    float spacing = fmaxf(state->currentBrush.Realb.rad_out * 0.15f, 1.0f);
-                    float segLen = Dist2D(liveLast, canvasPos);
-                    int steps = (int)(segLen / spacing) + 1;
-                    for (int s = 0; s < steps; s++) {
-                        float t = (float)s / (float)steps;
-                        Vector2 pos = {
-                            liveLast.x + (canvasPos.x - liveLast.x) * t,
-                            liveLast.y + (canvasPos.y - liveLast.y) * t
-                        };
-                        DrawStamp(liveStamp, pos, &state->currentBrush);
+            if (state->mode == eBrush) {
+                if (strokeLen == 0) {
+                    strokePts[0] = canvasPos;
+                    strokeLen = 1;
+                } else {
+                    float minDist = fmaxf(state->currentBrush.Realb.rad_out * 0.15f, 1.0f);
+                    if (Dist2D(strokePts[strokeLen - 1], canvasPos) >= minDist) {
+                        if (strokeLen < MAX_STROKE_PTS)
+                            strokePts[strokeLen++] = canvasPos;
                     }
-                    EndStampBlend();
-                    EndTextureMode();
-                    liveLast = canvasPos;
+
+                    if (strokeLen >= 2) {
+                        float spacing = fmaxf(state->currentBrush.Realb.rad_out * 0.15f, 1.0f);
+                        float segLen = Dist2D(strokePts[strokeLen - 2], strokePts[strokeLen - 1]);
+                        int steps = (int)(segLen / spacing) + 1;
+                        if (steps < 1) steps = 1;
+                        for (int s = 0; s < steps; s++) {
+                            float t = (float)s / (float)steps;
+                            Vector2 pos = {
+                                strokePts[strokeLen - 2].x + (strokePts[strokeLen - 1].x - strokePts[strokeLen - 2].x) * t,
+                                strokePts[strokeLen - 2].y + (strokePts[strokeLen - 1].y - strokePts[strokeLen - 2].y) * t
+                            };
+                            BrushBlend_ApplyStamp(state->layerRTs[active], &state->currentBrush,
+                                pos.x, pos.y);
+                        }
+                    }
+                }
+            } else {
+                float spacing = state->currentBrush.Realb.rad_out * 0.2f;
+                if (spacing < 2.0f) spacing = 2.0f;
+                if (!wasMouseDown) {
+                    BrushBlend_ApplyStamp(state->layerRTs[active], &state->currentBrush,
+                        canvasPos.x, canvasPos.y);
+                    lastDabPos = canvasPos;
+                    wasMouseDown = true;
+                } else {
+                    if (Dist2D(lastDabPos, canvasPos) >= spacing) {
+                        BrushBlend_ApplyStamp(state->layerRTs[active], &state->currentBrush,
+                            canvasPos.x, canvasPos.y);
+                        lastDabPos = canvasPos;
+                    }
                 }
             }
         }
-    } else if (strokeLen > 0) {
-        if (liveStampReady) { UnloadTexture(liveStamp); liveStampReady = false; liveStamp.id = 0; }
-        SyncImageFromRT(state, active);
-        strokeLen = 0;
+        layersDirty = true;
+    } else {
+        if (strokeLen > 0) {
+            SyncLayerTexture(state, active);
+            strokeLen = 0;
+        }
+        if (wasMouseDown)
+            SyncLayerTexture(state, active);
+        layersDirty = true;
+        wasMouseDown = false;
     }
 
     if (!leftDown) {
         strokeLen = 0;
-        if (liveStampReady) { UnloadTexture(liveStamp); liveStampReady = false; liveStamp.id = 0; }
     }
 
-    if (state->mode != eBrush && inCanvas && leftDown &&
-        active >= 0 && active < state->canvas.layerCount) {
-        Image* layer = &state->canvas.layerImages[active];
-        float spacing = state->currentBrush.Realb.rad_out * 0.2f;
-        if (spacing < 2.0f) spacing = 2.0f;
-        bool didPaint = false;
-
-        if (state->mode == eLine) {
-            if (!wasMouseDown) {
-                lastDabPos = canvasPos;
-                wasMouseDown = true;
-            }
+    if (state->mode == eLine && inCanvas && leftDown && active >= 0 && active < state->texCount) {
+        EnsureRTs(state);
+        if (state->layerRTs[active].id == 0) {
+            state->layerRTs[active] = LoadRenderTexture(
+                state->canvas.width, state->canvas.height);
+        }
+        if (!wasMouseDown) {
+            lastDabPos = canvasPos;
+            wasMouseDown = true;
+        } else {
+            float spacing = state->currentBrush.Realb.rad_out * 0.2f;
+            if (spacing < 2.0f) spacing = 2.0f;
             if (Dist2D(lastDabPos, canvasPos) > spacing) {
-                Painter_DrawLine(layer, lastDabPos, canvasPos, &state->currentBrush);
-                lastDabPos = canvasPos;
-                didPaint = true;
-            }
-        } else if (state->mode == eSmudge || state->mode == eDisp || state->mode == eCont) {
-            if (!wasMouseDown) {
-                Painter_DrawDab(layer, canvasPos, &state->currentBrush, state->mode);
-                lastDabPos = canvasPos;
-                wasMouseDown = true;
-                didPaint = true;
-            } else {
-                if (Dist2D(lastDabPos, canvasPos) >= spacing) {
-                    Painter_DrawLine(layer, lastDabPos, canvasPos, &state->currentBrush);
-                    lastDabPos = canvasPos;
-                    didPaint = true;
+                float segLen = Dist2D(lastDabPos, canvasPos);
+                int steps = (int)(segLen / spacing) + 1;
+                if (steps < 1) steps = 1;
+                for (int s = 0; s <= steps; s++) {
+                    float t = (float)s / (float)steps;
+                    Vector2 pos = {
+                        lastDabPos.x + (canvasPos.x - lastDabPos.x) * t,
+                        lastDabPos.y + (canvasPos.y - lastDabPos.y) * t
+                    };
+                    BrushBlend_ApplyStamp(state->layerRTs[active], &state->currentBrush,
+                        pos.x, pos.y);
                 }
+                lastDabPos = canvasPos;
             }
         }
-        if (didPaint) {
-            SyncRTFromImage(state, active);
-        }
-    } else {
+    } else if (state->mode != eLine && !leftDown) {
+        if (wasMouseDown)
+            SyncLayerTexture(state, active);
+        layersDirty = true;
         wasMouseDown = false;
     }
 
     if (IsMouseButtonDown(MOUSE_RIGHT_BUTTON)) {
         if (state->rightMouseDown) {
             Vector2 delta = {mousePos.x - state->lastMousePos.x, mousePos.y - state->lastMousePos.y};
-            state->scrollPos.x += delta.x;
-            state->scrollPos.y += delta.y;
+            state->camera.target.x -= delta.x / state->camera.zoom;
+            state->camera.target.y -= delta.y / state->camera.zoom;
+            layersDirty = true;
         }
         state->rightMouseDown = true;
     } else {
@@ -316,8 +301,9 @@ void HandleCanvasInput(AppState* state) {
 
     float wheel = GetMouseWheelMove();
     if (wheel != 0) {
-        state->zoomK += wheel * 0.1f;
-        state->zoomK = fmaxf(0.1f, fminf(5.0f, state->zoomK));
+        state->camera.zoom += wheel * 0.1f;
+        state->camera.zoom = fmaxf(0.1f, fminf(5.0f, state->camera.zoom));
+        layersDirty = true;
     }
 
     state->lastMousePos = mousePos;
@@ -328,6 +314,7 @@ void App_Init(AppState* state) {
     SetTargetFPS(60);
 
     Painter_Init();
+    BrushBlend_Init();
     LoadPenIcons();
 
     BParam_Init(&bpOpacity, 0, "Opacity", 0.0f, 1.0f, 1.0f);
@@ -390,8 +377,12 @@ void App_Init(AppState* state) {
 
     state->canvas = Canvas_Create(800, 600, WHITE);
     state->activeLayer = 0;
-    state->scrollPos = (Vector2){0, 0};
-    state->zoomK = 1.0f;
+    state->camera = (Camera2D){
+        .target = (Vector2){0, 0},
+        .offset = (Vector2){UI_PANEL_WIDTH, 0},
+        .rotation = 0.0f,
+        .zoom = 1.0f
+    };
     state->mode = eBrush;
     state->leftMouseDown = false;
     state->rightMouseDown = false;
@@ -427,8 +418,17 @@ void App_Init(AppState* state) {
     state->texCount = 0;
 
     EnsureRTs(state);
-    for (int i = 0; i < state->texCount; i++)
+    for (int i = 0; i < state->texCount; i++) {
         SyncRTFromImage(state, i);
+        state->layerTextures[i] = LoadTextureFromImage(state->canvas.layerImages[i]);
+    }
+
+    // Init stamp preview render texture
+    if (!stampPrevInited) {
+        stampPrev = LoadRenderTexture(100, 100);
+        stampPrevInited = true;
+    }
+
 }
 
 void App_Draw(AppState* state) {
@@ -444,46 +444,21 @@ void App_Draw(AppState* state) {
     };
     DrawRectangleRec(canvasArea, (Color){55, 55, 55, 255});
 
-    if (state->canvas.layerCount > 0) {
-        int canvasX = UI_PANEL_WIDTH + (int)state->scrollPos.x;
-        int canvasY = (int)state->scrollPos.y;
-        float cw = state->canvas.width * state->zoomK;
-        float ch = state->canvas.height * state->zoomK;
+    DrawViewport(state, canvasArea, state->camera);
 
-        DrawRectangle(canvasX, canvasY, (int)cw, (int)ch, state->canvas.backgroundColor);
-
-        for (int i = 0; i < state->canvas.layerCount; i++) {
-            if (!state->canvas.layerProps[i].visible) continue;
-            float alpha = state->canvas.layerProps[i].op;
-            Color tint = {255, 255, 255, (unsigned char)(alpha * 255.0f)};
-            Rectangle src = {0, 0, (float)state->canvas.width, (float)-state->canvas.height};
-            Rectangle dst = {(float)canvasX, (float)canvasY, cw, ch};
-            if (state->texCount > i && state->layerRTs && state->layerRTs[i].id > 0)
-                DrawTexturePro(state->layerRTs[i].texture, src, dst, (Vector2){0, 0}, 0.0f, tint);
-        }
-    }
+    BeginMode2D(state->camera);
 
     if (debugShowStamps && strokeLen > 0) {
         float rad = state->currentBrush.Realb.rad_out;
-        int cx = UI_PANEL_WIDTH + (int)state->scrollPos.x;
-        int cy = (int)state->scrollPos.y;
-        float zk = state->zoomK;
-        int minX = 9999, minY = 9999, maxX = -9999, maxY = -9999;
         for (int i = 0; i < strokeLen; i++) {
-            int sx = cx + (int)(strokePts[i].x * zk);
-            int sy = cy + (int)(strokePts[i].y * zk);
-            int r = (int)(rad * zk);
-            DrawCircleLines(sx, sy, r, YELLOW);
-            DrawRectangleLines(sx - r, sy - r, r * 2, r * 2, (Color){255, 255, 0, 80});
-            DrawCircle(sx, sy, 2, RED);
-            if (sx - r < minX) minX = sx - r;
-            if (sy - r < minY) minY = sy - r;
-            if (sx + r > maxX) maxX = sx + r;
-            if (sy + r > maxY) maxY = sy + r;
+            DrawCircleLines(strokePts[i].x, strokePts[i].y, rad, YELLOW);
+            DrawRectangleLines(strokePts[i].x - rad, strokePts[i].y - rad, rad * 2, rad * 2, (Color){255, 255, 0, 80});
+            DrawCircle(strokePts[i].x, strokePts[i].y, 2, RED);
         }
-        DrawRectangleLines(minX, minY, maxX - minX, maxY - minY, (Color){255, 0, 255, 120});
-        DrawText("DEBUG: stamp positions (F1 toggle)", UI_PANEL_WIDTH + 10, 10, 14, YELLOW);
+        DrawText("DEBUG: stamp positions (F1 toggle)", 10, 10, 14, YELLOW);
     }
+
+    EndMode2D();
 
     Gizmo_Draw(state);
 
@@ -499,6 +474,36 @@ void App_Draw(AppState* state) {
     UIButton_Draw(&btnEraser);
 
     DrawText("Settings", 10, 280, 20, LIGHTGRAY);
+
+    // Update stamp preview
+    if (stampPrevInited && stampPrev.id > 0) {
+        BeginTextureMode(stampPrev);
+        ClearBackground(BLANK);
+        EndTextureMode();
+
+        d_Brush pb = state->currentBrush;
+        Color pc = pb.Realb.col;
+        pb.Realb.col = WHITE;
+        pb.Realb.opacity = 1.0f;
+        float prevRadOut = pb.Realb.rad_out;
+        if (prevRadOut > 45.0f) {
+            pb.Realb.rad_out = 45.0f;
+            pb.Realb.rad_in = pb.Realb.rad_in * (45.0f / fmaxf(prevRadOut, 1.0f));
+        }
+        BrushBlend_ApplyStamp(stampPrev, &pb, 50, 50);
+        pb.Realb.rad_out = prevRadOut;
+        pb.Realb.col = pc;
+
+        int prevX = 50;
+        int prevY = 305;
+        int prevSize = 100;
+        DrawRectangle(prevX - 2, prevY - 2, prevSize + 4, prevSize + 4, (Color){40, 40, 45, 255});
+        DrawRectangleLines(prevX - 2, prevY - 2, prevSize + 4, prevSize + 4, (Color){80, 80, 90, 255});
+        Rectangle src = {0, 0, 100, -100};
+        Rectangle dst = {(float)prevX, (float)prevY, (float)prevSize, (float)prevSize};
+        DrawTexturePro(stampPrev.texture, src, dst, (Vector2){0, 0}, 0, WHITE);
+    }
+
     BParam_Draw(&bpOpacity);
     BParam_Draw(&bpSize);
     BParam_Draw(&bpHardness);
@@ -506,7 +511,7 @@ void App_Draw(AppState* state) {
     LayerPanel_Draw(state);
 
     char zoomInfo[32];
-    sprintf(zoomInfo, "Zoom: %.0f%%", state->zoomK * 100.0f);
+    sprintf(zoomInfo, "Zoom: %.0f%%", state->camera.zoom * 100.0f);
     DrawText(zoomInfo, 10, SCREEN_HEIGHT - 40, 16, WHITE);
 
     const char* modeNames[] = {"None", "Brush", "Smudge", "Disp", "Cont", "Line"};
@@ -525,10 +530,16 @@ void App_Close(AppState* state) {
     free(state->layerTextures);
     free(state->layerRTs);
     free(state->texDirty);
+    if (stampPrevInited && stampPrev.id > 0) {
+        UnloadRenderTexture(stampPrev);
+        stampPrevInited = false;
+    }
+    UnloadViewportRenderer();
     if (bpOpacity.iconLoaded) UnloadTexture(bpOpacity.iconTex);
     if (bpSize.iconLoaded) UnloadTexture(bpSize.iconTex);
     if (bpHardness.iconLoaded) UnloadTexture(bpHardness.iconTex);
     UnloadPenIcons();
     Painter_Shutdown();
+    BrushBlend_Shutdown();
     CloseWindow();
 }

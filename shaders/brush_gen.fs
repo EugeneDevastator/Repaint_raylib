@@ -1,53 +1,96 @@
 #version 330
 
-// Brush generation shader - replaces scanline methods from ArtMaster.cpp
 in vec2 fragTexCoord;
 out vec4 finalColor;
 
+uniform vec2 texSize;
 uniform vec2 center;
 uniform float rad_in;
 uniform float rad_out;
-uniform float crv; // curvature
-uniform vec4 brushColor;
+uniform float crv;
 uniform int pipeID;
+uniform float sol;
+uniform float sol2op;
+uniform float sigma;
 uniform float time;
 
-// Noise texture for solidity/noise effects
-uniform sampler2D noiseTex;
+float crPinchFunc(float val) { return val * val * val; }
+
+float crBubFunc(float val) {
+    return 1.0 + (val - 1.0) * (val - 1.0) * (val - 1.0);
+}
+
+float crContFunc(float val, float mid) {
+    if (val <= mid) {
+        float t = (mid > 0.001) ? val / mid : 0.0;
+        return t * t * t * mid;
+    } else {
+        float range = 1.0 - mid;
+        float t = (range > 0.001) ? (val - mid) / range : 0.0;
+        return mid + (1.0 + (t - 1.0) * (t - 1.0) * (t - 1.0)) * range;
+    }
+}
+
+float hash(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
 
 void main() {
-    vec2 uv = fragTexCoord;
+    vec2 uv = fragTexCoord * texSize;
     vec2 diff = uv - center;
     float dist = length(diff);
 
-    // Create radial gradient brush shape
-    float t = clamp(dist / rad_out, 0.0, 1.0);
+    if (dist >= rad_out) {
+        finalColor = vec4(1.0, 1.0, 1.0, 0.0);
+        return;
+    }
 
-    // Inner radius cutoff
+    float t = dist / rad_out;
     float innerT = rad_in / rad_out;
-    float shape = 1.0 - smoothstep(innerT - 0.01, innerT + 0.01, t);
 
-    // Apply curvature (crv) - similar to GenCurveF
-    float curveFactor = t;
+    float alpha = 1.0;
+    if (t > innerT && rad_out > rad_in) {
+        alpha = 1.0 - (t - innerT) / (1.0 - innerT);
+    }
+    alpha = clamp(alpha, 0.0, 1.0);
+
     if (crv < 0.0) {
-        float mid = 1.0 - crv;
-        float fpos = 1.0 + pow(t - 1.0, 3.0);
-        curveFactor = mix(t, fpos, abs(crv));
+        float cube = (t - 1.0) * (t - 1.0) * (t - 1.0);
+        float fpos = 1.0 + cube;
+        alpha = (fpos - t) * (-crv) + t;
+        alpha = clamp(alpha, 0.0, 1.0);
     } else if (crv > 0.0) {
-        curveFactor = mix(t, t * t * t, crv);
+        alpha = (t * t * t - t) * crv + t;
+        alpha = clamp(alpha, 0.0, 1.0);
     }
 
-    // Final alpha based on brush shape and curve
-    float alpha = shape * (1.0 - curveFactor);
+    if (pipeID == 0) {
+        float top = 1.0 - innerT;
+        if (top < 0.001) top = 0.001;
+        float mid = innerT;
+        alpha = crContFunc(clamp(alpha / top, 0.0, 1.0), mid);
+        alpha = clamp(alpha, 0.0, 1.0);
 
-    // Apply noise/solidity if pipeID indicates it
-    if (pipeID == 0) { // plCFNSR
-        vec2 noiseCoord = uv * 2.0 + vec2(time * 0.1);
-        float noise = texture(noiseTex, noiseCoord).r;
-        // Simple solidity - threshold based on noise
-        float solidity = 0.5; // configurable
-        alpha *= step(1.0 - solidity, noise);
+        float fop = crv;
+        if (fop <= 0.0) {
+            float bpn = crBubFunc(alpha);
+            alpha = (bpn - alpha) * abs(fop) + alpha;
+        } else {
+            float bpn = crPinchFunc(alpha);
+            alpha = (bpn - alpha) * fop + alpha;
+        }
+        alpha = clamp(alpha, 0.0, 1.0);
+
+        if (!(sol >= 0.999 && sol2op <= 0.001)) {
+            float noiseVal = hash(uv + floor(time * 100.0));
+            float fsol2op = clamp(1.0 - sol2op, 0.0, 1.0);
+            float nsal = (noiseVal < sol) ? 1.0 : 0.0;
+            float noiseres = (noiseVal < alpha) ? 1.0 : 0.0;
+            nsal = noiseres * fsol2op + nsal * (1.0 - fsol2op);
+            alpha *= nsal;
+        }
     }
 
-    finalColor = vec4(brushColor.rgb, brushColor.a * alpha);
+    alpha = clamp(alpha, 0.0, 1.0);
+    finalColor = vec4(1.0, 1.0, 1.0, alpha);
 }

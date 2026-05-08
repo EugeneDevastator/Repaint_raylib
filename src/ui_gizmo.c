@@ -27,7 +27,7 @@ void Gizmo_HandleInput(AppState* state, Vector2 mousePos) {
     }
 
     if (gizmoMouseMode > 0 && IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
-        float rad = dist / state->zoomK;
+        float rad = dist / state->camera.zoom;
         float absrad = dist;
         int curMode = 0;
         if (ang > d30 && ang < d30 * 5) curMode = 1;
@@ -81,8 +81,8 @@ void Gizmo_Draw(AppState* state) {
     int gcy = SCREEN_HEIGHT / 2;
     int gs = 200;
     int gizR = gs / 2;
-    float drawRadOut = state->currentBrush.Realb.rad_out * state->zoomK;
-    float drawRadIn = state->currentBrush.Realb.rad_in * state->zoomK;
+    float drawRadOut = state->currentBrush.Realb.rad_out * state->camera.zoom;
+    float drawRadIn = state->currentBrush.Realb.rad_in * state->camera.zoom;
     if (drawRadOut > gizR) drawRadOut = gizR;
     if (drawRadIn > drawRadOut) drawRadIn = drawRadOut;
 

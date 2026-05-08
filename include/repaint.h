@@ -189,8 +189,7 @@ typedef struct {
     Canvas canvas;
     d_Brush currentBrush;
     int activeLayer;
-    Vector2 scrollPos;
-    float zoomK;
+    Camera2D camera;
     int mode;
     bool leftMouseDown, rightMouseDown;
     Vector2 lastMousePos;
@@ -233,13 +232,13 @@ bool LAction_Deserialize(d_LAction* la, uint8_t* buf, size_t len);
 size_t LayerProps_Serialize(sLayerProps* lp, uint8_t* buf, size_t cap);
 bool LayerProps_Deserialize(sLayerProps* lp, uint8_t* buf, size_t len);
 
-Color BlendColors(Color dst, Color src, int blendMode);
-
 void Painter_Init(void);
 void Painter_Shutdown(void);
-Image Painter_GenBMask(d_Brush* brush, float fx, float fy);
-void Painter_DrawDab(Image* layer, Vector2 pos, d_Brush* brush, int toolID);
-void Painter_DrawLine(Image* layer, Vector2 from, Vector2 to, d_Brush* brush);
+
+void BrushBlend_Init(void);
+void BrushBlend_Shutdown(void);
+void BrushBlend_ApplyStamp(RenderTexture2D dstRT, d_Brush* brush,
+    float stampX, float stampY);
 
 void UIButton_Update(UIButton* btn, Vector2 mousePos, bool mousePressed);
 void UIButton_Draw(UIButton* btn);
@@ -296,6 +295,11 @@ void LayerPanel_Draw(AppState* state);
 
 void Gizmo_Draw(AppState* state);
 void Gizmo_HandleInput(AppState* state, Vector2 mousePos);
+
+extern bool layersDirty;
+
+void DrawViewport(AppState* state, Rectangle screenRect, Camera2D camera);
+void UnloadViewportRenderer(void);
 
 void App_Init(AppState* state);
 void App_Draw(AppState* state);

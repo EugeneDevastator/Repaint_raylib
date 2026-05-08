@@ -108,6 +108,9 @@ Canvas Canvas_Create(int width, int height, Color bgColor) {
     canvas.layerImages = NULL;
     canvas.layerProps = NULL;
     Canvas_AddLayer(&canvas);
+    // First layer is the canvas background — fill with white instead of transparent
+    UnloadImage(canvas.layerImages[0]);
+    canvas.layerImages[0] = GenImageColor(width, height, WHITE);
     return canvas;
 }
 

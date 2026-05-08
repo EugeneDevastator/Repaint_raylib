@@ -1,4 +1,5 @@
 #include "repaint.h"
+#include "rlgl.h"
 
 UISlider layerOpSlider;
 
@@ -36,11 +37,13 @@ static void DrawLayerEntry(AppState* state, int idx, int x, int y) {
         DrawRectangleLinesEx(thumbRect, 1, (Color){80, 80, 90, 255});
     }
 
-    if (idx < state->texCount && state->layerRTs && state->layerRTs[idx].id > 0) {
+    if (idx < state->texCount && state->layerTextures && state->layerTextures[idx].id > 0) {
+        rlSetBlendMode(RL_BLEND_ALPHA_PREMULTIPLY);
         float scale = fminf(44.0f / state->canvas.width, 44.0f / state->canvas.height);
-        Rectangle src = {0, 0, (float)state->canvas.width, (float)-state->canvas.height};
+        Rectangle src = {0, 0, (float)state->canvas.width, (float)state->canvas.height};
         Rectangle dst = {(float)x + 36, (float)y + 4, state->canvas.width * scale, state->canvas.height * scale};
-        DrawTexturePro(state->layerRTs[idx].texture, src, dst, (Vector2){0, 0}, 0, WHITE);
+        DrawTexturePro(state->layerTextures[idx], src, dst, (Vector2){0, 0}, 0, WHITE);
+        rlSetBlendMode(RL_BLEND_ALPHA);
     }
 
     char lname[32];
@@ -60,6 +63,7 @@ void LayerPanel_HandleInput(AppState* state, Vector2 mousePos) {
     if (CheckCollisionPointRec(mousePos, addRect) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         Canvas_InsertLayer(&state->canvas, state->activeLayer + 1);
         SyncAllRTs(state);
+        layersDirty = true;
     }
     if (CheckCollisionPointRec(mousePos, delRect) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         if (state->canvas.layerCount > 1) {
@@ -67,6 +71,7 @@ void LayerPanel_HandleInput(AppState* state, Vector2 mousePos) {
             Canvas_DeleteLayer(&state->canvas, del);
             if (state->activeLayer >= state->canvas.layerCount)
                 state->activeLayer = state->canvas.layerCount - 1;
+            layersDirty = true;
         }
     }
 
@@ -85,6 +90,7 @@ void LayerPanel_HandleInput(AppState* state, Vector2 mousePos) {
                     state->activeLayer = aIdx;
                 } else {
                     state->canvas.layerProps[aIdx].visible = !state->canvas.layerProps[aIdx].visible;
+                    layersDirty = true;
                 }
             }
         }
@@ -128,6 +134,7 @@ void LayerPanel_HandleInput(AppState* state, Vector2 mousePos) {
                     int f = dragFromIdx;
                     Canvas_MoveLayer(&state->canvas, f, to);
                     SyncAllRTs(state);
+                    layersDirty = true;
                 }
             }
             dragFromIdx = -1;
@@ -147,7 +154,10 @@ void LayerPanel_HandleInput(AppState* state, Vector2 mousePos) {
     }
 
     UISlider_HandleInput(&layerOpSlider, mousePos);
+    float prevOp = state->canvas.layerProps[state->activeLayer].op;
     state->canvas.layerProps[state->activeLayer].op = layerOpSlider.clipmaxF;
+    if (state->canvas.layerProps[state->activeLayer].op != prevOp)
+        layersDirty = true;
 
     if (gizmoShow) {
         int gcx = UI_PANEL_WIDTH + (RIGHT_PANEL_X - UI_PANEL_WIDTH) / 2;
