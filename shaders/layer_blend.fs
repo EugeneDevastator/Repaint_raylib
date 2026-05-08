@@ -17,7 +17,7 @@ void main() {
     vec3 srcRGB = src.rgb;
 	
     vec3 blended;
-    if (bmidx == 0 || true) { // Normal
+    if (bmidx == 0) { // Normal
         blended = srcRGB;
     } else if (bmidx == 1) { // Add
         blended = dst.rgb + srcRGB * srcA;

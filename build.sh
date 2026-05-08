@@ -31,6 +31,7 @@ SOURCES=(
     src/app.c
     src/brush_blend.c
     src/viewport_renderer.c
+    src/viewport.c
 )
 
 mkdir -p "$OBJ_DIR" "$BIN_DIR"

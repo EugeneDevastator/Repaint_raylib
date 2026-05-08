@@ -5,7 +5,7 @@ int main() {
     App_Init(&state);
     while (!WindowShouldClose()) {
         UpdateUI(&state);
-        HandleCanvasInput(&state);
+        Viewport_HandleInput(&viewport, &state);
         App_Draw(&state);
     }
     App_Close(&state);

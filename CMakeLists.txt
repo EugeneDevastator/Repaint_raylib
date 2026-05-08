@@ -39,6 +39,8 @@ set(SOURCES
     src/ui_layerpanel.c
     src/app.c
     src/brush_blend.c
+    src/viewport.c
+    src/viewport_renderer.c
 )
 
 add_executable(repaint ${SOURCES})

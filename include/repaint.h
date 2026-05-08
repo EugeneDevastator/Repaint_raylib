@@ -186,13 +186,23 @@ typedef struct {
 } BParam;
 
 typedef struct {
+    Rectangle bounds;
+    Vector2 strokePts[MAX_STROKE_PTS];
+    int strokeLen;
+    bool wasMouseDown;
+    Vector2 lastDabPos;
+    bool debugShowStamps;
+    bool rightMouseDown;
+    Vector2 lastMousePos;
+    bool inBounds;
+} Viewport;
+
+typedef struct {
     Canvas canvas;
     d_Brush currentBrush;
     int activeLayer;
     Camera2D camera;
     int mode;
-    bool leftMouseDown, rightMouseDown;
-    Vector2 lastMousePos;
     Texture2D* layerTextures;
     RenderTexture2D* layerRTs;
     bool* texDirty;
@@ -275,11 +285,7 @@ extern bool dragActive;
 extern Vector2 dragMouseDownPos;
 extern int dragDropTarget;
 
-extern Vector2 strokePts[MAX_STROKE_PTS];
-extern int strokeLen;
-extern bool wasMouseDown;
-extern Vector2 lastDabPos;
-
+extern Viewport viewport;
 extern BParam bpOpacity;
 extern BParam bpSize;
 extern BParam bpHardness;
@@ -300,6 +306,11 @@ extern bool layersDirty;
 
 void DrawViewport(AppState* state, Rectangle screenRect, Camera2D camera);
 void UnloadViewportRenderer(void);
+
+void Viewport_Init(Viewport* vp, Rectangle bounds);
+void Viewport_SetBounds(Viewport* vp, Rectangle bounds);
+void Viewport_HandleInput(Viewport* vp, AppState* state);
+void Viewport_Draw(Viewport* vp, AppState* state);
 
 void App_Init(AppState* state);
 void App_Draw(AppState* state);

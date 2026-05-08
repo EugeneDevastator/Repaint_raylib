@@ -82,42 +82,32 @@ void DrawViewport(AppState* state, Rectangle screenRect, Camera2D camera) {
         DrawTexture(checkerTex, 0, 0, WHITE);
         EndTextureMode();
 
+        for (int i = 0; i < state->canvas.layerCount; i++) {
+            if (!state->canvas.layerProps[i].visible) continue;
+            if (!(state->texCount > i && state->layerRTs[i].id > 0)) continue;
 
-		for (int i = 0; i < state->canvas.layerCount; i++) {
-			if (!state->canvas.layerProps[i].visible) continue;
-			if (!(state->texCount > i && state->layerRTs[i].id > 0)) continue;
+            float alpha = state->canvas.layerProps[i].op;
+            int bmidx = state->canvas.layerProps[i].blendmode;
 
-			float alpha = state->canvas.layerProps[i].op;
-			int bmidx = 0;
+            BeginTextureMode(*dst);
+            ClearBackground(BLANK);
+            BeginShaderMode(layerBlendShader);
 
-			BeginTextureMode(*dst);
-			ClearBackground(BLANK);
-			BeginShaderMode(layerBlendShader);
+            SetShaderValueTexture(layerBlendShader, locLayerTex, state->layerRTs[i].texture);
+            SetShaderValue(layerBlendShader, locLayerAlpha, &alpha, SHADER_UNIFORM_FLOAT);
+            SetShaderValue(layerBlendShader, locBmIdx, &bmidx, SHADER_UNIFORM_INT);
 
-			// texture0 = src accumulator, bound by DrawTextureRec below
-			// layerTex = layer, must be on unit 1
-			rlActiveTextureSlot(1);
-			rlEnableTexture(state->layerRTs[i].texture.id);
-			SetShaderValue(layerBlendShader, locLayerTex, (int[]){1}, SHADER_UNIFORM_INT);
-			SetShaderValue(layerBlendShader, locLayerAlpha, &alpha, SHADER_UNIFORM_FLOAT);
-			SetShaderValue(layerBlendShader, locBmIdx, &bmidx, SHADER_UNIFORM_INT);
+            DrawTextureRec(src->texture,
+                (Rectangle){0, 0, (float)cw, (float)-ch},
+                (Vector2){0, 0}, WHITE);
 
-			DrawTextureRec(src->texture,
-				(Rectangle){0, 0, (float)cw, (float)-ch},
-				(Vector2){0, 0}, WHITE);
+            EndShaderMode();
+            EndTextureMode();
 
-			EndShaderMode();
-
-			rlActiveTextureSlot(1);
-			rlDisableTexture();
-			rlActiveTextureSlot(0);
-
-			EndTextureMode();
-
-			RenderTexture2D* tmp = src;
-			src = dst;
-			dst = tmp;
-		}
+            RenderTexture2D* tmp = src;
+            src = dst;
+            dst = tmp;
+        }
 
         finalAcc = src;
         layersDirty = false;
@@ -129,7 +119,7 @@ void DrawViewport(AppState* state, Rectangle screenRect, Camera2D camera) {
     int sh = (int)screenRect.height;
     if (sw < 1 || sh < 1) return;
 
-    float dstX = -camera.target.x * camera.zoom + camera.offset.x - screenRect.x;
+    float dstX = -camera.target.x * camera.zoom + camera.offset.x;
     float dstY = -camera.target.y * camera.zoom + camera.offset.y;
     float dstW = cw * camera.zoom;
     float dstH = ch * camera.zoom;
