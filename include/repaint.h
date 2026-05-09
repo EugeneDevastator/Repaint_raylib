@@ -302,6 +302,8 @@ void Viewport_SetBounds(Viewport* vp, Rectangle bounds);
 void Viewport_HandleInput(Viewport* vp, AppState* state);
 void Viewport_FlushDabs(Viewport* vp, AppState* state);
 void Viewport_Draw(Viewport* vp, AppState* state);
+extern void LayerPanel_Init(void);
+extern void LayerPanel_Shutdown(void);
 
 void App_Init(AppState* state);
 void App_Draw(AppState* state);

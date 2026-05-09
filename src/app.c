@@ -121,6 +121,7 @@ void UpdateUI(AppState* state) {
 
 void App_Init(AppState* state) {
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "RePaint");
+	LayerPanel_Init();
     SetTargetFPS(60);
 
     GuiLoadStyleDefault();
@@ -233,6 +234,7 @@ void App_Draw(AppState* state) {
     Viewport_FlushDabs(&viewport, state);
 
     BeginDrawing();
+	LayerPanel_Draw(state);
     ClearBackground((Color){220, 220, 220, 255});
 
     Viewport_Draw(&viewport, state);
@@ -413,4 +415,5 @@ void App_Close(AppState* state) {
     Painter_Shutdown();
     BrushBlend_Shutdown();
     CloseWindow();
+	LayerPanel_Shutdown();
 }
