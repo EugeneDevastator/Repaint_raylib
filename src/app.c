@@ -1,5 +1,6 @@
 #include "repaint.h"
 #include "rlgl.h"
+#include "stroke.h"
 
 int uiPanelWidth = 250;
 bool panelResizing = false;
@@ -9,6 +10,7 @@ BParam bpSize;
 BParam bpHardness;
 BParam bpSpacing;
 BParam bpCurvature;
+BParam bpScatter;
 
 Viewport viewport;
 static RenderTexture2D stampPrev = {0};
@@ -67,8 +69,11 @@ void SyncAllImages(AppState* state) {
 
 void SyncAllRTs(AppState* state) {
     EnsureRTs(state);
-    for (int i = 0; i < state->texCount; i++)
+    for (int i = 0; i < state->texCount; i++) {
         SyncRTFromImage(state, i);
+        if (state->layerTextures[i].id > 0) UnloadTexture(state->layerTextures[i]);
+        state->layerTextures[i] = LoadTextureFromImage(state->canvas.layerImages[i]);
+    }
 }
 
 void UpdateUI(AppState* state) {
@@ -153,17 +158,23 @@ void App_Init(AppState* state) {
     bpHardness.slider.clipmaxF = 0.5f;
     BParam_SetIcon(&bpHardness, "ctlrrel");
 
-    BParam_Init(&bpSpacing, 3, "Spacing", 0.01f, 1.0f, 0.15f);
+    BParam_Init(&bpSpacing, 3, "Spacing", 0.05f, 2.0f, 0.3f);
     bpSpacing.slider.rect = (Rectangle){40, 585, 124, 30};
     bpSpacing.slider.gradStart = BLACK;
     bpSpacing.slider.gradEnd = WHITE;
-    BParam_SetIcon(&bpSpacing, "ctlrad");
+    BParam_SetIcon(&bpSpacing, "ctlspc");
 
     BParam_Init(&bpCurvature, 4, "Curve", 0.0f, 1.0f, 0.0f);
     bpCurvature.slider.rect = (Rectangle){40, 640, 124, 30};
     bpCurvature.slider.gradStart = BLACK;
     bpCurvature.slider.gradEnd = WHITE;
-    BParam_SetIcon(&bpCurvature, "ctlrad");
+    BParam_SetIcon(&bpCurvature, "ctlcrv");
+
+    BParam_Init(&bpScatter, 5, "Scatter", 0.0f, 5.0f, 0.0f);
+    bpScatter.slider.rect = (Rectangle){40, 695, 124, 30};
+    bpScatter.slider.gradStart = BLACK;
+    bpScatter.slider.gradEnd = WHITE;
+    BParam_SetIcon(&bpScatter, "ctlspcjit");
 
     state->canvas = Canvas_Create(800, 600, WHITE);
     state->activeLayer = 0;
@@ -209,11 +220,7 @@ void App_Init(AppState* state) {
     state->texDirty = NULL;
     state->texCount = 0;
 
-    EnsureRTs(state);
-    for (int i = 0; i < state->texCount; i++) {
-        SyncRTFromImage(state, i);
-        state->layerTextures[i] = LoadTextureFromImage(state->canvas.layerImages[i]);
-    }
+    SyncAllRTs(state);
 
     if (!stampPrevInited) {
         stampPrev = LoadRenderTexture(100, 100);
@@ -296,15 +303,15 @@ void App_Draw(AppState* state) {
     int penW = uiPanelWidth - 4 - (sliderX + sliderW + 4);
     if (penW < 60) { sliderW -= 30; penW = uiPanelWidth - 4 - (sliderX + sliderW + 4); }
 
-    BParam* bps[] = {&bpSize, &bpHardness, &bpCurvature, &bpSpacing, &bpOpacity};
-    for (int i = 0; i < 5; i++) {
+    BParam* bps[] = {&bpSize, &bpHardness, &bpCurvature, &bpSpacing, &bpOpacity, &bpScatter};
+    for (int i = 0; i < 6; i++) {
         bps[i]->slider.rect = (Rectangle){sliderX, ty, sliderW, sliderH};
         BParam_Draw(bps[i]);
         ty += sliderGap;
     }
 
     // Dropdown pending states for two-phase drawing
-    for (int i = 0; i < 5; i++) bps[i]->penEdit = bps[i]->penPending;
+    for (int i = 0; i < 6; i++) bps[i]->penEdit = bps[i]->penPending;
 
     ty += 8;
     // --- Pipeline collapsed button ---
@@ -320,7 +327,7 @@ void App_Draw(AppState* state) {
     ty += 44;
 
     // --- Pen collapsed buttons ---
-    for (int i = 0; i < 5; i++)
+    for (int i = 0; i < 6; i++)
         BParam_DrawPen(bps[i]);
 
     int sz = uiPanelWidth;
@@ -352,7 +359,7 @@ void App_Draw(AppState* state) {
             if (pv >= 0 && pv < 2) state->currentBrush.Realb.pipeID = (uint8_t)pv;
         }
     }
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 6; i++) {
         if (bps[i]->penEdit) {
             int pm = bps[i]->penMode;
             Rectangle r = bps[i]->slider.rect;
@@ -401,6 +408,7 @@ void App_Close(AppState* state) {
     if (bpHardness.iconLoaded) UnloadTexture(bpHardness.iconTex);
     if (bpSpacing.iconLoaded) UnloadTexture(bpSpacing.iconTex);
     if (bpCurvature.iconLoaded) UnloadTexture(bpCurvature.iconTex);
+    if (bpScatter.iconLoaded) UnloadTexture(bpScatter.iconTex);
     UnloadPenIcons();
     Painter_Shutdown();
     BrushBlend_Shutdown();

@@ -187,6 +187,7 @@ typedef struct {
     int strokeLen;
     bool wasMouseDown;
     Vector2 lastDabPos;
+    float strokeDabAccum;
     bool debugShowStamps;
     bool rightMouseDown;
     Vector2 lastMousePos;

@@ -33,6 +33,7 @@ SOURCES=(
     src/viewport_renderer.c
     src/viewport.c
     src/raygui_impl.c
+    src/stroke.c
 )
 
 mkdir -p "$OBJ_DIR" "$BIN_DIR"

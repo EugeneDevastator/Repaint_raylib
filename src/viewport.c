@@ -32,6 +32,7 @@ void Viewport_Init(Viewport* vp, Rectangle bounds) {
     vp->strokeLen = 0;
     vp->wasMouseDown = false;
     vp->lastDabPos = (Vector2){0, 0};
+    vp->strokeDabAccum = 0.0f;
     vp->debugShowStamps = false;
     vp->rightMouseDown = false;
     vp->lastMousePos = (Vector2){0, 0};
@@ -111,29 +112,43 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             RenderTexture2D rt = state->layerRTs[active];
 
             if (state->mode == eBrush) {
-                if (vp->strokeLen == 0) {
-                    vp->strokePts[0] = canvasPos;
-                    vp->strokeLen = 1;
+                if (!vp->wasMouseDown) {
+                    DabQueue_Push(vp, canvasPos.x, canvasPos.y, rt, active);
+                    vp->lastDabPos = canvasPos;
+                    vp->strokeDabAccum = 0.0f;
+                    vp->wasMouseDown = true;
+                    if (vp->strokeLen < MAX_STROKE_PTS)
+                        vp->strokePts[vp->strokeLen++] = canvasPos;
                 } else {
-                    float minDist = fmaxf(state->currentBrush.Realb.rad_out * BParam_GetValue(&bpSpacing), 1.0f);
-                    if (Dist2D(vp->strokePts[vp->strokeLen - 1], canvasPos) >= minDist) {
-                        if (vp->strokeLen < MAX_STROKE_PTS)
-                            vp->strokePts[vp->strokeLen++] = canvasPos;
-                    }
-
-                    if (vp->strokeLen >= 2) {
-                        float spacing = fmaxf(state->currentBrush.Realb.rad_out * BParam_GetValue(&bpSpacing), 1.0f);
-                        float segLen = Dist2D(vp->strokePts[vp->strokeLen - 2], vp->strokePts[vp->strokeLen - 1]);
-                        int steps = (int)(segLen / spacing) + 1;
-                        if (steps < 1) steps = 1;
-                        for (int s = 0; s < steps; s++) {
-                            float t = (float)s / (float)steps;
-                            Vector2 pos = {
-                                vp->strokePts[vp->strokeLen - 2].x + (vp->strokePts[vp->strokeLen - 1].x - vp->strokePts[vp->strokeLen - 2].x) * t,
-                                vp->strokePts[vp->strokeLen - 2].y + (vp->strokePts[vp->strokeLen - 1].y - vp->strokePts[vp->strokeLen - 2].y) * t
-                            };
-                            DabQueue_Push(vp, pos.x, pos.y, rt, active);
+                    float spacing = fmaxf(state->currentBrush.Realb.rad_out * BParam_GetValue(&bpSpacing), 1.0f);
+                    Vector2 from = vp->lastDabPos;
+                    Vector2 to = canvasPos;
+                    float stdist = Dist2D(from, to);
+                    if (stdist > 0.0f) {
+                        float dx = to.x - from.x;
+                        float dy = to.y - from.y;
+                        float x2r = dx / stdist;
+                        float y2r = dy / stdist;
+                        float tdist = stdist + vp->strokeDabAccum;
+                        if (tdist >= spacing) {
+                            float firstDist = spacing - vp->strokeDabAccum;
+                            if (firstDist < 0.0f) firstDist = 0.0f;
+                            float remaining = stdist - firstDist;
+                            int extraDabs = (remaining > 0.0f) ? (int)(remaining / spacing) : 0;
+                            for (int i = 0; i <= extraDabs; i++) {
+                                float d = firstDist + i * spacing;
+                                if (d > stdist) break;
+                                Vector2 pos = {from.x + d * x2r, from.y + d * y2r};
+                                DabQueue_Push(vp, pos.x, pos.y, rt, active);
+                                if (vp->strokeLen < MAX_STROKE_PTS)
+                                    vp->strokePts[vp->strokeLen++] = pos;
+                            }
+                            float lastDabDist = firstDist + extraDabs * spacing;
+                            vp->strokeDabAccum = stdist - lastDabDist;
+                        } else {
+                            vp->strokeDabAccum += stdist;
                         }
+                        vp->lastDabPos = to;
                     }
                 }
             } else {
