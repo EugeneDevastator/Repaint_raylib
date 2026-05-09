@@ -173,6 +173,14 @@ typedef struct {
     int id;
 } BParam;
 
+#define DAB_QUEUE_CAPACITY 16384
+
+typedef struct {
+    float x, y;
+    RenderTexture2D targetRT;
+    int activeLayer;
+} Dab;
+
 typedef struct {
     Rectangle bounds;
     Vector2 strokePts[MAX_STROKE_PTS];
@@ -183,6 +191,11 @@ typedef struct {
     bool rightMouseDown;
     Vector2 lastMousePos;
     bool inBounds;
+    Dab dabQueue[DAB_QUEUE_CAPACITY];
+    volatile int dabHead;
+    volatile int dabTail;
+    bool strokeEnded;
+    int endLayer;
 } Viewport;
 
 typedef struct {
@@ -286,6 +299,7 @@ void UnloadViewportRenderer(void);
 void Viewport_Init(Viewport* vp, Rectangle bounds);
 void Viewport_SetBounds(Viewport* vp, Rectangle bounds);
 void Viewport_HandleInput(Viewport* vp, AppState* state);
+void Viewport_FlushDabs(Viewport* vp, AppState* state);
 void Viewport_Draw(Viewport* vp, AppState* state);
 
 void App_Init(AppState* state);

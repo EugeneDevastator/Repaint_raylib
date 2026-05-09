@@ -223,6 +223,7 @@ void App_Init(AppState* state) {
 
 void App_Draw(AppState* state) {
     EnsureRTs(state);
+    Viewport_FlushDabs(&viewport, state);
 
     BeginDrawing();
     ClearBackground((Color){220, 220, 220, 255});
@@ -232,25 +233,32 @@ void App_Draw(AppState* state) {
 
     int px = 10;
     int pw = uiPanelWidth - px * 2;
-    int bh = 56;
-    int by = bh + 8;
 
     DrawRectangle(0, 0, uiPanelWidth, SCREEN_HEIGHT, (Color){230, 230, 230, 255});
     DrawRectangle(uiPanelWidth, 0, 1, SCREEN_HEIGHT, (Color){120, 120, 120, 255});
 
     DrawText("RePaint", px, 10, 28, (Color){20, 20, 20, 255});
-    DrawText("Tools", px, 50, 22, (Color){40, 40, 40, 255});
 
-    int ty = 80;
-    if (GuiButton((Rectangle){px, ty, pw, bh}, "Brush")) state->mode = eBrush; ty += by;
-    if (GuiButton((Rectangle){px, ty, pw, bh}, "Smudge")) state->mode = eSmudge; ty += by;
-    if (GuiButton((Rectangle){px, ty, pw, bh}, "Line")) state->mode = eLine; ty += by;
-    if (GuiButton((Rectangle){px, ty, pw, bh}, "Eraser")) {
-        state->mode = eBrush;
-        state->currentBrush.Realb.col.a = 0;
-    } ty += by;
+    // Dropdown pending states — declared early for two-phase pattern
+    static bool bmPending = false, pipePending = false;
+    bool bmOpen = bmPending, pipeOpen = pipePending;
+    int bmY = 0, pipeY = 0;
 
-    ty += 20;
+    int ty = 50;
+
+    // Brush blend dropdown at top of left panel
+    bmY = ty;
+    if (!bmOpen) {
+        int bw = (int)state->currentBrush.Realb.bmidx;
+        Rectangle r = {(float)px, (float)ty, (float)pw, 32};
+        if (GuiDropdownBox(r,
+            "Normal;Add;Dodge;Screen;Lighten;Burn;Multiply;Darken;Overlay;Highlight;Shadowlight;Xor;Diff;Exclusion",
+            &bw, false)) {
+            bmPending = true;
+        }
+    }
+    ty += 40;
+
     DrawText("Settings", px, ty, 22, (Color){40, 40, 40, 255}); ty += 30;
 
     if (stampPrevInited && stampPrev.id > 0) {
@@ -295,27 +303,13 @@ void App_Draw(AppState* state) {
         ty += sliderGap;
     }
 
-    // Dropdown pending states (deferred open to avoid same-frame auto-close)
-    static bool bmPending = false, pipePending = false;
-    bool bmOpen = bmPending, pipeOpen = pipePending;
+    // Dropdown pending states for two-phase drawing
     for (int i = 0; i < 5; i++) bps[i]->penEdit = bps[i]->penPending;
 
     ty += 8;
-    // --- Blend collapsed button ---
-    int bmY = ty;
-    {
-        static const char* bmNames[] = {"Normal","Add","Dodge","Screen","Lighten","Burn","Multiply","Darken","Overlay","Highlight","Shadowlight","Xor","Diff","Exclusion"};
-        int bw = (int)state->currentBrush.Realb.bmidx;
-        const char* label = (bw >= 0 && bw < 14) ? bmNames[bw] : "Normal";
-        char buf[48];
-        snprintf(buf, sizeof(buf), "%s #120#", label);
-        Rectangle r = {(float)px, (float)ty, (float)pw, 36};
-        if (GuiButton(r, buf)) bmPending = !bmPending;
-        ty += 44;
-    }
     // --- Pipeline collapsed button ---
-    int pipeY = ty;
-    {
+    pipeY = ty;
+    if (!pipeOpen) {
         int pv = (int)state->currentBrush.Realb.pipeID;
         const char* label = pv == 0 ? "CFNSR" : (pv == 1 ? "RS" : "CFNSR");
         char buf[32];
@@ -323,6 +317,7 @@ void App_Draw(AppState* state) {
         Rectangle r = {(float)px, (float)ty, (float)pw, 36};
         if (GuiButton(r, buf)) pipePending = !pipePending;
     }
+    ty += 44;
 
     // --- Pen collapsed buttons ---
     for (int i = 0; i < 5; i++)

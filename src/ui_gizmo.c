@@ -3,15 +3,27 @@
 bool gizmoShow = false;
 int gizmoMouseMode = 0;
 
+#define GIZMO_TOOL_N 6
+static const char* gizmoToolLabels[GIZMO_TOOL_N] = {"Br","Sm","Li","Er","Di","Co"};
+static const int gizmoToolModes[GIZMO_TOOL_N] = {eBrush, eSmudge, eLine, -1, eDisp, eCont};
+
+#define GIZMO_SLIDER_W 30
+#define GIZMO_SLIDER_H 150
+#define GIZMO_SLIDER_GAP 8
+#define GIZMO_THUMB_H 8
+
 void Gizmo_HandleInput(AppState* state, Vector2 mousePos) {
     int gcx = uiPanelWidth + (RIGHT_PANEL_X - uiPanelWidth) / 2;
     int gcy = SCREEN_HEIGHT / 2;
+    int gs = 200;
+    int gizR = gs / 2;
     float dx = mousePos.x - gcx;
     float dy = mousePos.y - gcy;
     float dist = sqrtf(dx * dx + dy * dy);
     float ang = AtanXY(dx, dy);
     float d30 = M_PI * 30 / 180.0f;
 
+    // Radial gizmo input
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && dist < 100 && dist > 3) {
         float angDeg = (ang + M_PI) * 180.0f / M_PI;
         float rotDiff = fabsf(angDeg - fmodf(state->currentBrush.Realb.resangle, 360.0f));
@@ -74,6 +86,64 @@ void Gizmo_HandleInput(AppState* state, Vector2 mousePos) {
     }
 
     if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) gizmoMouseMode = 0;
+
+    // Tool buttons input
+    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+        int bx = gcx - 256;
+        int by = gcy + gizR + 14 + 24 + 8;
+        for (int i = 0; i < GIZMO_TOOL_N; i++) {
+            Rectangle r = {(float)(bx + i * 44), (float)by, 40, 28};
+            if (CheckCollisionPointRec(mousePos, r)) {
+                if (i == 3) {
+                    if (state->mode == eBrush && state->currentBrush.Realb.col.a == 0) {
+                        state->mode = eBrush;
+                        state->currentBrush.Realb.col.a = 255;
+                    } else {
+                        state->mode = eBrush;
+                        state->currentBrush.Realb.col.a = 0;
+                    }
+                } else {
+                    state->mode = gizmoToolModes[i];
+                    state->currentBrush.Realb.col.a = 255;
+                }
+                return;
+            }
+        }
+    }
+
+    // Color sliders input
+    {
+        static bool drag = false;
+        static int dragS = -1;
+        int slX = gcx + 120;
+        int slY = gcy - 75;
+
+        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+            for (int s = 0; s < 3; s++) {
+                Rectangle r = {(float)(slX + s * (GIZMO_SLIDER_W + GIZMO_SLIDER_GAP)), (float)slY, (float)GIZMO_SLIDER_W, (float)GIZMO_SLIDER_H};
+                if (CheckCollisionPointRec(mousePos, r)) {
+                    drag = true;
+                    dragS = s;
+                    break;
+                }
+            }
+        }
+
+        if (drag && dragS >= 0 && IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
+            float t = (mousePos.y - slY) / (float)GIZMO_SLIDER_H;
+            t = fminf(1.0f, fmaxf(0.0f, t));
+            switch (dragS) {
+                case 0: colorHue = t; break;
+                case 1: colorSat = t; break;
+                case 2: colorLit = t; break;
+            }
+        }
+
+        if (!IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
+            drag = false;
+            dragS = -1;
+        }
+    }
 }
 
 void Gizmo_Draw(AppState* state) {
@@ -93,8 +163,9 @@ void Gizmo_Draw(AppState* state) {
 
     int overlayW = 540;
     int overlayH = 480;
-    DrawRectangle(gcx - overlayW / 2, gcy - gizR, overlayW, overlayH, (Color){0, 0, 0, 160});
-    DrawRectangleLines(gcx - overlayW / 2, gcy - gizR, overlayW, overlayH, (Color){100, 100, 120, 255});
+    int overlayY = gcy - gizR;
+    DrawRectangle(gcx - overlayW / 2, overlayY, overlayW, overlayH, (Color){0, 0, 0, 160});
+    DrawRectangleLines(gcx - overlayW / 2, overlayY, overlayW, overlayH, (Color){100, 100, 120, 255});
 
     for (int gi = 1; gi <= 5; gi += 2) {
         float a = -d30 * (2 * gi - 1);
@@ -149,4 +220,46 @@ void Gizmo_Draw(AppState* state) {
     Color curCol = HSLToRGB(colorHue, colorSat, colorLit);
     DrawRectangleRec(swRect, curCol);
     DrawRectangleLinesEx(swRect, 1, WHITE);
+
+    // Tool buttons row
+    int tbY = swY + 24 + 8;
+    for (int i = 0; i < GIZMO_TOOL_N; i++) {
+        Rectangle r = {(float)(gcx - 256 + i * 44), (float)tbY, 40, 28};
+        bool active;
+        if (i == 3)
+            active = (state->mode == eBrush && state->currentBrush.Realb.col.a == 0);
+        else
+            active = (state->mode == gizmoToolModes[i]);
+        if (active) {
+            DrawRectangleRec(r, (Color){50, 110, 190, 200});
+        }
+        DrawRectangleLinesEx(r, 1, (Color){180, 180, 200, 200});
+        DrawText(gizmoToolLabels[i], (int)r.x + 8, (int)r.y + 6, 14, (Color){220, 220, 230, 230});
+    }
+
+    // Color sliders — vertical bars on the right side
+    {
+        int slX = gcx + 120;
+        int slY = gcy - 75;
+        float vals[3] = {colorHue, colorSat, colorLit};
+        for (int s = 0; s < 3; s++) {
+            Rectangle r = {(float)(slX + s * (GIZMO_SLIDER_W + GIZMO_SLIDER_GAP)), (float)slY, (float)GIZMO_SLIDER_W, (float)GIZMO_SLIDER_H};
+            int y0 = (int)r.y, y1 = (int)(r.y + r.height);
+            for (int y = y0; y < y1; y++) {
+                float t = (float)(y - y0) / (float)(y1 - y0 - 1);
+                Color c;
+                switch (s) {
+                    case 0: c = HSLToRGB(t, 1.0f, 0.5f); break;
+                    case 1: c = HSLToRGB(colorHue, t, colorLit); break;
+                    case 2: c = HSLToRGB(colorHue, colorSat, t); break;
+                    default: c = BLACK;
+                }
+                DrawRectangle((int)r.x, y, (int)r.width, 1, c);
+            }
+            DrawRectangleLinesEx(r, 1, (Color){180, 180, 200, 180});
+            float thumbY = r.y + vals[s] * r.height;
+            DrawRectangle((int)r.x - 1, (int)(thumbY - GIZMO_THUMB_H / 2), (int)r.width + 2, GIZMO_THUMB_H, WHITE);
+            DrawRectangleLines((int)r.x - 1, (int)(thumbY - GIZMO_THUMB_H / 2), (int)r.width + 2, GIZMO_THUMB_H, (Color){50, 50, 50, 200});
+        }
+    }
 }

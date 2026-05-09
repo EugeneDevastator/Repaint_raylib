@@ -52,7 +52,7 @@ done
 if [ $NEED_LINK -eq 1 ] || [ ! -f "$BINARY" ]; then
     echo -e "${YELLOW}Linking...${NC}"
     # Use versioned .so filenames (no dev symlinks available on this system)
-    X11_LIBS="-l:libX11.so.6 -l:libGL.so.1 -lm"
+    X11_LIBS="-l:libX11.so.6 -l:libGL.so.1 -lm -lpthread"
     OBJS=""
     for src in "${SOURCES[@]}"; do
         basename=$(basename "$src" .c)

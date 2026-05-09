@@ -9,6 +9,24 @@ static void SyncLayerTexture(AppState* state, int layer) {
     state->layerTextures[layer] = LoadTextureFromImage(state->canvas.layerImages[layer]);
 }
 
+static bool DabQueue_Push(Viewport* vp, float x, float y, RenderTexture2D rt, int layer) {
+    int next = (vp->dabTail + 1) % DAB_QUEUE_CAPACITY;
+    if (next == vp->dabHead) return false;
+    vp->dabQueue[vp->dabTail].x = x;
+    vp->dabQueue[vp->dabTail].y = y;
+    vp->dabQueue[vp->dabTail].targetRT = rt;
+    vp->dabQueue[vp->dabTail].activeLayer = layer;
+    vp->dabTail = next;
+    return true;
+}
+
+static bool DabQueue_Pop(Viewport* vp, Dab* out) {
+    if (vp->dabHead == vp->dabTail) return false;
+    *out = vp->dabQueue[vp->dabHead];
+    vp->dabHead = (vp->dabHead + 1) % DAB_QUEUE_CAPACITY;
+    return true;
+}
+
 void Viewport_Init(Viewport* vp, Rectangle bounds) {
     vp->bounds = bounds;
     vp->strokeLen = 0;
@@ -18,6 +36,10 @@ void Viewport_Init(Viewport* vp, Rectangle bounds) {
     vp->rightMouseDown = false;
     vp->lastMousePos = (Vector2){0, 0};
     vp->inBounds = false;
+    vp->dabHead = 0;
+    vp->dabTail = 0;
+    vp->strokeEnded = false;
+    vp->endLayer = 0;
 }
 
 void Viewport_SetBounds(Viewport* vp, Rectangle bounds) {
@@ -86,6 +108,8 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     state->canvas.width, state->canvas.height);
             }
 
+            RenderTexture2D rt = state->layerRTs[active];
+
             if (state->mode == eBrush) {
                 if (vp->strokeLen == 0) {
                     vp->strokePts[0] = canvasPos;
@@ -108,8 +132,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                                 vp->strokePts[vp->strokeLen - 2].x + (vp->strokePts[vp->strokeLen - 1].x - vp->strokePts[vp->strokeLen - 2].x) * t,
                                 vp->strokePts[vp->strokeLen - 2].y + (vp->strokePts[vp->strokeLen - 1].y - vp->strokePts[vp->strokeLen - 2].y) * t
                             };
-                            BrushBlend_ApplyStamp(state->layerRTs[active], &state->currentBrush,
-                                pos.x, pos.y);
+                            DabQueue_Push(vp, pos.x, pos.y, rt, active);
                         }
                     }
                 }
@@ -117,14 +140,12 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                 float spacing = state->currentBrush.Realb.rad_out * BParam_GetValue(&bpSpacing);
                 if (spacing < 2.0f) spacing = 2.0f;
                 if (!vp->wasMouseDown) {
-                    BrushBlend_ApplyStamp(state->layerRTs[active], &state->currentBrush,
-                        canvasPos.x, canvasPos.y);
+                    DabQueue_Push(vp, canvasPos.x, canvasPos.y, rt, active);
                     vp->lastDabPos = canvasPos;
                     vp->wasMouseDown = true;
                 } else {
                     if (Dist2D(vp->lastDabPos, canvasPos) >= spacing) {
-                        BrushBlend_ApplyStamp(state->layerRTs[active], &state->currentBrush,
-                            canvasPos.x, canvasPos.y);
+                        DabQueue_Push(vp, canvasPos.x, canvasPos.y, rt, active);
                         vp->lastDabPos = canvasPos;
                     }
                 }
@@ -133,11 +154,14 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         layersDirty = true;
     } else {
         if (vp->strokeLen > 0) {
-            SyncLayerTexture(state, active);
+            vp->strokeEnded = true;
+            vp->endLayer = active;
             vp->strokeLen = 0;
         }
-        if (vp->wasMouseDown)
-            SyncLayerTexture(state, active);
+        if (vp->wasMouseDown) {
+            vp->strokeEnded = true;
+            vp->endLayer = active;
+        }
         layersDirty = true;
         vp->wasMouseDown = false;
     }
@@ -153,6 +177,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             state->layerRTs[active] = LoadRenderTexture(
                 state->canvas.width, state->canvas.height);
         }
+        RenderTexture2D rt = state->layerRTs[active];
         if (!vp->wasMouseDown) {
             vp->lastDabPos = canvasPos;
             vp->wasMouseDown = true;
@@ -168,17 +193,29 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                         vp->lastDabPos.x + (canvasPos.x - vp->lastDabPos.x) * t,
                         vp->lastDabPos.y + (canvasPos.y - vp->lastDabPos.y) * t
                     };
-                    BrushBlend_ApplyStamp(state->layerRTs[active], &state->currentBrush,
-                        pos.x, pos.y);
+                    DabQueue_Push(vp, pos.x, pos.y, rt, active);
                 }
                 vp->lastDabPos = canvasPos;
             }
         }
     } else if (state->mode != eLine && !leftDown) {
-        if (vp->wasMouseDown)
-            SyncLayerTexture(state, active);
+        if (vp->wasMouseDown) {
+            vp->strokeEnded = true;
+            vp->endLayer = active;
+        }
         layersDirty = true;
         vp->wasMouseDown = false;
+    }
+}
+
+void Viewport_FlushDabs(Viewport* vp, AppState* state) {
+    Dab dab;
+    while (DabQueue_Pop(vp, &dab)) {
+        BrushBlend_ApplyStamp(dab.targetRT, &state->currentBrush, dab.x, dab.y);
+    }
+    if (vp->strokeEnded) {
+        SyncLayerTexture(state, vp->endLayer);
+        vp->strokeEnded = false;
     }
 }
 
