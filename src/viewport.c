@@ -91,14 +91,14 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     vp->strokePts[0] = canvasPos;
                     vp->strokeLen = 1;
                 } else {
-                    float minDist = fmaxf(state->currentBrush.Realb.rad_out * 0.15f, 1.0f);
+                    float minDist = fmaxf(state->currentBrush.Realb.rad_out * BParam_GetValue(&bpSpacing), 1.0f);
                     if (Dist2D(vp->strokePts[vp->strokeLen - 1], canvasPos) >= minDist) {
                         if (vp->strokeLen < MAX_STROKE_PTS)
                             vp->strokePts[vp->strokeLen++] = canvasPos;
                     }
 
                     if (vp->strokeLen >= 2) {
-                        float spacing = fmaxf(state->currentBrush.Realb.rad_out * 0.15f, 1.0f);
+                        float spacing = fmaxf(state->currentBrush.Realb.rad_out * BParam_GetValue(&bpSpacing), 1.0f);
                         float segLen = Dist2D(vp->strokePts[vp->strokeLen - 2], vp->strokePts[vp->strokeLen - 1]);
                         int steps = (int)(segLen / spacing) + 1;
                         if (steps < 1) steps = 1;
@@ -114,7 +114,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     }
                 }
             } else {
-                float spacing = state->currentBrush.Realb.rad_out * 0.2f;
+                float spacing = state->currentBrush.Realb.rad_out * BParam_GetValue(&bpSpacing);
                 if (spacing < 2.0f) spacing = 2.0f;
                 if (!vp->wasMouseDown) {
                     BrushBlend_ApplyStamp(state->layerRTs[active], &state->currentBrush,
@@ -157,8 +157,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             vp->lastDabPos = canvasPos;
             vp->wasMouseDown = true;
         } else {
-            float spacing = state->currentBrush.Realb.rad_out * 0.2f;
-            if (spacing < 2.0f) spacing = 2.0f;
+            float spacing = fmaxf(state->currentBrush.Realb.rad_out * BParam_GetValue(&bpSpacing), 2.0f);
             if (Dist2D(vp->lastDabPos, canvasPos) > spacing) {
                 float segLen = Dist2D(vp->lastDabPos, canvasPos);
                 int steps = (int)(segLen / spacing) + 1;

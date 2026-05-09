@@ -4,7 +4,7 @@ bool gizmoShow = false;
 int gizmoMouseMode = 0;
 
 void Gizmo_HandleInput(AppState* state, Vector2 mousePos) {
-    int gcx = UI_PANEL_WIDTH + (RIGHT_PANEL_X - UI_PANEL_WIDTH) / 2;
+    int gcx = uiPanelWidth + (RIGHT_PANEL_X - uiPanelWidth) / 2;
     int gcy = SCREEN_HEIGHT / 2;
     float dx = mousePos.x - gcx;
     float dy = mousePos.y - gcy;
@@ -45,8 +45,9 @@ void Gizmo_HandleInput(AppState* state, Vector2 mousePos) {
             if (state->currentBrush.Realb.rad_in > newRad * 0.98f)
                 state->currentBrush.Realb.rad_in = newRad * 0.98f;
             BParam_SetValue(&bpSize, newRad);
-            bpHardness.slider.clipmaxF = (state->currentBrush.Realb.rad_out > 0)
+            float h = (state->currentBrush.Realb.rad_out > 0)
                 ? (state->currentBrush.Realb.rad_in / state->currentBrush.Realb.rad_out) : 0;
+            BParam_SetValue(&bpHardness, h);
         }
         if (gizmoMouseMode == 2) {
             float newRadIn = fminf(rad, state->currentBrush.Realb.rad_out);
@@ -55,8 +56,9 @@ void Gizmo_HandleInput(AppState* state, Vector2 mousePos) {
             if (newRadIn > state->currentBrush.Realb.rad_out * 0.98f)
                 newRadIn = state->currentBrush.Realb.rad_out * 0.98f;
             state->currentBrush.Realb.rad_in = newRadIn;
-            bpHardness.slider.clipmaxF = (state->currentBrush.Realb.rad_out > 0)
+            float h = (state->currentBrush.Realb.rad_out > 0)
                 ? (state->currentBrush.Realb.rad_in / state->currentBrush.Realb.rad_out) : 0;
+            BParam_SetValue(&bpHardness, h);
         }
         if (gizmoMouseMode == 3) {
             float ir = fminf(rad, state->currentBrush.Realb.rad_out);
@@ -77,7 +79,7 @@ void Gizmo_HandleInput(AppState* state, Vector2 mousePos) {
 void Gizmo_Draw(AppState* state) {
     if (!gizmoShow) return;
 
-    int gcx = UI_PANEL_WIDTH + (RIGHT_PANEL_X - UI_PANEL_WIDTH) / 2;
+    int gcx = uiPanelWidth + (RIGHT_PANEL_X - uiPanelWidth) / 2;
     int gcy = SCREEN_HEIGHT / 2;
     int gs = 200;
     int gizR = gs / 2;
@@ -147,16 +149,4 @@ void Gizmo_Draw(AppState* state) {
     Color curCol = HSLToRGB(colorHue, colorSat, colorLit);
     DrawRectangleRec(swRect, curCol);
     DrawRectangleLinesEx(swRect, 1, WHITE);
-
-    Rectangle hueR = {(float)gcx - 256, (float)(swY + 34), 512, 24};
-    DrawColorGradientAt(hueR, 0, colorHue);
-    UISlider_Draw(&sliderHue);
-
-    Rectangle satR = {(float)gcx - 256, (float)(swY + 66), 512, 24};
-    DrawColorGradientAt(satR, 1, colorHue);
-    UISlider_Draw(&sliderSat);
-
-    Rectangle litR = {(float)gcx - 256, (float)(swY + 98), 512, 24};
-    DrawColorGradientAt(litR, 2, colorHue);
-    UISlider_Draw(&sliderLit);
 }

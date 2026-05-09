@@ -41,6 +41,7 @@ set(SOURCES
     src/brush_blend.c
     src/viewport.c
     src/viewport_renderer.c
+    src/raygui_impl.c
 )
 
 add_executable(repaint ${SOURCES})

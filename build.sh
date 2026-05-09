@@ -32,6 +32,7 @@ SOURCES=(
     src/brush_blend.c
     src/viewport_renderer.c
     src/viewport.c
+    src/raygui_impl.c
 )
 
 mkdir -p "$OBJ_DIR" "$BIN_DIR"

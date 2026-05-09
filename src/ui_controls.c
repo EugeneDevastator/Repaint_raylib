@@ -1,9 +1,5 @@
 #include "repaint.h"
 
-#define POPUP_ITEM_H 20
-#define POPUP_WIDTH 140
-#define POPUP_ICON_S 16
-
 static Texture2D penModeTex[PEN_MODE_COUNT];
 static const char* PenIconNames[PEN_MODE_COUNT] = {
     "tct_none", "tct_pressure", "tct_vel", "tct_dir", "tct_rot", "tct_tilt",
@@ -17,25 +13,7 @@ static const char* PenModeNames[PEN_MODE_COUNT] = {
     "X-Tilt", "Y-Tilt"
 };
 
-static BParam* activePopup = NULL;
-
-void UIButton_Update(UIButton* btn, Vector2 mousePos, bool mousePressed) {
-    btn->hovered = CheckCollisionPointRec(mousePos, btn->rect);
-    if (btn->hovered && mousePressed && !btn->clicked) {
-        btn->clicked = true;
-    }
-}
-
-void UIButton_Draw(UIButton* btn) {
-    Color drawColor = btn->hovered ? btn->hoverColor : btn->color;
-    DrawRectangleRec(btn->rect, drawColor);
-    DrawRectangleLinesEx(btn->rect, 1, DARKGRAY);
-    int textX = btn->rect.x + (btn->rect.width - MeasureText(btn->label, 16)) / 2;
-    int textY = btn->rect.y + (btn->rect.height - 16) / 2;
-    DrawText(btn->label, textX, textY, 16, WHITE);
-}
-
-void UISlider_Init(UISlider* slider) {
+void DualSlider_Init(DualSlider* slider) {
     slider->clipminF = 0.0f;
     slider->clipmaxF = 1.0f;
     slider->jitter = 0.0f;
@@ -52,33 +30,33 @@ void UISlider_Init(UISlider* slider) {
     slider->showValue = true;
     slider->noGradient = false;
     slider->label[0] = '\0';
-    slider->id = 0;
     slider->prevDown[0] = false;
     slider->prevDown[1] = false;
     slider->prevDown[2] = false;
 }
 
-static void UISlider_ParsePoint(UISlider* slider, Vector2 mousePos) {
+static void DualSlider_ParsePoint(DualSlider* slider, Vector2 mousePos) {
     if (slider->ActivePick < 0) return;
 
     float val;
-    float w = slider->rect.width;
-    float h = slider->rect.height;
+    float w = slider->activeRect.width;
+    float h = slider->activeRect.height;
 
     if (slider->orient == 0) {
-        val = (mousePos.x - slider->rect.x) / w;
+        val = (mousePos.x - slider->activeRect.x) / w;
         val = fmaxf(0.0f, fminf(1.0f, val));
 
-        bool snapZone = (mousePos.y > slider->rect.y + h * 2) || (mousePos.y < slider->rect.y - h);
+        bool snapZone = (mousePos.y > slider->activeRect.y + h * 2) || (mousePos.y < slider->activeRect.y - h);
         if (snapZone && slider->DsRange > 0) {
             val = roundf(val / slider->DsRange) * slider->DsRange;
             val = fmaxf(0.0f, fminf(1.0f, val));
         }
     } else {
-        val = (mousePos.y - slider->rect.y) / h;
+        val = (mousePos.y - slider->activeRect.y) / h;
         val = fmaxf(0.0f, fminf(1.0f, val));
         val = 1.0f - val;
-        bool snapZone = (mousePos.x > slider->rect.x + w * 2) || (mousePos.x < slider->rect.x - w);
+
+        bool snapZone = (mousePos.x > slider->activeRect.x + w * 2) || (mousePos.x < slider->activeRect.x - w);
         if (snapZone && slider->DsRange > 0) {
             val = roundf(val / slider->DsRange) * slider->DsRange;
             val = fmaxf(0.0f, fminf(1.0f, val));
@@ -90,7 +68,7 @@ static void UISlider_ParsePoint(UISlider* slider, Vector2 mousePos) {
     if (slider->ActivePick == 2) slider->jitter = val;
 }
 
-void UISlider_HandleInput(UISlider* slider, Vector2 mousePos) {
+void DualSlider_HandleInput(DualSlider* slider, Vector2 mousePos) {
     bool left = IsMouseButtonDown(MOUSE_LEFT_BUTTON);
     bool right = IsMouseButtonDown(MOUSE_RIGHT_BUTTON);
     bool middle = IsMouseButtonDown(MOUSE_MIDDLE_BUTTON);
@@ -98,18 +76,26 @@ void UISlider_HandleInput(UISlider* slider, Vector2 mousePos) {
 
     bool overSlider = CheckCollisionPointRec(mousePos, slider->rect);
 
+    if (slider->ActivePick < 0 && !overSlider) {
+        slider->prevDown[0] = false;
+        slider->prevDown[1] = false;
+        slider->prevDown[2] = false;
+        return;
+    }
+
     if (anyDown && !slider->prevDown[0] && !slider->prevDown[1] && !slider->prevDown[2]) {
         if (overSlider) {
             if (left) slider->ActivePick = 1;
             else if (right) slider->ActivePick = 0;
             else if (middle) slider->ActivePick = 2;
+            slider->activeRect = slider->rect;
         }
     }
 
     if (!anyDown) slider->ActivePick = -1;
 
     if (slider->ActivePick >= 0) {
-        UISlider_ParsePoint(slider, mousePos);
+        DualSlider_ParsePoint(slider, mousePos);
     }
 
     slider->prevDown[0] = left;
@@ -124,7 +110,7 @@ void Draw3DFrame(int x, int y, int w, int h, Color shd, Color hl) {
     DrawRectangle(x + 1, y + h - 1, w - 1, 1, hl);
 }
 
-void UISlider_Draw(UISlider* slider) {
+void DualSlider_Draw(DualSlider* slider) {
     Rectangle r = slider->rect;
     int x = (int)r.x, y = (int)r.y, w = (int)r.width, h = (int)r.height;
     int Soff = slider->Soff;
@@ -137,8 +123,13 @@ void UISlider_Draw(UISlider* slider) {
         DrawRectangleGradientH(x, y, w, h, slider->gradStart, slider->gradEnd);
 
     if (slider->jitter > 0.0f) {
-        int jw = (int)(w * slider->jitter);
-        DrawRectangle(x, y, jw, 7, (Color){0, 0, 255, 255});
+        if (slider->orient == 0) {
+            int jw = (int)(w * slider->jitter);
+            DrawRectangle(x, y, jw, 7, (Color){0, 0, 255, 255});
+        } else {
+            int jh = (int)(h * slider->jitter);
+            DrawRectangle(x, y + h - jh, w, jh, (Color){0, 0, 255, 255});
+        }
     }
 
     if (slider->orient == 0) {
@@ -197,18 +188,18 @@ void UnloadPenIcons(void) {
 }
 
 void BParam_Init(BParam* bp, int id, const char* name, float outMin, float outMax, float outDef) {
-    UISlider_Init(&bp->slider);
+    DualSlider_Init(&bp->slider);
+    bp->slider.clipmaxF = (outMax > outMin) ? (outDef - outMin) / (outMax - outMin) : 1.0f;
+    bp->slider.clipmaxF = fmaxf(0.0f, fminf(1.0f, bp->slider.clipmaxF));
+    bp->slider.showValue = false;
     bp->iconTex = (Texture2D){0};
     bp->iconLoaded = false;
     bp->penMode = csNone;
-    bp->penState = PEN_STATE_OFF;
-    bp->penRect = (Rectangle){0, 0, 28, 28};
+    bp->penEdit = false;
+    bp->penPending = false;
     bp->outMin = outMin;
     bp->outMax = outMax;
-    bp->outDef = outDef;
     bp->id = id;
-    bp->popupActive = false;
-    bp->popupHover = -1;
     strncpy(bp->name, name, sizeof(bp->name) - 1);
 }
 
@@ -242,11 +233,11 @@ void BParam_SetValue(BParam* bp, float val) {
 
 void BParam_Draw(BParam* bp) {
     Vector2 mp = GetMousePosition();
-    UISlider* sl = &bp->slider;
+    DualSlider* sl = &bp->slider;
     Rectangle r = sl->rect;
 
     if (bp->name[0])
-        DrawText(bp->name, (int)r.x, (int)r.y - 16, 12, WHITE);
+        DrawText(bp->name, (int)r.x, (int)r.y - 16, 12, DARKGRAY);
 
     Rectangle iconRect = {r.x - 28, r.y + (r.height - 24) / 2, 24, 24};
     if (bp->iconLoaded) {
@@ -254,124 +245,33 @@ void BParam_Draw(BParam* bp) {
             (Rectangle){0, 0, (float)bp->iconTex.width, (float)bp->iconTex.height},
             iconRect, (Vector2){0, 0}, 0, WHITE);
     } else {
-        DrawRectangleRec(iconRect, (Color){60, 60, 60, 255});
-        DrawRectangleLinesEx(iconRect, 1, DARKGRAY);
+        DrawRectangleRec(iconRect, (Color){180, 180, 180, 255});
+        DrawRectangleLinesEx(iconRect, 1, (Color){120, 120, 120, 255});
     }
 
-    UISlider_Draw(sl);
+    DualSlider_HandleInput(sl, mp);
+    DualSlider_Draw(sl);
+}
 
-    Rectangle pr = bp->penRect;
-    bool hover = CheckCollisionPointRec(mp, pr);
-    Color btnCol = hover ? (Color){80, 80, 90, 255} : (Color){60, 60, 70, 255};
-    if (bp->penState == PEN_STATE_OFF) btnCol = (Color){50, 50, 55, 255};
+void BParam_DrawPen(BParam* bp) {
+    Rectangle r = bp->slider.rect;
+    int penX = (int)(r.x + r.width + 4);
+    int penW = uiPanelWidth - 4 - penX;
+    if (penW <= 28) return;
 
-    DrawRectangleRec(pr, btnCol);
-    DrawRectangleLinesEx(pr, 1, (Color){100, 100, 110, 255});
+    Rectangle btnRect = {(float)penX, r.y, (float)penW, r.height};
+    GuiButton(btnRect, "");
 
     if (bp->penMode >= 0 && bp->penMode < PEN_MODE_COUNT && penModeTex[bp->penMode].id > 0) {
         Texture2D* pt = &penModeTex[bp->penMode];
-        float scale = fminf(pr.width / (float)pt->width, pr.height / (float)pt->height) * 0.8f;
-        float dw = pt->width * scale, dh = pt->height * scale;
-        Rectangle dst = {pr.x + (pr.width - dw) / 2, pr.y + (pr.height - dh) / 2, dw, dh};
-        Color tint = bp->penState == PEN_STATE_OFF ? (Color){100, 100, 100, 255} : WHITE;
-        DrawTexturePro(*pt,
-            (Rectangle){0, 0, (float)pt->width, (float)pt->height},
-            dst, (Vector2){0, 0}, 0, tint);
+        int iconSize = (penW < r.height ? penW : (int)r.height) - 6;
+        if (iconSize < 12) iconSize = 12;
+        float s = fminf((float)iconSize / pt->width, (float)iconSize / pt->height);
+        float dw = pt->width * s, dh = pt->height * s;
+        Rectangle dst = {btnRect.x + (penW - dw) / 2, btnRect.y + (r.height - dh) / 2, dw, dh};
+        DrawTexturePro(*pt, (Rectangle){0, 0, (float)pt->width, (float)pt->height}, dst, (Vector2){0, 0}, 0, WHITE);
     }
 
-    if (!bp->popupActive) return;
-
-    float pw = POPUP_WIDTH;
-    float ph = PEN_MODE_COUNT * POPUP_ITEM_H + 4;
-    float px = pr.x + pr.width - pw;
-    float py = pr.y + pr.height + 2;
-    if ((int)(py + ph) > GetScreenHeight() - 10)
-        py = pr.y - ph - 2;
-
-    Rectangle popupRect = {px, py, pw, ph};
-
-    DrawRectangleRec(popupRect, (Color){45, 45, 50, 255});
-    DrawRectangleLinesEx(popupRect, 1, (Color){120, 120, 130, 255});
-
-    for (int i = 0; i < PEN_MODE_COUNT; i++) {
-        float iy = py + 2 + i * POPUP_ITEM_H;
-        Rectangle itemRect = {px + 2, iy, pw - 4, POPUP_ITEM_H};
-
-        if (i == bp->popupHover)
-            DrawRectangleRec(itemRect, (Color){70, 70, 95, 255});
-
-        if (penModeTex[i].id > 0) {
-            float ds = POPUP_ICON_S;
-            float is = fminf((float)penModeTex[i].width, (float)penModeTex[i].height);
-            Rectangle src = {0, 0, is, is};
-            Rectangle dst = {itemRect.x + 4, itemRect.y + (POPUP_ITEM_H - ds) / 2, ds, ds};
-            DrawTexturePro(penModeTex[i], src, dst, (Vector2){0, 0}, 0, WHITE);
-        }
-
-        DrawText(PenModeNames[i], (int)(itemRect.x + POPUP_ICON_S + 8),
-                 (int)(itemRect.y + (POPUP_ITEM_H - 10) / 2), 10,
-                 i == bp->popupHover ? WHITE : (Color){180, 180, 180, 255});
-    }
-}
-
-void BParam_HandleInput(BParam* bp, Vector2 mousePos) {
-    if (activePopup != NULL && activePopup != bp) return;
-
-    if (bp->popupActive) {
-        if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON) || IsKeyPressed(KEY_ESCAPE)) {
-            bp->popupActive = false;
-            bp->popupHover = -1;
-            activePopup = NULL;
-            return;
-        }
-
-        float pw = POPUP_WIDTH;
-        float ph = PEN_MODE_COUNT * POPUP_ITEM_H + 4;
-        Rectangle pr = bp->penRect;
-        float px = pr.x + pr.width - pw;
-        float py = pr.y + pr.height + 2;
-        if ((int)(py + ph) > GetScreenHeight() - 10)
-            py = pr.y - ph - 2;
-        Rectangle popupRect = {px, py, pw, ph};
-        Rectangle outerRect = {px - 10, py - 10, pw + 20, ph + 20};
-
-        if (CheckCollisionPointRec(mousePos, popupRect)) {
-            int relY = (int)(mousePos.y - py - 2);
-            bp->popupHover = relY / POPUP_ITEM_H;
-            if (bp->popupHover < 0 || bp->popupHover >= PEN_MODE_COUNT)
-                bp->popupHover = -1;
-        } else {
-            bp->popupHover = -1;
-        }
-
-        if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) {
-            if (bp->popupHover >= 0)
-                bp->penMode = bp->popupHover;
-            bp->popupActive = false;
-            activePopup = NULL;
-            return;
-        }
-
-        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && !CheckCollisionPointRec(mousePos, outerRect)) {
-            bp->popupActive = false;
-            bp->popupHover = -1;
-            activePopup = NULL;
-            return;
-        }
-
-        return;
-    }
-
-    UISlider_HandleInput(&bp->slider, mousePos);
-
-    if (CheckCollisionPointRec(mousePos, bp->penRect)) {
-        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-            bp->popupActive = true;
-            bp->popupHover = bp->penMode;
-            activePopup = bp;
-        }
-        if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
-            bp->penState = (bp->penState == PEN_STATE_OFF) ? PEN_STATE_DIRECT : PEN_STATE_OFF;
-        }
-    }
+    if (CheckCollisionPointRec(GetMousePosition(), btnRect) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
+        bp->penPending = !bp->penPending;
 }

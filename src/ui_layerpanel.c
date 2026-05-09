@@ -1,27 +1,27 @@
 #include "repaint.h"
 #include "rlgl.h"
 
-UISlider layerOpSlider;
-
 int dragFromIdx = -1;
 bool dragActive = false;
 Vector2 dragMouseDownPos = {0, 0};
 int dragDropTarget = -1;
 
+static const char* blendModeNames = "Normal;Add;Dodge;Screen;Lighten;Burn;Multiply;Darken;Overlay;Highlight;Shadowlight;Xor;Diff;Exclusion";
+
 static void DrawLayerEntry(AppState* state, int idx, int x, int y) {
     Rectangle entryRect = {(float)x + 4, (float)y, (float)RIGHT_PANEL_WIDTH - 8, (float)LAYER_ENTRY_H};
 
     bool isActive = (idx == state->activeLayer);
-    Color bg = isActive ? (Color){70, 70, 85, 255} : (Color){50, 50, 55, 255};
+    Color bg = isActive ? (Color){190, 205, 230, 255} : (Color){208, 208, 208, 255};
     DrawRectangleRec(entryRect, bg);
     if (isActive)
-        DrawRectangleLinesEx(entryRect, 1, (Color){100, 140, 200, 255});
+        DrawRectangleLinesEx(entryRect, 1, (Color){60, 120, 200, 255});
 
     Rectangle checkRect = {(float)x + 10, (float)(y + LAYER_ENTRY_H / 2 - 10), 20, 20};
-    DrawRectangleRec(checkRect, (Color){40, 40, 45, 255});
-    DrawRectangleLinesEx(checkRect, 1, (Color){100, 100, 110, 255});
-    if (state->canvas.layerProps[idx].visible) {
-        DrawText("V", (int)checkRect.x + 6, (int)checkRect.y + 4, 12, GREEN);
+    bool visible = state->canvas.layerProps[idx].visible;
+    if (GuiCheckBox(checkRect, NULL, &visible) && visible != state->canvas.layerProps[idx].visible) {
+        state->canvas.layerProps[idx].visible = visible;
+        layersDirty = true;
     }
 
     Rectangle thumbRect = {(float)x + 36, (float)y + 4, 44, 44};
@@ -31,10 +31,10 @@ static void DrawLayerEntry(AppState* state, int idx, int x, int y) {
             for (int tx = 0; tx < 44; tx += cw) {
                 bool light = ((tx / cw) + (ty / ch)) % 2 == 0;
                 DrawRectangle((int)thumbRect.x + tx, (int)thumbRect.y + ty, cw, ch,
-                              light ? (Color){70, 70, 75, 255} : (Color){55, 55, 60, 255});
+                              light ? (Color){190, 190, 190, 255} : (Color){170, 170, 170, 255});
             }
         }
-        DrawRectangleLinesEx(thumbRect, 1, (Color){80, 80, 90, 255});
+        DrawRectangleLinesEx(thumbRect, 1, (Color){140, 140, 150, 255});
     }
 
     if (idx < state->texCount && state->layerTextures && state->layerTextures[idx].id > 0) {
@@ -48,7 +48,7 @@ static void DrawLayerEntry(AppState* state, int idx, int x, int y) {
 
     char lname[32];
     sprintf(lname, "Layer %d", idx + 1);
-    DrawText(lname, x + 86, y + LAYER_ENTRY_H / 2 - 6, 12, isActive ? WHITE : LIGHTGRAY);
+    DrawText(lname, x + 86, y + LAYER_ENTRY_H / 2 - 6, 12, isActive ? BLACK : DARKGRAY);
 }
 
 void LayerPanel_HandleInput(AppState* state, Vector2 mousePos) {
@@ -57,23 +57,6 @@ void LayerPanel_HandleInput(AppState* state, Vector2 mousePos) {
     int layerCount = state->canvas.layerCount;
     int listTop = 130;
     int listBottom = listTop + layerCount * LAYER_ENTRY_H;
-
-    Rectangle addRect = {(float)rpx + 10, 40, 80, 36};
-    Rectangle delRect = {(float)rpx + 100, 40, 80, 36};
-    if (CheckCollisionPointRec(mousePos, addRect) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-        Canvas_InsertLayer(&state->canvas, state->activeLayer + 1);
-        SyncAllRTs(state);
-        layersDirty = true;
-    }
-    if (CheckCollisionPointRec(mousePos, delRect) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-        if (state->canvas.layerCount > 1) {
-            int del = state->activeLayer;
-            Canvas_DeleteLayer(&state->canvas, del);
-            if (state->activeLayer >= state->canvas.layerCount)
-                state->activeLayer = state->canvas.layerCount - 1;
-            layersDirty = true;
-        }
-    }
 
     if (!dragActive) {
         for (int i = 0; i < layerCount && i < maxVisible; i++) {
@@ -88,9 +71,6 @@ void LayerPanel_HandleInput(AppState* state, Vector2 mousePos) {
                     dragActive = false;
                     dragDropTarget = -1;
                     state->activeLayer = aIdx;
-                } else {
-                    state->canvas.layerProps[aIdx].visible = !state->canvas.layerProps[aIdx].visible;
-                    layersDirty = true;
                 }
             }
         }
@@ -152,72 +132,66 @@ void LayerPanel_HandleInput(AppState* state, Vector2 mousePos) {
     if (dragFromIdx >= 0 && !dragActive && IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) {
         dragFromIdx = -1;
     }
-
-    UISlider_HandleInput(&layerOpSlider, mousePos);
-    float prevOp = state->canvas.layerProps[state->activeLayer].op;
-    state->canvas.layerProps[state->activeLayer].op = layerOpSlider.clipmaxF;
-    if (state->canvas.layerProps[state->activeLayer].op != prevOp)
-        layersDirty = true;
-
-    if (gizmoShow) {
-        int gcx = UI_PANEL_WIDTH + (RIGHT_PANEL_X - UI_PANEL_WIDTH) / 2;
-        int gcy = SCREEN_HEIGHT / 2;
-        int gizR = 100;
-        sliderHue.rect = (Rectangle){(float)gcx - 256, (float)gcy + gizR + 48, 512, 24};
-        sliderSat.rect = (Rectangle){(float)gcx - 256, (float)gcy + gizR + 80, 512, 24};
-        sliderLit.rect = (Rectangle){(float)gcx - 256, (float)gcy + gizR + 112, 512, 24};
-    } else {
-        sliderHue.rect = (Rectangle){-200, -200, 1, 1};
-        sliderSat.rect = (Rectangle){-200, -200, 1, 1};
-        sliderLit.rect = (Rectangle){-200, -200, 1, 1};
-    }
-    UISlider_HandleInput(&sliderHue, mousePos);
-    UISlider_HandleInput(&sliderSat, mousePos);
-    UISlider_HandleInput(&sliderLit, mousePos);
-    colorHue = sliderHue.clipmaxF;
-    colorSat = sliderSat.clipmaxF;
-    colorLit = sliderLit.clipmaxF;
 }
 
 void LayerPanel_Draw(AppState* state) {
     int rpx = RIGHT_PANEL_X;
     Vector2 mp = GetMousePosition();
 
-    DrawRectangle(rpx, 0, RIGHT_PANEL_WIDTH, SCREEN_HEIGHT, (Color){45, 45, 50, 255});
-    DrawRectangle(rpx, 0, 1, SCREEN_HEIGHT, DARKGRAY);
+    DrawRectangle(rpx, 0, RIGHT_PANEL_WIDTH, SCREEN_HEIGHT, (Color){210, 210, 210, 255});
+    DrawRectangle(rpx, 0, 1, SCREEN_HEIGHT, (Color){150, 150, 150, 255});
 
-    DrawText("Layers", rpx + 10, 10, 20, LIGHTGRAY);
+    GuiLabel((Rectangle){(float)rpx + 10, 10, 180, 20}, "Layers");
 
     Rectangle addRect = {(float)rpx + 10, 40, 80, 36};
     Rectangle delRect = {(float)rpx + 100, 40, 80, 36};
 
-    Color addCol = CheckCollisionPointRec(mp, addRect) ? (Color){70, 80, 70, 255} : (Color){55, 65, 55, 255};
-    Color delCol = CheckCollisionPointRec(mp, delRect) ? (Color){80, 60, 60, 255} : (Color){65, 55, 55, 255};
+    if (GuiButton(addRect, "+ Add")) {
+        Canvas_InsertLayer(&state->canvas, state->activeLayer + 1);
+        SyncAllRTs(state);
+        layersDirty = true;
+    }
+    if (GuiButton(delRect, "- Del")) {
+        if (state->canvas.layerCount > 1) {
+            int del = state->activeLayer;
+            Canvas_DeleteLayer(&state->canvas, del);
+            if (state->activeLayer >= state->canvas.layerCount)
+                state->activeLayer = state->canvas.layerCount - 1;
+            layersDirty = true;
+        }
+    }
 
-    DrawRectangleRec(addRect, addCol);
-    DrawRectangleLinesEx(addRect, 1, DARKGRAY);
-    DrawText("+ Add", (int)addRect.x + 16, (int)addRect.y + 10, 14, WHITE);
-
-    DrawRectangleRec(delRect, delCol);
-    DrawRectangleLinesEx(delRect, 1, DARKGRAY);
-    DrawText("- Del", (int)delRect.x + 16, (int)delRect.y + 10, 14, WHITE);
-
-    layerOpSlider.rect = (Rectangle){(float)rpx + 10, 86, 180, 24};
-    layerOpSlider.clipmaxF = state->canvas.layerProps[state->activeLayer].op;
-    UISlider_Draw(&layerOpSlider);
+    float layerOp = state->canvas.layerProps[state->activeLayer].op;
+    GuiLabel((Rectangle){(float)rpx + 10, 80, 180, 14}, "Layer Op");
+    GuiSlider((Rectangle){(float)rpx + 10, 94, 180, 20}, NULL, NULL, &layerOp, 0.0f, 1.0f);
+    if (layerOp != state->canvas.layerProps[state->activeLayer].op) {
+        Canvas_SetLayerOpacity(&state->canvas, state->activeLayer, layerOp);
+        layersDirty = true;
+    }
 
     int maxVisible = (SCREEN_HEIGHT - 180) / LAYER_ENTRY_H;
-    int listTop = 130;
+    int listTop = 150;
     int layerCount = state->canvas.layerCount;
     for (int i = 0; i < layerCount && i < maxVisible; i++) {
         DrawLayerEntry(state, layerCount - 1 - i, rpx, listTop + i * LAYER_ENTRY_H);
+    }
+
+    static bool blendEditMode = false;
+    int blendActive = state->canvas.layerProps[state->activeLayer].blendmode;
+
+    if (GuiDropdownBox((Rectangle){(float)rpx + 10, 118, 180, 18}, blendModeNames, &blendActive, blendEditMode))
+        blendEditMode = !blendEditMode;
+
+    if (blendActive != state->canvas.layerProps[state->activeLayer].blendmode) {
+        Canvas_SetLayerBlendMode(&state->canvas, state->activeLayer, blendActive);
+        layersDirty = true;
     }
 
     if (dragActive && dragDropTarget >= 0) {
         int indicatorY = listTop + dragDropTarget * LAYER_ENTRY_H;
         int maxY = listTop + (layerCount > maxVisible ? maxVisible : layerCount) * LAYER_ENTRY_H;
         if (indicatorY >= listTop && indicatorY <= maxY) {
-            DrawRectangle(rpx + 4, indicatorY - 4, RIGHT_PANEL_WIDTH - 8, 8, (Color){100, 200, 255, 180});
+            DrawRectangle(rpx + 4, indicatorY - 4, RIGHT_PANEL_WIDTH - 8, 8, (Color){30, 100, 200, 180});
         }
     }
 }
