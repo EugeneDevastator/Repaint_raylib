@@ -7,6 +7,7 @@ Vector2 dragMouseDownPos = {0, 0};
 int dragDropTarget = -1;
 
 static const char* blendModeNames = "Normal;Add;Dodge;Screen;Lighten;Burn;Multiply;Darken;Overlay;Highlight;Shadowlight;Xor;Diff;Exclusion";
+static bool blendEditMode = false;
 
 static void DrawLayerEntry(AppState* state, int idx, int x, int y) {
     Rectangle entryRect = {(float)x + 4, (float)y, (float)RIGHT_PANEL_WIDTH - 8, (float)LAYER_ENTRY_H};
@@ -55,8 +56,10 @@ void LayerPanel_HandleInput(AppState* state, Vector2 mousePos) {
     int rpx = RIGHT_PANEL_X;
     int maxVisible = (SCREEN_HEIGHT - 180) / LAYER_ENTRY_H;
     int layerCount = state->canvas.layerCount;
-    int listTop = 130;
+    int listTop = 150;
     int listBottom = listTop + layerCount * LAYER_ENTRY_H;
+
+    if (blendEditMode) return; // dropdown owns all input when open
 
     if (!dragActive) {
         for (int i = 0; i < layerCount && i < maxVisible; i++) {
@@ -169,22 +172,20 @@ void LayerPanel_Draw(AppState* state) {
         layersDirty = true;
     }
 
+    // Dropdown drawn BEFORE layer entries — renders on top when expanded
+    int blendActive = state->canvas.layerProps[state->activeLayer].blendmode;
+    if (GuiDropdownBox((Rectangle){(float)rpx + 10, 118, 180, 18}, blendModeNames, &blendActive, blendEditMode))
+        blendEditMode = !blendEditMode;
+    if (blendActive != state->canvas.layerProps[state->activeLayer].blendmode) {
+        Canvas_SetLayerBlendMode(&state->canvas, state->activeLayer, blendActive);
+        layersDirty = true;
+    }
+
     int maxVisible = (SCREEN_HEIGHT - 180) / LAYER_ENTRY_H;
     int listTop = 150;
     int layerCount = state->canvas.layerCount;
     for (int i = 0; i < layerCount && i < maxVisible; i++) {
         DrawLayerEntry(state, layerCount - 1 - i, rpx, listTop + i * LAYER_ENTRY_H);
-    }
-
-    static bool blendEditMode = false;
-    int blendActive = state->canvas.layerProps[state->activeLayer].blendmode;
-
-    if (GuiDropdownBox((Rectangle){(float)rpx + 10, 118, 180, 18}, blendModeNames, &blendActive, blendEditMode))
-        blendEditMode = !blendEditMode;
-
-    if (blendActive != state->canvas.layerProps[state->activeLayer].blendmode) {
-        Canvas_SetLayerBlendMode(&state->canvas, state->activeLayer, blendActive);
-        layersDirty = true;
     }
 
     if (dragActive && dragDropTarget >= 0) {
