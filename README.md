@@ -1,5 +1,14 @@
 # RePaint Raylib Port
 
+
+# Releases:
+
+| Platform | Download |
+|----------|----------|
+| Windows-x64  | [repaint-windows.zip](https://github.com/EugeneDevastator/Repaint_raylib/releases/download/latest/repaint-windows.zip) |
+| Linux    | [repaint-linux.zip](https://github.com/EugeneDevastator/Repaint_raylib/releases/download/latest/repaint-linux.zip) |
+
+
 A pure C port of the repaint-qt project (C++/Qt painting application) using raylib.
 
 ## Build
