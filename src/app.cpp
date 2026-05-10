@@ -79,23 +79,6 @@ void SyncAllRTs(AppState* state) {
 void UpdateUI(AppState* state) {
     Vector2 mousePos = GetMousePosition();
 
-    {
-        int handleX = uiPanelWidth;
-        Rectangle handleRect = {(float)handleX - 3, 0, 7, (float)SCREEN_HEIGHT};
-        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && CheckCollisionPointRec(mousePos, handleRect))
-            panelResizing = true;
-        if (panelResizing) {
-            if (IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
-                uiPanelWidth = (int)fmaxf(120.0f, fminf(mousePos.x, SCREEN_WIDTH - RIGHT_PANEL_WIDTH - 100));
-                Rectangle vb = {(float)uiPanelWidth, 0,
-                    (float)(SCREEN_WIDTH - uiPanelWidth - RIGHT_PANEL_WIDTH), (float)SCREEN_HEIGHT};
-                Viewport_SetBounds(&viewport, vb);
-            } else {
-                panelResizing = false;
-            }
-        }
-    }
-
     gizmoShow = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
 
     if (gizmoShow)
@@ -149,13 +132,6 @@ void App_Init(AppState* state) {
 
     state->canvas = Canvas_Create(800, 600, WHITE);
     state->activeLayer = 0;
-    state->camera = Camera2D{};
-    state->camera.target = Vector2{0, 0};
-    state->camera.offset = Vector2{0, 0};
-    state->camera.rotation = 0.0f;
-    state->camera.zoom = 1.0f;
-
-    state->mode = eBrush;
 
     Rectangle viewportBounds = {
         (float)uiPanelWidth, 0,
@@ -163,6 +139,14 @@ void App_Init(AppState* state) {
         (float)SCREEN_HEIGHT
     };
     Viewport_Init(&viewport, viewportBounds);
+
+    state->camera = Camera2D{};
+    state->camera.target = Vector2{(float)state->canvas.width * 0.5f, (float)state->canvas.height * 0.5f};
+    state->camera.offset = Vector2{viewportBounds.x + viewportBounds.width * 0.5f, viewportBounds.y + viewportBounds.height * 0.5f};
+    state->camera.rotation = 0.0f;
+    state->camera.zoom = 1.0f;
+
+    state->mode = eBrush;
 
     state->currentBrush.Realb.rad_in = 1.0f;
     state->currentBrush.Realb.rad_out = 20.0f;
@@ -208,11 +192,6 @@ void App_Draw(AppState* state) {
     LeftPanel_Draw(state);
     LayerPanel_Draw(state);
     rlImGuiEnd();
-
-    // Panel resize handle (drawn over ImGui)
-    int sz = uiPanelWidth;
-    DrawRectangle(sz - 3, 0, 7, SCREEN_HEIGHT,
-        panelResizing ? Color{80, 120, 200, 255} : Color{160, 160, 160, 255});
 
     EndDrawing();
 }

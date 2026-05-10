@@ -16,6 +16,11 @@ static int locSol2op = -1;
 static int locBmidx = -1;
 static bool brushBlendInited = false;
 
+// Temp render target to avoid feedback loop (reading from dstRT while writing to it)
+static RenderTexture2D brushTempRT = {0};
+static int brushTempW = 0;
+static int brushTempH = 0;
+
 void BrushBlend_Init(void) {
     if (brushBlendInited) return;
 
@@ -41,6 +46,8 @@ void BrushBlend_Init(void) {
 void BrushBlend_Shutdown(void) {
     if (!brushBlendInited) return;
     UnloadShader(brushBlendShader);
+    if (brushTempRT.id > 0) UnloadRenderTexture(brushTempRT);
+    brushTempRT = RenderTexture2D{0};
     brushBlendInited = false;
 }
 
@@ -58,6 +65,14 @@ void BrushBlend_ApplyStamp(
 
     int canvasW = dstRT.texture.width;
     int canvasH = dstRT.texture.height;
+
+    // Ensure temp RT matches canvas size (avoids feedback loop)
+    if (brushTempRT.id == 0 || brushTempW != canvasW || brushTempH != canvasH) {
+        if (brushTempRT.id > 0) UnloadRenderTexture(brushTempRT);
+        brushTempRT = LoadRenderTexture(canvasW, canvasH);
+        brushTempW = canvasW;
+        brushTempH = canvasH;
+    }
 
     float radOut = brush->Realb.rad_out;
     if (radOut < 0.5f) radOut = 0.5f;
@@ -100,13 +115,17 @@ void BrushBlend_ApplyStamp(
     int bmidx = (int)brush->Realb.bmidx;
     SetShaderValue(brushBlendShader, locBmidx,    &bmidx,                 SHADER_UNIFORM_INT);
 
-    // Shader does manual blending — disable GL blending to avoid double-blend
+    // Step 1: copy dstRT to tempRT (read from dstRT, write to tempRT)
     rlSetBlendMode(RL_BLEND_CUSTOM);
     rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+    BeginTextureMode(brushTempRT);
+    DrawTextureRec(dstRT.texture, Rectangle{0, 0, (float)canvasW, (float)-canvasH}, Vector2{0, 0}, WHITE);
+    EndTextureMode();
 
+    // Step 2: apply brush stamp using tempRT as source (avoid feedback loop)
     BeginTextureMode(dstRT);
     BeginShaderMode(brushBlendShader);
-    DrawTextureRec(dstRT.texture, Rectangle{0, 0, (float)canvasW, (float)-canvasH}, Vector2{0, 0}, WHITE);
+    DrawTextureRec(brushTempRT.texture, Rectangle{0, 0, (float)canvasW, (float)-canvasH}, Vector2{0, 0}, WHITE);
     EndShaderMode();
     EndTextureMode();
 

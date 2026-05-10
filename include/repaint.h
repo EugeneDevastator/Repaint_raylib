@@ -168,6 +168,7 @@ typedef struct {
     bool penEdit;
     bool penPending;
     float outMin, outMax;
+    float defClipmaxF;
     char name[48];
     int id;
 } BParam;

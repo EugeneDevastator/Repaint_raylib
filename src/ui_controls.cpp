@@ -66,8 +66,9 @@ void UnloadPenIcons(void) {
 
 void BParam_Init(BParam* bp, int id, const char* name, float outMin, float outMax, float outDef) {
     DualSlider_Init(&bp->slider);
-    bp->slider.clipmaxF = (outMax > outMin) ? (outDef - outMin) / (outMax - outMin) : 1.0f;
-    bp->slider.clipmaxF = fmaxf(0.0f, fminf(1.0f, bp->slider.clipmaxF));
+    bp->defClipmaxF = (outMax > outMin) ? (outDef - outMin) / (outMax - outMin) : 1.0f;
+    bp->defClipmaxF = fmaxf(0.0f, fminf(1.0f, bp->defClipmaxF));
+    bp->slider.clipmaxF = bp->defClipmaxF;
     bp->slider.showValue = false;
     bp->iconTex = Texture2D{0};
     bp->iconLoaded = false;

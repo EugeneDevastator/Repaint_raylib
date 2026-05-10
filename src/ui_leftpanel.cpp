@@ -52,12 +52,6 @@ static void DrawBParamSlider(BParam* bp) {
     ImU32 gradB = IM_COL32(bp->slider.gradEnd.r, bp->slider.gradEnd.g, bp->slider.gradEnd.b, bp->slider.gradEnd.a);
     dl->AddRectFilledMultiColor(bb.Min, bb.Max, gradA, gradB, gradB, gradA);
 
-    // Jitter bar (thin blue strip at top, like Qt version)
-    if (bp->slider.jitter > 0.0f) {
-        float jw = (bb.Max.x - bb.Min.x) * bp->slider.jitter;
-        dl->AddRectFilled(bb.Min, ImVec2(bb.Min.x + jw, bb.Min.y + 7), IM_COL32(0, 80, 200, 160));
-    }
-
     // 3D sunken frame (Qt-style bevel border)
     ImU32 shade = IM_COL32(bp->slider.shade.r, bp->slider.shade.g, bp->slider.shade.b, bp->slider.shade.a);
     ImU32 hlite = IM_COL32(bp->slider.hlite.r, bp->slider.hlite.g, bp->slider.hlite.b, bp->slider.hlite.a);
@@ -66,15 +60,39 @@ static void DrawBParamSlider(BParam* bp) {
     dl->AddLine(ImVec2(bb.Max.x - 1, bb.Min.y), ImVec2(bb.Max.x - 1, bb.Max.y), hlite);
     dl->AddLine(ImVec2(bb.Min.x, bb.Max.y - 1), ImVec2(bb.Max.x, bb.Max.y - 1), hlite);
 
-    // Invisible button for input (click + drag)
-    ImGui::InvisibleButton("##sl", bb.GetSize());
+    // Invisible button for input
+    // left = primary value (white handle), right = secondary value (dark handle), middle = jitter
+    ImGui::InvisibleButton("##sl", bb.GetSize(), ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonMiddle | ImGuiButtonFlags_MouseButtonRight);
     if (ImGui::IsItemActive()) {
         float mx = (ImGui::GetMousePos().x - bb.Min.x) / (bb.Max.x - bb.Min.x);
         mx = fminf(fmaxf(mx, 0.0f), 1.0f);
-        bp->slider.clipmaxF = mx;
+        if (ImGui::IsMouseDown(0))
+            bp->slider.clipmaxF = mx;
+        else if (ImGui::IsMouseDown(1))
+            bp->slider.clipminF = mx;
+        else if (ImGui::IsMouseDown(2))
+            bp->slider.jitter = mx;
     }
 
-    // Grabber handle at current value (thin vertical bar)
+    // Range fill between min and max handles
+    {
+        float minX = bb.Min.x + (bb.Max.x - bb.Min.x) * bp->slider.clipminF;
+        float maxX = bb.Min.x + (bb.Max.x - bb.Min.x) * bp->slider.clipmaxF;
+        if (maxX > minX)
+            dl->AddRectFilled(ImVec2(minX, bb.Min.y + 7), ImVec2(maxX, bb.Max.y), IM_COL32(0, 80, 200, 40));
+    }
+
+    // Secondary grabber (dark, right-click controlled)
+    {
+        float grabX = bb.Min.x + (bb.Max.x - bb.Min.x) * bp->slider.clipminF;
+        float grabHalf = 4.0f;
+        ImRect gr(ImVec2(grabX - grabHalf, bb.Min.y + 2),
+                  ImVec2(grabX + grabHalf, bb.Max.y - 2));
+        dl->AddRectFilled(gr.Min, gr.Max, IM_COL32(60, 60, 60, 255));
+        dl->AddRect(gr.Min, gr.Max, IM_COL32(30, 30, 30, 200));
+    }
+
+    // Primary grabber (white, left-click controlled)
     {
         float grabX = bb.Min.x + (bb.Max.x - bb.Min.x) * bp->slider.clipmaxF;
         float grabHalf = 4.0f;
@@ -219,6 +237,30 @@ void LeftPanel_Draw(AppState* state) {
 
         const char* modeNames[] = {"None", "Brush", "Smudge", "Disp", "Cont", "Line"};
         ImGui::Text("%s", modeNames[state->mode > 5 ? 0 : state->mode]);
+    }
+
+    // Separator + resize handle at right edge (drawn inside ImGui for proper z-order)
+    {
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        ImVec2 wMin = ImGui::GetWindowPos();
+        ImVec2 wSize = ImGui::GetWindowSize();
+        float handleX = wMin.x + wSize.x;
+        ImU32 col = panelResizing ? IM_COL32(80, 120, 200, 255) : IM_COL32(160, 160, 160, 255);
+        dl->AddRectFilled(ImVec2(handleX - 3, wMin.y), ImVec2(handleX + 4, wMin.y + SCREEN_HEIGHT), col);
+
+        // Invisible button for resize interaction
+        ImGui::SetCursorScreenPos(ImVec2(handleX - 3, wMin.y));
+        ImGui::InvisibleButton("##resize", ImVec2(7, SCREEN_HEIGHT));
+        if (ImGui::IsItemActive()) {
+            panelResizing = true;
+            float mx = ImGui::GetMousePos().x;
+            uiPanelWidth = (int)fmaxf(120.0f, fminf(mx, (float)(SCREEN_WIDTH - RIGHT_PANEL_WIDTH - 100)));
+            Rectangle vb = {(float)uiPanelWidth, 0,
+                (float)(SCREEN_WIDTH - uiPanelWidth - RIGHT_PANEL_WIDTH), (float)SCREEN_HEIGHT};
+            Viewport_SetBounds(&viewport, vb);
+        } else {
+            panelResizing = false;
+        }
     }
 
     ImGui::End();

@@ -52,8 +52,12 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
 
     Vector2 mousePos = GetMousePosition();
 
-    // Pan camera (right mouse — works regardless of hover)
-    if (IsMouseButtonDown(MOUSE_RIGHT_BUTTON)) {
+    // Bounds check first (used by pan and drawing below)
+    vp->inBounds = mousePos.x >= vp->bounds.x && mousePos.x <= vp->bounds.x + vp->bounds.width &&
+                   mousePos.y >= vp->bounds.y && mousePos.y <= vp->bounds.y + vp->bounds.height;
+
+    // Pan camera (right mouse — only when within viewport bounds)
+    if (vp->inBounds && IsMouseButtonDown(MOUSE_RIGHT_BUTTON)) {
         if (vp->rightMouseDown) {
             Vector2 delta = {
                 mousePos.x - vp->lastMousePos.x,
@@ -82,10 +86,6 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
 
     vp->lastMousePos = mousePos;
 
-    // Bounds check
-    vp->inBounds = mousePos.x >= vp->bounds.x && mousePos.x <= vp->bounds.x + vp->bounds.width &&
-                   mousePos.y >= vp->bounds.y && mousePos.y <= vp->bounds.y + vp->bounds.height;
-
     // Gizmo overlay skip
     if (gizmoShow) {
         int gcx = (int)(vp->bounds.x + vp->bounds.width / 2);
@@ -102,13 +102,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
 
     // Brush / Smudge / Disp / Cont
     if (vp->inBounds && leftDown && (state->mode == eBrush || state->mode == eSmudge || state->mode == eDisp || state->mode == eCont)) {
-        if (active >= 0 && active < state->texCount) {
-            EnsureRTs(state);
-            if (state->layerRTs[active].id == 0) {
-                state->layerRTs[active] = LoadRenderTexture(
-                    state->canvas.width, state->canvas.height);
-            }
-
+        if (active >= 0 && active < state->texCount && state->layerRTs[active].id > 0) {
             RenderTexture2D rt = state->layerRTs[active];
 
             if (state->mode == eBrush) {
@@ -186,12 +180,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
     }
 
     // Line tool
-    if (state->mode == eLine && vp->inBounds && leftDown && active >= 0 && active < state->texCount) {
-        EnsureRTs(state);
-        if (state->layerRTs[active].id == 0) {
-            state->layerRTs[active] = LoadRenderTexture(
-                state->canvas.width, state->canvas.height);
-        }
+    if (state->mode == eLine && vp->inBounds && leftDown && active >= 0 && active < state->texCount && state->layerRTs[active].id > 0) {
         RenderTexture2D rt = state->layerRTs[active];
         if (!vp->wasMouseDown) {
             vp->lastDabPos = canvasPos;

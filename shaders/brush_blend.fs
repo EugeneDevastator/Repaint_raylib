@@ -182,7 +182,6 @@ void main() {
 	  // bmNormal
         outRGB = srcPremul + dst.rgb * (1.0 - srcA);
         outA = srcA + dst.a * (1.0 - srcA);
-	}
     } else { // default: normal
         outRGB = srcPremul + dst.rgb * (1.0 - srcA);
         outA = srcA + dst.a * (1.0 - srcA);
