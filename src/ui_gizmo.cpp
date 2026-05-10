@@ -106,7 +106,8 @@ void Gizmo_Draw(AppState* state) {
     float drawRadOut = state->currentBrush.Realb.rad_out * state->camera.zoom;
     float drawRadIn = state->currentBrush.Realb.rad_in * state->camera.zoom;
     if (drawRadIn > drawRadOut) drawRadIn = drawRadOut;
-    float drawRelRad = drawRadOut * state->currentBrush.Realb.crv;
+	float drawRelRad = drawRadOut * (1.0f - state->currentBrush.Realb.crv);
+
 
     // ── Radial guide lines ──────────────────────────────────────────────
     for (int gi = 1; gi <= 5; gi += 2) {
@@ -121,20 +122,25 @@ void Gizmo_Draw(AppState* state) {
     dl->AddCircle(org, drawRadOut + 1, IM_COL32_WHITE,  0, 2);
     dl->AddCircle(org, drawRadOut - 1, IM_COL32_WHITE,  0, 2);
 
-    // ── 3 × 120° sector arcs (hardness, curvature, radius) ──────────────
-    // Positions match original Qt: inner at 150°→270° (left), curvature at
-    // 270°→30° (right), radius at 30°→150° (bottom).
+    // ── 3 × 120° sector arcs ────────────────────────────────────────────
+    // Rays at -30°, -90°, -150° → sectors:
+    //   [-150° → -30°]  top      = size      (drawRadOut)
+    //   [-30°  →  90°]  bot-right = curvature (drawRelRad)
+    //   [ 90°  → 210°]  bot-left  = hardness  (drawRadIn)
     {
-        float arcStart = (float)(M_PI * 150.0 / 180.0); // 5π/6
-        float arcStep  = (float)(M_PI * 120.0 / 180.0); // 2π/3
-        float rads[3]  = {drawRadIn, drawRelRad, drawRadOut};
+        float deg = (float)(M_PI / 180.0);
+        // sector start angles, CCW in screen space (Y-down = CW visually)
+        float starts[3] = { -150.0f * deg, -30.0f * deg,  90.0f * deg };
+        float ends[3]   = {  -30.0f * deg,  90.0f * deg, 210.0f * deg };
+        float rads[3]   = { drawRadOut, drawRelRad, drawRadIn };
+
         for (int i = 0; i < 3; i++) {
             float rad = rads[i];
             if (rad <= 0) continue;
-            float a0 = arcStart + i * arcStep;
-            float a1 = arcStart + (i + 1) * arcStep;
+            float a0 = starts[i];
+            float a1 = ends[i];
             dl->PathClear();
-            dl->PathArcTo(org, rad, a0, a1, 0);
+            dl->PathArcTo(org, rad,     a0, a1, 0);
             dl->PathStroke(IM_COL32_BLACK, false, 3.0f);
             dl->PathClear();
             dl->PathArcTo(org, rad + 1, a0, a1, 0);
@@ -144,6 +150,7 @@ void Gizmo_Draw(AppState* state) {
             dl->PathStroke(IM_COL32_WHITE, false, 2.0f);
         }
     }
+
 
     // ── Rotation arrow ──────────────────────────────────────────────────
     float rang = state->currentBrush.Realb.resangle * (float)(M_PI * 2.0 / 360.0);
