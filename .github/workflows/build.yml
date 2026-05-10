@@ -38,9 +38,6 @@ jobs:
 
   build-windows:
     runs-on: windows-latest
-    defaults:
-      run:
-        shell: msys2 {0}
     steps:
       - uses: actions/checkout@v4
 
@@ -50,18 +47,21 @@ jobs:
           install: mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-make
 
       - name: Configure
+        shell: msys2 {0}
         run: cmake --preset win64-release -DCMAKE_MAKE_PROGRAM=mingw32-make
 
       - name: Build
+        shell: msys2 {0}
         run: cmake --build build/win64-release --parallel
 
       - name: Package
+        shell: pwsh
         run: |
-          mkdir -p dist/repaint-windows
-          cp build/win64-release/bin/repaint.exe dist/repaint-windows/
-          cp -r shaders dist/repaint-windows/ 2>/dev/null || true
-          cp -r resources dist/repaint-windows/ 2>/dev/null || true
-          7z a repaint-windows.zip dist/repaint-windows
+          New-Item -ItemType Directory -Force dist/repaint-windows
+          Copy-Item build/win64-release/bin/repaint.exe dist/repaint-windows/
+          if (Test-Path shaders)   { Copy-Item -Recurse shaders   dist/repaint-windows/ }
+          if (Test-Path resources) { Copy-Item -Recurse resources dist/repaint-windows/ }
+          Compress-Archive -Path dist/repaint-windows -DestinationPath repaint-windows.zip
 
       - uses: actions/upload-artifact@v4
         with:
