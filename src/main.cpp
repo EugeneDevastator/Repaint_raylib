@@ -42,34 +42,12 @@ int main() {
     AppState state = {0};
     App_Init(&state);
 
-    mainWindow = glfwGetCurrentContext();
-    if (mainWindow) glfwMakeContextCurrent(NULL);
-
-    pthread_create(&renderThread, NULL, RenderLoop, &state);
-
     while (!WindowShouldClose()) {
-        pthread_mutex_lock(&renderMutex);
-        while (!frameComplete)
-            pthread_cond_wait(&renderCond, &renderMutex);
-        frameComplete = false;
-        pthread_mutex_unlock(&renderMutex);
-
         UpdateUI(&state);
         Viewport_HandleInput(&viewport, &state);
-
-        pthread_mutex_lock(&renderMutex);
-        framePending = true;
-        pthread_cond_signal(&renderCond);
-        pthread_mutex_unlock(&renderMutex);
+        App_Draw(&state);
     }
 
-    running = false;
-    pthread_mutex_lock(&renderMutex);
-    pthread_cond_signal(&renderCond);
-    pthread_mutex_unlock(&renderMutex);
-    pthread_join(renderThread, NULL);
-
-    if (mainWindow) glfwMakeContextCurrent(mainWindow);
     App_Close(&state);
     return 0;
 }
