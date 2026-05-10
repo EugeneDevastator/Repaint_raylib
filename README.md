@@ -1,5 +1,6 @@
 # RePaint Raylib Port
-
+Now with shaders,
+AND PROPER BLENDING. Not your normal normal
 
 # Releases:
 
