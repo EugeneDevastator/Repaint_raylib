@@ -13,6 +13,9 @@ BParam bpHardness;
 BParam bpSpacing;
 BParam bpCurvature;
 BParam bpScatter;
+BParam bpQuickHue;
+BParam bpQuickSat;
+BParam bpQuickLit;
 
 Viewport viewport;
 
@@ -97,8 +100,13 @@ void UpdateUI(AppState* state) {
     state->currentBrush.Realb.crv = BParam_GetValue(&bpCurvature);
     state->currentBrush.Realb.opacity = BParam_GetValue(&bpOpacity);
 
+    colorHue = bpQuickHue.slider.clipmaxF;
+    colorSat = bpQuickSat.slider.clipmaxF;
+    colorLit = bpQuickLit.slider.clipmaxF;
     state->currentBrush.Realb.col = HSLToRGB(colorHue, colorSat, colorLit);
 }
+
+static LocalBroker localBroker;
 
 void App_Init(AppState* state) {
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "RePaint");
@@ -109,6 +117,9 @@ void App_Init(AppState* state) {
     Painter_Init();
     BrushBlend_Init();
     LoadPenIcons();
+    LoadGizmoIcons();
+
+    localBroker.appState = state;
 
     BParam_Init(&bpOpacity, 0, "Opacity", 0.0f, 1.0f, 1.0f);
     BParam_SetIcon(&bpOpacity, "ctlop");
@@ -130,6 +141,13 @@ void App_Init(AppState* state) {
     BParam_Init(&bpScatter, 5, "Scatter", 0.0f, 5.0f, 0.0f);
     BParam_SetIcon(&bpScatter, "ctlspcjit");
 
+    BParam_Init(&bpQuickHue, 10, "Hue", 0.0f, 1.0f, 0.35f);
+    bpQuickHue.slider.clipmaxF = 0.35f;
+    BParam_Init(&bpQuickSat, 11, "Sat", 0.0f, 1.0f, 1.0f);
+    bpQuickSat.slider.clipmaxF = 1.0f;
+    BParam_Init(&bpQuickLit, 12, "Lit", 0.0f, 1.0f, 0.5f);
+    bpQuickLit.slider.clipmaxF = 0.5f;
+
     state->canvas = Canvas_Create(800, 600, WHITE);
     state->activeLayer = 0;
 
@@ -139,6 +157,7 @@ void App_Init(AppState* state) {
         (float)SCREEN_HEIGHT
     };
     Viewport_Init(&viewport, viewportBounds);
+    viewport.broker = &localBroker;
 
     state->camera = Camera2D{};
     state->camera.target = Vector2{(float)state->canvas.width * 0.5f, (float)state->canvas.height * 0.5f};
@@ -179,18 +198,22 @@ void App_Init(AppState* state) {
 
 void App_Draw(AppState* state) {
     EnsureRTs(state);
-    Viewport_FlushDabs(&viewport, state);
+    if (viewport.broker) viewport.broker->poll(state);
+    if (viewport.strokeEnded) {
+        SyncLayerTexture(state, viewport.endLayer);
+        viewport.strokeEnded = false;
+    }
 
     BeginDrawing();
     ClearBackground(Color{220, 220, 220, 255});
 
     Viewport_Draw(&viewport, state);
-    Gizmo_Draw(state);
 
-    // All ImGui in one frame
     rlImGuiBegin();
+    Gizmo_Draw(state);
     LeftPanel_Draw(state);
     LayerPanel_Draw(state);
+    Gizmo_DrawPenPopups(state);
     rlImGuiEnd();
 
     EndDrawing();
@@ -216,6 +239,7 @@ void App_Close(AppState* state) {
     if (bpCurvature.iconLoaded) UnloadTexture(bpCurvature.iconTex);
     if (bpScatter.iconLoaded) UnloadTexture(bpScatter.iconTex);
     UnloadPenIcons();
+    UnloadGizmoIcons();
     Painter_Shutdown();
     BrushBlend_Shutdown();
     CloseWindow();

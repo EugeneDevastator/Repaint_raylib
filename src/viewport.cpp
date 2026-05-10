@@ -1,30 +1,16 @@
 #include "repaint.h"
 #include "rlgl.h"
 
-static void SyncLayerTexture(AppState* state, int layer) {
+static uint32_t PackColor(Color c) {
+    return (uint32_t)c.r << 16 | (uint32_t)c.g << 8 | (uint32_t)c.b | (uint32_t)c.a << 24;
+}
+
+void SyncLayerTexture(AppState* state, int layer) {
     if (layer < 0 || layer >= state->texCount) return;
     if (state->layerRTs[layer].id == 0) return;
     SyncImageFromRT(state, layer);
     if (state->layerTextures[layer].id > 0) UnloadTexture(state->layerTextures[layer]);
     state->layerTextures[layer] = LoadTextureFromImage(state->canvas.layerImages[layer]);
-}
-
-static bool DabQueue_Push(Viewport* vp, float x, float y, RenderTexture2D rt, int layer) {
-    int next = (vp->dabTail + 1) % DAB_QUEUE_CAPACITY;
-    if (next == vp->dabHead) return false;
-    vp->dabQueue[vp->dabTail].x = x;
-    vp->dabQueue[vp->dabTail].y = y;
-    vp->dabQueue[vp->dabTail].targetRT = rt;
-    vp->dabQueue[vp->dabTail].activeLayer = layer;
-    vp->dabTail = next;
-    return true;
-}
-
-static bool DabQueue_Pop(Viewport* vp, Dab* out) {
-    if (vp->dabHead == vp->dabTail) return false;
-    *out = vp->dabQueue[vp->dabHead];
-    vp->dabHead = (vp->dabHead + 1) % DAB_QUEUE_CAPACITY;
-    return true;
 }
 
 void Viewport_Init(Viewport* vp, Rectangle bounds) {
@@ -37,10 +23,9 @@ void Viewport_Init(Viewport* vp, Rectangle bounds) {
     vp->rightMouseDown = false;
     vp->lastMousePos = Vector2{0, 0};
     vp->inBounds = false;
-    vp->dabHead = 0;
-    vp->dabTail = 0;
     vp->strokeEnded = false;
     vp->endLayer = 0;
+    vp->broker = NULL;
 }
 
 void Viewport_SetBounds(Viewport* vp, Rectangle bounds) {
@@ -52,7 +37,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
 
     Vector2 mousePos = GetMousePosition();
 
-    // Bounds check first (used by pan and drawing below)
+    // Bounds check first
     vp->inBounds = mousePos.x >= vp->bounds.x && mousePos.x <= vp->bounds.x + vp->bounds.width &&
                    mousePos.y >= vp->bounds.y && mousePos.y <= vp->bounds.y + vp->bounds.height;
 
@@ -86,15 +71,8 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
 
     vp->lastMousePos = mousePos;
 
-    // Gizmo overlay skip
-    if (gizmoShow) {
-        int gcx = (int)(vp->bounds.x + vp->bounds.width / 2);
-        int gcy = (int)(vp->bounds.y + vp->bounds.height / 2);
-        int gizR = 100;
-        Rectangle overlayRect = {(float)gcx - 270, (float)gcy - gizR, 540, 480};
-        if (gizmoMouseMode > 0 || CheckCollisionPointRec(mousePos, overlayRect))
-            return;
-    }
+    // Gizmo overlay — block all viewport input when gizmo is showing
+    if (gizmoShow) return;
 
     Vector2 canvasPos = GetScreenToWorld2D(mousePos, state->camera);
     bool leftDown = IsMouseButtonDown(MOUSE_LEFT_BUTTON);
@@ -103,11 +81,12 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
     // Brush / Smudge / Disp / Cont
     if (vp->inBounds && leftDown && (state->mode == eBrush || state->mode == eSmudge || state->mode == eDisp || state->mode == eCont)) {
         if (active >= 0 && active < state->texCount && state->layerRTs[active].id > 0) {
-            RenderTexture2D rt = state->layerRTs[active];
-
             if (state->mode == eBrush) {
                 if (!vp->wasMouseDown) {
-                    DabQueue_Push(vp, canvasPos.x, canvasPos.y, rt, active);
+                    if (vp->broker) {
+                        InputEvent ev = {canvasPos.x, canvasPos.y, PackColor(state->currentBrush.Realb.col), state->currentBrush.Realb.rad_out};
+                        vp->broker->on_input(ev);
+                    }
                     vp->lastDabPos = canvasPos;
                     vp->strokeDabAccum = 0.0f;
                     vp->wasMouseDown = true;
@@ -133,7 +112,10 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                                 float d = firstDist + i * spacing;
                                 if (d > stdist) break;
                                 Vector2 pos = {from.x + d * x2r, from.y + d * y2r};
-                                DabQueue_Push(vp, pos.x, pos.y, rt, active);
+                                if (vp->broker) {
+                                    InputEvent ev = {pos.x, pos.y, PackColor(state->currentBrush.Realb.col), state->currentBrush.Realb.rad_out};
+                                    vp->broker->on_input(ev);
+                                }
                                 if (vp->strokeLen < MAX_STROKE_PTS)
                                     vp->strokePts[vp->strokeLen++] = pos;
                             }
@@ -149,12 +131,18 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                 float spacing = state->currentBrush.Realb.rad_out * BParam_GetValue(&bpSpacing);
                 if (spacing < 2.0f) spacing = 2.0f;
                 if (!vp->wasMouseDown) {
-                    DabQueue_Push(vp, canvasPos.x, canvasPos.y, rt, active);
+                    if (vp->broker) {
+                        InputEvent ev = {canvasPos.x, canvasPos.y, PackColor(state->currentBrush.Realb.col), state->currentBrush.Realb.rad_out};
+                        vp->broker->on_input(ev);
+                    }
                     vp->lastDabPos = canvasPos;
                     vp->wasMouseDown = true;
                 } else {
                     if (Dist2D(vp->lastDabPos, canvasPos) >= spacing) {
-                        DabQueue_Push(vp, canvasPos.x, canvasPos.y, rt, active);
+                        if (vp->broker) {
+                            InputEvent ev = {canvasPos.x, canvasPos.y, PackColor(state->currentBrush.Realb.col), state->currentBrush.Realb.rad_out};
+                            vp->broker->on_input(ev);
+                        }
                         vp->lastDabPos = canvasPos;
                     }
                 }
@@ -181,7 +169,6 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
 
     // Line tool
     if (state->mode == eLine && vp->inBounds && leftDown && active >= 0 && active < state->texCount && state->layerRTs[active].id > 0) {
-        RenderTexture2D rt = state->layerRTs[active];
         if (!vp->wasMouseDown) {
             vp->lastDabPos = canvasPos;
             vp->wasMouseDown = true;
@@ -197,7 +184,10 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                         vp->lastDabPos.x + (canvasPos.x - vp->lastDabPos.x) * t,
                         vp->lastDabPos.y + (canvasPos.y - vp->lastDabPos.y) * t
                     };
-                    DabQueue_Push(vp, pos.x, pos.y, rt, active);
+                    if (vp->broker) {
+                        InputEvent ev = {pos.x, pos.y, PackColor(state->currentBrush.Realb.col), state->currentBrush.Realb.rad_out};
+                        vp->broker->on_input(ev);
+                    }
                 }
                 vp->lastDabPos = canvasPos;
             }
@@ -209,17 +199,6 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         }
         layersDirty = true;
         vp->wasMouseDown = false;
-    }
-}
-
-void Viewport_FlushDabs(Viewport* vp, AppState* state) {
-    Dab dab;
-    while (DabQueue_Pop(vp, &dab)) {
-        BrushBlend_ApplyStamp(dab.targetRT, &state->currentBrush, dab.x, dab.y);
-    }
-    if (vp->strokeEnded) {
-        SyncLayerTexture(state, vp->endLayer);
-        vp->strokeEnded = false;
     }
 }
 

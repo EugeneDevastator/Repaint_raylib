@@ -57,7 +57,7 @@ void LayerPanel_Draw(AppState* state) {
         int blend = state->canvas.layerProps[state->activeLayer].blendmode;
         if (blend < 0 || blend >= 14) blend = 0;
         ImGui::SetNextItemWidth(-1);
-        if (ImGui::Combo("##blend", &blend, blendNames, 14)) {
+        if (ImGui::Combo("##blend", &blend, blendNames, 14, 14)) {
             Canvas_SetLayerBlendMode(&state->canvas, state->activeLayer, blend);
             layersDirty = true;
         }
@@ -92,7 +92,8 @@ void LayerPanel_Draw(AppState* state) {
     ImGui::Separator();
 
     {
-        float listH = ImGui::GetContentRegionAvail().y;
+        float avail = ImGui::GetContentRegionAvail().y;
+        float listH = avail * 0.7f;
         if (listH < 10.0f) listH = 10.0f;
         if (ImGui::BeginChild("LayerList", ImVec2(0, listH), false)) {
             for (int i = 0; i < layerCount; i++) {
@@ -152,6 +153,32 @@ void LayerPanel_Draw(AppState* state) {
                 }
 
                 ImGui::PopID();
+            }
+        }
+        ImGui::EndChild();
+    }
+
+    // Network lobby panel (dummy UI, bottom 30%)
+    {
+        ImGui::Separator();
+        float netH = ImGui::GetContentRegionAvail().y;
+        if (netH < 10.0f) netH = 10.0f;
+        if (ImGui::BeginChild("NetworkLobby", ImVec2(0, netH), false,
+                ImGuiWindowFlags_NoScrollbar)) {
+            ImGui::Text("Server");
+            ImGui::Separator();
+            float btnW = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
+            if (ImGui::Button("Server", ImVec2(btnW, 24))) {}
+            ImGui::SameLine();
+            if (ImGui::Button("Room", ImVec2(btnW, 24))) {}
+            ImGui::Text("IP: 0.0.0.0:0");
+            ImGui::Separator();
+            ImGui::Text("Users:");
+            static const char* dummyUsers[] = {"Alice", "Bob", "Charlie"};
+            static int selectedUser = -1;
+            for (int i = 0; i < 3; i++) {
+                if (ImGui::Selectable(dummyUsers[i], selectedUser == i))
+                    selectedUser = i;
             }
         }
         ImGui::EndChild();

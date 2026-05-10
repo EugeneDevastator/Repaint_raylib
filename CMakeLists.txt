@@ -54,6 +54,7 @@ set(SOURCES
     src/viewport.cpp
     src/viewport_renderer.cpp
     src/raygui_impl.cpp
+    src/local_broker.cpp
     src/ui_controls.cpp
     src/ui_color.cpp
     src/ui_gizmo.cpp

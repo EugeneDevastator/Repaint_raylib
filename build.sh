@@ -40,6 +40,7 @@ SOURCES=(
     src/viewport_renderer.cpp
     src/viewport.cpp
     src/raygui_impl.cpp
+    src/local_broker.cpp
     src/stroke.cpp
     $IMGUI_DIR/imgui.cpp
     $IMGUI_DIR/imgui_draw.cpp

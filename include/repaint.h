@@ -145,6 +145,41 @@ typedef struct {
     Color backgroundColor;
 } Canvas;
 
+// ── Network painter architecture ─────────────────────────────────────────
+struct InputEvent  { float x, y; uint32_t color; float radius; };
+struct DrawCommand { float x, y; uint32_t color; float radius; };
+
+struct AppState;
+
+struct ICommandBroker {
+    virtual void on_input(const InputEvent& e) = 0;
+    virtual void poll(AppState* state) = 0;
+    virtual ~ICommandBroker() = default;
+};
+
+struct LocalBroker : ICommandBroker {
+    static const int CMD_CAPACITY = 4096;
+
+    struct QueuedDab {
+        RenderTexture2D targetRT;
+        float x, y;
+        float rad_in, rad_out, opacity, crv, x2y, sol, sol2op, resangle;
+        Color color;
+        int bmidx;
+        uint16_t seed;
+        int activeLayer;
+    };
+
+    QueuedDab queue[CMD_CAPACITY];
+    volatile int head;
+    volatile int tail;
+    AppState* appState;
+
+    LocalBroker();
+    void on_input(const InputEvent& e) override;
+    void poll(AppState* state) override;
+};
+
 typedef struct {
     Rectangle rect;
     Rectangle activeRect;
@@ -173,13 +208,7 @@ typedef struct {
     int id;
 } BParam;
 
-#define DAB_QUEUE_CAPACITY 16384
 
-typedef struct {
-    float x, y;
-    RenderTexture2D targetRT;
-    int activeLayer;
-} Dab;
 
 typedef struct {
     Rectangle bounds;
@@ -192,14 +221,12 @@ typedef struct {
     bool rightMouseDown;
     Vector2 lastMousePos;
     bool inBounds;
-    Dab dabQueue[DAB_QUEUE_CAPACITY];
-    volatile int dabHead;
-    volatile int dabTail;
     bool strokeEnded;
     int endLayer;
+    ICommandBroker* broker;
 } Viewport;
 
-typedef struct {
+struct AppState {
     Canvas canvas;
     d_Brush currentBrush;
     int activeLayer;
@@ -209,7 +236,7 @@ typedef struct {
     RenderTexture2D* layerRTs;
     bool* texDirty;
     int texCount;
-} AppState;
+};
 
 float PackedFloat_GetVal(PackedFloat* pf);
 void PackedFloat_SetVal(PackedFloat* pf, double val);
@@ -285,6 +312,9 @@ extern BParam bpHardness;
 extern BParam bpSpacing;
 extern BParam bpCurvature;
 extern BParam bpScatter;
+extern BParam bpQuickHue;
+extern BParam bpQuickSat;
+extern BParam bpQuickLit;
 
 extern const char* PenModeNames[PEN_MODE_COUNT];
 
@@ -296,6 +326,9 @@ void LeftPanel_Draw(AppState* state);
 
 void Gizmo_Draw(AppState* state);
 void Gizmo_HandleInput(AppState* state, Vector2 mousePos);
+void Gizmo_DrawPenPopups(AppState* state);
+void LoadGizmoIcons(void);
+void UnloadGizmoIcons(void);
 
 extern bool layersDirty;
 
@@ -305,7 +338,6 @@ void UnloadViewportRenderer(void);
 void Viewport_Init(Viewport* vp, Rectangle bounds);
 void Viewport_SetBounds(Viewport* vp, Rectangle bounds);
 void Viewport_HandleInput(Viewport* vp, AppState* state);
-void Viewport_FlushDabs(Viewport* vp, AppState* state);
 void Viewport_Draw(Viewport* vp, AppState* state);
 void App_Init(AppState* state);
 void App_Draw(AppState* state);
@@ -316,5 +348,6 @@ void SyncRTFromImage(AppState* state, int layer);
 void SyncImageFromRT(AppState* state, int layer);
 void SyncAllImages(AppState* state);
 void SyncAllRTs(AppState* state);
+void SyncLayerTexture(AppState* state, int layer);
 
 #endif

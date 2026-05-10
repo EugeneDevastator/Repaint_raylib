@@ -166,7 +166,8 @@ void LeftPanel_Draw(AppState* state) {
     ImGui::SetNextWindowSize(ImVec2((float)uiPanelWidth, (float)SCREEN_HEIGHT), ImGuiCond_Always);
     ImGui::Begin("Tools", NULL,
         ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
+        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar |
+        ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
     // Brush type
     {
@@ -177,7 +178,7 @@ void LeftPanel_Draw(AppState* state) {
         };
         int blend = (int)state->currentBrush.Realb.bmidx;
         ImGui::SetNextItemWidth(-1);
-        if (ImGui::Combo("##brushBlend", &blend, blendNames, 14))
+        if (ImGui::Combo("##brushBlend", &blend, blendNames, 14, 14))
             state->currentBrush.Realb.bmidx = (uint8_t)blend;
     }
 
@@ -251,6 +252,8 @@ void LeftPanel_Draw(AppState* state) {
         // Invisible button for resize interaction
         ImGui::SetCursorScreenPos(ImVec2(handleX - 3, wMin.y));
         ImGui::InvisibleButton("##resize", ImVec2(7, SCREEN_HEIGHT));
+        if (ImGui::IsItemHovered() || ImGui::IsItemActive())
+            ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
         if (ImGui::IsItemActive()) {
             panelResizing = true;
             float mx = ImGui::GetMousePos().x;
