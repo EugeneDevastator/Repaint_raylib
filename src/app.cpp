@@ -109,7 +109,10 @@ void UpdateUI(AppState* state) {
 static LocalBroker localBroker;
 
 void App_Init(AppState* state) {
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "RePaint");
+    MaximizeWindow();
+
     UIStyle::Init();
     LeftPanel_Init();
     SetTargetFPS(60);
@@ -198,6 +201,21 @@ void App_Init(AppState* state) {
 
 void App_Draw(AppState* state) {
     EnsureRTs(state);
+
+    int sw = GetScreenWidth();
+    int sh = GetScreenHeight();
+
+    Rectangle viewportBounds = {
+        (float)uiPanelWidth, 0,
+        (float)(sw - uiPanelWidth - RIGHT_PANEL_WIDTH),
+        (float)sh
+    };
+    viewport.bounds = viewportBounds;
+    state->camera.offset = Vector2{
+        viewportBounds.x + viewportBounds.width * 0.5f,
+        viewportBounds.y + viewportBounds.height * 0.5f
+    };
+
     if (viewport.broker) viewport.broker->poll(state);
     if (viewport.strokeEnded) {
         SyncLayerTexture(state, viewport.endLayer);

@@ -5,10 +5,13 @@
 extern bool layersDirty;
 
 void LayerPanel_Draw(AppState* state) {
+    int sw = GetScreenWidth();
+    int sh = GetScreenHeight();
     int layerCount = state->canvas.layerCount;
 
-    ImGui::SetNextWindowPos(ImVec2((float)RIGHT_PANEL_X, 0), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2((float)RIGHT_PANEL_WIDTH, (float)SCREEN_HEIGHT), ImGuiCond_Always);
+    ImGui::SetNextWindowPos(ImVec2((float)(sw - RIGHT_PANEL_WIDTH), 0), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2((float)RIGHT_PANEL_WIDTH, (float)sh), ImGuiCond_Always);
+
     ImGui::Begin("Layers", NULL,
         ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
