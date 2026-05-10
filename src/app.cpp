@@ -1,6 +1,8 @@
 #include "repaint.h"
 #include "rlgl.h"
 #include "stroke.h"
+#include "rlImGui.h"
+#include "imgui.h"
 
 int uiPanelWidth = 250;
 bool panelResizing = false;
@@ -13,8 +15,6 @@ BParam bpCurvature;
 BParam bpScatter;
 
 Viewport viewport;
-static RenderTexture2D stampPrev = {0};
-static bool stampPrevInited = false;
 
 void EnsureRTs(AppState* state) {
     int newCount = state->canvas.layerCount;
@@ -108,8 +108,6 @@ void UpdateUI(AppState* state) {
     if (IsKeyPressed(KEY_THREE)) state->mode = eLine;
     if (IsKeyPressed(KEY_FOUR)) state->mode = eDisp;
     if (IsKeyPressed(KEY_FIVE)) state->mode = eCont;
-    if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyPressed(KEY_Z)) {
-    }
 
     state->currentBrush.Realb.rad_out = BParam_GetValue(&bpSize);
     state->currentBrush.Realb.rad_in = state->currentBrush.Realb.rad_out * BParam_GetValue(&bpHardness);
@@ -121,60 +119,32 @@ void UpdateUI(AppState* state) {
 
 void App_Init(AppState* state) {
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "RePaint");
-	LayerPanel_Init();
+    UIStyle::Init();
+    LeftPanel_Init();
     SetTargetFPS(60);
-
-    GuiLoadStyleDefault();
-    GuiSetStyle(DEFAULT, TEXT_COLOR_NORMAL, 0x1a1a1aff);
-    GuiSetStyle(DEFAULT, BASE_COLOR_NORMAL, 0xe0e0e0ff);
-    GuiSetStyle(DEFAULT, BORDER_COLOR_NORMAL, 0x666666ff);
-    GuiSetStyle(DEFAULT, TEXT_COLOR_FOCUSED, 0x000000ff);
-    if (FileExists("resources/Cadman_Bold.otf")) {
-        Font cadman = LoadFontEx("resources/Cadman_Bold.otf", 28, 0, 0);
-        GuiSetFont(cadman);
-    }
-    GuiSetStyle(DEFAULT, TEXT_SIZE, 28);
 
     Painter_Init();
     BrushBlend_Init();
     LoadPenIcons();
 
     BParam_Init(&bpOpacity, 0, "Opacity", 0.0f, 1.0f, 1.0f);
-    bpOpacity.slider.rect = Rectangle{40, 420, 124, 30};
-    bpOpacity.slider.gradStart = BLACK;
-    bpOpacity.slider.gradEnd = WHITE;
     BParam_SetIcon(&bpOpacity, "ctlop");
 
     BParam_Init(&bpSize, 1, "Size", 1.0f, 100.0f, 20.0f);
-    bpSize.slider.rect = Rectangle{40, 475, 124, 30};
-    bpSize.slider.gradStart = BLACK;
-    bpSize.slider.gradEnd = WHITE;
     bpSize.slider.clipmaxF = 19.0f / 99.0f;
     BParam_SetIcon(&bpSize, "ctlrad");
 
     BParam_Init(&bpHardness, 2, "Hardness", 0.0f, 1.0f, 0.5f);
-    bpHardness.slider.rect = Rectangle{40, 530, 124, 30};
-    bpHardness.slider.gradStart = BLACK;
-    bpHardness.slider.gradEnd = WHITE;
     bpHardness.slider.clipmaxF = 0.5f;
     BParam_SetIcon(&bpHardness, "ctlrrel");
 
     BParam_Init(&bpSpacing, 3, "Spacing", 0.05f, 2.0f, 0.3f);
-    bpSpacing.slider.rect = Rectangle{40, 585, 124, 30};
-    bpSpacing.slider.gradStart = BLACK;
-    bpSpacing.slider.gradEnd = WHITE;
     BParam_SetIcon(&bpSpacing, "ctlspc");
 
     BParam_Init(&bpCurvature, 4, "Curve", 0.0f, 1.0f, 0.0f);
-    bpCurvature.slider.rect = Rectangle{40, 640, 124, 30};
-    bpCurvature.slider.gradStart = BLACK;
-    bpCurvature.slider.gradEnd = WHITE;
     BParam_SetIcon(&bpCurvature, "ctlcrv");
 
     BParam_Init(&bpScatter, 5, "Scatter", 0.0f, 5.0f, 0.0f);
-    bpScatter.slider.rect = Rectangle{40, 695, 124, 30};
-    bpScatter.slider.gradStart = BLACK;
-    bpScatter.slider.gradEnd = WHITE;
     BParam_SetIcon(&bpScatter, "ctlspcjit");
 
     state->canvas = Canvas_Create(800, 600, WHITE);
@@ -221,11 +191,6 @@ void App_Init(AppState* state) {
     state->texCount = 0;
 
     SyncAllRTs(state);
-
-    if (!stampPrevInited) {
-        stampPrev = LoadRenderTexture(100, 100);
-        stampPrevInited = true;
-    }
 }
 
 void App_Draw(AppState* state) {
@@ -233,158 +198,21 @@ void App_Draw(AppState* state) {
     Viewport_FlushDabs(&viewport, state);
 
     BeginDrawing();
-	LayerPanel_Draw(state);
     ClearBackground(Color{220, 220, 220, 255});
 
     Viewport_Draw(&viewport, state);
     Gizmo_Draw(state);
 
-    int px = 10;
-    int pw = uiPanelWidth - px * 2;
-
-    DrawRectangle(0, 0, uiPanelWidth, SCREEN_HEIGHT, Color{230, 230, 230, 255});
-    DrawRectangle(uiPanelWidth, 0, 1, SCREEN_HEIGHT, Color{120, 120, 120, 255});
-
-    DrawText("RePaint", px, 10, 28, Color{20, 20, 20, 255});
-
-    // Dropdown pending states — declared early for two-phase pattern
-    static bool bmPending = false, pipePending = false;
-    bool bmOpen = bmPending, pipeOpen = pipePending;
-    int bmY = 0, pipeY = 0;
-
-    int ty = 50;
-
-    // Brush blend dropdown at top of left panel
-    bmY = ty;
-    if (!bmOpen) {
-        int bw = (int)state->currentBrush.Realb.bmidx;
-        Rectangle r = {(float)px, (float)ty, (float)pw, 32};
-        if (GuiDropdownBox(r,
-            "Normal;Add;Dodge;Screen;Lighten;Burn;Multiply;Darken;Overlay;Highlight;Shadowlight;Xor;Diff;Exclusion",
-            &bw, false)) {
-            bmPending = true;
-        }
-    }
-    ty += 40;
-
-    DrawText("Settings", px, ty, 22, Color{40, 40, 40, 255}); ty += 30;
-
-    if (stampPrevInited && stampPrev.id > 0) {
-        BeginTextureMode(stampPrev);
-        ClearBackground(BLANK);
-        EndTextureMode();
-
-        d_Brush pb = state->currentBrush;
-        Color pc = pb.Realb.col;
-        pb.Realb.col = WHITE;
-        pb.Realb.opacity = 1.0f;
-        float prevRadOut = pb.Realb.rad_out;
-        if (prevRadOut > 45.0f) {
-            pb.Realb.rad_out = 45.0f;
-            pb.Realb.rad_in = pb.Realb.rad_in * (45.0f / fmaxf(prevRadOut, 1.0f));
-        }
-        BrushBlend_ApplyStamp(stampPrev, &pb, 50, 50);
-        pb.Realb.rad_out = prevRadOut;
-        pb.Realb.col = pc;
-
-        DrawTexturePro(stampPrev.texture,
-            Rectangle{0, 0, 100, -100},
-            Rectangle{px + (pw - 100) / 2, ty, 100, 100},
-            Vector2{0, 0}, 0, WHITE);
-        ty += 110;
-    }
-
-    LayerPanel_HandleInput(state, GetMousePosition());
+    // All ImGui in one frame
+    rlImGuiBegin();
+    LeftPanel_Draw(state);
     LayerPanel_Draw(state);
+    rlImGuiEnd();
 
-    int sliderH = 42;
-    int sliderGap = 50;
-    int sliderX = px + 34;
-    int sliderW = pw - 34 - 4 - 4;
-    int penW = uiPanelWidth - 4 - (sliderX + sliderW + 4);
-    if (penW < 60) { sliderW -= 30; penW = uiPanelWidth - 4 - (sliderX + sliderW + 4); }
-
-    BParam* bps[] = {&bpSize, &bpHardness, &bpCurvature, &bpSpacing, &bpOpacity, &bpScatter};
-    for (int i = 0; i < 6; i++) {
-        bps[i]->slider.rect = Rectangle{sliderX, ty, sliderW, sliderH};
-        BParam_Draw(bps[i]);
-        ty += sliderGap;
-    }
-
-    // Dropdown pending states for two-phase drawing
-    for (int i = 0; i < 6; i++) bps[i]->penEdit = bps[i]->penPending;
-
-    ty += 8;
-    // --- Pipeline collapsed button ---
-    pipeY = ty;
-    if (!pipeOpen) {
-        int pv = (int)state->currentBrush.Realb.pipeID;
-        const char* label = pv == 0 ? "CFNSR" : (pv == 1 ? "RS" : "CFNSR");
-        char buf[32];
-        snprintf(buf, sizeof(buf), "%s #120#", label);
-        Rectangle r = {(float)px, (float)ty, (float)pw, 36};
-        if (GuiButton(r, buf)) pipePending = !pipePending;
-    }
-    ty += 44;
-
-    // --- Pen collapsed buttons ---
-    for (int i = 0; i < 6; i++)
-        BParam_DrawPen(bps[i]);
-
+    // Panel resize handle (drawn over ImGui)
     int sz = uiPanelWidth;
-    DrawRectangle(sz - 3, 0, 7, SCREEN_HEIGHT, panelResizing ? Color{80, 120, 200, 255} : Color{160, 160, 160, 255});
-
-    char zoomInfo[32];
-    sprintf(zoomInfo, "Zoom: %.0f%%", state->camera.zoom * 100.0f);
-    DrawText(zoomInfo, 10, SCREEN_HEIGHT - 48, 20, DARKGRAY);
-
-    const char* modeNames[] = {"None", "Brush", "Smudge", "Disp", "Cont", "Line"};
-    DrawText(modeNames[state->mode > 5 ? 0 : state->mode], 10, SCREEN_HEIGHT - 24, 20, Color{0, 100, 0, 255});
-
-    // === Phase 2: expanded lists (drawn last, on top of EVERYTHING) ===
-    if (bmOpen) {
-        Rectangle wide = {(float)px, (float)bmY, (float)pw, 36};
-        int bw = (int)state->currentBrush.Realb.bmidx;
-        if (GuiDropdownBox(wide,
-            "Normal;Add;Dodge;Screen;Lighten;Burn;Multiply;Darken;Overlay;Highlight;Shadowlight;Xor;Diff;Exclusion",
-            &bw, true)) {
-            bmPending = false;
-            if (bw >= 0 && bw < 14) state->currentBrush.Realb.bmidx = (uint8_t)bw;
-        }
-    }
-    if (pipeOpen) {
-        Rectangle wide = {(float)px, (float)pipeY, (float)pw, 36};
-        int pv = (int)state->currentBrush.Realb.pipeID;
-        if (GuiDropdownBox(wide, "CFNSR;RS", &pv, true)) {
-            pipePending = false;
-            if (pv >= 0 && pv < 2) state->currentBrush.Realb.pipeID = (uint8_t)pv;
-        }
-    }
-    for (int i = 0; i < 6; i++) {
-        if (bps[i]->penEdit) {
-            int pm = bps[i]->penMode;
-            Rectangle r = bps[i]->slider.rect;
-            int btnX = (int)(r.x + r.width + 4);
-            int ddW = 180;
-            int maxW = GetScreenWidth() - btnX - 4;
-            if (ddW > maxW) ddW = maxW;
-            if (ddW < 60) ddW = GetScreenWidth() - 4 - (int)r.x;
-            int ddH = 18;
-            int spacing = GuiGetStyle(DROPDOWNBOX, DROPDOWN_ITEMS_SPACING);
-            int totalH = 14 * (ddH + spacing);
-            int prevRoll = GuiGetStyle(DROPDOWNBOX, DROPDOWN_ROLL_UP);
-            if ((int)r.y + totalH > GetScreenHeight() - 4)
-                GuiSetStyle(DROPDOWNBOX, DROPDOWN_ROLL_UP, 1);
-            Rectangle wide = {(float)btnX, r.y, (float)ddW, (float)ddH};
-            if (GuiDropdownBox(wide,
-                "Off;Pressure;Velocity;Direction;Rotation;Tilt;Rel Ang;H-Tilt;V-Tilt;Length;Accel;X-Tilt;Y-Tilt",
-                &pm, true)) {
-                bps[i]->penPending = false;
-                bps[i]->penMode = pm;
-            }
-            GuiSetStyle(DROPDOWNBOX, DROPDOWN_ROLL_UP, prevRoll);
-        }
-    }
+    DrawRectangle(sz - 3, 0, 7, SCREEN_HEIGHT,
+        panelResizing ? Color{80, 120, 200, 255} : Color{160, 160, 160, 255});
 
     EndDrawing();
 }
@@ -399,10 +227,8 @@ void App_Close(AppState* state) {
     free(state->layerTextures);
     free(state->layerRTs);
     free(state->texDirty);
-    if (stampPrevInited && stampPrev.id > 0) {
-        UnloadRenderTexture(stampPrev);
-        stampPrevInited = false;
-    }
+
+    LeftPanel_Shutdown();
     UnloadViewportRenderer();
     if (bpOpacity.iconLoaded) UnloadTexture(bpOpacity.iconTex);
     if (bpSize.iconLoaded) UnloadTexture(bpSize.iconTex);
@@ -414,5 +240,5 @@ void App_Close(AppState* state) {
     Painter_Shutdown();
     BrushBlend_Shutdown();
     CloseWindow();
-	LayerPanel_Shutdown();
+    UIStyle::Shutdown();
 }

@@ -2,7 +2,7 @@
 #define REPAINT_H
 
 #include "raylib.h"
-#include "raygui.h"
+#include "ui_style.h"
 #include <cstdint>
 #include <math.h>
 #include <string.h>
@@ -254,15 +254,12 @@ void BrushBlend_ApplyStamp(RenderTexture2D dstRT, d_Brush* brush,
     float stampX, float stampY);
 
 void DualSlider_Init(DualSlider* slider);
-void DualSlider_Draw(DualSlider* slider);
-void DualSlider_HandleInput(DualSlider* slider, Vector2 mousePos);
 
 void BParam_Init(BParam* bp, int id, const char* name, float outMin, float outMax, float outDef);
 void BParam_SetIcon(BParam* bp, const char* filename);
-void BParam_Draw(BParam* bp);
-void BParam_DrawPen(BParam* bp);
 void LoadPenIcons(void);
 void UnloadPenIcons(void);
+Texture2D GetPenModeIcon(int mode);
 float BParam_GetValue(BParam* bp);
 void BParam_SetValue(BParam* bp, float val);
 
@@ -286,9 +283,15 @@ extern BParam bpSize;
 extern BParam bpHardness;
 extern BParam bpSpacing;
 extern BParam bpCurvature;
+extern BParam bpScatter;
 
-void LayerPanel_HandleInput(AppState* state, Vector2 mousePos);
+extern const char* PenModeNames[PEN_MODE_COUNT];
+
 void LayerPanel_Draw(AppState* state);
+
+void LeftPanel_Init(void);
+void LeftPanel_Shutdown(void);
+void LeftPanel_Draw(AppState* state);
 
 void Gizmo_Draw(AppState* state);
 void Gizmo_HandleInput(AppState* state, Vector2 mousePos);
@@ -303,9 +306,6 @@ void Viewport_SetBounds(Viewport* vp, Rectangle bounds);
 void Viewport_HandleInput(Viewport* vp, AppState* state);
 void Viewport_FlushDabs(Viewport* vp, AppState* state);
 void Viewport_Draw(Viewport* vp, AppState* state);
-extern void LayerPanel_Init(void);
-extern void LayerPanel_Shutdown(void);
-
 void App_Init(AppState* state);
 void App_Draw(AppState* state);
 void App_Close(AppState* state);

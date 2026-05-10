@@ -33,6 +33,8 @@ SOURCES=(
     src/ui_color.cpp
     src/ui_gizmo.cpp
     src/ui_layerpanel.cpp
+    src/ui_leftpanel.cpp
+    src/ui_style.cpp
     src/app.cpp
     src/brush_blend.cpp
     src/viewport_renderer.cpp

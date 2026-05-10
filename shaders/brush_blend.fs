@@ -149,10 +149,15 @@ void main() {
     vec3 outRGB;
     float outA;
 
-    if (bmidx == 0) { // bmNormal
-        outRGB = srcPremul + dst.rgb * (1.0 - srcA);
-        outA = srcA + dst.a * (1.0 - srcA);
-    } else if (bmidx == 1) { // bmPlus
+    if (bmidx == 0) {    // normal -gamma encoded
+		vec3 srcLin = srcRGB * srcRGB; // gamma decode (approx sRGB -> linear)
+		vec3 dstLin = dst.rgb * dst.rgb;
+		vec3 blended = srcLin * srcA + dstLin * (1.0 - srcA);
+		outRGB = sqrt(blended);               // gamma re-encode
+		outA   = srcA + dst.a * (1.0 - srcA);
+
+    } else if (bmidx == 1) { 
+	    // bmPlus
         outRGB = dst.rgb + srcPremul;
         outA = min(1.0, dst.a + srcA);
     } else if (bmidx == 2) { // bmDodge
@@ -173,6 +178,11 @@ void main() {
     } else if (bmidx == 7) { // bmDarken
         outRGB = min(dst.rgb, srcPremul);
         outA = min(dst.a, srcA);
+    } else if (bmidx == 8) { 
+	  // bmNormal
+        outRGB = srcPremul + dst.rgb * (1.0 - srcA);
+        outA = srcA + dst.a * (1.0 - srcA);
+	}
     } else { // default: normal
         outRGB = srcPremul + dst.rgb * (1.0 - srcA);
         outA = srcA + dst.a * (1.0 - srcA);

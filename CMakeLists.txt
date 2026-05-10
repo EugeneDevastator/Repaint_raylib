@@ -58,6 +58,8 @@ set(SOURCES
     src/ui_color.cpp
     src/ui_gizmo.cpp
     src/ui_layerpanel.cpp
+    src/ui_leftpanel.cpp
+    src/ui_style.cpp
     src/stroke.cpp
 )
 

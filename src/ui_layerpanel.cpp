@@ -1,32 +1,11 @@
 #include "repaint.h"
-#include "rlImGui.h"
 #include "imgui.h"
 #include <cstdint>
 
 extern bool layersDirty;
 
-void LayerPanel_Init(void) {
-    rlImGuiBeginInitImGui();
-    ImGui::StyleColorsLight();
-
-    ImGuiIO& io = ImGui::GetIO();
-    io.Fonts->Clear();
-    if (FileExists("resources/Cadman_Bold.otf"))
-        io.Fonts->AddFontFromFileTTF("resources/Cadman_Bold.otf", 20.0f);
-    else
-        io.Fonts->AddFontDefault();
-
-    rlImGuiEndInitImGui();
-}
-
-void LayerPanel_Shutdown(void) {
-    rlImGuiShutdown();
-}
-
 void LayerPanel_Draw(AppState* state) {
     int layerCount = state->canvas.layerCount;
-
-    rlImGuiBegin();
 
     ImGui::SetNextWindowPos(ImVec2((float)RIGHT_PANEL_X, 0), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2((float)RIGHT_PANEL_WIDTH, (float)SCREEN_HEIGHT), ImGuiCond_Always);
@@ -34,7 +13,6 @@ void LayerPanel_Draw(AppState* state) {
         ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
 
-    // Button row: Add, Dup, Drop, Del
     float aw = ImGui::GetContentRegionAvail().x;
     float bw = (aw - 9.0f) / 4.0f;
     if (ImGui::Button("+Add", ImVec2(bw, 28))) {
@@ -70,7 +48,6 @@ void LayerPanel_Draw(AppState* state) {
 
     ImGui::Spacing();
 
-    // Blend mode combo
     {
         static const char* blendNames[] = {
             "Normal","Add","Dodge","Screen","Lighten","Burn",
@@ -81,16 +58,13 @@ void LayerPanel_Draw(AppState* state) {
         if (blend < 0 || blend >= 14) blend = 0;
         ImGui::SetNextItemWidth(-1);
         if (ImGui::Combo("##blend", &blend, blendNames, 14)) {
-            if (blend >= 0 && blend < 14) {
-                Canvas_SetLayerBlendMode(&state->canvas, state->activeLayer, blend);
-                layersDirty = true;
-            }
+            Canvas_SetLayerBlendMode(&state->canvas, state->activeLayer, blend);
+            layersDirty = true;
         }
     }
 
     ImGui::Spacing();
 
-    // Opacity slider
     {
         float op = state->canvas.layerProps[state->activeLayer].op;
         ImGui::SetNextItemWidth(-1);
@@ -102,14 +76,12 @@ void LayerPanel_Draw(AppState* state) {
 
     ImGui::Spacing();
 
-    // Layer index label
     {
         char idxBuf[64];
         snprintf(idxBuf, sizeof(idxBuf), "Layer %d / %d", state->activeLayer + 1, layerCount);
         ImGui::Text("%s", idxBuf);
     }
 
-    // Preserve opacity toggle
     {
         bool presop = state->canvas.layerProps[state->activeLayer].presop != 0;
         if (ImGui::Checkbox("Preserve opacity", &presop)) {
@@ -119,7 +91,6 @@ void LayerPanel_Draw(AppState* state) {
 
     ImGui::Separator();
 
-    // Layer list
     {
         float listH = ImGui::GetContentRegionAvail().y;
         if (listH < 10.0f) listH = 10.0f;
@@ -130,7 +101,6 @@ void LayerPanel_Draw(AppState* state) {
 
                 ImGui::PushID(idx);
 
-                // Visibility checkbox
                 bool vis = state->canvas.layerProps[idx].visible;
                 if (ImGui::Checkbox("##v", &vis)) {
                     Canvas_SetLayerVisible(&state->canvas, idx, vis);
@@ -138,7 +108,6 @@ void LayerPanel_Draw(AppState* state) {
                 }
                 ImGui::SameLine();
 
-                // Thumbnail preview
                 if (idx < state->texCount && state->layerTextures[idx].id > 0) {
                     float ts = 36.0f;
                     ImGui::Image((ImTextureID)(intptr_t)state->layerTextures[idx].id,
@@ -146,7 +115,6 @@ void LayerPanel_Draw(AppState* state) {
                     ImGui::SameLine();
                 }
 
-                // Layer name
                 char lname[256];
                 const char* ln = state->canvas.layerProps[idx].layerName;
                 if (ln[0])
@@ -163,7 +131,6 @@ void LayerPanel_Draw(AppState* state) {
                     state->activeLayer = idx;
                 if (isActive) ImGui::PopStyleColor(2);
 
-                // Drag-drop reorder
                 if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
                     ImGui::SetDragDropPayload("LAYER_IDX", &i, sizeof(int));
                     ImGui::Text("Move %s", lname);
@@ -191,9 +158,4 @@ void LayerPanel_Draw(AppState* state) {
     }
 
     ImGui::End();
-    rlImGuiEnd();
-}
-
-void LayerPanel_HandleInput(AppState* state, Vector2 mousePos) {
-    (void)state; (void)mousePos;
 }
