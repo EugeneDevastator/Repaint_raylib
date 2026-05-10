@@ -47,10 +47,10 @@ jobs:
       - uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
-          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake make
+          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-make
 
       - name: Configure
-        run: cmake --preset win64-release
+        run: cmake --preset win64-release -DCMAKE_MAKE_PROGRAM=mingw32-make
 
       - name: Build
         run: cmake --build build/win64-release --parallel
