@@ -22,11 +22,11 @@ void DualSlider_Init(DualSlider* slider) {
     slider->orient = 0;
     slider->Soff = 2;
     slider->sliderrad = 2;
-    slider->gradStart = (Color){0, 0, 0, 255};
-    slider->gradEnd = (Color){255, 255, 255, 255};
-    slider->shade = (Color){144, 144, 144, 255};
-    slider->hlite = (Color){250, 250, 250, 255};
-    slider->midtone = (Color){240, 240, 240, 255};
+    slider->gradStart = Color{0, 0, 0, 255};
+    slider->gradEnd = Color{255, 255, 255, 255};
+    slider->shade = Color{144, 144, 144, 255};
+    slider->hlite = Color{250, 250, 250, 255};
+    slider->midtone = Color{240, 240, 240, 255};
     slider->showValue = true;
     slider->noGradient = false;
     slider->label[0] = '\0';
@@ -125,10 +125,10 @@ void DualSlider_Draw(DualSlider* slider) {
     if (slider->jitter > 0.0f) {
         if (slider->orient == 0) {
             int jw = (int)(w * slider->jitter);
-            DrawRectangle(x, y, jw, 7, (Color){0, 0, 255, 255});
+            DrawRectangle(x, y, jw, 7, Color{0, 0, 255, 255});
         } else {
             int jh = (int)(h * slider->jitter);
-            DrawRectangle(x, y + h - jh, w, jh, (Color){0, 0, 255, 255});
+            DrawRectangle(x, y + h - jh, w, jh, Color{0, 0, 255, 255});
         }
     }
 
@@ -176,7 +176,7 @@ void LoadPenIcons(void) {
             penModeTex[i] = LoadTextureFromImage(img);
             UnloadImage(img);
         } else {
-            penModeTex[i] = (Texture2D){0};
+            penModeTex[i] = Texture2D{0};
         }
     }
 }
@@ -192,7 +192,7 @@ void BParam_Init(BParam* bp, int id, const char* name, float outMin, float outMa
     bp->slider.clipmaxF = (outMax > outMin) ? (outDef - outMin) / (outMax - outMin) : 1.0f;
     bp->slider.clipmaxF = fmaxf(0.0f, fminf(1.0f, bp->slider.clipmaxF));
     bp->slider.showValue = false;
-    bp->iconTex = (Texture2D){0};
+    bp->iconTex = Texture2D{0};
     bp->iconLoaded = false;
     bp->penMode = csNone;
     bp->penEdit = false;
@@ -242,11 +242,11 @@ void BParam_Draw(BParam* bp) {
     Rectangle iconRect = {r.x - 28, r.y + (r.height - 24) / 2, 24, 24};
     if (bp->iconLoaded) {
         DrawTexturePro(bp->iconTex,
-            (Rectangle){0, 0, (float)bp->iconTex.width, (float)bp->iconTex.height},
-            iconRect, (Vector2){0, 0}, 0, WHITE);
+            Rectangle{0, 0, (float)bp->iconTex.width, (float)bp->iconTex.height},
+            iconRect, Vector2{0, 0}, 0, WHITE);
     } else {
-        DrawRectangleRec(iconRect, (Color){180, 180, 180, 255});
-        DrawRectangleLinesEx(iconRect, 1, (Color){120, 120, 120, 255});
+        DrawRectangleRec(iconRect, Color{180, 180, 180, 255});
+        DrawRectangleLinesEx(iconRect, 1, Color{120, 120, 120, 255});
     }
 
     DualSlider_HandleInput(sl, mp);
@@ -269,7 +269,7 @@ void BParam_DrawPen(BParam* bp) {
         float s = fminf((float)iconSize / pt->width, (float)iconSize / pt->height);
         float dw = pt->width * s, dh = pt->height * s;
         Rectangle dst = {btnRect.x + (penW - dw) / 2, btnRect.y + (r.height - dh) / 2, dw, dh};
-        DrawTexturePro(*pt, (Rectangle){0, 0, (float)pt->width, (float)pt->height}, dst, (Vector2){0, 0}, 0, WHITE);
+        DrawTexturePro(*pt, Rectangle{0, 0, (float)pt->width, (float)pt->height}, dst, Vector2{0, 0}, 0, WHITE);
     }
 
     if (CheckCollisionPointRec(GetMousePosition(), btnRect) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON))

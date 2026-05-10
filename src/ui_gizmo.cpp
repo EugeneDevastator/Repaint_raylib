@@ -164,8 +164,8 @@ void Gizmo_Draw(AppState* state) {
     int overlayW = 540;
     int overlayH = 480;
     int overlayY = gcy - gizR;
-    DrawRectangle(gcx - overlayW / 2, overlayY, overlayW, overlayH, (Color){0, 0, 0, 160});
-    DrawRectangleLines(gcx - overlayW / 2, overlayY, overlayW, overlayH, (Color){100, 100, 120, 255});
+    DrawRectangle(gcx - overlayW / 2, overlayY, overlayW, overlayH, Color{0, 0, 0, 160});
+    DrawRectangleLines(gcx - overlayW / 2, overlayY, overlayW, overlayH, Color{100, 100, 120, 255});
 
     for (int gi = 1; gi <= 5; gi += 2) {
         float a = -d30 * (2 * gi - 1);
@@ -231,10 +231,10 @@ void Gizmo_Draw(AppState* state) {
         else
             active = (state->mode == gizmoToolModes[i]);
         if (active) {
-            DrawRectangleRec(r, (Color){50, 110, 190, 200});
+            DrawRectangleRec(r, Color{50, 110, 190, 200});
         }
-        DrawRectangleLinesEx(r, 1, (Color){180, 180, 200, 200});
-        DrawText(gizmoToolLabels[i], (int)r.x + 8, (int)r.y + 6, 14, (Color){220, 220, 230, 230});
+        DrawRectangleLinesEx(r, 1, Color{180, 180, 200, 200});
+        DrawText(gizmoToolLabels[i], (int)r.x + 8, (int)r.y + 6, 14, Color{220, 220, 230, 230});
     }
 
     // Color sliders — vertical bars on the right side
@@ -256,10 +256,10 @@ void Gizmo_Draw(AppState* state) {
                 }
                 DrawRectangle((int)r.x, y, (int)r.width, 1, c);
             }
-            DrawRectangleLinesEx(r, 1, (Color){180, 180, 200, 180});
+            DrawRectangleLinesEx(r, 1, Color{180, 180, 200, 180});
             float thumbY = r.y + vals[s] * r.height;
             DrawRectangle((int)r.x - 1, (int)(thumbY - GIZMO_THUMB_H / 2), (int)r.width + 2, GIZMO_THUMB_H, WHITE);
-            DrawRectangleLines((int)r.x - 1, (int)(thumbY - GIZMO_THUMB_H / 2), (int)r.width + 2, GIZMO_THUMB_H, (Color){50, 50, 50, 200});
+            DrawRectangleLines((int)r.x - 1, (int)(thumbY - GIZMO_THUMB_H / 2), (int)r.width + 2, GIZMO_THUMB_H, Color{50, 50, 50, 200});
         }
     }
 }

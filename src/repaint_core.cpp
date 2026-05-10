@@ -131,8 +131,8 @@ void Canvas_InsertLayer(Canvas* canvas, int idx) {
     if (idx < 0) idx = 0;
     if (idx > canvas->layerCount) idx = canvas->layerCount;
     canvas->layerCount++;
-    canvas->layerImages = realloc(canvas->layerImages, canvas->layerCount * sizeof(Image));
-    canvas->layerProps = realloc(canvas->layerProps, canvas->layerCount * sizeof(sLayerProps));
+    canvas->layerImages = (Image*)realloc(canvas->layerImages, canvas->layerCount * sizeof(Image));
+    canvas->layerProps = (sLayerProps*)realloc(canvas->layerProps, canvas->layerCount * sizeof(sLayerProps));
     for (int i = canvas->layerCount - 1; i > idx; i--) {
         canvas->layerImages[i] = canvas->layerImages[i - 1];
         canvas->layerProps[i] = canvas->layerProps[i - 1];
@@ -154,8 +154,8 @@ void Canvas_DeleteLayer(Canvas* canvas, int index) {
         canvas->layerProps[i] = canvas->layerProps[i + 1];
     }
     canvas->layerCount--;
-    canvas->layerImages = realloc(canvas->layerImages, canvas->layerCount * sizeof(Image));
-    canvas->layerProps = realloc(canvas->layerProps, canvas->layerCount * sizeof(sLayerProps));
+    canvas->layerImages = (Image*)realloc(canvas->layerImages, canvas->layerCount * sizeof(Image));
+    canvas->layerProps = (sLayerProps*)realloc(canvas->layerProps, canvas->layerCount * sizeof(sLayerProps));
 }
 
 void Canvas_SetLayerOpacity(Canvas* canvas, int layer, float op) {
@@ -191,4 +191,30 @@ void Canvas_MoveLayer(Canvas* canvas, int from, int to) {
 
 void Canvas_SetLayerVisible(Canvas* canvas, int layer, bool visible) {
     if (layer >= 0 && layer < canvas->layerCount) canvas->layerProps[layer].visible = visible;
+}
+
+void Canvas_DuplicateLayer(Canvas* canvas, int idx) {
+    if (idx < 0 || idx >= canvas->layerCount) return;
+    Canvas_InsertLayer(canvas, idx + 1);
+    canvas->layerImages[idx + 1] = ImageCopy(canvas->layerImages[idx]);
+    canvas->layerProps[idx + 1] = canvas->layerProps[idx];
+}
+
+void Canvas_MergeDown(Canvas* canvas, int idx) {
+    if (idx <= 0 || idx >= canvas->layerCount) return;
+    Color* src = (Color*)canvas->layerImages[idx].data;
+    Color* dst = (Color*)canvas->layerImages[idx - 1].data;
+    int n = canvas->width * canvas->height;
+    for (int i = 0; i < n; i++) {
+        float sa = src[i].a / 255.0f;
+        float da = dst[i].a / 255.0f;
+        float outa = sa + da * (1.0f - sa);
+        if (outa > 0.0f) {
+            dst[i].r = (uint8_t)((src[i].r * sa + dst[i].r * da * (1.0f - sa)) / outa);
+            dst[i].g = (uint8_t)((src[i].g * sa + dst[i].g * da * (1.0f - sa)) / outa);
+            dst[i].b = (uint8_t)((src[i].b * sa + dst[i].b * da * (1.0f - sa)) / outa);
+            dst[i].a = (uint8_t)(outa * 255.0f);
+        }
+    }
+    Canvas_DeleteLayer(canvas, idx);
 }

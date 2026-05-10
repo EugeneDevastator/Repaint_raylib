@@ -31,7 +31,7 @@ FetchContent_MakeAvailable(raylib)
 
 FetchContent_Declare(
     imgui
-    URL https://github.com/ocornut/imgui/archive/refs/tags/v1.90.4.tar.gz
+    URL https://github.com/ocornut/imgui/archive/refs/heads/docking.tar.gz
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
 )
 FetchContent_MakeAvailable(imgui)
@@ -58,6 +58,7 @@ set(SOURCES
     src/ui_color.cpp
     src/ui_gizmo.cpp
     src/ui_layerpanel.cpp
+    src/stroke.cpp
 )
 
 # ── imgui (C++ but we don't touch these) ─────────────────────────────────────

@@ -32,7 +32,7 @@ d_RealBrush Stroke_BlendBrushes(d_RealBrush from, d_RealBrush to, float k) {
     uint8_t gf = (uint8_t)(from.col.g + (to.col.g - from.col.g) * k);
     uint8_t bf = (uint8_t)(from.col.b + (to.col.b - from.col.b) * k);
     uint8_t af = (uint8_t)(from.col.a + (to.col.a - from.col.a) * k);
-    bbr.col = (Color){rf, gf, bf, af};
+    bbr.col = Color{rf, gf, bf, af};
 
     // Non-interpolated: carry forward from the first brush
     bbr.seed       = from.seed;

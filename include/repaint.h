@@ -3,8 +3,7 @@
 
 #include "raylib.h"
 #include "raygui.h"
-#include <stdbool.h>
-#include <stdint.h>
+#include <cstdint>
 #include <math.h>
 #include <string.h>
 #include <stdio.h>
@@ -230,6 +229,8 @@ void Canvas_SetLayerOpacity(Canvas* canvas, int layer, float op);
 void Canvas_SetLayerBlendMode(Canvas* canvas, int layer, int bm);
 void Canvas_SetLayerVisible(Canvas* canvas, int layer, bool visible);
 void Canvas_MoveLayer(Canvas* canvas, int from, int to);
+void Canvas_DuplicateLayer(Canvas* canvas, int idx);
+void Canvas_MergeDown(Canvas* canvas, int idx);
 
 size_t Stroke_Serialize(d_Stroke* st, uint8_t* buf, size_t cap);
 bool Stroke_Deserialize(d_Stroke* st, uint8_t* buf, size_t len);

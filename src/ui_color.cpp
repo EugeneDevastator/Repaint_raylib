@@ -1,5 +1,12 @@
 #include "repaint.h"
 
+static float hue2rgb(float p, float q, float t) {
+    if (t < 1.0f/6.0f) return p + (q - p) * 6.0f * t;
+    if (t < 1.0f/2.0f) return q;
+    if (t < 2.0f/3.0f) return p + (q - p) * (2.0f/3.0f - t) * 6.0f;
+    return p;
+}
+
 float colorHue = 0.35f;
 float colorSat = 1.0f;
 float colorLit = 0.5f;
@@ -19,17 +26,9 @@ Color HSLToRGB(float h, float s, float l) {
         if (tg < 0) tg += 1.0f; if (tg > 1.0f) tg -= 1.0f;
         if (tb < 0) tb += 1.0f; if (tb > 1.0f) tb -= 1.0f;
 
-            {
-            float hue2rgb(float p, float q, float t) {
-                if (t < 1.0f/6.0f) return p + (q - p) * 6.0f * t;
-                if (t < 1.0f/2.0f) return q;
-                if (t < 2.0f/3.0f) return p + (q - p) * (2.0f/3.0f - t) * 6.0f;
-                return p;
-            }
             r = hue2rgb(p, q, tr);
-        g = hue2rgb(p, q, tg);
-        b = hue2rgb(p, q, tb);
-        }
+            g = hue2rgb(p, q, tg);
+            b = hue2rgb(p, q, tb);
     }
     return (Color){(unsigned char)(r * 255), (unsigned char)(g * 255), (unsigned char)(b * 255), 255};
 }

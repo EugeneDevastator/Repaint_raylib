@@ -31,11 +31,11 @@ void Viewport_Init(Viewport* vp, Rectangle bounds) {
     vp->bounds = bounds;
     vp->strokeLen = 0;
     vp->wasMouseDown = false;
-    vp->lastDabPos = (Vector2){0, 0};
+    vp->lastDabPos = Vector2{0, 0};
     vp->strokeDabAccum = 0.0f;
     vp->debugShowStamps = false;
     vp->rightMouseDown = false;
-    vp->lastMousePos = (Vector2){0, 0};
+    vp->lastMousePos = Vector2{0, 0};
     vp->inBounds = false;
     vp->dabHead = 0;
     vp->dabTail = 0;
@@ -237,7 +237,7 @@ void Viewport_FlushDabs(Viewport* vp, AppState* state) {
 void Viewport_Draw(Viewport* vp, AppState* state) {
     Rectangle bounds = vp->bounds;
 
-    DrawRectangleRec(bounds, (Color){55, 55, 55, 255});
+    DrawRectangleRec(bounds, Color{55, 55, 55, 255});
 
     DrawViewport(state, bounds, state->camera);
 
@@ -246,7 +246,7 @@ void Viewport_Draw(Viewport* vp, AppState* state) {
         float rad = state->currentBrush.Realb.rad_out;
         for (int i = 0; i < vp->strokeLen; i++) {
             DrawCircleLines(vp->strokePts[i].x, vp->strokePts[i].y, rad, YELLOW);
-            DrawRectangleLines(vp->strokePts[i].x - rad, vp->strokePts[i].y - rad, rad * 2, rad * 2, (Color){255, 255, 0, 80});
+            DrawRectangleLines(vp->strokePts[i].x - rad, vp->strokePts[i].y - rad, rad * 2, rad * 2, Color{255, 255, 0, 80});
             DrawCircle(vp->strokePts[i].x, vp->strokePts[i].y, 2, RED);
         }
         DrawText("DEBUG: stamp positions (F1 toggle)", 10, 10, 14, YELLOW);

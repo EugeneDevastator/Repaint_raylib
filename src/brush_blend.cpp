@@ -106,7 +106,7 @@ void BrushBlend_ApplyStamp(
 
     BeginTextureMode(dstRT);
     BeginShaderMode(brushBlendShader);
-    DrawTextureRec(dstRT.texture, (Rectangle){0, 0, (float)canvasW, (float)-canvasH}, (Vector2){0, 0}, WHITE);
+    DrawTextureRec(dstRT.texture, Rectangle{0, 0, (float)canvasW, (float)-canvasH}, Vector2{0, 0}, WHITE);
     EndShaderMode();
     EndTextureMode();
 

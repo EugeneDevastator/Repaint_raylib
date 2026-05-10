@@ -11,29 +11,39 @@ echo -e "${GREEN}=== RePaint Raylib Build ===${NC}"
 SRC_DIR="src"
 INC_DIR="include"
 BUILD_DIR="build"
-RAYLIB_SRC="$BUILD_DIR/_deps/raylib-src/src"
-RAYLIB_LIB="$BUILD_DIR/_deps/raylib-build/raylib/libraylib.a"
-OBJ_DIR="$BUILD_DIR/CMakeFiles/repaint.dir/src"
+DEP_DIR="$BUILD_DIR/_deps"
+RAYLIB_SRC="$DEP_DIR/raylib-src/src"
+RAYLIB_LIB="$DEP_DIR/raylib-build/raylib/libraylib.a"
+IMGUI_DIR="$DEP_DIR/imgui-src"
+RLIMGUI_DIR="$DEP_DIR/rlimgui-src"
+OBJ_DIR="$BUILD_DIR/objs"
 BIN_DIR="$BUILD_DIR/bin"
 BINARY="$BIN_DIR/repaint"
 
-CFLAGS="-DGRAPHICS_API_OPENGL_33 -DPLATFORM_DESKTOP -I$INC_DIR -I$RAYLIB_SRC -O3 -DNDEBUG -std=gnu99"
+CXXFLAGS="-DGRAPHICS_API_OPENGL_33 -DPLATFORM_DESKTOP"
+CXXFLAGS="$CXXFLAGS -I$INC_DIR -I$RAYLIB_SRC -I$IMGUI_DIR -I$RLIMGUI_DIR"
+CXXFLAGS="$CXXFLAGS -O3 -DNDEBUG -std=c++11 -fno-exceptions -fno-rtti"
 
 SOURCES=(
-    src/main.c
-    src/repaint_core.c
-    src/repaint_painter.c
-    src/repaint_drawmodel.c
-    src/ui_controls.c
-    src/ui_color.c
-    src/ui_gizmo.c
-    src/ui_layerpanel.c
-    src/app.c
-    src/brush_blend.c
-    src/viewport_renderer.c
-    src/viewport.c
-    src/raygui_impl.c
-    src/stroke.c
+    src/main.cpp
+    src/repaint_core.cpp
+    src/repaint_painter.cpp
+    src/repaint_drawmodel.cpp
+    src/ui_controls.cpp
+    src/ui_color.cpp
+    src/ui_gizmo.cpp
+    src/ui_layerpanel.cpp
+    src/app.cpp
+    src/brush_blend.cpp
+    src/viewport_renderer.cpp
+    src/viewport.cpp
+    src/raygui_impl.cpp
+    src/stroke.cpp
+    $IMGUI_DIR/imgui.cpp
+    $IMGUI_DIR/imgui_draw.cpp
+    $IMGUI_DIR/imgui_tables.cpp
+    $IMGUI_DIR/imgui_widgets.cpp
+    $RLIMGUI_DIR/rlImGui.cpp
 )
 
 mkdir -p "$OBJ_DIR" "$BIN_DIR"
@@ -41,25 +51,25 @@ mkdir -p "$OBJ_DIR" "$BIN_DIR"
 echo -e "${YELLOW}Compiling...${NC}"
 NEED_LINK=0
 for src in "${SOURCES[@]}"; do
-    basename=$(basename "$src" .c)
-    obj="$OBJ_DIR/${basename}.c.o"
+    srcname=$(basename "$src")
+    objname="${srcname}.o"
+    obj="$OBJ_DIR/$objname"
     if [ ! -f "$obj" ] || [ "$src" -nt "$obj" ]; then
-        echo "  CC $src"
-        /usr/bin/cc $CFLAGS -c "$src" -o "$obj"
+        echo "  CXX $src"
+        /usr/bin/g++ $CXXFLAGS -c "$src" -o "$obj"
         NEED_LINK=1
     fi
 done
 
 if [ $NEED_LINK -eq 1 ] || [ ! -f "$BINARY" ]; then
     echo -e "${YELLOW}Linking...${NC}"
-    # Use versioned .so filenames (no dev symlinks available on this system)
     X11_LIBS="-l:libX11.so.6 -l:libGL.so.1 -lm -lpthread"
     OBJS=""
     for src in "${SOURCES[@]}"; do
-        basename=$(basename "$src" .c)
-        OBJS="$OBJS $OBJ_DIR/${basename}.c.o"
+        srcname=$(basename "$src")
+        OBJS="$OBJS $OBJ_DIR/${srcname}.o"
     done
-    /usr/bin/cc -O3 -DNDEBUG \
+    /usr/bin/g++ -O3 -DNDEBUG \
         $OBJS \
         -o "$BINARY" \
         "$RAYLIB_LIB" $X11_LIBS

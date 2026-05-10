@@ -2,8 +2,8 @@
 #include <pthread.h>
 
 typedef struct GLFWwindow GLFWwindow;
-extern GLFWwindow* glfwGetCurrentContext(void);
-extern void glfwMakeContextCurrent(GLFWwindow*);
+extern "C" GLFWwindow* glfwGetCurrentContext(void);
+extern "C" void glfwMakeContextCurrent(GLFWwindow*);
 
 static pthread_t renderThread;
 static pthread_mutex_t renderMutex = PTHREAD_MUTEX_INITIALIZER;

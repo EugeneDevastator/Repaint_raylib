@@ -20,9 +20,9 @@ void EnsureRTs(AppState* state) {
     int newCount = state->canvas.layerCount;
     if (state->texCount == newCount) return;
     int old = state->texCount;
-    state->layerRTs = realloc(state->layerRTs, newCount * sizeof(RenderTexture2D));
-    state->layerTextures = realloc(state->layerTextures, newCount * sizeof(Texture2D));
-    state->texDirty = realloc(state->texDirty, newCount * sizeof(bool));
+    state->layerRTs = (RenderTexture2D*)realloc(state->layerRTs, newCount * sizeof(RenderTexture2D));
+    state->layerTextures = (Texture2D*)realloc(state->layerTextures, newCount * sizeof(Texture2D));
+    state->texDirty = (bool*)realloc(state->texDirty, newCount * sizeof(bool));
     if (newCount > old) {
         memset(&state->layerRTs[old], 0, (newCount - old) * sizeof(RenderTexture2D));
         memset(&state->layerTextures[old], 0, (newCount - old) * sizeof(Texture2D));
@@ -140,51 +140,50 @@ void App_Init(AppState* state) {
     LoadPenIcons();
 
     BParam_Init(&bpOpacity, 0, "Opacity", 0.0f, 1.0f, 1.0f);
-    bpOpacity.slider.rect = (Rectangle){40, 420, 124, 30};
+    bpOpacity.slider.rect = Rectangle{40, 420, 124, 30};
     bpOpacity.slider.gradStart = BLACK;
     bpOpacity.slider.gradEnd = WHITE;
     BParam_SetIcon(&bpOpacity, "ctlop");
 
     BParam_Init(&bpSize, 1, "Size", 1.0f, 100.0f, 20.0f);
-    bpSize.slider.rect = (Rectangle){40, 475, 124, 30};
+    bpSize.slider.rect = Rectangle{40, 475, 124, 30};
     bpSize.slider.gradStart = BLACK;
     bpSize.slider.gradEnd = WHITE;
     bpSize.slider.clipmaxF = 19.0f / 99.0f;
     BParam_SetIcon(&bpSize, "ctlrad");
 
     BParam_Init(&bpHardness, 2, "Hardness", 0.0f, 1.0f, 0.5f);
-    bpHardness.slider.rect = (Rectangle){40, 530, 124, 30};
+    bpHardness.slider.rect = Rectangle{40, 530, 124, 30};
     bpHardness.slider.gradStart = BLACK;
     bpHardness.slider.gradEnd = WHITE;
     bpHardness.slider.clipmaxF = 0.5f;
     BParam_SetIcon(&bpHardness, "ctlrrel");
 
     BParam_Init(&bpSpacing, 3, "Spacing", 0.05f, 2.0f, 0.3f);
-    bpSpacing.slider.rect = (Rectangle){40, 585, 124, 30};
+    bpSpacing.slider.rect = Rectangle{40, 585, 124, 30};
     bpSpacing.slider.gradStart = BLACK;
     bpSpacing.slider.gradEnd = WHITE;
     BParam_SetIcon(&bpSpacing, "ctlspc");
 
     BParam_Init(&bpCurvature, 4, "Curve", 0.0f, 1.0f, 0.0f);
-    bpCurvature.slider.rect = (Rectangle){40, 640, 124, 30};
+    bpCurvature.slider.rect = Rectangle{40, 640, 124, 30};
     bpCurvature.slider.gradStart = BLACK;
     bpCurvature.slider.gradEnd = WHITE;
     BParam_SetIcon(&bpCurvature, "ctlcrv");
 
     BParam_Init(&bpScatter, 5, "Scatter", 0.0f, 5.0f, 0.0f);
-    bpScatter.slider.rect = (Rectangle){40, 695, 124, 30};
+    bpScatter.slider.rect = Rectangle{40, 695, 124, 30};
     bpScatter.slider.gradStart = BLACK;
     bpScatter.slider.gradEnd = WHITE;
     BParam_SetIcon(&bpScatter, "ctlspcjit");
 
     state->canvas = Canvas_Create(800, 600, WHITE);
     state->activeLayer = 0;
-    state->camera = (Camera2D){
-        .target   = (Vector2){0, 0},
-        .offset   = (Vector2){0, 0},
-        .rotation = 0.0f,
-        .zoom     = 1.0f
-    };
+    state->camera = Camera2D{};
+    state->camera.target = Vector2{0, 0};
+    state->camera.offset = Vector2{0, 0};
+    state->camera.rotation = 0.0f;
+    state->camera.zoom = 1.0f;
 
     state->mode = eBrush;
 
@@ -235,7 +234,7 @@ void App_Draw(AppState* state) {
 
     BeginDrawing();
 	LayerPanel_Draw(state);
-    ClearBackground((Color){220, 220, 220, 255});
+    ClearBackground(Color{220, 220, 220, 255});
 
     Viewport_Draw(&viewport, state);
     Gizmo_Draw(state);
@@ -243,10 +242,10 @@ void App_Draw(AppState* state) {
     int px = 10;
     int pw = uiPanelWidth - px * 2;
 
-    DrawRectangle(0, 0, uiPanelWidth, SCREEN_HEIGHT, (Color){230, 230, 230, 255});
-    DrawRectangle(uiPanelWidth, 0, 1, SCREEN_HEIGHT, (Color){120, 120, 120, 255});
+    DrawRectangle(0, 0, uiPanelWidth, SCREEN_HEIGHT, Color{230, 230, 230, 255});
+    DrawRectangle(uiPanelWidth, 0, 1, SCREEN_HEIGHT, Color{120, 120, 120, 255});
 
-    DrawText("RePaint", px, 10, 28, (Color){20, 20, 20, 255});
+    DrawText("RePaint", px, 10, 28, Color{20, 20, 20, 255});
 
     // Dropdown pending states — declared early for two-phase pattern
     static bool bmPending = false, pipePending = false;
@@ -268,7 +267,7 @@ void App_Draw(AppState* state) {
     }
     ty += 40;
 
-    DrawText("Settings", px, ty, 22, (Color){40, 40, 40, 255}); ty += 30;
+    DrawText("Settings", px, ty, 22, Color{40, 40, 40, 255}); ty += 30;
 
     if (stampPrevInited && stampPrev.id > 0) {
         BeginTextureMode(stampPrev);
@@ -289,9 +288,9 @@ void App_Draw(AppState* state) {
         pb.Realb.col = pc;
 
         DrawTexturePro(stampPrev.texture,
-            (Rectangle){0, 0, 100, -100},
-            (Rectangle){px + (pw - 100) / 2, ty, 100, 100},
-            (Vector2){0, 0}, 0, WHITE);
+            Rectangle{0, 0, 100, -100},
+            Rectangle{px + (pw - 100) / 2, ty, 100, 100},
+            Vector2{0, 0}, 0, WHITE);
         ty += 110;
     }
 
@@ -307,7 +306,7 @@ void App_Draw(AppState* state) {
 
     BParam* bps[] = {&bpSize, &bpHardness, &bpCurvature, &bpSpacing, &bpOpacity, &bpScatter};
     for (int i = 0; i < 6; i++) {
-        bps[i]->slider.rect = (Rectangle){sliderX, ty, sliderW, sliderH};
+        bps[i]->slider.rect = Rectangle{sliderX, ty, sliderW, sliderH};
         BParam_Draw(bps[i]);
         ty += sliderGap;
     }
@@ -333,14 +332,14 @@ void App_Draw(AppState* state) {
         BParam_DrawPen(bps[i]);
 
     int sz = uiPanelWidth;
-    DrawRectangle(sz - 3, 0, 7, SCREEN_HEIGHT, panelResizing ? (Color){80, 120, 200, 255} : (Color){160, 160, 160, 255});
+    DrawRectangle(sz - 3, 0, 7, SCREEN_HEIGHT, panelResizing ? Color{80, 120, 200, 255} : Color{160, 160, 160, 255});
 
     char zoomInfo[32];
     sprintf(zoomInfo, "Zoom: %.0f%%", state->camera.zoom * 100.0f);
     DrawText(zoomInfo, 10, SCREEN_HEIGHT - 48, 20, DARKGRAY);
 
     const char* modeNames[] = {"None", "Brush", "Smudge", "Disp", "Cont", "Line"};
-    DrawText(modeNames[state->mode > 5 ? 0 : state->mode], 10, SCREEN_HEIGHT - 24, 20, (Color){0, 100, 0, 255});
+    DrawText(modeNames[state->mode > 5 ? 0 : state->mode], 10, SCREEN_HEIGHT - 24, 20, Color{0, 100, 0, 255});
 
     // === Phase 2: expanded lists (drawn last, on top of EVERYTHING) ===
     if (bmOpen) {

@@ -25,7 +25,7 @@ static void EnsureChecker(int w, int h) {
     for (int y = 0; y < h; y += 8) {
         for (int x = 0; x < w; x += 8) {
             bool light = ((x / 8) + (y / 8)) % 2 == 0;
-            Color col = light ? (Color){70, 70, 75, 255} : (Color){55, 55, 60, 255};
+            Color col = light ? Color{70, 70, 75, 255} : Color{55, 55, 60, 255};
             ImageDrawRectangle(&img, x, y, 8, 8, col);
         }
     }
@@ -98,8 +98,8 @@ void DrawViewport(AppState* state, Rectangle screenRect, Camera2D camera) {
             SetShaderValue(layerBlendShader, locBmIdx, &bmidx, SHADER_UNIFORM_INT);
 
             DrawTextureRec(src->texture,
-                (Rectangle){0, 0, (float)cw, (float)-ch},
-                (Vector2){0, 0}, WHITE);
+                Rectangle{0, 0, (float)cw, (float)-ch},
+                Vector2{0, 0}, WHITE);
 
             EndShaderMode();
             EndTextureMode();
@@ -126,7 +126,7 @@ void DrawViewport(AppState* state, Rectangle screenRect, Camera2D camera) {
 
     Rectangle srcRect = {0, 0, (float)cw, (float)-ch};
     Rectangle dstRect = {dstX, dstY, dstW, dstH};
-    DrawTexturePro(finalAcc->texture, srcRect, dstRect, (Vector2){0, 0}, 0.0f, WHITE);
+    DrawTexturePro(finalAcc->texture, srcRect, dstRect, Vector2{0, 0}, 0.0f, WHITE);
 }
 
 void UnloadViewportRenderer(void) {
