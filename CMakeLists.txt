@@ -59,6 +59,7 @@ set(SOURCES
     src/file_format.cpp
     src/network_broker.cpp
     src/app_config.cpp
+    src/sock_platform.cpp
     dialog/dialog.c
     ${imgui_SOURCE_DIR}/imgui.cpp
     ${imgui_SOURCE_DIR}/imgui_draw.cpp
@@ -75,6 +76,10 @@ target_include_directories(repaint PRIVATE
     ${imgui_SOURCE_DIR}
     ${rlimgui_SOURCE_DIR}
 )
+
+if(WIN32)
+    target_link_libraries(repaint PRIVATE ws2_32)
+endif()
 
 target_link_libraries(repaint PRIVATE raylib)
 
