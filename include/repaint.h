@@ -334,6 +334,7 @@ extern bool layersDirty;
 
 void DrawViewport(AppState* state, Rectangle screenRect, Camera2D camera);
 void UnloadViewportRenderer(void);
+void ReloadViewportShader(void);
 
 void Viewport_Init(Viewport* vp, Rectangle bounds);
 void Viewport_SetBounds(Viewport* vp, Rectangle bounds);

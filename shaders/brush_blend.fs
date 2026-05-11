@@ -108,19 +108,15 @@ void main() {
     float top = 1.0 - innerT;
     if (top < 0.001) top = 0.001;
     float mid = innerT;
-    alpha = crContFunc(clamp(alpha / top, 0.0, 1.0), mid);
+    //alpha = crContFunc(clamp(alpha / top, 0.0, 1.0), mid);
     alpha = clamp(alpha, 0.0, 1.0);
+	float crvt = crv*2.0-1.0;
+	float curvePower = (crvt >= 0.0)
+		? mix(1.0, 3.0, crvt)
+		: mix(1.0, 1.0/3.0, -crvt);
+	alpha = pow(alpha, curvePower);
+	alpha = clamp(alpha, 0.0, 1.0);
 
-    // Curvature: blend between contrast-remapped (crv=0) and raw
-    // hardness falloff (crv=1). crv<0 = bubble (future use).
-    float fop = crv;
-    if (fop < 0.0) {
-        float bpn = crBubFunc(alpha);
-        alpha = (bpn - alpha) * (-fop) + alpha;
-    } else if (fop > 0.0) {
-        alpha = mix(alpha, rawAlpha, fop);
-    }
-    alpha = clamp(alpha, 0.0, 1.0);
 
     // Solidity noise scatter
     if (!(sol >= 0.999 && sol2op <= 0.001)) {

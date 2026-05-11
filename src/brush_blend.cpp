@@ -24,7 +24,11 @@ static int brushTempH = 0;
 void BrushBlend_Init(void) {
     if (brushBlendInited) return;
 
-    brushBlendShader = LoadShader("shaders/brush_gen.vs", "shaders/brush_blend.fs");
+    const char* ad = GetApplicationDirectory();
+    char vsPath[512], fsPath[512];
+    snprintf(vsPath, sizeof(vsPath), "%sshaders/brush_gen.vs", ad);
+    snprintf(fsPath, sizeof(fsPath), "%sshaders/brush_blend.fs", ad);
+    brushBlendShader = LoadShader(vsPath, fsPath);
     if (brushBlendShader.id == 0) return;
 
     locRectBounds = GetShaderLocation(brushBlendShader, "rectBounds");

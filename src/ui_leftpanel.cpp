@@ -226,6 +226,19 @@ void LeftPanel_Draw(AppState* state) {
             state->currentBrush.Realb.pipeID = (uint8_t)pipe;
     }
 
+    // Reload shaders button at bottom
+    {
+        float windowH = ImGui::GetWindowHeight();
+        float itemH = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.y;
+        ImGui::SetCursorPosY(windowH - itemH * 3 - ImGui::GetStyle().FramePadding.y * 2);
+
+        if (ImGui::Button("Reload Shaders", ImVec2(-1, 0))) {
+            BrushBlend_Shutdown();
+            BrushBlend_Init();
+            ReloadViewportShader();
+        }
+    }
+
     // Zoom and mode info at bottom
     {
         float windowH = ImGui::GetWindowHeight();

@@ -51,7 +51,10 @@ static void EnsureAccumulators(int w, int h) {
 
 static void EnsureShader(void) {
     if (shaderInited) return;
-    layerBlendShader = LoadShader(0, "shaders/layer_blend.fs");
+    const char* ad = GetApplicationDirectory();
+    char fsPath[512];
+    snprintf(fsPath, sizeof(fsPath), "%sshaders/layer_blend.fs", ad);
+    layerBlendShader = LoadShader(0, fsPath);
     if (layerBlendShader.id == 0) {
         TraceLog(LOG_ERROR, "layer_blend.fs failed to load/compile");
         return;
@@ -127,6 +130,16 @@ void DrawViewport(AppState* state, Rectangle screenRect, Camera2D camera) {
     Rectangle srcRect = {0, 0, (float)cw, (float)-ch};
     Rectangle dstRect = {dstX, dstY, dstW, dstH};
     DrawTexturePro(finalAcc->texture, srcRect, dstRect, Vector2{0, 0}, 0.0f, WHITE);
+}
+
+void ReloadViewportShader(void) {
+    if (shaderInited) {
+        UnloadShader(layerBlendShader);
+        shaderInited = false;
+        layersDirty = true;
+    }
+    EnsureShader();
+    if (!shaderInited) TraceLog(LOG_WARNING, "ReloadViewportShader: layer_blend.fs still failed");
 }
 
 void UnloadViewportRenderer(void) {
