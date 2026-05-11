@@ -76,12 +76,13 @@ void DrawViewport(AppState* state, Rectangle screenRect, Camera2D camera) {
     EnsureChecker(cw, ch);
     EnsureShader();
 
-    if (layersDirty && shaderInited) {
+    if (layersDirty) {
         RenderTexture2D* src = &accumA;
         RenderTexture2D* dst = &accumB;
 
         BeginTextureMode(*src);
-        ClearBackground(state->canvas.backgroundColor);
+        ClearBackground(BLANK);
+        DrawTexture(checkerTex, 0, 0, WHITE);
         EndTextureMode();
 
         for (int i = 0; i < state->canvas.layerCount; i++) {
@@ -93,17 +94,28 @@ void DrawViewport(AppState* state, Rectangle screenRect, Camera2D camera) {
 
             BeginTextureMode(*dst);
             ClearBackground(BLANK);
-            BeginShaderMode(layerBlendShader);
 
-            SetShaderValueTexture(layerBlendShader, locLayerTex, state->layerRTs[i].texture);
-            SetShaderValue(layerBlendShader, locLayerAlpha, &alpha, SHADER_UNIFORM_FLOAT);
-            SetShaderValue(layerBlendShader, locBmIdx, &bmidx, SHADER_UNIFORM_INT);
+            if (shaderInited) {
+                BeginShaderMode(layerBlendShader);
 
-            DrawTextureRec(src->texture,
-                Rectangle{0, 0, (float)cw, (float)-ch},
-                Vector2{0, 0}, WHITE);
+                SetShaderValueTexture(layerBlendShader, locLayerTex, state->layerRTs[i].texture);
+                SetShaderValue(layerBlendShader, locLayerAlpha, &alpha, SHADER_UNIFORM_FLOAT);
+                SetShaderValue(layerBlendShader, locBmIdx, &bmidx, SHADER_UNIFORM_INT);
 
-            EndShaderMode();
+                DrawTextureRec(src->texture,
+                    Rectangle{0, 0, (float)cw, (float)-ch},
+                    Vector2{0, 0}, WHITE);
+
+                EndShaderMode();
+            } else {
+                DrawTextureRec(src->texture,
+                    Rectangle{0, 0, (float)cw, (float)-ch},
+                    Vector2{0, 0}, WHITE);
+                DrawTextureRec(state->layerRTs[i].texture,
+                    Rectangle{0, 0, (float)cw, (float)-ch},
+                    Vector2{0, 0}, ColorAlpha(WHITE, alpha));
+            }
+
             EndTextureMode();
 
             RenderTexture2D* tmp = src;

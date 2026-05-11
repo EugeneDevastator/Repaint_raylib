@@ -482,9 +482,13 @@ void NetworkBroker::ProcessReceived(uint8_t hid, uint8_t* data, uint32_t size) {
     }
 
     case sdLAction: {
-        if (!appState) break;
+        if (!appState || size < 3) break;
+        char senderName[256] = "";
+        size_t nameBytes = SZstring_unpack(data, size, senderName, sizeof(senderName));
+        if (nameBytes == 0 || nameBytes >= size) break;
+        bool createdByMe = (strcmp(senderName, ownName) == 0);
         d_LAction lact;
-        if (!LAction_Deserialize(&lact, data, size)) break;
+        if (!LAction_Deserialize(&lact, data + nameBytes, size - (uint32_t)nameBytes)) break;
 
         switch (lact.ActID) {
         case laAdd: {
@@ -492,8 +496,11 @@ void NetworkBroker::ProcessReceived(uint8_t hid, uint8_t* data, uint32_t size) {
             if (insertAfter < 0) insertAfter = 0;
             Canvas_InsertLayer(&appState->canvas, insertAfter);
             SyncAllRTs(appState);
-            if (appState->activeLayer >= insertAfter)
+            if (createdByMe) {
+                appState->activeLayer = insertAfter;
+            } else if (appState->activeLayer >= insertAfter) {
                 appState->activeLayer++;
+            }
             layersDirty = true;
             break;
         }

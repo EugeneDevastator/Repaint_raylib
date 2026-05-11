@@ -178,10 +178,10 @@ class Server:
                         c.send_packet(hid, payload)
 
             elif hid == sdLAction:
-                # broadcast to ALL (including sender) for server-authoritative layer mgmt
+                wrapped = pack_string(sender.name) + payload
                 for c in self.clients:
                     if c.registered:
-                        c.send_packet(hid, payload)
+                        c.send_packet(hid, wrapped)
 
             elif hid == sdUserStat:
                 for c in self.clients:
