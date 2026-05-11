@@ -58,6 +58,7 @@ set(SOURCES
     src/stroke.cpp
     src/file_format.cpp
     src/network_broker.cpp
+    src/app_config.cpp
     dialog/dialog.c
     ${imgui_SOURCE_DIR}/imgui.cpp
     ${imgui_SOURCE_DIR}/imgui_draw.cpp

@@ -172,9 +172,15 @@ class Server:
                 return
 
             # relay messages to all other clients
-            if hid in (sdAction, sdSection, sdLAction, sdGetMsg):
+            if hid in (sdAction, sdSection, sdGetMsg):
                 for c in self.clients:
                     if c is not sender and c.registered:
+                        c.send_packet(hid, payload)
+
+            elif hid == sdLAction:
+                # broadcast to ALL (including sender) for server-authoritative layer mgmt
+                for c in self.clients:
+                    if c.registered:
                         c.send_packet(hid, payload)
 
             elif hid == sdUserStat:

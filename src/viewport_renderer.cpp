@@ -81,8 +81,7 @@ void DrawViewport(AppState* state, Rectangle screenRect, Camera2D camera) {
         RenderTexture2D* dst = &accumB;
 
         BeginTextureMode(*src);
-        ClearBackground(BLANK);
-        DrawTexture(checkerTex, 0, 0, WHITE);
+        ClearBackground(state->canvas.backgroundColor);
         EndTextureMode();
 
         for (int i = 0; i < state->canvas.layerCount; i++) {

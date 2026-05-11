@@ -257,6 +257,9 @@ void App_Init(AppState* state) {
 
     networkBroker.appState = state;
 
+    // load persistent config
+    networkBroker.LoadConfig("repaint.ini");
+
     BParam_Init(&bpOpacity, 0, "Opacity", 0.0f, 1.0f, 1.0f);
     BParam_SetIcon(&bpOpacity, "ctlop");
 
@@ -465,6 +468,7 @@ void App_Draw(AppState* state) {
 /* ── App_Close ─────────────────────────────────────────────────────────── */
 
 void App_Close(AppState* state) {
+    networkBroker.SaveConfig();
     networkBroker.Disconnect();
     SyncAllImages(state);
     Canvas_Destroy(&state->canvas);

@@ -1,4 +1,5 @@
 #include "network_broker.h"
+#include "app_config.h"
 #include "imgui.h"
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -97,9 +98,9 @@ NetworkBroker::NetworkBroker() {
     state = NS_DISCONNECTED;
     sockfd = -1;
     appState = NULL;
-    serverAddr[0] = '\0';
+    configPath[0] = '\0';
+    strcpy(serverAddr, "127.0.0.1");
     serverPort = NET_PORT;
-    username[0] = '\0';
     ownName[0] = '\0';
     userCount = 0;
     statusMsg[0] = '\0';
@@ -110,6 +111,11 @@ NetworkBroker::NetworkBroker() {
     threadRunning = false;
     recvPos = 0;
     recvNeed = NET_HEADER_SIZE;
+
+    // default username: "User" + random number
+    unsigned int r = (unsigned int)time(NULL) ^ (unsigned int)(uintptr_t)this;
+    r = r * 1103515245 + 12345;
+    snprintf(username, sizeof(username), "User%04u", (r / 65536) % 10000);
 }
 
 NetworkBroker::~NetworkBroker() {
@@ -276,6 +282,13 @@ void NetworkBroker::SendAction(const d_Action* act) {
         SendPacket(sdAction, buf, (uint32_t)sz);
 }
 
+void NetworkBroker::SendLAction(const d_LAction* lact) {
+    uint8_t buf[512];
+    size_t sz = LAction_Serialize((d_LAction*)lact, buf, sizeof(buf));
+    if (sz > 0)
+        SendPacket(sdLAction, buf, (uint32_t)sz);
+}
+
 void NetworkBroker::SendChat(const char* msg) {
     uint8_t buf[2048];
     size_t sz = SZstring(msg, buf, sizeof(buf));
@@ -406,10 +419,12 @@ void NetworkBroker::ProcessReceived(uint8_t hid, uint8_t* data, uint32_t size) {
         SZstring_unpack(data, size, name, sizeof(name));
         state = NS_CONNECTED;
         strncpy(ownName, name, sizeof(ownName) - 1);
-        // add self to user list
+        strncpy(username, name, sizeof(username) - 1);
         strncpy(userNames[0], name, sizeof(userNames[0]) - 1);
         userCount = 1;
         snprintf(statusMsg, sizeof(statusMsg), "Connected as %s", name);
+        showUI = false;
+        SaveConfig();
         break;
     }
 
@@ -466,6 +481,83 @@ void NetworkBroker::ProcessReceived(uint8_t hid, uint8_t* data, uint32_t size) {
         break;
     }
 
+    case sdLAction: {
+        if (!appState) break;
+        d_LAction lact;
+        if (!LAction_Deserialize(&lact, data, size)) break;
+
+        switch (lact.ActID) {
+        case laAdd: {
+            int insertAfter = lact.layer;
+            if (insertAfter < 0) insertAfter = 0;
+            Canvas_InsertLayer(&appState->canvas, insertAfter);
+            SyncAllRTs(appState);
+            if (appState->activeLayer >= insertAfter)
+                appState->activeLayer++;
+            layersDirty = true;
+            break;
+        }
+        case laDel: {
+            int idx = lact.layer;
+            if (idx < 0 || idx >= appState->canvas.layerCount) break;
+            Canvas_DeleteLayer(&appState->canvas, idx);
+            SyncAllRTs(appState);
+            if (appState->activeLayer >= appState->canvas.layerCount)
+                appState->activeLayer = appState->canvas.layerCount - 1;
+            layersDirty = true;
+            break;
+        }
+        case laDup: {
+            int idx = lact.layer;
+            if (idx < 0 || idx >= appState->canvas.layerCount) break;
+            Canvas_DuplicateLayer(&appState->canvas, idx);
+            SyncAllRTs(appState);
+            layersDirty = true;
+            break;
+        }
+        case laMove: {
+            int fromIdx = lact.layer;
+            int toIdx = lact.layerto;
+            if (fromIdx < 0 || fromIdx >= appState->canvas.layerCount) break;
+            if (toIdx < 0 || toIdx >= appState->canvas.layerCount) break;
+            if (fromIdx == toIdx) break;
+            Canvas_MoveLayer(&appState->canvas, fromIdx, toIdx);
+            SyncAllRTs(appState);
+            if (appState->activeLayer == fromIdx)
+                appState->activeLayer = toIdx;
+            layersDirty = true;
+            break;
+        }
+        case laDrop: {
+            int idx = lact.layer;
+            if (idx <= 0 || idx >= appState->canvas.layerCount) break;
+            Canvas_MergeDown(&appState->canvas, idx);
+            SyncAllRTs(appState);
+            if (appState->activeLayer >= appState->canvas.layerCount)
+                appState->activeLayer = appState->canvas.layerCount - 1;
+            layersDirty = true;
+            break;
+        }
+        case laOp: {
+            int idx = lact.layer;
+            if (idx < 0 || idx >= appState->canvas.layerCount) break;
+            Canvas_SetLayerOpacity(&appState->canvas, idx, lact.op);
+            layersDirty = true;
+            break;
+        }
+        case laBm: {
+            int idx = lact.layer;
+            if (idx < 0 || idx >= appState->canvas.layerCount) break;
+            Canvas_SetLayerBlendMode(&appState->canvas, idx, lact.bm);
+            layersDirty = true;
+            break;
+        }
+        default:
+            break;
+        }
+        break;
+    }
+
     case sdFAIL:
         snprintf(statusMsg, sizeof(statusMsg), "Server rejected connection");
         Disconnect();
@@ -491,6 +583,37 @@ void NetworkBroker::EnqueueRemoteDab(const d_Action* act) {
     }
 }
 
+// ── Config ───────────────────────────────────────────────────────────────
+
+void NetworkBroker::LoadConfig(const char* path) {
+    strncpy(configPath, path, sizeof(configPath) - 1);
+    configPath[sizeof(configPath) - 1] = '\0';
+
+    AppConfig cfg;
+    AppConfig_Load(&cfg, path);
+
+    if (cfg.lastServer[0])
+        strncpy(serverAddr, cfg.lastServer, sizeof(serverAddr) - 1);
+    if (cfg.lastUsername[0])
+        strncpy(username, cfg.lastUsername, sizeof(username) - 1);
+}
+
+void NetworkBroker::SaveConfig() {
+    AppConfig cfg;
+    strncpy(cfg.lastServer, serverAddr, sizeof(cfg.lastServer) - 1);
+    strncpy(cfg.lastUsername, username, sizeof(cfg.lastUsername) - 1);
+
+    // try stored path; fallback to cwd; then try app directory
+    if (configPath[0] && AppConfig_Save(&cfg, configPath)) return;
+    if (AppConfig_Save(&cfg, "repaint.ini")) return;
+    const char* ad = GetApplicationDirectory();
+    if (ad && ad[0]) {
+        char buf[1024];
+        snprintf(buf, sizeof(buf), "%srepaint.ini", ad);
+        AppConfig_Save(&cfg, buf);
+    }
+}
+
 // ── Connection UI ────────────────────────────────────────────────────────
 
 void NetworkBroker::DrawConnectionUI(void) {
@@ -512,8 +635,10 @@ void NetworkBroker::DrawConnectionUI(void) {
         ImGui::TextDisabled("Password not required (local test server)");
 
         if (ImGui::Button("Connect", ImVec2(120, 0))) {
-            if (serverAddr[0] && username[0])
+            if (serverAddr[0] && username[0]) {
+                SaveConfig();
                 Connect(serverAddr, serverPort);
+            }
         }
     } else {
         if (ImGui::Button("Disconnect", ImVec2(120, 0))) {

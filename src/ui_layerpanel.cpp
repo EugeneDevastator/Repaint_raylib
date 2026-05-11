@@ -5,6 +5,57 @@
 
 extern bool layersDirty;
 
+static void CommitLayerOp(AppState* state, d_LAction* lact) {
+    if (networkBroker.IsConnected()) {
+        networkBroker.SendLAction(lact);
+        // server-authoritative: don't apply locally, wait for echo
+    } else {
+        // local mode: apply directly
+        switch (lact->ActID) {
+        case laAdd: {
+            int insertAfter = lact->layer;
+            Canvas_InsertLayer(&state->canvas, insertAfter);
+            SyncAllRTs(state);
+            if (state->activeLayer >= insertAfter)
+                state->activeLayer++;
+            break;
+        }
+        case laDel: {
+            int idx = lact->layer;
+            Canvas_DeleteLayer(&state->canvas, idx);
+            if (state->activeLayer >= state->canvas.layerCount)
+                state->activeLayer = state->canvas.layerCount - 1;
+            SyncAllRTs(state);
+            break;
+        }
+        case laDup: {
+            int idx = lact->layer;
+            Canvas_DuplicateLayer(&state->canvas, idx);
+            state->activeLayer = idx + 1;
+            EnsureRTs(state);
+            SyncRTFromImage(state, state->activeLayer);
+            break;
+        }
+        case laDrop: {
+            int idx = lact->layer;
+            Canvas_MergeDown(&state->canvas, idx);
+            if (state->activeLayer >= state->canvas.layerCount)
+                state->activeLayer = state->canvas.layerCount - 1;
+            SyncAllRTs(state);
+            break;
+        }
+        case laMove: {
+            Canvas_MoveLayer(&state->canvas, lact->layer, lact->layerto);
+            state->activeLayer = lact->layerto;
+            SyncAllRTs(state);
+            break;
+        }
+        default: break;
+        }
+        layersDirty = true;
+    }
+}
+
 void LayerPanel_Draw(AppState* state) {
     int sw = GetScreenWidth();
     int sh = GetScreenHeight();
@@ -20,34 +71,31 @@ void LayerPanel_Draw(AppState* state) {
     float aw = ImGui::GetContentRegionAvail().x;
     float bw = (aw - 9.0f) / 4.0f;
     if (ImGui::Button("+Add", ImVec2(bw, 28))) {
-        Canvas_InsertLayer(&state->canvas, state->activeLayer + 1);
-        SyncAllRTs(state);
-        layersDirty = true;
+        d_LAction lact = {};
+        lact.ActID = laAdd;
+        lact.layer = (int16_t)(state->activeLayer + 1);
+        CommitLayerOp(state, &lact);
     }
     ImGui::SameLine();
     if (ImGui::Button("Dup", ImVec2(bw, 28)) && layerCount < 64) {
-        Canvas_DuplicateLayer(&state->canvas, state->activeLayer);
-        state->activeLayer++;
-        EnsureRTs(state);
-        SyncRTFromImage(state, state->activeLayer);
-        layersDirty = true;
+        d_LAction lact = {};
+        lact.ActID = laDup;
+        lact.layer = (int16_t)state->activeLayer;
+        CommitLayerOp(state, &lact);
     }
     ImGui::SameLine();
     if (ImGui::Button("Drop", ImVec2(bw, 28)) && state->activeLayer > 0) {
-        int merged = state->activeLayer;
-        Canvas_MergeDown(&state->canvas, merged);
-        if (state->activeLayer >= state->canvas.layerCount)
-            state->activeLayer = state->canvas.layerCount - 1;
-        SyncAllRTs(state);
-        layersDirty = true;
+        d_LAction lact = {};
+        lact.ActID = laDrop;
+        lact.layer = (int16_t)state->activeLayer;
+        CommitLayerOp(state, &lact);
     }
     ImGui::SameLine();
     if (ImGui::Button("Del", ImVec2(bw, 28)) && layerCount > 1) {
-        Canvas_DeleteLayer(&state->canvas, state->activeLayer);
-        if (state->activeLayer >= state->canvas.layerCount)
-            state->activeLayer = state->canvas.layerCount - 1;
-        SyncAllRTs(state);
-        layersDirty = true;
+        d_LAction lact = {};
+        lact.ActID = laDel;
+        lact.layer = (int16_t)state->activeLayer;
+        CommitLayerOp(state, &lact);
     }
 
     ImGui::Spacing();
@@ -64,6 +112,13 @@ void LayerPanel_Draw(AppState* state) {
         if (ImGui::Combo("##blend", &blend, blendNames, 14, 14)) {
             Canvas_SetLayerBlendMode(&state->canvas, state->activeLayer, blend);
             layersDirty = true;
+            if (networkBroker.IsConnected()) {
+                d_LAction lact = {};
+                lact.ActID = laBm;
+                lact.layer = (int16_t)state->activeLayer;
+                lact.bm = (uint8_t)blend;
+                networkBroker.SendLAction(&lact);
+            }
         }
     }
 
@@ -75,6 +130,13 @@ void LayerPanel_Draw(AppState* state) {
         if (ImGui::SliderFloat("##op", &op, 0.0f, 1.0f, "Opacity %.2f")) {
             Canvas_SetLayerOpacity(&state->canvas, state->activeLayer, op);
             layersDirty = true;
+        }
+        if (ImGui::IsItemDeactivatedAfterEdit() && networkBroker.IsConnected()) {
+            d_LAction lact = {};
+            lact.ActID = laOp;
+            lact.layer = (int16_t)state->activeLayer;
+            lact.op = op;
+            networkBroker.SendLAction(&lact);
         }
     }
 
@@ -113,9 +175,9 @@ void LayerPanel_Draw(AppState* state) {
                 }
                 ImGui::SameLine();
 
-                if (idx < state->texCount && state->layerTextures[idx].id > 0) {
+                if (idx < state->texCount && state->layerRTs[idx].id > 0) {
                     float ts = 36.0f;
-                    ImGui::Image((ImTextureID)(intptr_t)state->layerTextures[idx].id,
+                    ImGui::Image((ImTextureID)(intptr_t)state->layerRTs[idx].texture.id,
                         ImVec2(ts, ts));
                     ImGui::SameLine();
                 }
@@ -147,10 +209,11 @@ void LayerPanel_Draw(AppState* state) {
                         int fromVis = *(int*)payload->Data;
                         int fromIdx = layerCount - 1 - fromVis;
                         if (fromIdx != idx) {
-                            Canvas_MoveLayer(&state->canvas, fromIdx, idx);
-                            state->activeLayer = idx;
-                            SyncAllRTs(state);
-                            layersDirty = true;
+                            d_LAction lact = {};
+                            lact.ActID = laMove;
+                            lact.layer = (int16_t)fromIdx;
+                            lact.layerto = (int16_t)idx;
+                            CommitLayerOp(state, &lact);
                         }
                     }
                     ImGui::EndDragDropTarget();

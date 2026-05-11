@@ -79,7 +79,15 @@ struct NetworkBroker : ICommandBroker {
 
     void SendPacket(uint8_t hid, const uint8_t* data, uint32_t size);
     void SendAction(const d_Action* act);
+    void SendLAction(const d_LAction* lact);
     void SendChat(const char* msg);
+
+    // config path (set by LoadConfig, used by auto-save on connect)
+    char configPath[1024];
+
+    // config
+    void LoadConfig(const char* path);
+    void SaveConfig();
 
     // ui
     void DrawConnectionUI(void);
@@ -88,7 +96,6 @@ private:
     static void RecvThreadFunc(NetworkBroker* self);
     void ProcessReceived(uint8_t hid, uint8_t* data, uint32_t size);
     void EnqueueRemoteDab(const d_Action* act);
-    void HandleAuth(uint8_t hid, uint8_t* data, uint32_t size);
 };
 
 extern NetworkBroker networkBroker;
