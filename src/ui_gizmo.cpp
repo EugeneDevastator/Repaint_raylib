@@ -261,13 +261,23 @@ void Gizmo_Draw(AppState* state) {
         ImTextureID tid = (fileBtnTex[i].id > 0) ? (ImTextureID)(intptr_t)fileBtnTex[i].id : 0;
         if (tid) {
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.27f, 0.27f, 0.31f, 0.86f));
-            if (ImGui::ImageButton("##fb", tid, ImVec2(24, 24)))
-                {} // dummy
+            if (ImGui::ImageButton("##fb", tid, ImVec2(24, 24))) {
+                if (i == 0) App_FileNew();
+                else if (i == 1) App_FileOpen();
+                else if (i == 2) App_FileSaveAs();
+                else if (i == 3) App_FileSave();
+                else if (i == 5) App_FileSnap();
+            }
             ImGui::PopStyleColor();
         } else {
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.27f, 0.27f, 0.31f, 0.86f));
-            if (ImGui::Button(fileBtnLabels[i], ImVec2(36, 28)))
-                {} // dummy
+            if (ImGui::Button(fileBtnLabels[i], ImVec2(36, 28))) {
+                if (i == 0) App_FileNew();
+                else if (i == 1) App_FileOpen();
+                else if (i == 2) App_FileSaveAs();
+                else if (i == 3) App_FileSave();
+                else if (i == 5) App_FileSnap();
+            }
             ImGui::PopStyleColor();
         }
         ImGui::PopID();

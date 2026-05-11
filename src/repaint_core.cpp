@@ -118,8 +118,8 @@ void Canvas_Destroy(Canvas* canvas) {
     for (int i = 0; i < canvas->layerCount; i++) {
         UnloadImage(canvas->layerImages[i]);
     }
-    if (canvas->layerImages) free(canvas->layerImages);
-    if (canvas->layerProps) free(canvas->layerProps);
+    if (canvas->layerImages) { free(canvas->layerImages); canvas->layerImages = NULL; }
+    if (canvas->layerProps)  { free(canvas->layerProps);  canvas->layerProps = NULL; }
     canvas->layerCount = 0;
 }
 

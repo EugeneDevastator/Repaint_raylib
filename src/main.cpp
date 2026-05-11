@@ -43,8 +43,10 @@ int main() {
     App_Init(&state);
 
     while (!WindowShouldClose()) {
-        UpdateUI(&state);
-        Viewport_HandleInput(&viewport, &state);
+        if (!App_IsDialogActive()) {
+            UpdateUI(&state);
+            Viewport_HandleInput(&viewport, &state);
+        }
         App_Draw(&state);
     }
 

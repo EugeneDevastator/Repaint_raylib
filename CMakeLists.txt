@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(repaint_raylib CXX)
+project(repaint_raylib C CXX)
 
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -56,6 +56,8 @@ set(SOURCES
     src/ui_leftpanel.cpp
     src/ui_style.cpp
     src/stroke.cpp
+    src/file_format.cpp
+    dialog/dialog.c
     ${imgui_SOURCE_DIR}/imgui.cpp
     ${imgui_SOURCE_DIR}/imgui_draw.cpp
     ${imgui_SOURCE_DIR}/imgui_tables.cpp
@@ -67,6 +69,7 @@ add_executable(repaint ${SOURCES})
 
 target_include_directories(repaint PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/dialog
     ${imgui_SOURCE_DIR}
     ${rlimgui_SOURCE_DIR}
 )

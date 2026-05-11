@@ -342,6 +342,7 @@ void Viewport_Draw(Viewport* vp, AppState* state);
 void App_Init(AppState* state);
 void App_Draw(AppState* state);
 void App_Close(AppState* state);
+bool App_IsDialogActive(void);
 void UpdateUI(AppState* state);
 void EnsureRTs(AppState* state);
 void SyncRTFromImage(AppState* state, int layer);
@@ -349,5 +350,16 @@ void SyncImageFromRT(AppState* state, int layer);
 void SyncAllImages(AppState* state);
 void SyncAllRTs(AppState* state);
 void SyncLayerTexture(AppState* state, int layer);
+
+// ── .re.png file format ─────────────────────────────────────────────
+bool SaveRePaint(const char* path, Canvas* canvas);
+bool LoadRePaint(const char* path, Canvas* canvas);
+
+// ── File operations (hooked from gizmo) ─────────────────────────────
+void App_FileNew(void);
+void App_FileOpen(void);
+void App_FileSave(void);
+void App_FileSaveAs(void);
+void App_FileSnap(void);
 
 #endif

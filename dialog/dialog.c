@@ -40,6 +40,11 @@ static int  _persistFontSize = 26;
 
 /* ── Helpers ── */
 
+static void _trimSlash(char* p) {
+    size_t n = strlen(p);
+    while (n > 0 && (p[n-1] == '/' || p[n-1] == '\\')) p[--n] = '\0';
+}
+
 static int _sort(const void* a, const void* b) {
     const char* pa = *(const char**)a;
     const char* pb = *(const char**)b;
@@ -56,7 +61,7 @@ static bool _matchExt(const char* path, const char* filter) {
 }
 
 static bool _itemVisible(DialogState* d, int i) {
-    if (DirectoryExists(d->_files.paths[i])) return true;
+    if (DirectoryExists(d->_files.paths[i])) return false;
     if (d->type == 1) return _matchExt(d->_files.paths[i], d->_filter);
     return d->type == 2;
 }
@@ -88,21 +93,35 @@ static void _loadDir(DialogState* d) {
     snprintf(d->_pathPreview, DIALOG_PATH_MAX, "%s", d->_currentDir);
 }
 
+
 static void _navUp(DialogState* d) {
     const char* p = GetPrevDirectoryPath(d->_currentDir);
-    if (p && p[0]) { snprintf(d->_currentDir, DIALOG_PATH_MAX, "%s", p); _loadDir(d); }
+    if (p && p[0]) { snprintf(d->_currentDir, DIALOG_PATH_MAX, "%s", p); _trimSlash(d->_currentDir); _loadDir(d); }
 }
 
 static void _navInto(DialogState* d, const char* path) {
-    if (DirectoryExists(path)) { snprintf(d->_currentDir, DIALOG_PATH_MAX, "%s", path); _loadDir(d); }
+    if (DirectoryExists(path)) { snprintf(d->_currentDir, DIALOG_PATH_MAX, "%s", path); _trimSlash(d->_currentDir); _loadDir(d); }
 }
 
 static void _initDir(DialogState* d) {
-    const char* app = GetApplicationDirectory();
-    char saves[DIALOG_PATH_MAX];
-    snprintf(saves, sizeof(saves), "%sSaves", app);
-    snprintf(d->_currentDir, DIALOG_PATH_MAX, "%s",
-             DirectoryExists(saves) ? saves : app);
+    char app[DIALOG_PATH_MAX];
+    snprintf(app, sizeof(app), "%s", GetApplicationDirectory());
+    _trimSlash(app);
+
+    /* Build Saves/ path safely without triggering truncation warnings */
+    char saves[DIALOG_PATH_MAX + 8];
+    saves[0] = '\0';
+    size_t al = strlen(app);
+    if (al + 7 <= sizeof(saves)) {
+        memcpy(saves, app, al);
+        memcpy(saves + al, "/Saves", 7);
+    }
+
+    const char* dir = (app[0] && DirectoryExists(saves)) ? saves : app;
+    size_t dl = strlen(dir);
+    if (dl >= DIALOG_PATH_MAX) dl = DIALOG_PATH_MAX - 1;
+    memcpy(d->_currentDir, dir, dl);
+    d->_currentDir[dl] = '\0';
     _loadDir(d);
 }
 
@@ -115,11 +134,11 @@ static float _sp(Font f) {
 
 
 static void _drawText(Font f, const char* t, int x, int y, int sz, Color c) {
-    DrawTextEx(f, t, (Vector2){(float)x,(float)y}, (float)sz, _sp(sz), c);
+    DrawTextEx(f, t, (Vector2){(float)x,(float)y}, (float)sz, _sp(f), c);
 }
 
 static float _measureText(Font f, const char* t, int sz) {
-    return MeasureTextEx(f, t, (float)sz, _sp(sz)).x;
+    return MeasureTextEx(f, t, (float)sz, _sp(f)).x;
 }
 
 static DialogResult _makeResult(void) {
@@ -208,123 +227,133 @@ static void _textField(DialogState* d, Rectangle r, char* buf, int maxLen,
     }
 }
 
-/* ── Pane drawing ── */
+/* ── Left pane: folders only ── */
 
-static void _drawPane(DialogState* d, Rectangle area, bool leftOnly) {
+static void _drawLeftPane(DialogState* d, Rectangle a) {
     Vector2 mp = GetMousePosition();
     bool md = IsMouseButtonDown(MOUSE_LEFT_BUTTON);
-    bool* prevDown  = leftOnly ? &d->_leftPrevMouseDown : &d->_prevMouseDown;
-    bool  pressed   = md && !(*prevDown);
-    *prevDown = md;
+    bool pressed = md && !d->_leftPrevMouseDown;
+    d->_leftPrevMouseDown = md;
 
-    int viewH = (int)area.height;
-    int* scrollOff = leftOnly ? &d->_leftScrollOffset : &d->_scrollOffset;
-    int totalItems;
+    int dirs = 0;
+    for (int i = 0; i < (int)d->_files.count; i++)
+        if (DirectoryExists(d->_files.paths[i])) dirs++;
+    int totalH = (1 + dirs) * ITEM_H;
+    int viewH = (int)a.height;
+    int maxOff = totalH > viewH ? totalH - viewH : 0;
 
-    if (leftOnly) {
-        int dirs = 0;
-        for (int i = 0; i < (int)d->_files.count; i++)
-            if (DirectoryExists(d->_files.paths[i])) dirs++;
-        totalItems = (1 + dirs) * ITEM_H;
-    } else {
-        totalItems = _visCount(d) * ITEM_H;
-    }
-
-    int maxOff = totalItems > viewH ? totalItems - viewH : 0;
     float wheel = GetMouseWheelMove();
-    if (wheel && CheckCollisionPointRec(mp, area)) {
-        *scrollOff -= (int)(wheel * ITEM_H * 3);
-        if (*scrollOff < 0) *scrollOff = 0;
-        if (*scrollOff > maxOff) *scrollOff = maxOff;
+    if (wheel && CheckCollisionPointRec(mp, a)) {
+        d->_leftScrollOffset -= (int)(wheel * ITEM_H * 3);
+        if (d->_leftScrollOffset < 0) d->_leftScrollOffset = 0;
+        if (d->_leftScrollOffset > maxOff) d->_leftScrollOffset = maxOff;
     }
 
-    if (!leftOnly) {
-        int tv = _visCount(d);
-        if (tv > 0) {
-            if (IsKeyPressed(KEY_DOWN) && d->_selectedIndex < tv-1) {
-                d->_selectedIndex++;
-                _visPath(d, d->_selectedIndex, d->_pathPreview, DIALOG_PATH_MAX);
-                int sy = d->_selectedIndex*ITEM_H - *scrollOff;
-                if (sy + ITEM_H > viewH) *scrollOff = d->_selectedIndex*ITEM_H - viewH + ITEM_H;
-            }
-            if (IsKeyPressed(KEY_UP) && d->_selectedIndex > 0) {
-                d->_selectedIndex--;
-                _visPath(d, d->_selectedIndex, d->_pathPreview, DIALOG_PATH_MAX);
-                int sy = d->_selectedIndex*ITEM_H - *scrollOff;
-                if (sy < 0) *scrollOff = d->_selectedIndex*ITEM_H;
-            }
-        }
-    }
+    BeginScissorMode((int)a.x, (int)a.y, (int)a.width, viewH);
+    int y0 = (int)a.y - d->_leftScrollOffset;
 
-    BeginScissorMode((int)area.x, (int)area.y, (int)area.width, viewH);
-    int y0 = (int)area.y - *scrollOff;
+    /* [..] row */
+    Rectangle ir = {a.x, (float)y0, a.width - SCROLL_W, ITEM_H};
+    if (CheckCollisionPointRec(mp, ir)) DrawRectangleRec(ir, _hovBg);
+    _drawText(d->_font, "[..]", (int)a.x+6, y0+(ITEM_H-d->_fontSize)/2, d->_fontSize, _textDim);
+    if (pressed && CheckCollisionPointRec(mp, ir)) { EndScissorMode(); _navUp(d); return; }
 
-    if (leftOnly) {
-        /* ".." row */
-        Rectangle ir = {area.x, (float)y0, area.width - SCROLL_W, ITEM_H};
-        bool hov = CheckCollisionPointRec(mp, ir);
-        if (hov) DrawRectangleRec(ir, _hovBg);
-        _drawText(d->_font, "[..]", (int)area.x+6, y0+(ITEM_H-d->_fontSize)/2, d->_fontSize, _textDim);
-        if (pressed && hov) { EndScissorMode(); _navUp(d); return; }
-
-        int di = 0;
-        for (int i = 0; i < (int)d->_files.count; i++) {
-            if (!DirectoryExists(d->_files.paths[i])) continue;
-            int y = y0 + (1 + di) * ITEM_H; di++;
-            if (y + ITEM_H <= (int)area.y || y >= (int)(area.y + viewH)) continue;
-            Rectangle ir2 = {area.x, (float)y, area.width - SCROLL_W, ITEM_H};
-            bool hov2 = CheckCollisionPointRec(mp, ir2);
-            if (hov2) DrawRectangleRec(ir2, _hovBg);
-            _drawText(d->_font, GetFileName(d->_files.paths[i]),
-                      (int)area.x+6, y+(ITEM_H-d->_fontSize)/2, d->_fontSize, _text);
-            if (pressed && hov2) { EndScissorMode(); _navInto(d, d->_files.paths[i]); return; }
-        }
-    } else {
-        int vi = 0;
-        for (int i = 0; i < (int)d->_files.count; i++) {
-            if (!_itemVisible(d, i)) continue;
-            int y = y0 + vi * ITEM_H;
-            if (y + ITEM_H > (int)area.y && y < (int)(area.y + viewH)) {
-                bool isDir = DirectoryExists(d->_files.paths[i]);
-                Rectangle ir = {area.x, (float)y, area.width - SCROLL_W, ITEM_H};
-                bool hov = CheckCollisionPointRec(mp, ir);
-                bool sel = (vi == d->_selectedIndex);
-                if (sel) DrawRectangleRec(ir, _selBg);
-                else if (hov) DrawRectangleRec(ir, _hovBg);
-                char buf[512];
-                snprintf(buf, sizeof(buf), isDir ? "[d] %s" : "    %s",
-                         GetFileName(d->_files.paths[i]));
-                _drawText(d->_font, buf, (int)area.x+6, y+(ITEM_H-d->_fontSize)/2,
-                          d->_fontSize, isDir ? _textDim : _text);
-                if (pressed && hov) {
-                    double now = GetTime();
-                    bool dbl = (now - d->_lastClickTime < DBLCK_TIME && d->_lastClickedIdx == vi);
-                    d->_lastClickTime = now; d->_lastClickedIdx = vi;
-                    if (dbl) {
-                        if (isDir) { EndScissorMode(); _navInto(d, d->_files.paths[i]); return; }
-                        char path[DIALOG_PATH_MAX];
-                        _visPath(d, vi, path, DIALOG_PATH_MAX);
-                        EndScissorMode(); _closeOk(d, path); return;
-                    }
-                    d->_selectedIndex = vi;
-                    _visPath(d, vi, d->_pathPreview, DIALOG_PATH_MAX);
-                    if (d->type == 2 && !isDir && d->_pathPreview[0]) {
-                        snprintf(d->_textInput, DIALOG_PATH_MAX, "%s", GetFileName(d->_pathPreview));
-                        d->_textLen = (int)strlen(d->_textInput);
-                        d->_cursorPos = d->_textLen; d->_textActive = true;
-                    }
-                }
-            }
-            vi++;
-        }
+    /* Directory rows */
+    int di = 0;
+    for (int i = 0; i < (int)d->_files.count; i++) {
+        if (!DirectoryExists(d->_files.paths[i])) continue;
+        int y = y0 + (1 + di) * ITEM_H; di++;
+        if (y + ITEM_H <= (int)a.y || y >= (int)(a.y + viewH)) continue;
+        Rectangle ir2 = {a.x, (float)y, a.width - SCROLL_W, ITEM_H};
+        if (CheckCollisionPointRec(mp, ir2)) DrawRectangleRec(ir2, _hovBg);
+        _drawText(d->_font, GetFileName(d->_files.paths[i]),
+                  (int)a.x+6, y+(ITEM_H-d->_fontSize)/2, d->_fontSize, _text);
+        if (pressed && CheckCollisionPointRec(mp, ir2)) { EndScissorMode(); _navInto(d, d->_files.paths[i]); return; }
     }
     EndScissorMode();
 
-    bool* grab     = leftOnly ? &d->_leftScrollGrabbed  : &d->_scrollGrabbed;
-    int*  grabY    = leftOnly ? &d->_leftScrollGrabY    : &d->_scrollGrabY;
-    int*  startOff = leftOnly ? &d->_leftScrollStartOff : &d->_scrollStartOff;
-    _scrollbar((int)(area.x + area.width - SCROLL_W), (int)area.y, viewH,
-               totalItems, viewH, scrollOff, grab, grabY, startOff, pressed);
+    _scrollbar((int)(a.x + a.width - SCROLL_W), (int)a.y, viewH, totalH, viewH,
+               &d->_leftScrollOffset, &d->_leftScrollGrabbed,
+               &d->_leftScrollGrabY, &d->_leftScrollStartOff, pressed);
+}
+
+/* ── Right pane: files only ── */
+
+static void _drawRightPane(DialogState* d, Rectangle a) {
+    Vector2 mp = GetMousePosition();
+    bool md = IsMouseButtonDown(MOUSE_LEFT_BUTTON);
+    bool pressed = md && !d->_prevMouseDown;
+    d->_prevMouseDown = md;
+
+    int totalH = _visCount(d) * ITEM_H;
+    int viewH = (int)a.height;
+    int maxOff = totalH > viewH ? totalH - viewH : 0;
+
+    float wheel = GetMouseWheelMove();
+    if (wheel && CheckCollisionPointRec(mp, a)) {
+        d->_scrollOffset -= (int)(wheel * ITEM_H * 3);
+        if (d->_scrollOffset < 0) d->_scrollOffset = 0;
+        if (d->_scrollOffset > maxOff) d->_scrollOffset = maxOff;
+    }
+
+    /* Keyboard navigation */
+    int tv = _visCount(d);
+    if (tv > 0) {
+        if (IsKeyPressed(KEY_DOWN) && d->_selectedIndex < tv-1) {
+            d->_selectedIndex++;
+            _visPath(d, d->_selectedIndex, d->_pathPreview, DIALOG_PATH_MAX);
+            int sy = d->_selectedIndex * ITEM_H - d->_scrollOffset;
+            if (sy + ITEM_H > viewH) d->_scrollOffset = d->_selectedIndex * ITEM_H - viewH + ITEM_H;
+        }
+        if (IsKeyPressed(KEY_UP) && d->_selectedIndex > 0) {
+            d->_selectedIndex--;
+            _visPath(d, d->_selectedIndex, d->_pathPreview, DIALOG_PATH_MAX);
+            int sy = d->_selectedIndex * ITEM_H - d->_scrollOffset;
+            if (sy < 0) d->_scrollOffset = d->_selectedIndex * ITEM_H;
+        }
+    }
+
+    BeginScissorMode((int)a.x, (int)a.y, (int)a.width, viewH);
+    int y0 = (int)a.y - d->_scrollOffset;
+    int vi = 0;
+
+    for (int i = 0; i < (int)d->_files.count; i++) {
+        if (!_itemVisible(d, i)) continue;
+        int y = y0 + vi * ITEM_H;
+        if (y + ITEM_H > (int)a.y && y < (int)(a.y + viewH)) {
+            Rectangle ir = {a.x, (float)y, a.width - SCROLL_W, ITEM_H};
+            bool hov = CheckCollisionPointRec(mp, ir);
+            bool sel = (vi == d->_selectedIndex);
+            if (sel) DrawRectangleRec(ir, _selBg);
+            else if (hov) DrawRectangleRec(ir, _hovBg);
+            _drawText(d->_font, GetFileName(d->_files.paths[i]),
+                      (int)a.x+6, y+(ITEM_H-d->_fontSize)/2, d->_fontSize, _text);
+            if (pressed && hov) {
+                double now = GetTime();
+                bool dbl = (now - d->_lastClickTime < DBLCK_TIME && d->_lastClickedIdx == vi);
+                d->_lastClickTime = now; d->_lastClickedIdx = vi;
+                if (dbl) {
+                    char path[DIALOG_PATH_MAX];
+                    _visPath(d, vi, path, DIALOG_PATH_MAX);
+                    EndScissorMode(); _closeOk(d, path); return;
+                }
+                d->_selectedIndex = vi;
+                _visPath(d, vi, d->_pathPreview, DIALOG_PATH_MAX);
+                if (d->type == 2 && d->_pathPreview[0]) {
+                    snprintf(d->_textInput, DIALOG_PATH_MAX, "%s",
+                             GetFileName(d->_pathPreview));
+                    d->_textLen = (int)strlen(d->_textInput);
+                    d->_cursorPos = d->_textLen; d->_textActive = true;
+                }
+            }
+        }
+        vi++;
+    }
+    EndScissorMode();
+
+    _scrollbar((int)(a.x + a.width - SCROLL_W), (int)a.y, viewH, totalH, viewH,
+               &d->_scrollOffset, &d->_scrollGrabbed,
+               &d->_scrollGrabY, &d->_scrollStartOff, pressed);
 }
 
 /* ── File dialog ── */
@@ -381,12 +410,12 @@ static void _drawFileDialog(DialogState* d) {
 
     Rectangle leftR = {(float)wx+2, (float)contentY, (float)LEFT_PANE-2, (float)contentH};
     DrawRectangleRec(leftR, _winBg); DrawRectangleLinesEx(leftR, 1, _border);
-    _drawPane(d, (Rectangle){leftR.x+1, leftR.y+1, leftR.width-2, leftR.height-2}, true);
+    _drawLeftPane(d, (Rectangle){leftR.x+1, leftR.y+1, leftR.width-2, leftR.height-2});
     DrawLine(wx+LEFT_PANE, contentY, wx+LEFT_PANE, contentY+contentH, _border);
 
     Rectangle rightR = {(float)(wx+LEFT_PANE+1), (float)contentY,
                         (float)(winW-LEFT_PANE-3), (float)contentH};
-    _drawPane(d, rightR, false);
+    _drawRightPane(d, rightR);
 
     int pathY = contentY + contentH + 2;
     DrawLine(wx, pathY, wx+winW, pathY, _border);
@@ -415,15 +444,13 @@ static void _drawFileDialog(DialogState* d) {
                 snprintf(fname+fl, DIALOG_PATH_MAX-fl, "%s", d->_filter);
             }
             if (fname[0]) {
-                /* fix: use separate buffers to avoid truncation warning */
-				// In _drawFileDialog, replace the full[] block:
-				char full[DIALOG_PATH_MAX];
+				char full[DIALOG_PATH_MAX * 2 + 1];
 				snprintf(full, sizeof(full), "%s/%s", d->_currentDir, fname);
 				if (FileExists(full)) {
 					strncpy(d->_overwritePath, full, DIALOG_PATH_MAX-1);
 					d->_overwritePath[DIALOG_PATH_MAX-1] = '\0';
 					d->_confirmOverwrite = true;
-				} else {
+				} else if (full[0]) {
 					_closeOk(d, full);
 				}
             }

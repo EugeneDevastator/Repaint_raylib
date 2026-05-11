@@ -3,6 +3,9 @@
 #include "stroke.h"
 #include "rlImGui.h"
 #include "imgui.h"
+#include "imgui_internal.h"
+#include "dialog.h"
+#include <time.h>
 
 int uiPanelWidth = 250;
 bool panelResizing = false;
@@ -18,6 +21,24 @@ BParam bpQuickSat;
 BParam bpQuickLit;
 
 Viewport viewport;
+
+/* ── File dialog / path state ──────────────────────────────────────────── */
+static AppState* g_state = NULL;
+DialogState g_fileDlg;
+char g_currentFilePath[1024] = "";
+Font g_dialogFont = {0};
+
+/* ── New canvas dialog state ───────────────────────────────────────────── */
+static bool g_newCanvasActive = false;
+static int g_newW = 800;
+static int g_newH = 600;
+static int g_newPreset = 0;
+static const char* g_presets[] = {
+    "800 x 600", "1024 x 768", "1280 x 720",
+    "1920 x 1080", "2560 x 1440", "3840 x 2160"
+};
+static int g_presetW[] = { 800, 1024, 1280, 1920, 2560, 3840 };
+static int g_presetH[] = { 600, 768,  720,  1080, 1440, 2160 };
 
 void EnsureRTs(AppState* state) {
     int newCount = state->canvas.layerCount;
@@ -108,7 +129,118 @@ void UpdateUI(AppState* state) {
 
 static LocalBroker localBroker;
 
+bool App_IsDialogActive(void) {
+    return g_fileDlg.type != 0;
+}
+
+/* ── Callbacks ─────────────────────────────────────────────────────────── */
+
+static void OnOpenResult(DialogResult r) {
+    if (r.wasClosed && r.success && r.output[0]) {
+        SyncAllImages(g_state);
+        if (LoadRePaint(r.output, &g_state->canvas)) {
+            int len = (int)strlen(r.output);
+            if (len < (int)sizeof(g_currentFilePath) - 1)
+                memcpy(g_currentFilePath, r.output, len + 1);
+            g_state->activeLayer = 0;
+            g_state->texCount = 0;
+            SyncAllRTs(g_state);
+            layersDirty = true;
+        }
+    }
+}
+
+static void OnSaveResult(DialogResult r) {
+    if (r.wasClosed && r.success && r.output[0]) {
+        SyncAllImages(g_state);
+        if (SaveRePaint(r.output, &g_state->canvas)) {
+            int len = (int)strlen(r.output);
+            if (len < (int)sizeof(g_currentFilePath) - 1)
+                memcpy(g_currentFilePath, r.output, len + 1);
+        }
+    }
+}
+
+static void OnNewCanvasConfirm(DialogResult r) {
+    if (r.wasClosed && r.success) {
+        g_newCanvasActive = true;
+    }
+}
+
+static void OnClearForNew(DialogResult r) {
+    if (r.wasClosed && r.success) {
+        g_newCanvasActive = true;
+    }
+}
+
+/* ── File operations (called from gizmo) ───────────────────────────────── */
+
+void App_FileNew(void) {
+    DialogYesNo_Init(&g_fileDlg, "Clear canvas and create new?", OnClearForNew);
+}
+
+void App_FileOpen(void) {
+    DialogOpen_Init(&g_fileDlg, "Open", ".re.png", OnOpenResult);
+}
+
+void App_FileSave(void) {
+    if (g_currentFilePath[0]) {
+        SyncAllImages(g_state);
+        SaveRePaint(g_currentFilePath, &g_state->canvas);
+    } else {
+        App_FileSaveAs();
+    }
+}
+
+void App_FileSaveAs(void) {
+    const char* name = "untitled";
+    if (g_currentFilePath[0]) {
+        name = GetFileNameWithoutExt(g_currentFilePath);
+    }
+    DialogSaveAs_Init(&g_fileDlg, "Save As", ".re.png", name, OnSaveResult);
+}
+
+void App_FileSnap(void) {
+    /* flatten all visible layers and save to Snaps/ */
+    Image flat = GenImageColor(g_state->canvas.width, g_state->canvas.height, BLANK);
+    Color* dst = (Color*)flat.data;
+    for (int i = 0; i < g_state->canvas.layerCount; i++) {
+        if (!g_state->canvas.layerProps[i].visible) continue;
+        Color* src = (Color*)g_state->canvas.layerImages[i].data;
+        float alpha = g_state->canvas.layerProps[i].op;
+        int n = g_state->canvas.width * g_state->canvas.height;
+        for (int j = 0; j < n; j++) {
+            float sa = src[j].a / 255.0f * alpha;
+            float da = dst[j].a / 255.0f;
+            float outa = sa + da * (1.0f - sa);
+            if (outa > 0.0f) {
+                dst[j].r = (uint8_t)((src[j].r * sa + dst[j].r * da * (1.0f - sa)) / outa);
+                dst[j].g = (uint8_t)((src[j].g * sa + dst[j].g * da * (1.0f - sa)) / outa);
+                dst[j].b = (uint8_t)((src[j].b * sa + dst[j].b * da * (1.0f - sa)) / outa);
+                dst[j].a = (uint8_t)(outa * 255.0f);
+            }
+        }
+    }
+
+    /* build path: Snaps/snap_YYYYMMDD_HHMMSS.png */
+    time_t now = time(NULL);
+    struct tm* t = localtime(&now);
+    const char* appDir = GetApplicationDirectory();
+    char path[1024];
+    snprintf(path, sizeof(path), "%sSnaps/snap_%04d%02d%02d_%02d%02d%02d.png",
+             appDir,
+             t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
+             t->tm_hour, t->tm_min, t->tm_sec);
+
+    ExportImage(flat, path);
+    UnloadImage(flat);
+}
+
+/* ── App_Init ──────────────────────────────────────────────────────────── */
+
 void App_Init(AppState* state) {
+    g_state = state;
+
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "RePaint");
     MaximizeWindow();
@@ -197,11 +329,24 @@ void App_Init(AppState* state) {
     state->texCount = 0;
 
     SyncAllRTs(state);
+
+    /* Create default directories */
+    const char* ad = GetApplicationDirectory();
+    char p[1024];
+    snprintf(p, sizeof(p), "%sSaves", ad); Dialog_MakeDir(p);
+    snprintf(p, sizeof(p), "%sSnaps", ad); Dialog_MakeDir(p);
+
+    /* Load custom dialog font — bilinear filter for smooth OTF rendering */
+    g_dialogFont = LoadFontEx("resources/Cadman_Bold.otf", 26, 0, 0);
+    SetTextureFilter(g_dialogFont.texture, TEXTURE_FILTER_BILINEAR);
+    DialogSetFont(&g_fileDlg, g_dialogFont, 26);
+
+    g_currentFilePath[0] = '\0';
 }
 
-void App_Draw(AppState* state) {
-    EnsureRTs(state);
+/* ── App_Draw ──────────────────────────────────────────────────────────── */
 
+void App_Draw(AppState* state) {
     int sw = GetScreenWidth();
     int sh = GetScreenHeight();
 
@@ -216,26 +361,102 @@ void App_Draw(AppState* state) {
         viewportBounds.y + viewportBounds.height * 0.5f
     };
 
+    BeginDrawing();
+    ClearBackground(Color{220, 220, 220, 255});
+
+    /* If dialog active, draw it modelly — skip viewport/imgui entirely */
+    if (g_fileDlg.type != 0) {
+        Dialog_Draw(&g_fileDlg);
+        EndDrawing();
+        return;
+    }
+
+    /* Normal rendering path */
+    EnsureRTs(state);
+
     if (viewport.broker) viewport.broker->poll(state);
     if (viewport.strokeEnded) {
         SyncLayerTexture(state, viewport.endLayer);
         viewport.strokeEnded = false;
     }
 
-    BeginDrawing();
-    ClearBackground(Color{220, 220, 220, 255});
-
     Viewport_Draw(&viewport, state);
 
     rlImGuiBegin();
+
     Gizmo_Draw(state);
     LeftPanel_Draw(state);
     LayerPanel_Draw(state);
     Gizmo_DrawPenPopups(state);
+
+    /* New canvas dialog (imgui modal) */
+    if (g_newCanvasActive) {
+        ImGui::OpenPopup("New Canvas");
+        if (ImGui::BeginPopupModal("New Canvas", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+            ImGui::Text("Canvas Size");
+            ImGui::Separator();
+
+            /* Preset combo */
+            int prev = g_newPreset;
+            ImGui::SetNextItemWidth(180);
+            ImGui::Combo("Preset", &g_newPreset, g_presets, 6);
+            if (prev != g_newPreset) {
+                g_newW = g_presetW[g_newPreset];
+                g_newH = g_presetH[g_newPreset];
+            }
+
+            ImGui::InputInt("Width", &g_newW, 1, 100);
+            ImGui::InputInt("Height", &g_newH, 1, 100);
+            if (g_newW < 1) g_newW = 1;
+            if (g_newH < 1) g_newH = 1;
+            if (g_newW > 16384) g_newW = 16384;
+            if (g_newH > 16384) g_newH = 16384;
+
+            ImGui::Separator();
+            if (ImGui::Button("Create", ImVec2(100, 0))) {
+                /* Destroy old canvas + RTs */
+                SyncAllImages(state);
+                Canvas_Destroy(&state->canvas);
+                for (int i = 0; i < state->texCount; i++) {
+                    if (state->layerRTs[i].id > 0) UnloadRenderTexture(state->layerRTs[i]);
+                    if (state->layerTextures[i].id > 0) UnloadTexture(state->layerTextures[i]);
+                }
+                free(state->layerTextures); state->layerTextures = NULL;
+                free(state->layerRTs);     state->layerRTs = NULL;
+                free(state->texDirty);     state->texDirty = NULL;
+                state->texCount = 0;
+
+                state->canvas = Canvas_Create(g_newW, g_newH, WHITE);
+                state->activeLayer = 0;
+                state->camera.target = Vector2{(float)g_newW * 0.5f, (float)g_newH * 0.5f};
+                state->camera.zoom = 1.0f;
+                SyncAllRTs(state);
+                layersDirty = true;
+                g_currentFilePath[0] = '\0';
+                g_newCanvasActive = false;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(100, 0))) {
+                g_newCanvasActive = false;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        }
+        /* if popup closed via X/escape, reset flag */
+        if (!ImGui::IsPopupOpen("New Canvas"))
+            g_newCanvasActive = false;
+    }
+
     rlImGuiEnd();
 
     EndDrawing();
+
+    /* Check file rename result after dialog callback has a chance to fire */
+    /* (dialog draws at beginning of next frame) */
 }
+
+/* ── App_Close ─────────────────────────────────────────────────────────── */
 
 void App_Close(AppState* state) {
     SyncAllImages(state);
@@ -258,8 +479,9 @@ void App_Close(AppState* state) {
     if (bpScatter.iconLoaded) UnloadTexture(bpScatter.iconTex);
     UnloadPenIcons();
     UnloadGizmoIcons();
+    if (g_dialogFont.texture.id > 0) UnloadFont(g_dialogFont);
+    UIStyle::Shutdown();
     Painter_Shutdown();
     BrushBlend_Shutdown();
     CloseWindow();
-    UIStyle::Shutdown();
 }
