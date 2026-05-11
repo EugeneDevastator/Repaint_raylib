@@ -1,5 +1,6 @@
 #include "repaint.h"
 #include "imgui.h"
+#include "network_broker.h"
 #include <cstdint>
 
 extern bool layersDirty;
@@ -161,7 +162,7 @@ void LayerPanel_Draw(AppState* state) {
         ImGui::EndChild();
     }
 
-    // Network lobby panel (dummy UI, bottom 30%)
+    // Network lobby panel (bottom of layers)
     {
         ImGui::Separator();
         float netH = ImGui::GetContentRegionAvail().y;
@@ -171,17 +172,31 @@ void LayerPanel_Draw(AppState* state) {
             ImGui::Text("Server");
             ImGui::Separator();
             float btnW = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
-            if (ImGui::Button("Server", ImVec2(btnW, 24))) {}
+            if (ImGui::Button("Server", ImVec2(btnW, 24)))
+                networkBroker.showUI = !networkBroker.showUI;
             ImGui::SameLine();
-            if (ImGui::Button("Room", ImVec2(btnW, 24))) {}
-            ImGui::Text("IP: 0.0.0.0:0");
+            if (networkBroker.IsConnected()) {
+                if (ImGui::Button("Disconnect", ImVec2(btnW, 24)))
+                    networkBroker.Disconnect();
+            } else {
+                if (ImGui::Button("Room", ImVec2(btnW, 24))) {}
+            }
+            if (networkBroker.IsConnected())
+                ImGui::Text("IP: %s:%d", networkBroker.serverAddr, networkBroker.serverPort);
+            else
+                ImGui::Text("Not connected");
             ImGui::Separator();
-            ImGui::Text("Users:");
-            static const char* dummyUsers[] = {"Alice", "Bob", "Charlie"};
-            static int selectedUser = -1;
-            for (int i = 0; i < 3; i++) {
-                if (ImGui::Selectable(dummyUsers[i], selectedUser == i))
-                    selectedUser = i;
+            ImGui::Text("Users (%d):", networkBroker.userCount);
+            for (int i = 0; i < networkBroker.userCount; i++) {
+                const char* name = networkBroker.userNames[i];
+                bool isMe = strcmp(name, networkBroker.ownName) == 0;
+                if (isMe) {
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.9f, 0.3f, 1.0f));
+                    ImGui::Text("> %s", name);
+                    ImGui::PopStyleColor();
+                } else {
+                    ImGui::Text("  %s", name);
+                }
             }
         }
         ImGui::EndChild();

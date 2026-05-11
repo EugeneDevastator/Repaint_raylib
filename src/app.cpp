@@ -5,6 +5,7 @@
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "dialog.h"
+#include "network_broker.h"
 #include <time.h>
 
 int uiPanelWidth = 250;
@@ -127,7 +128,7 @@ void UpdateUI(AppState* state) {
     state->currentBrush.Realb.col = HSLToRGB(colorHue, colorSat, colorLit);
 }
 
-static LocalBroker localBroker;
+NetworkBroker networkBroker;
 
 bool App_IsDialogActive(void) {
     return g_fileDlg.type != 0;
@@ -254,7 +255,7 @@ void App_Init(AppState* state) {
     LoadPenIcons();
     LoadGizmoIcons();
 
-    localBroker.appState = state;
+    networkBroker.appState = state;
 
     BParam_Init(&bpOpacity, 0, "Opacity", 0.0f, 1.0f, 1.0f);
     BParam_SetIcon(&bpOpacity, "ctlop");
@@ -292,7 +293,7 @@ void App_Init(AppState* state) {
         (float)SCREEN_HEIGHT
     };
     Viewport_Init(&viewport, viewportBounds);
-    viewport.broker = &localBroker;
+    viewport.broker = &networkBroker;
 
     state->camera = Camera2D{};
     state->camera.target = Vector2{(float)state->canvas.width * 0.5f, (float)state->canvas.height * 0.5f};
@@ -374,6 +375,10 @@ void App_Draw(AppState* state) {
     /* Normal rendering path */
     EnsureRTs(state);
 
+    // toggle network UI
+    if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyPressed(KEY_N))
+        networkBroker.showUI = !networkBroker.showUI;
+
     if (viewport.broker) viewport.broker->poll(state);
     if (viewport.strokeEnded) {
         SyncLayerTexture(state, viewport.endLayer);
@@ -384,6 +389,7 @@ void App_Draw(AppState* state) {
 
     rlImGuiBegin();
 
+    networkBroker.DrawConnectionUI();
     Gizmo_Draw(state);
     LeftPanel_Draw(state);
     LayerPanel_Draw(state);
@@ -459,6 +465,7 @@ void App_Draw(AppState* state) {
 /* ── App_Close ─────────────────────────────────────────────────────────── */
 
 void App_Close(AppState* state) {
+    networkBroker.Disconnect();
     SyncAllImages(state);
     Canvas_Destroy(&state->canvas);
     for (int i = 0; i < state->texCount; i++) {
