@@ -69,13 +69,15 @@ void SyncRTFromImage(AppState* state, int layer) {
     }
     Texture2D tmp = LoadTextureFromImage(*img);
     BeginTextureMode(state->layerRTs[layer]);
-    rlSetBlendMode(RL_BLEND_CUSTOM);
+    ClearBackground(BLANK);
     rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+    rlSetBlendMode(RL_BLEND_CUSTOM);
     DrawTexture(tmp, 0, 0, WHITE);
     rlSetBlendMode(RL_BLEND_ALPHA);
     EndTextureMode();
     UnloadTexture(tmp);
 }
+
 
 void SyncImageFromRT(AppState* state, int layer) {
     if (layer < 0 || layer >= state->texCount) return;
