@@ -14,6 +14,7 @@ static int locResangle = -1;
 static int locSol = -1;
 static int locSol2op = -1;
 static int locBmidx = -1;
+static int locPreserveOp = -1;
 static bool brushBlendInited = false;
 
 // Temp render target to avoid feedback loop (reading from dstRT while writing to it)
@@ -43,6 +44,7 @@ void BrushBlend_Init(void) {
     locSol        = GetShaderLocation(brushBlendShader, "sol");
     locSol2op     = GetShaderLocation(brushBlendShader, "sol2op");
     locBmidx      = GetShaderLocation(brushBlendShader, "bmidx");
+    locPreserveOp = GetShaderLocation(brushBlendShader, "preserveop");
 
     brushBlendInited = true;
 }
@@ -118,6 +120,8 @@ void BrushBlend_ApplyStamp(
     SetShaderValue(brushBlendShader, locSol2op,   &brush->Realb.sol2op,   SHADER_UNIFORM_FLOAT);
     int bmidx = (int)brush->Realb.bmidx;
     SetShaderValue(brushBlendShader, locBmidx,    &bmidx,                 SHADER_UNIFORM_INT);
+    float preserveop = (brush->Realb.preserveop > 0) ? 1.0f : 0.0f;
+    SetShaderValue(brushBlendShader, locPreserveOp, &preserveop,          SHADER_UNIFORM_FLOAT);
 
     // Step 1: copy dstRT to tempRT (read from dstRT, write to tempRT)
     rlSetBlendMode(RL_BLEND_CUSTOM);

@@ -10,6 +10,7 @@
 
 int uiPanelWidth = 250;
 bool panelResizing = false;
+bool g_panelsVisible = true;
 
 BParam bpOpacity;
 BParam bpSize;
@@ -31,6 +32,7 @@ Font g_dialogFont = {0};
 
 /* ── New canvas dialog state ───────────────────────────────────────────── */
 static bool g_newCanvasActive = false;
+static bool g_newCanvasConfirm = false;
 static int g_newW = 800;
 static int g_newH = 600;
 static int g_newPreset = 0;
@@ -106,7 +108,11 @@ void SyncAllRTs(AppState* state) {
 void UpdateUI(AppState* state) {
     Vector2 mousePos = GetMousePosition();
 
-    gizmoShow = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+    if (IsKeyPressed(KEY_TAB))
+        g_panelsVisible = !g_panelsVisible;
+
+    if (IsKeyPressed(KEY_LEFT_SHIFT) || IsKeyPressed(KEY_RIGHT_SHIFT))
+        gizmoShow = !gizmoShow;
 
     if (gizmoShow)
         Gizmo_HandleInput(state, mousePos);
@@ -164,22 +170,32 @@ static void OnSaveResult(DialogResult r) {
     }
 }
 
-static void OnNewCanvasConfirm(DialogResult r) {
-    if (r.wasClosed && r.success) {
-        g_newCanvasActive = true;
+static void DoCreateNew(void) {
+    SyncAllImages(g_state);
+    Canvas_Destroy(&g_state->canvas);
+    for (int i = 0; i < g_state->texCount; i++) {
+        if (g_state->layerRTs[i].id > 0) UnloadRenderTexture(g_state->layerRTs[i]);
+        if (g_state->layerTextures[i].id > 0) UnloadTexture(g_state->layerTextures[i]);
     }
-}
+    free(g_state->layerTextures); g_state->layerTextures = NULL;
+    free(g_state->layerRTs);     g_state->layerRTs = NULL;
+    free(g_state->texDirty);     g_state->texDirty = NULL;
+    g_state->texCount = 0;
 
-static void OnClearForNew(DialogResult r) {
-    if (r.wasClosed && r.success) {
-        g_newCanvasActive = true;
-    }
+    g_state->canvas = Canvas_Create(g_newW, g_newH, WHITE);
+    g_state->activeLayer = 0;
+    g_state->camera.target = Vector2{(float)g_newW * 0.5f, (float)g_newH * 0.5f};
+    g_state->camera.zoom = 1.0f;
+    SyncAllRTs(g_state);
+    layersDirty = true;
+    g_currentFilePath[0] = '\0';
+    g_newCanvasActive = false;
+    ImGui::CloseCurrentPopup();
 }
-
-/* ── File operations (called from gizmo) ───────────────────────────────── */
 
 void App_FileNew(void) {
-    DialogYesNo_Init(&g_fileDlg, "Clear canvas and create new?", OnClearForNew);
+    g_newCanvasActive = true;
+    g_newCanvasConfirm = false;
 }
 
 void App_FileOpen(void) {
@@ -201,6 +217,31 @@ void App_FileSaveAs(void) {
         name = GetFileNameWithoutExt(g_currentFilePath);
     }
     DialogSaveAs_Init(&g_fileDlg, "Save As", ".re.png", name, OnSaveResult);
+}
+
+void App_FileReload(void) {
+    if (!g_currentFilePath[0]) return;
+    SyncAllImages(g_state);
+
+    // Backup current file with random hash
+    char backupPath[1048];
+    const char* base = GetFileNameWithoutExt(g_currentFilePath);
+    const char* ext = GetFileExtension(g_currentFilePath);
+    unsigned int hash = (unsigned int)time(NULL) ^ (unsigned int)(uintptr_t)g_state;
+    hash = hash * 1103515245 + 12345;
+    const char* dir = GetDirectoryPath(g_currentFilePath);
+    const char* fname = GetFileNameWithoutExt(g_currentFilePath);
+    snprintf(backupPath, sizeof(backupPath), "%s/%s_backup_%08x%s",
+             dir, fname, (hash / 65536) % 0xFFFFFFFFu, ext);
+    SaveRePaint(backupPath, &g_state->canvas);
+
+    // Reload from original
+    if (LoadRePaint(g_currentFilePath, &g_state->canvas)) {
+        g_state->activeLayer = 0;
+        g_state->texCount = 0;
+        SyncAllRTs(g_state);
+        layersDirty = true;
+    }
 }
 
 void App_FileSnap(void) {
@@ -265,7 +306,7 @@ void App_Init(AppState* state) {
     BParam_Init(&bpOpacity, 0, "Opacity", 0.0f, 1.0f, 1.0f);
     BParam_SetIcon(&bpOpacity, "ctlop");
 
-    BParam_Init(&bpSize, 1, "Size", 1.0f, 100.0f, 20.0f);
+    BParam_Init(&bpSize, 1, "Size", 1.0f, 4096.0f, 20.0f);
     bpSize.slider.clipmaxF = 19.0f / 99.0f;
     BParam_SetIcon(&bpSize, "ctlrad");
 
@@ -284,10 +325,13 @@ void App_Init(AppState* state) {
 
     BParam_Init(&bpQuickHue, 10, "Hue", 0.0f, 1.0f, 0.35f);
     bpQuickHue.slider.clipmaxF = 0.35f;
+    BParam_SetIcon(&bpQuickHue, "ctlhue");
     BParam_Init(&bpQuickSat, 11, "Sat", 0.0f, 1.0f, 1.0f);
     bpQuickSat.slider.clipmaxF = 1.0f;
+    BParam_SetIcon(&bpQuickSat, "ctlsat");
     BParam_Init(&bpQuickLit, 12, "Lit", 0.0f, 1.0f, 0.5f);
     bpQuickLit.slider.clipmaxF = 0.5f;
+    BParam_SetIcon(&bpQuickLit, "ctllit");
 
     state->canvas = Canvas_Create(800, 600, WHITE);
     state->activeLayer = 0;
@@ -343,7 +387,7 @@ void App_Init(AppState* state) {
     snprintf(p, sizeof(p), "%sSnaps", ad); Dialog_MakeDir(p);
 
     /* Load custom dialog font — bilinear filter for smooth OTF rendering */
-    g_dialogFont = LoadFontEx("resources/Cadman_Bold.otf", 26, 0, 0);
+    g_dialogFont = LoadFontEx("resources/Cadman_Bold.otf", 28, 0, 0);
     SetTextureFilter(g_dialogFont.texture, TEXTURE_FILTER_BILINEAR);
     DialogSetFont(&g_fileDlg, g_dialogFont, 26);
 
@@ -356,11 +400,16 @@ void App_Draw(AppState* state) {
     int sw = GetScreenWidth();
     int sh = GetScreenHeight();
 
-    Rectangle viewportBounds = {
-        (float)uiPanelWidth, 0,
-        (float)(sw - uiPanelWidth - RIGHT_PANEL_WIDTH),
-        (float)sh
-    };
+    Rectangle viewportBounds;
+    if (g_panelsVisible) {
+        viewportBounds = {
+            (float)uiPanelWidth, 0,
+            (float)(sw - uiPanelWidth - RIGHT_PANEL_WIDTH),
+            (float)sh
+        };
+    } else {
+        viewportBounds = {0, 0, (float)sw, (float)sh};
+    }
     viewport.bounds = viewportBounds;
     state->camera.offset = Vector2{
         viewportBounds.x + viewportBounds.width * 0.5f,
@@ -394,11 +443,26 @@ void App_Draw(AppState* state) {
 
     rlImGuiBegin();
 
-    networkBroker.DrawConnectionUI();
+    if (g_panelsVisible)
+        networkBroker.DrawConnectionUI();
     Gizmo_Draw(state);
-    LeftPanel_Draw(state);
-    LayerPanel_Draw(state);
+    if (g_panelsVisible) {
+        LeftPanel_Draw(state);
+        LayerPanel_Draw(state);
+    }
     Gizmo_DrawPenPopups(state);
+
+    // ── Color picker preview swatch (always visible during Alt+click) ──
+    if (g_colorPicking) {
+        ImDrawList* fdl = ImGui::GetForegroundDrawList();
+        ImVec2 mp = ImGui::GetMousePos();
+        Color pc = HSLToRGB(colorHue, colorSat, colorLit);
+        ImU32 pCol = IM_COL32(pc.r, pc.g, pc.b, 255);
+        float r = 12.0f;
+        fdl->AddCircleFilled(ImVec2(mp.x + 20, mp.y + 20), r, pCol, 24);
+        fdl->AddCircle(ImVec2(mp.x + 20, mp.y + 20), r, IM_COL32_BLACK, 24, 3.0f);
+        fdl->AddCircle(ImVec2(mp.x + 20, mp.y + 20), r + 1, IM_COL32_WHITE, 24, 1.0f);
+    }
 
     /* New canvas dialog (imgui modal) */
     if (g_newCanvasActive) {
@@ -425,28 +489,29 @@ void App_Draw(AppState* state) {
 
             ImGui::Separator();
             if (ImGui::Button("Create", ImVec2(100, 0))) {
-                /* Destroy old canvas + RTs */
-                SyncAllImages(state);
-                Canvas_Destroy(&state->canvas);
-                for (int i = 0; i < state->texCount; i++) {
-                    if (state->layerRTs[i].id > 0) UnloadRenderTexture(state->layerRTs[i]);
-                    if (state->layerTextures[i].id > 0) UnloadTexture(state->layerTextures[i]);
+                if (g_currentFilePath[0] && !g_newCanvasConfirm) {
+                    ImGui::OpenPopup("Confirm New");
+                } else {
+                    DoCreateNew();
                 }
-                free(state->layerTextures); state->layerTextures = NULL;
-                free(state->layerRTs);     state->layerRTs = NULL;
-                free(state->texDirty);     state->texDirty = NULL;
-                state->texCount = 0;
-
-                state->canvas = Canvas_Create(g_newW, g_newH, WHITE);
-                state->activeLayer = 0;
-                state->camera.target = Vector2{(float)g_newW * 0.5f, (float)g_newH * 0.5f};
-                state->camera.zoom = 1.0f;
-                SyncAllRTs(state);
-                layersDirty = true;
-                g_currentFilePath[0] = '\0';
-                g_newCanvasActive = false;
-                ImGui::CloseCurrentPopup();
             }
+
+            /* Confirmation popup (within modal) */
+            if (ImGui::BeginPopupModal("Confirm New", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+                ImGui::Text("Clear current canvas and create new?");
+                ImGui::Separator();
+                if (ImGui::Button("Yes", ImVec2(80, 0))) {
+                    DoCreateNew();
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("No", ImVec2(80, 0))) {
+                    g_newCanvasConfirm = false;
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::EndPopup();
+            }
+
             ImGui::SameLine();
             if (ImGui::Button("Cancel", ImVec2(100, 0))) {
                 g_newCanvasActive = false;
@@ -460,6 +525,63 @@ void App_Draw(AppState* state) {
     }
 
     rlImGuiEnd();
+
+    // XOR overlay for gizmo lines (always visible on any background)
+    if (gizmoShow) {
+        Rectangle vp = viewport.bounds;
+        int gcx = (int)(vp.x + vp.width * 0.5f);
+        int gcy = (int)(vp.y + vp.height * 0.5f);
+        float d30 = (float)(M_PI * 30.0 / 180.0);
+
+        rlSetBlendMode(RL_BLEND_CUSTOM);
+        rlSetBlendFactors(RL_ONE_MINUS_DST_COLOR, RL_ZERO, RL_FUNC_ADD);
+
+        // Guide lines
+        for (int gi = 1; gi <= 5; gi += 2) {
+            float a = -d30 * (2 * gi - 1);
+            float len = 220.0f;
+            DrawLineEx(Vector2{(float)gcx, (float)gcy},
+                       Vector2{(float)gcx + len * cosf(a), (float)gcy + len * sinf(a)},
+                       3.0f, WHITE);
+        }
+
+        // All arcs drawn as thick XOR rings/segments
+        Vector2 ctr = {(float)gcx, (float)gcy};
+        float drawRadOut = state->currentBrush.Realb.rad_out * state->camera.zoom;
+
+        // Brush size — full thick XOR ring
+        if (drawRadOut > 2.0f) {
+            DrawRing(ctr, drawRadOut - 1.5f, drawRadOut + 1.5f, 0, 360, 0, WHITE);
+        }
+
+        // Sector arcs: hardness (right side, -30° to 90° screen → 270°→30° math)
+        // and curve (left side, 90° to 210° screen → 150°→270° math)
+        float refR = 180.0f;
+        float hardStartMath = 270.0f, hardEndMath = 30.0f;
+        float curveStartMath = 150.0f, curveEndMath = 270.0f;
+
+        // Hardness reference arc at 180px
+        DrawRing(ctr, refR - 1.5f, refR + 1.5f, hardStartMath, hardEndMath, 0, WHITE);
+        // Curve reference arc at 180px
+        DrawRing(ctr, refR - 1.5f, refR + 1.5f, curveStartMath, curveEndMath, 0, WHITE);
+
+        // Hardness moving arc
+        float hRatio = (state->currentBrush.Realb.rad_out > 0)
+            ? fminf(state->currentBrush.Realb.rad_in / state->currentBrush.Realb.rad_out, 1.0f)
+            : 0.0f;
+        float hardMv = refR * hRatio;
+        if (hardMv > 2.0f) {
+            DrawRing(ctr, hardMv - 1.5f, hardMv + 1.5f, hardStartMath, hardEndMath, 0, WHITE);
+        }
+
+        // Curve moving arc
+        float curveMv = refR * (1.0f - state->currentBrush.Realb.crv);
+        if (curveMv > 2.0f) {
+            DrawRing(ctr, curveMv - 1.5f, curveMv + 1.5f, curveStartMath, curveEndMath, 0, WHITE);
+        }
+
+        rlSetBlendMode(RL_BLEND_ALPHA);
+    }
 
     EndDrawing();
 

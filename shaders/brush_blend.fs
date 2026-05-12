@@ -28,6 +28,7 @@ uniform float sol;
 uniform float sol2op;
 uniform int bmidx;
 uniform float seed;
+uniform float preserveop;
 
 float hash2(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
@@ -129,6 +130,7 @@ void main() {
     }
 
     float finalAlpha = clamp(alpha, 0.0, 1.0) * opacity;
+    if (preserveop > 0.5) finalAlpha *= dst.a;
     if (finalAlpha < 0.001) { finalColor = dst; return; }
 
     finalColor = applyBlend(bmidx, dst, brushColor.rgb, finalAlpha);

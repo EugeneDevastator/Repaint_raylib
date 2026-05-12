@@ -4,6 +4,8 @@
 #include <cstdint>
 
 extern bool layersDirty;
+extern Texture2D g_blendModeIcon;
+extern bool g_blendIconLoaded;
 
 static void CommitLayerOp(AppState* state, d_LAction* lact) {
     if (networkBroker.IsConnected()) {
@@ -108,6 +110,11 @@ void LayerPanel_Draw(AppState* state) {
         };
         int blend = state->canvas.layerProps[state->activeLayer].blendmode;
         if (blend < 0 || blend >= 14) blend = 0;
+        if (g_blendIconLoaded)
+            ImGui::Image((ImTextureID)(intptr_t)g_blendModeIcon.id, ImVec2(24, 24));
+        else
+            ImGui::Dummy(ImVec2(24, 24));
+        ImGui::SameLine();
         ImGui::SetNextItemWidth(-1);
         if (ImGui::Combo("##blend", &blend, blendNames, 14, 14)) {
             Canvas_SetLayerBlendMode(&state->canvas, state->activeLayer, blend);
@@ -146,13 +153,6 @@ void LayerPanel_Draw(AppState* state) {
         char idxBuf[64];
         snprintf(idxBuf, sizeof(idxBuf), "Layer %d / %d", state->activeLayer + 1, layerCount);
         ImGui::Text("%s", idxBuf);
-    }
-
-    {
-        bool presop = state->canvas.layerProps[state->activeLayer].presop != 0;
-        if (ImGui::Checkbox("Preserve opacity", &presop)) {
-            state->canvas.layerProps[state->activeLayer].presop = presop ? 1 : 0;
-        }
     }
 
     ImGui::Separator();
@@ -235,14 +235,14 @@ void LayerPanel_Draw(AppState* state) {
             ImGui::Text("Server");
             ImGui::Separator();
             float btnW = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
-            if (ImGui::Button("Server", ImVec2(btnW, 24)))
+            if (ImGui::Button("Server", ImVec2(btnW, 0)))
                 networkBroker.showUI = !networkBroker.showUI;
             ImGui::SameLine();
             if (networkBroker.IsConnected()) {
-                if (ImGui::Button("Disconnect", ImVec2(btnW, 24)))
+                if (ImGui::Button("Disconnect", ImVec2(btnW, 0)))
                     networkBroker.Disconnect();
             } else {
-                if (ImGui::Button("Room", ImVec2(btnW, 24))) {}
+                if (ImGui::Button("Room", ImVec2(btnW, 0))) {}
             }
             if (networkBroker.IsConnected())
                 ImGui::Text("IP: %s:%d", networkBroker.serverAddr, networkBroker.serverPort);

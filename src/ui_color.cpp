@@ -33,6 +33,26 @@ Color HSLToRGB(float h, float s, float l) {
     return (Color){(unsigned char)(r * 255), (unsigned char)(g * 255), (unsigned char)(b * 255), 255};
 }
 
+void RGBToHSL(Color c, float& h, float& s, float& l) {
+    float r = c.r / 255.0f;
+    float g = c.g / 255.0f;
+    float b = c.b / 255.0f;
+    float mx = fmaxf(r, fmaxf(g, b));
+    float mn = fminf(r, fminf(g, b));
+    l = (mx + mn) * 0.5f;
+    if (mx == mn) {
+        h = 0.0f;
+        s = 0.0f;
+    } else {
+        float d = mx - mn;
+        s = (l > 0.5f) ? d / (2.0f - mx - mn) : d / (mx + mn);
+        if (mx == r) h = (g - b) / d + (g < b ? 6.0f : 0.0f);
+        else if (mx == g) h = (b - r) / d + 2.0f;
+        else h = (r - g) / d + 4.0f;
+        h /= 6.0f;
+    }
+}
+
 void DrawColorGradientAt(Rectangle r, int gradType, float hue) {
     (void)r;
     (void)gradType;

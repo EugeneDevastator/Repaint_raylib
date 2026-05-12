@@ -11,11 +11,22 @@ extern BParam bpOpacity, bpSize, bpHardness, bpSpacing, bpCurvature, bpScatter;
 
 static RenderTexture2D stampPrev = {0};
 static bool stampPrevInited = false;
+Texture2D g_blendModeIcon = {0};
+bool g_blendIconLoaded = false;
 
 void LeftPanel_Init(void) {
     if (!stampPrevInited) {
         stampPrev = LoadRenderTexture(100, 100);
         stampPrevInited = true;
+    }
+    if (!g_blendIconLoaded) {
+        if (FileExists("resources/ctlbm.png")) {
+            Image img = LoadImage("resources/ctlbm.png");
+            ImageResize(&img, 24, 24);
+            g_blendModeIcon = LoadTextureFromImage(img);
+            g_blendIconLoaded = g_blendModeIcon.id > 0;
+            UnloadImage(img);
+        }
     }
 }
 
@@ -24,35 +35,40 @@ void LeftPanel_Shutdown(void) {
         UnloadRenderTexture(stampPrev);
         stampPrevInited = false;
     }
+    if (g_blendIconLoaded) {
+        UnloadTexture(g_blendModeIcon);
+        g_blendIconLoaded = false;
+    }
 }
 
 static void DrawBParamSlider(BParam* bp) {
     ImGui::PushID(bp->id);
 
-    // Icon
-    if (bp->iconLoaded)
-        ImGui::Image((ImTextureID)(intptr_t)bp->iconTex.id, ImVec2(24, 24));
-    else
-        ImGui::Dummy(ImVec2(24, 24));
-    ImGui::SameLine();
+    float ctrlH = 24.0f;
+    float spacing = 4.0f;
 
-    // Custom slider with Qt-style visualizations
+    // Icon — ctrlH square
+    if (bp->iconLoaded)
+        ImGui::Image((ImTextureID)(intptr_t)bp->iconTex.id, ImVec2(ctrlH, ctrlH));
+    else
+        ImGui::Dummy(ImVec2(ctrlH, ctrlH));
+    ImGui::SameLine(0, spacing);
+
+    // Slider
     float avail = ImGui::GetContentRegionAvail().x;
-    float btnSz = ImGui::GetFrameHeight();
-    float sliderW = avail - btnSz - ImGui::GetStyle().ItemInnerSpacing.x;
+    float sliderW = avail - ctrlH - spacing;
     if (sliderW < 10.0f) sliderW = 10.0f;
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    float height = ImGui::GetFrameHeight();
     ImVec2 pos = ImGui::GetCursorScreenPos();
-    ImRect bb(pos, ImVec2(pos.x + sliderW, pos.y + height));
+    ImRect bb(pos, ImVec2(pos.x + sliderW, pos.y + ctrlH));
 
     // Background gradient
     ImU32 gradA = IM_COL32(bp->slider.gradStart.r, bp->slider.gradStart.g, bp->slider.gradStart.b, bp->slider.gradStart.a);
     ImU32 gradB = IM_COL32(bp->slider.gradEnd.r, bp->slider.gradEnd.g, bp->slider.gradEnd.b, bp->slider.gradEnd.a);
     dl->AddRectFilledMultiColor(bb.Min, bb.Max, gradA, gradB, gradB, gradA);
 
-    // 3D sunken frame (Qt-style bevel border)
+    // 3D sunken frame
     ImU32 shade = IM_COL32(bp->slider.shade.r, bp->slider.shade.g, bp->slider.shade.b, bp->slider.shade.a);
     ImU32 hlite = IM_COL32(bp->slider.hlite.r, bp->slider.hlite.g, bp->slider.hlite.b, bp->slider.hlite.a);
     dl->AddLine(bb.Min, ImVec2(bb.Max.x, bb.Min.y), shade);
@@ -60,8 +76,7 @@ static void DrawBParamSlider(BParam* bp) {
     dl->AddLine(ImVec2(bb.Max.x - 1, bb.Min.y), ImVec2(bb.Max.x - 1, bb.Max.y), hlite);
     dl->AddLine(ImVec2(bb.Min.x, bb.Max.y - 1), ImVec2(bb.Max.x, bb.Max.y - 1), hlite);
 
-    // Invisible button for input
-    // left = primary value (white handle), right = secondary value (dark handle), middle = jitter
+    // Invisible button — direct position mapping
     ImGui::InvisibleButton("##sl", bb.GetSize(), ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonMiddle | ImGuiButtonFlags_MouseButtonRight);
     if (ImGui::IsItemActive()) {
         float mx = (ImGui::GetMousePos().x - bb.Min.x) / (bb.Max.x - bb.Min.x);
@@ -74,35 +89,36 @@ static void DrawBParamSlider(BParam* bp) {
             bp->slider.jitter = mx;
     }
 
-    // Range fill between min and max handles
+    // Range fill
     {
         float minX = bb.Min.x + (bb.Max.x - bb.Min.x) * bp->slider.clipminF;
         float maxX = bb.Min.x + (bb.Max.x - bb.Min.x) * bp->slider.clipmaxF;
         if (maxX > minX)
-            dl->AddRectFilled(ImVec2(minX, bb.Min.y + 7), ImVec2(maxX, bb.Max.y), IM_COL32(0, 80, 200, 40));
+            dl->AddRectFilled(ImVec2(minX, bb.Min.y), ImVec2(maxX, bb.Max.y), IM_COL32(0, 80, 200, 40));
     }
 
-    // Secondary grabber (dark, right-click controlled)
+    // Grabber width = 0.5 * control height
+    float grabHalf = ctrlH * 0.25f;
+
+    // Secondary grabber (dark, right-click)
     {
         float grabX = bb.Min.x + (bb.Max.x - bb.Min.x) * bp->slider.clipminF;
-        float grabHalf = 4.0f;
-        ImRect gr(ImVec2(grabX - grabHalf, bb.Min.y + 2),
-                  ImVec2(grabX + grabHalf, bb.Max.y - 2));
+        ImRect gr(ImVec2(grabX - grabHalf, bb.Min.y),
+                  ImVec2(grabX + grabHalf, bb.Max.y));
         dl->AddRectFilled(gr.Min, gr.Max, IM_COL32(60, 60, 60, 255));
         dl->AddRect(gr.Min, gr.Max, IM_COL32(30, 30, 30, 200));
     }
 
-    // Primary grabber (white, left-click controlled)
+    // Primary grabber (white, left-click)
     {
         float grabX = bb.Min.x + (bb.Max.x - bb.Min.x) * bp->slider.clipmaxF;
-        float grabHalf = 4.0f;
-        ImRect gr(ImVec2(grabX - grabHalf, bb.Min.y + 2),
-                  ImVec2(grabX + grabHalf, bb.Max.y - 2));
+        ImRect gr(ImVec2(grabX - grabHalf, bb.Min.y),
+                  ImVec2(grabX + grabHalf, bb.Max.y));
         dl->AddRectFilled(gr.Min, gr.Max, IM_COL32(255, 255, 255, 255));
         dl->AddRect(gr.Min, gr.Max, IM_COL32(80, 80, 80, 200));
     }
 
-    // Value text centered on slider
+    // Value text
     {
         float dispVal = bp->slider.clipmaxF * (bp->outMax - bp->outMin) + bp->outMin;
         char txt[32];
@@ -116,10 +132,8 @@ static void DrawBParamSlider(BParam* bp) {
                     IM_COL32(0, 0, 0, 200), txt);
     }
 
-    // Place cursor for pen mode button
-    ImGui::SetCursorScreenPos(ImVec2(bb.Max.x + ImGui::GetStyle().ItemInnerSpacing.x, bb.Min.y));
-
-    // Pen mode button with current mode icon (replaces "...")
+    // Pen mode button — ctrlH square
+    ImGui::SetCursorScreenPos(ImVec2(bb.Max.x + spacing, bb.Min.y));
     {
         char popupID[32];
         snprintf(popupID, sizeof(popupID), "pen_%d", bp->id);
@@ -127,23 +141,21 @@ static void DrawBParamSlider(BParam* bp) {
         Texture2D ptex = GetPenModeIcon(bp->penMode);
         ImTextureID texID = (ptex.id > 0) ? (ImTextureID)(intptr_t)ptex.id : 0;
 
-        // Neutral gray button colors (no blue tint)
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.90f, 0.90f, 0.90f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.80f, 0.80f, 0.80f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.72f, 0.72f, 0.72f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_NavHighlight, ImVec4(0, 0, 0, 0));
 
         if (texID) {
-            if (ImGui::ImageButton("##pen", texID, ImVec2(btnSz, btnSz)))
+            if (ImGui::ImageButton("##pen", texID, ImVec2(ctrlH, ctrlH)))
                 ImGui::OpenPopup(popupID);
         } else {
-            if (ImGui::Button("...", ImVec2(btnSz, btnSz)))
+            if (ImGui::Button("...", ImVec2(ctrlH, ctrlH)))
                 ImGui::OpenPopup(popupID);
         }
 
         ImGui::PopStyleColor(4);
 
-        // Pen mode popup with icons next to each mode name
         if (ImGui::BeginPopup(popupID)) {
             for (int p = 0; p < PEN_MODE_COUNT; p++) {
                 Texture2D itex = GetPenModeIcon(p);
@@ -177,6 +189,11 @@ void LeftPanel_Draw(AppState* state) {
             "Xor","Diff","Exclusion"
         };
         int blend = (int)state->currentBrush.Realb.bmidx;
+        if (g_blendIconLoaded)
+            ImGui::Image((ImTextureID)(intptr_t)g_blendModeIcon.id, ImVec2(24, 24));
+        else
+            ImGui::Dummy(ImVec2(24, 24));
+        ImGui::SameLine();
         ImGui::SetNextItemWidth(-1);
         if (ImGui::Combo("##brushBlend", &blend, blendNames, 14, 14))
             state->currentBrush.Realb.bmidx = (uint8_t)blend;
@@ -216,6 +233,11 @@ void LeftPanel_Draw(AppState* state) {
     BParam* bps[] = {&bpSize, &bpHardness, &bpCurvature, &bpSpacing, &bpOpacity, &bpScatter};
     for (int i = 0; i < 6; i++)
         DrawBParamSlider(bps[i]);
+
+    ImGui::Spacing();
+    int preserve = state->currentBrush.Realb.preserveop;
+    ImGui::Checkbox("Preserve Layer Alpha", (bool*)&preserve);
+    state->currentBrush.Realb.preserveop = (uint8_t)preserve;
 
     // Pipeline selector
     {

@@ -10,7 +10,7 @@ void UIStyle::Init() {
     ImGuiIO& io = ImGui::GetIO();
     io.Fonts->Clear();
     if (FileExists("resources/Cadman_Bold.otf"))
-        io.Fonts->AddFontFromFileTTF("resources/Cadman_Bold.otf", 20.0f);
+        io.Fonts->AddFontFromFileTTF("resources/Cadman_Bold.otf", 22.0f);
     else
         io.Fonts->AddFontDefault();
 
@@ -23,6 +23,11 @@ void UIStyle::Init() {
     style.ItemSpacing = ImVec2(5, 4);
     style.ItemInnerSpacing = ImVec2(4, 4);
     style.ScrollbarSize = 14.0f;
+
+    // Neutral gray buttons (removing default blue tint)
+    style.Colors[ImGuiCol_Button] = ImVec4(0.85f, 0.85f, 0.85f, 1.0f);
+    style.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.75f, 0.75f, 0.75f, 1.0f);
+    style.Colors[ImGuiCol_ButtonActive] = ImVec4(0.65f, 0.65f, 0.65f, 1.0f);
 
     rlImGuiEndInitImGui();
 }

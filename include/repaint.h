@@ -16,6 +16,7 @@
 
 extern int uiPanelWidth;
 extern bool panelResizing;
+extern bool g_panelsVisible;
 #define LAYER_ENTRY_H 56
 #define MAX_STROKE_PTS 65536
 #define PEN_MODE_COUNT 13
@@ -292,6 +293,7 @@ float BParam_GetValue(BParam* bp);
 void BParam_SetValue(BParam* bp, float val);
 
 Color HSLToRGB(float h, float s, float l);
+void RGBToHSL(Color c, float& h, float& s, float& l);
 
 extern float colorHue;
 extern float colorSat;
@@ -299,6 +301,7 @@ extern float colorLit;
 
 extern bool gizmoShow;
 extern int gizmoMouseMode;
+extern bool g_colorPicking;
 
 extern int dragFromIdx;
 extern bool dragActive;
@@ -317,6 +320,8 @@ extern BParam bpQuickSat;
 extern BParam bpQuickLit;
 
 extern const char* PenModeNames[PEN_MODE_COUNT];
+extern Texture2D g_blendModeIcon;
+extern bool g_blendIconLoaded;
 
 void LayerPanel_Draw(AppState* state);
 
@@ -361,6 +366,7 @@ void App_FileNew(void);
 void App_FileOpen(void);
 void App_FileSave(void);
 void App_FileSaveAs(void);
+void App_FileReload(void);
 void App_FileSnap(void);
 
 #endif

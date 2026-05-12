@@ -1,6 +1,8 @@
 #include "repaint.h"
 #include "rlgl.h"
 
+extern bool gizmoShow;
+
 static uint32_t PackColor(Color c) {
     return (uint32_t)c.r << 16 | (uint32_t)c.g << 8 | (uint32_t)c.b | (uint32_t)c.a << 24;
 }
@@ -69,9 +71,55 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         layersDirty = true;
     }
 
+    // Alt+Left click/drag color picker — composite from all visible layers
+    if (IsKeyDown(KEY_LEFT_ALT) && IsMouseButtonDown(MOUSE_LEFT_BUTTON) && vp->inBounds) {
+        g_colorPicking = true;
+        Vector2 cp = GetScreenToWorld2D(mousePos, state->camera);
+        int px = (int)cp.x;
+        int py = (int)cp.y;
+        if (px >= 0 && px < state->canvas.width && py >= 0 && py < state->canvas.height) {
+            Color picked = {0, 0, 0, 0};
+            for (int li = 0; li < state->canvas.layerCount; li++) {
+                if (!state->canvas.layerProps[li].visible) continue;
+                Color* lpix = (Color*)state->canvas.layerImages[li].data;
+                Color sp = lpix[py * state->canvas.width + px];
+                float sa = sp.a / 255.0f * state->canvas.layerProps[li].op;
+                float da = picked.a / 255.0f;
+                float outa = sa + da * (1.0f - sa);
+                if (outa > 0.0f) {
+                    picked.r = (uint8_t)((sp.r * sa + picked.r * da * (1.0f - sa)) / outa);
+                    picked.g = (uint8_t)((sp.g * sa + picked.g * da * (1.0f - sa)) / outa);
+                    picked.b = (uint8_t)((sp.b * sa + picked.b * da * (1.0f - sa)) / outa);
+                    picked.a = (uint8_t)(outa * 255.0f);
+                }
+            }
+            float tH, tS, tL;
+            RGBToHSL(picked, tH, tS, tL);
+            if (picked.a == 0) { tL = 1.0f; tS = 0.0f; }
+            // Slow down color change by lerping at 0.5 speed
+            float spd = 0.5f;
+            float dh = tH - colorHue;
+            if (dh > 0.5f) dh -= 1.0f;
+            else if (dh < -0.5f) dh += 1.0f;
+            colorHue += dh * spd;
+            if (colorHue < 0.0f) colorHue += 1.0f;
+            else if (colorHue > 1.0f) colorHue -= 1.0f;
+            colorSat += (tS - colorSat) * spd;
+            colorLit += (tL - colorLit) * spd;
+            bpQuickHue.slider.clipmaxF = colorHue;
+            bpQuickSat.slider.clipmaxF = colorSat;
+            bpQuickLit.slider.clipmaxF = colorLit;
+        }
+    } else {
+        g_colorPicking = false;
+    }
+
     vp->lastMousePos = mousePos;
 
-    // Gizmo overlay — block all viewport input when gizmo is showing
+    // Alt is held for color picking — skip painting
+    if (IsKeyDown(KEY_LEFT_ALT)) return;
+
+    // Gizmo shown — skip painting, interaction handled by gizmo
     if (gizmoShow) return;
 
     Vector2 canvasPos = GetScreenToWorld2D(mousePos, state->camera);

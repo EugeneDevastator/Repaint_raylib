@@ -4,23 +4,34 @@
 
 bool gizmoShow = false;
 int gizmoMouseMode = 0;
+bool g_colorPicking = false;
 
 #define GIZMO_TOOL_N 6
 static const char* gizmoToolLabels[GIZMO_TOOL_N] = {"Br","Sm","Li","Er","Di","Co"};
 static const int gizmoToolModes[GIZMO_TOOL_N] = {eBrush, eSmudge, eLine, -1, eDisp, eCont};
 
-#define GIZMO_SLIDER_W 48
+#define GIZMO_SLIDER_W 24
 #define GIZMO_SLIDER_H 256
 #define GIZMO_SLIDER_GAP 8
-#define GIZMO_PENBTN_H 24
-#define GIZMO_ICON_H 24
-#define GIZMO_THUMB_W 6
+#define GIZMO_CTRL_SZ 24
+#define GIZMO_SPACING 4
+
+static RenderTexture2D gizmoStamp = {0};
 
 #define FILE_BTN_N 7
 static const char* fileBtnLabels[FILE_BTN_N] = {"New","Open","SaveAs","Save","Reload","Snap","Pin"};
 static Texture2D fileBtnTex[FILE_BTN_N];
 
+#define TOOL_ICON_N 5
+static Texture2D toolIconTex[TOOL_ICON_N];
+static const char* toolIconNames[TOOL_ICON_N] = {"tbrush","tsmudge","tline","tdisp","tcont"};
+
 void LoadGizmoIcons(void) {
+    if (gizmoStamp.id == 0) {
+        gizmoStamp = LoadRenderTexture(256, 256);
+        SetTextureFilter(gizmoStamp.texture, TEXTURE_FILTER_BILINEAR);
+        SetTextureWrap(gizmoStamp.texture, TEXTURE_WRAP_CLAMP);
+    }
     const char* names[FILE_BTN_N] = {"btnnew","btnopen","btnsaveas","btnsave","btnreload","btnsnap","btnpin"};
     for (int i = 0; i < FILE_BTN_N; i++) {
         char path[128];
@@ -34,11 +45,30 @@ void LoadGizmoIcons(void) {
             fileBtnTex[i] = Texture2D{0};
         }
     }
+    for (int i = 0; i < TOOL_ICON_N; i++) {
+        char path[128];
+        sprintf(path, "resources/%s.png", toolIconNames[i]);
+        if (FileExists(path)) {
+            Image img = LoadImage(path);
+            ImageResize(&img, 24, 24);
+            toolIconTex[i] = LoadTextureFromImage(img);
+            UnloadImage(img);
+        } else {
+            toolIconTex[i] = Texture2D{0};
+        }
+    }
 }
 
 void UnloadGizmoIcons(void) {
     for (int i = 0; i < FILE_BTN_N; i++) {
         if (fileBtnTex[i].id > 0) UnloadTexture(fileBtnTex[i]);
+    }
+    for (int i = 0; i < TOOL_ICON_N; i++) {
+        if (toolIconTex[i].id > 0) UnloadTexture(toolIconTex[i]);
+    }
+    if (gizmoStamp.id > 0) {
+        UnloadRenderTexture(gizmoStamp);
+        gizmoStamp.id = 0;
     }
 }
 
@@ -70,8 +100,9 @@ static void DrawSliderVertical(ImDrawList* dl, BParam* bp, int x, int y, int w, 
     }
     dl->AddRect(ImVec2(x, y), ImVec2(x + w, y + h), IM_COL32(180, 180, 200, 180));
     float grabY = y + (1.0f - val) * h;
-    dl->AddRectFilled(ImVec2(x + 1, grabY - GIZMO_THUMB_W / 2), ImVec2(x + w - 1, grabY + GIZMO_THUMB_W / 2), IM_COL32_WHITE);
-    dl->AddRect(ImVec2(x + 1, grabY - GIZMO_THUMB_W / 2), ImVec2(x + w - 1, grabY + GIZMO_THUMB_W / 2), IM_COL32(50, 50, 50, 200));
+    float grabHalf = GIZMO_CTRL_SZ * 0.25f;
+    dl->AddRectFilled(ImVec2(x + 1, grabY - grabHalf), ImVec2(x + w - 1, grabY + grabHalf), IM_COL32_WHITE);
+    dl->AddRect(ImVec2(x + 1, grabY - grabHalf), ImVec2(x + w - 1, grabY + grabHalf), IM_COL32(50, 50, 50, 200));
     char txt[16];
     float disp = BParam_GetValue(bp);
     if (bp->outMax - bp->outMin >= 1.0f) snprintf(txt, sizeof(txt), "%.1f", disp);
@@ -86,8 +117,27 @@ void Gizmo_Draw(AppState* state) {
     Rectangle vp = VpRect();
     int gcx = (int)(vp.x + vp.width * 0.5f);
     int gcy = (int)(vp.y + vp.height * 0.5f);
-    int gizR = 200;
-    float d30 = (float)(M_PI * 30.0 / 180.0);
+
+    float drawRadOut = state->currentBrush.Realb.rad_out * state->camera.zoom;
+    float drawRadIn = state->currentBrush.Realb.rad_in * state->camera.zoom;
+    if (drawRadIn > drawRadOut) drawRadIn = drawRadOut;
+
+    // ── Render stamp texture before ImGui window (avoids state conflicts) ─
+    {
+        if (gizmoStamp.id != 0 && drawRadOut > 1.0f) {
+            float scale = 128.0f / fmaxf(drawRadOut, 1.0f);
+            d_Brush pb = state->currentBrush;
+            pb.Realb.rad_out = 128.0f;
+            pb.Realb.rad_in  = state->currentBrush.Realb.rad_in * state->camera.zoom * scale;
+            pb.Realb.bmidx   = 0;
+
+            BeginTextureMode(gizmoStamp);
+            ClearBackground(BLANK);
+            EndTextureMode();
+
+            BrushBlend_ApplyStamp(gizmoStamp, &pb, 128, 128);
+        }
+    }
 
     ImGui::SetNextWindowPos(ImVec2(vp.x, vp.y));
     ImGui::SetNextWindowSize(ImVec2(vp.width, vp.height));
@@ -102,55 +152,17 @@ void Gizmo_Draw(AppState* state) {
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImVec2 org((float)gcx, (float)gcy);
+    int gizR = 200;
+    float d30 = (float)(M_PI * 30.0 / 180.0);
 
-    float drawRadOut = state->currentBrush.Realb.rad_out * state->camera.zoom;
-    float drawRadIn = state->currentBrush.Realb.rad_in * state->camera.zoom;
-    if (drawRadIn > drawRadOut) drawRadIn = drawRadOut;
-	float drawRelRad = drawRadOut * (1.0f - state->currentBrush.Realb.crv);
-
-
-    // ── Radial guide lines ──────────────────────────────────────────────
-    for (int gi = 1; gi <= 5; gi += 2) {
-        float a = -d30 * (2 * gi - 1);
-        ImVec2 tip(gcx + gizR * cosf(a), gcy + gizR * sinf(a));
-        dl->AddLine(org, tip, IM_COL32_BLACK, 3);
-        dl->AddLine(org, tip, IM_COL32_WHITE, 1);
+    // ── Brush stamp preview at center ──────────────────────────────────
+    if (gizmoStamp.id != 0 && drawRadOut > 1.0f) {
+        dl->AddImage((ImTextureID)(intptr_t)gizmoStamp.texture.id,
+            ImVec2(org.x - drawRadOut, org.y - drawRadOut),
+            ImVec2(org.x + drawRadOut, org.y + drawRadOut),
+            ImVec2(0, 0), ImVec2(1, 1),
+            IM_COL32(255, 255, 255, 255));
     }
-
-    // ── Gizmo circles ───────────────────────────────────────────────────
-    dl->AddCircle(org, drawRadOut,     IM_COL32_BLACK,  0, 3);
-    dl->AddCircle(org, drawRadOut + 1, IM_COL32_WHITE,  0, 2);
-    dl->AddCircle(org, drawRadOut - 1, IM_COL32_WHITE,  0, 2);
-
-    // ── 3 × 120° sector arcs ────────────────────────────────────────────
-    // Rays at -30°, -90°, -150° → sectors:
-    //   [-150° → -30°]  top      = size      (drawRadOut)
-    //   [-30°  →  90°]  bot-right = curvature (drawRelRad)
-    //   [ 90°  → 210°]  bot-left  = hardness  (drawRadIn)
-    {
-        float deg = (float)(M_PI / 180.0);
-        // sector start angles, CCW in screen space (Y-down = CW visually)
-        float starts[3] = { -150.0f * deg, -30.0f * deg,  90.0f * deg };
-        float ends[3]   = {  -30.0f * deg,  90.0f * deg, 210.0f * deg };
-        float rads[3]   = { drawRadOut, drawRelRad, drawRadIn };
-
-        for (int i = 0; i < 3; i++) {
-            float rad = rads[i];
-            if (rad <= 0) continue;
-            float a0 = starts[i];
-            float a1 = ends[i];
-            dl->PathClear();
-            dl->PathArcTo(org, rad,     a0, a1, 0);
-            dl->PathStroke(IM_COL32_BLACK, false, 3.0f);
-            dl->PathClear();
-            dl->PathArcTo(org, rad + 1, a0, a1, 0);
-            dl->PathStroke(IM_COL32_WHITE, false, 2.0f);
-            dl->PathClear();
-            dl->PathArcTo(org, rad - 1, a0, a1, 0);
-            dl->PathStroke(IM_COL32_WHITE, false, 2.0f);
-        }
-    }
-
 
     // ── Rotation arrow ──────────────────────────────────────────────────
     float rang = state->currentBrush.Realb.resangle * (float)(M_PI * 2.0 / 360.0);
@@ -266,6 +278,7 @@ void Gizmo_Draw(AppState* state) {
                 else if (i == 1) App_FileOpen();
                 else if (i == 2) App_FileSaveAs();
                 else if (i == 3) App_FileSave();
+                else if (i == 4) App_FileReload();
                 else if (i == 5) App_FileSnap();
             }
             ImGui::PopStyleColor();
@@ -276,6 +289,7 @@ void Gizmo_Draw(AppState* state) {
                 else if (i == 1) App_FileOpen();
                 else if (i == 2) App_FileSaveAs();
                 else if (i == 3) App_FileSave();
+                else if (i == 4) App_FileReload();
                 else if (i == 5) App_FileSnap();
             }
             ImGui::PopStyleColor();
@@ -285,7 +299,9 @@ void Gizmo_Draw(AppState* state) {
     }
 
     // ── Tool buttons (top-right) ────────────────────────────────────────
-    int totalToolW = GIZMO_TOOL_N * 40 + (GIZMO_TOOL_N - 1) * 4;
+    // Icon index per tool: Br->0, Sm->1, Li->2, Er->-1(no icon), Di->3, Co->4
+    static const int toolIconIdx[GIZMO_TOOL_N] = {0, 1, 2, -1, 3, 4};
+    int totalToolW = GIZMO_TOOL_N * 36 + (GIZMO_TOOL_N - 1) * 4;
     ImGui::SetCursorScreenPos(ImVec2(vp.x + vp.width - totalToolW - 8, vp.y + 8));
     for (int i = 0; i < GIZMO_TOOL_N; i++) {
         bool active;
@@ -294,25 +310,45 @@ void Gizmo_Draw(AppState* state) {
 
         ImGui::PushID(200 + i);
         if (active) {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.43f, 0.75f, 0.78f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.50f, 0.80f, 0.85f));
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.45f, 0.45f, 0.45f, 0.85f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.50f, 0.50f, 0.50f, 0.90f));
         } else {
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.27f, 0.27f, 0.31f, 0.86f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.35f, 0.35f, 0.40f, 0.90f));
         }
 
-        if (ImGui::Button(gizmoToolLabels[i], ImVec2(40, 28))) {
-            if (i == 3) {
-                if (state->mode == eBrush && state->currentBrush.Realb.col.a == 0) {
-                    state->mode = eBrush;
-                    state->currentBrush.Realb.col.a = 255;
+        int ii = toolIconIdx[i];
+        bool hasIcon = (ii >= 0 && ii < TOOL_ICON_N && toolIconTex[ii].id > 0);
+        if (hasIcon) {
+            ImTextureID tid = (ImTextureID)(intptr_t)toolIconTex[ii].id;
+            if (ImGui::ImageButton("##ti", tid, ImVec2(28, 28))) {
+                if (i == 3) {
+                    if (state->mode == eBrush && state->currentBrush.Realb.col.a == 0) {
+                        state->mode = eBrush;
+                        state->currentBrush.Realb.col.a = 255;
+                    } else {
+                        state->mode = eBrush;
+                        state->currentBrush.Realb.col.a = 0;
+                    }
                 } else {
-                    state->mode = eBrush;
-                    state->currentBrush.Realb.col.a = 0;
+                    state->mode = gizmoToolModes[i];
+                    state->currentBrush.Realb.col.a = 255;
                 }
-            } else {
-                state->mode = gizmoToolModes[i];
-                state->currentBrush.Realb.col.a = 255;
+            }
+        } else {
+            if (ImGui::Button(gizmoToolLabels[i], ImVec2(36, 28))) {
+                if (i == 3) {
+                    if (state->mode == eBrush && state->currentBrush.Realb.col.a == 0) {
+                        state->mode = eBrush;
+                        state->currentBrush.Realb.col.a = 255;
+                    } else {
+                        state->mode = eBrush;
+                        state->currentBrush.Realb.col.a = 0;
+                    }
+                } else {
+                    state->mode = gizmoToolModes[i];
+                    state->currentBrush.Realb.col.a = 255;
+                }
             }
         }
         ImGui::PopStyleColor(2);
@@ -321,13 +357,12 @@ void Gizmo_Draw(AppState* state) {
     }
 
     // ── Slider columns ──────────────────────────────────────────────────
-    int gap2 = 2;
-    int totalColH = GIZMO_PENBTN_H + gap2 + GIZMO_SLIDER_H + gap2 + GIZMO_ICON_H;
+    int totalColH = GIZMO_CTRL_SZ + GIZMO_SPACING + GIZMO_SLIDER_H + GIZMO_SPACING + GIZMO_CTRL_SZ;
     int sliderLeftX = gcx - gizR - 3 * GIZMO_SLIDER_W - 2 * GIZMO_SLIDER_GAP - 12;
     int sliderRightX = gcx + gizR + 12;
     int penBtnY = gcy - totalColH / 2;
-    int slY = penBtnY + GIZMO_PENBTN_H + gap2;
-    int iconY = slY + GIZMO_SLIDER_H + gap2;
+    int slY = penBtnY + GIZMO_CTRL_SZ + GIZMO_SPACING;
+    int iconY = slY + GIZMO_SLIDER_H + GIZMO_SPACING;
 
     BParam* bps[6] = {&bpOpacity, &bpSpacing, &bpScatter, &bpQuickHue, &bpQuickSat, &bpQuickLit};
     const char* labels[6] = {"Op", "Sp", "Sc", "H", "S", "L"};
@@ -339,10 +374,11 @@ void Gizmo_Draw(AppState* state) {
             : sliderRightX + (i - 3) * (GIZMO_SLIDER_W + GIZMO_SLIDER_GAP);
         BParam* bp = bps[i];
 
+        // Label
         dl->AddText(ImVec2(colX + GIZMO_SLIDER_W / 2 - 6, penBtnY - 14), IM_COL32(211, 211, 211, 230), labels[i]);
 
-        // Pen mode button
-        ImGui::SetCursorScreenPos(ImVec2(colX, penBtnY + 1));
+        // Pen mode button — GIZMO_CTRL_SZ square
+        ImGui::SetCursorScreenPos(ImVec2(colX, penBtnY));
         Texture2D pt = GetPenModeIcon(bp->penMode);
         ImTextureID penTid = (pt.id > 0) ? (ImTextureID)(intptr_t)pt.id : 0;
 
@@ -354,10 +390,10 @@ void Gizmo_Draw(AppState* state) {
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.80f, 0.80f, 0.80f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.72f, 0.72f, 0.72f, 1.0f));
         if (penTid) {
-            if (ImGui::ImageButton("##pb", penTid, ImVec2(GIZMO_SLIDER_W, GIZMO_PENBTN_H - 2)))
+            if (ImGui::ImageButton("##pb", penTid, ImVec2(GIZMO_CTRL_SZ, GIZMO_CTRL_SZ)))
                 ImGui::OpenPopup(pname);
         } else {
-            if (ImGui::Button("...", ImVec2(GIZMO_SLIDER_W, GIZMO_PENBTN_H - 2)))
+            if (ImGui::Button("...", ImVec2(GIZMO_CTRL_SZ, GIZMO_CTRL_SZ)))
                 ImGui::OpenPopup(pname);
         }
         ImGui::PopStyleColor(3);
@@ -379,7 +415,7 @@ void Gizmo_Draw(AppState* state) {
         // Slider body
         DrawSliderVertical(dl, bp, colX, slY, GIZMO_SLIDER_W, GIZMO_SLIDER_H, bp->slider.clipmaxF, colorModes[i]);
 
-        // Invisible button for slider drag
+        // Invisible button — direct position mapping
         ImGui::PushID(400 + i);
         ImGui::SetCursorScreenPos(ImVec2(colX, slY));
         ImGui::InvisibleButton("##sb", ImVec2(GIZMO_SLIDER_W, GIZMO_SLIDER_H));
@@ -391,20 +427,20 @@ void Gizmo_Draw(AppState* state) {
         }
         ImGui::PopID();
 
-        // Icon at bottom
+        // Icon at bottom — GIZMO_CTRL_SZ square
         if (bp->iconLoaded) {
             ImTextureID iconTid = (ImTextureID)(intptr_t)bp->iconTex.id;
             if (iconTid) {
-                ImGui::SetCursorScreenPos(ImVec2(colX + (GIZMO_SLIDER_W - 24) / 2, iconY));
-                ImGui::Image(iconTid, ImVec2(24, 24));
+                ImGui::SetCursorScreenPos(ImVec2(colX, iconY));
+                ImGui::Image(iconTid, ImVec2(GIZMO_CTRL_SZ, GIZMO_CTRL_SZ));
             }
         } else {
             Color swatch = (i == 3) ? HSLToRGB(colorHue, 1.0f, 0.5f)
                         : (i == 4) ? HSLToRGB(colorHue, colorSat, colorLit)
                         : HSLToRGB(colorHue, colorSat, colorLit);
             ImU32 swCol = IM_COL32(swatch.r, swatch.g, swatch.b, 255);
-            dl->AddRectFilled(ImVec2(colX + 4, iconY + 2), ImVec2(colX + GIZMO_SLIDER_W - 4, iconY + GIZMO_ICON_H - 2), swCol);
-            dl->AddRect(ImVec2(colX + 4, iconY + 2), ImVec2(colX + GIZMO_SLIDER_W - 4, iconY + GIZMO_ICON_H - 2), IM_COL32(200, 200, 200, 200));
+            dl->AddRectFilled(ImVec2(colX, iconY), ImVec2(colX + GIZMO_CTRL_SZ, iconY + GIZMO_CTRL_SZ), swCol);
+            dl->AddRect(ImVec2(colX, iconY), ImVec2(colX + GIZMO_CTRL_SZ, iconY + GIZMO_CTRL_SZ), IM_COL32(200, 200, 200, 200));
         }
     }
 
