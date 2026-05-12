@@ -1,11 +1,10 @@
 #include "repaint.h"
 #include "rlgl.h"
+#include "external/glad.h"   // raylib's glad — has GL_ constants, no windows.h
 #include "imgui.h"
-#include <GL/gl.h>
 #include <math.h>
 
 void BrushGizmo_Draw(ImDrawList* dl, ImVec2 org, int gcx, int gcy, AppState* state) {
-    // ── Rotation arrow ──────────────────────────────────────────────────
     float rang = state->currentBrush.Realb.resangle * (float)(M_PI * 2.0 / 360.0);
     int arrLen = 80;
     ImVec2 arrTip(gcx + arrLen * cosf(rang), gcy + arrLen * sinf(rang));
@@ -15,11 +14,10 @@ void BrushGizmo_Draw(ImDrawList* dl, ImVec2 org, int gcx, int gcy, AppState* sta
     ImVec2 a2(arrTip.x + 10 * cosf(rang - (float)M_PI - ah), arrTip.y + 10 * sinf(rang - (float)M_PI - ah));
     dl->AddLine(arrTip, a1, IM_COL32(200, 40, 40, 255), 3);
     dl->AddLine(arrTip, a2, IM_COL32(200, 40, 40, 255), 3);
-
-    // ── Center dot ──────────────────────────────────────────────────────
     dl->AddCircleFilled(org, 3, IM_COL32_BLACK);
     dl->AddCircleFilled(org, 2, IM_COL32_WHITE);
 }
+
 void BrushGizmo_DrawXOROverlay(AppState* state) {
     Rectangle vp = viewport.bounds;
     int gcx = (int)(vp.x + vp.width * 0.5f);
@@ -27,6 +25,7 @@ void BrushGizmo_DrawXOROverlay(AppState* state) {
     float d30 = (float)(M_PI * 30.0 / 180.0);
 
     rlDrawRenderBatchActive();
+
     glEnable(GL_COLOR_LOGIC_OP);
     glLogicOp(GL_XOR);
 
@@ -41,30 +40,27 @@ void BrushGizmo_DrawXOROverlay(AppState* state) {
     Vector2 ctr = {(float)gcx, (float)gcy};
     float drawRadOut = state->currentBrush.Realb.rad_out * state->camera.zoom;
 
-    if (drawRadOut > 2.0f) {
+    if (drawRadOut > 2.0f)
         DrawRing(ctr, drawRadOut - 1.5f, drawRadOut + 1.5f, 0, 360, 0, WHITE);
-    }
 
     float hardStart  = -GIZMO_HARD_ANG_START;
     float hardEnd    = hardStart - GIZMO_HARD_ANG_SPAN;
     float curveStart = -(GIZMO_HARD_ANG_START + GIZMO_HARD_ANG_SPAN);
     float curveEnd   = curveStart - GIZMO_CURVE_ANG_SPAN;
 
-    DrawRing(ctr, GIZMO_FIXED_RADIUS_PX - 1.5f, GIZMO_FIXED_RADIUS_PX + 1.5f, hardEnd,   hardStart,   0, WHITE);
-    DrawRing(ctr, GIZMO_FIXED_RADIUS_PX - 1.5f, GIZMO_FIXED_RADIUS_PX + 1.5f, curveEnd,  curveStart,  0, WHITE);
+    DrawRing(ctr, GIZMO_FIXED_RADIUS_PX - 1.5f, GIZMO_FIXED_RADIUS_PX + 1.5f, hardEnd,  hardStart,  0, WHITE);
+    DrawRing(ctr, GIZMO_FIXED_RADIUS_PX - 1.5f, GIZMO_FIXED_RADIUS_PX + 1.5f, curveEnd, curveStart, 0, WHITE);
 
     float hRatio = (state->currentBrush.Realb.rad_out > 0)
         ? fminf(state->currentBrush.Realb.rad_in / state->currentBrush.Realb.rad_out, 1.0f)
         : 0.0f;
     float hardMv = GIZMO_FIXED_RADIUS_PX * hRatio;
-    if (hardMv > 2.0f) {
+    if (hardMv > 2.0f)
         DrawRing(ctr, hardMv - 1.5f, hardMv + 1.5f, hardEnd, hardStart, 0, WHITE);
-    }
 
     float curveMv = GIZMO_FIXED_RADIUS_PX * (1.0f - state->currentBrush.Realb.crv);
-    if (curveMv > 2.0f) {
+    if (curveMv > 2.0f)
         DrawRing(ctr, curveMv - 1.5f, curveMv + 1.5f, curveEnd, curveStart, 0, WHITE);
-    }
 
     rlDrawRenderBatchActive();
     glDisable(GL_COLOR_LOGIC_OP);

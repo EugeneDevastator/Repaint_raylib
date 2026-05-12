@@ -51,7 +51,6 @@ set(SOURCES
     src/local_broker.cpp
     src/ui_controls.cpp
     src/ui_color.cpp
-    src/ui_gizmo.cpp
     src/ui_quickpanel.cpp
     src/ui_brushpreview.cpp
     src/ui_brushgizmo.cpp
