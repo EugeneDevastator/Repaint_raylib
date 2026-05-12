@@ -2,7 +2,7 @@
 #include "rlgl.h"
 #include "imgui.h"
 #include <math.h>
-
+#include <GL/gl.h>
 #define GIZMO_CTRL_SZ 24
 
 void DrawSliderVertical(ImDrawList* dl, BParam* bp, int x, int y, int w, int h, float val, int colorMode) {
@@ -60,8 +60,9 @@ void Gizmo_DrawXOROverlay(AppState* state) {
     int gcy = (int)(vp.y + vp.height * 0.5f);
     float d30 = (float)(M_PI * 30.0 / 180.0);
 
-    rlSetBlendMode(RL_BLEND_CUSTOM);
-    rlSetBlendFactors(RL_ONE_MINUS_DST_COLOR, RL_ZERO, RL_FUNC_ADD);
+    rlDrawRenderBatchActive();
+    glEnable(GL_COLOR_LOGIC_OP);
+    glLogicOp(GL_XOR);
 
     for (int gi = 1; gi <= 5; gi += 2) {
         float a = -d30 * (2 * gi - 1);
@@ -80,7 +81,7 @@ void Gizmo_DrawXOROverlay(AppState* state) {
 
     float hardStart  = -GIZMO_HARD_ANG_START;
     float hardEnd    = hardStart - GIZMO_HARD_ANG_SPAN;
-    float curveStart = -( GIZMO_HARD_ANG_START + GIZMO_HARD_ANG_SPAN );
+    float curveStart = -(GIZMO_HARD_ANG_START + GIZMO_HARD_ANG_SPAN);
     float curveEnd   = curveStart - GIZMO_CURVE_ANG_SPAN;
 
     DrawRing(ctr, GIZMO_FIXED_RADIUS_PX - 1.5f, GIZMO_FIXED_RADIUS_PX + 1.5f, hardEnd,   hardStart,   0, WHITE);
@@ -99,5 +100,6 @@ void Gizmo_DrawXOROverlay(AppState* state) {
         DrawRing(ctr, curveMv - 1.5f, curveMv + 1.5f, curveEnd, curveStart, 0, WHITE);
     }
 
-    rlSetBlendMode(RL_BLEND_ALPHA);
+    rlDrawRenderBatchActive();
+    glDisable(GL_COLOR_LOGIC_OP);
 }
