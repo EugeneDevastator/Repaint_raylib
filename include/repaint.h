@@ -303,6 +303,24 @@ extern bool gizmoShow;
 extern int gizmoMouseMode;
 extern bool g_colorPicking;
 
+// ── Gizmo sector arc configuration ─────────────────────────────────────
+// All angles in degrees, counter-clockwise in math coords (right=0°, up=90°)
+// Hardness arc starts at HARD_ANG_START and spans HARD_ANG_SPAN CCW.
+// Curve arc starts where hardness ends and spans CURVE_ANG_SPAN CCW.
+#define GIZMO_FIXED_RADIUS_PX  128.0f
+
+#define GIZMO_HARD_ANG_START   270.0f
+#define GIZMO_HARD_ANG_SPAN    120.0f
+#define GIZMO_CURVE_ANG_SPAN   120.0f
+
+// Gizmo sub-component init/shutdown (no ImGui types)
+void BrushPreview_Init(void);
+void BrushPreview_Shutdown(void);
+void FilePanel_Init(void);
+void FilePanel_Shutdown(void);
+void ToolBox_Init(void);
+void ToolBox_Shutdown(void);
+
 extern int dragFromIdx;
 extern bool dragActive;
 extern Vector2 dragMouseDownPos;
@@ -332,6 +350,7 @@ void LeftPanel_Draw(AppState* state);
 void Gizmo_Draw(AppState* state);
 void Gizmo_HandleInput(AppState* state, Vector2 mousePos);
 void Gizmo_DrawPenPopups(AppState* state);
+void Gizmo_DrawXOROverlay(AppState* state);
 void LoadGizmoIcons(void);
 void UnloadGizmoIcons(void);
 

@@ -52,6 +52,11 @@ set(SOURCES
     src/ui_controls.cpp
     src/ui_color.cpp
     src/ui_gizmo.cpp
+    src/ui_brushpreview.cpp
+    src/ui_brushgizmo.cpp
+    src/ui_quickinfo.cpp
+    src/ui_filepanel.cpp
+    src/ui_toolbox.cpp
     src/ui_layerpanel.cpp
     src/ui_leftpanel.cpp
     src/ui_style.cpp

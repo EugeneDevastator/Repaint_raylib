@@ -1,0 +1,34 @@
+[DONE] . let user have bigger brushes - up to 4096 base size.
+[DONE] . when creating new file - ask confirmation about clearing canvas only after user entered all parameters in popup and pressed new.
+[UNFIXED] . fix bug with dropping layer down. it blends incorrectly. 
+[DONE] . increase font size for all app, maybe by 2pt.
+. fix text vertical alignment on 'server' and 'room' buttons.
+[DONE] . remove blue background from buttons.
+[UNFIXED] . add colorpicker Alt+left click. and its preview area. slow down mouse move when picking by x0.5
+[DONE] . make quick pannel stay on shift press. and hide on next press.
+[PArtially] . tab key should hide(toggle) all overhang panels.. does not affet quick panel.
+. their backgrounds should disappear too and viewport should fill entire screen - just make it so by default and make panels overlay it.
+
+[DONE] . 'reload' button in file ops panel should instantly reload from saved file (take backup of a current one with random hash added)
+[DONE] . use icons for HSB sliders from original qt project
+[DONE partially] . use blend mode icon near blendmode dropdowns (see qt project)
+. add same icon to layer panel - in fact wrap it into component.
+[not done]. show tool buttons they appear in original qt project (see qt project) - they show as icon buttons on quickpanel)
+[partially DONE] . layers - preserve opacity this seems more of a brush mode - move it to left panel. name as preserve layer alpha. consume finally in shader
+. remove the old checkmark from layer panel.
+[partially DONE] . quickpanel gizmo - draw lines with xor blending - we should be able to always see them.
+0. when drawing gizmo - make a stamp with current parameters underneath it - check original qt implementation.
+. do arks like this:
+1. brush size - thick circle, remains, just draw with xor (or inverting operator so that it inverts whatever color is behind)
+2. hardness and curvature - draw their segments always at 256 radius, with same line style as brush size. maybe just override brush size value for them to always be constant.
+==== batch 2
+. add api to dialog box with showing 'text on full screen with progress bar
+. when connecting to a server - initialize new canvas, get appropriate size from the server.
+[not working] . implement velocity contol for sliders - see original project - should work with mouse.
+==== batch 3
+. port smudge(finger) tool - must use same brush shader, we only add sampling of underlying canvas in a branch.
+. port clone opacity slider for it.
+=== batch 4
+. implement tablet - wintab for windows, libinput on linux. Windows: GetPointerPenInfo (zero deps, built into OS). 
+. implement pressure tablet mode for sliders - port and update parameter application architecture
+. ===

@@ -528,59 +528,7 @@ void App_Draw(AppState* state) {
 
     // XOR overlay for gizmo lines (always visible on any background)
     if (gizmoShow) {
-        Rectangle vp = viewport.bounds;
-        int gcx = (int)(vp.x + vp.width * 0.5f);
-        int gcy = (int)(vp.y + vp.height * 0.5f);
-        float d30 = (float)(M_PI * 30.0 / 180.0);
-
-        rlSetBlendMode(RL_BLEND_CUSTOM);
-        rlSetBlendFactors(RL_ONE_MINUS_DST_COLOR, RL_ZERO, RL_FUNC_ADD);
-
-        // Guide lines
-        for (int gi = 1; gi <= 5; gi += 2) {
-            float a = -d30 * (2 * gi - 1);
-            float len = 220.0f;
-            DrawLineEx(Vector2{(float)gcx, (float)gcy},
-                       Vector2{(float)gcx + len * cosf(a), (float)gcy + len * sinf(a)},
-                       3.0f, WHITE);
-        }
-
-        // All arcs drawn as thick XOR rings/segments
-        Vector2 ctr = {(float)gcx, (float)gcy};
-        float drawRadOut = state->currentBrush.Realb.rad_out * state->camera.zoom;
-
-        // Brush size — full thick XOR ring
-        if (drawRadOut > 2.0f) {
-            DrawRing(ctr, drawRadOut - 1.5f, drawRadOut + 1.5f, 0, 360, 0, WHITE);
-        }
-
-        // Sector arcs: hardness (right side, -30° to 90° screen → 270°→30° math)
-        // and curve (left side, 90° to 210° screen → 150°→270° math)
-        float refR = 180.0f;
-        float hardStartMath = 270.0f, hardEndMath = 30.0f;
-        float curveStartMath = 150.0f, curveEndMath = 270.0f;
-
-        // Hardness reference arc at 180px
-        DrawRing(ctr, refR - 1.5f, refR + 1.5f, hardStartMath, hardEndMath, 0, WHITE);
-        // Curve reference arc at 180px
-        DrawRing(ctr, refR - 1.5f, refR + 1.5f, curveStartMath, curveEndMath, 0, WHITE);
-
-        // Hardness moving arc
-        float hRatio = (state->currentBrush.Realb.rad_out > 0)
-            ? fminf(state->currentBrush.Realb.rad_in / state->currentBrush.Realb.rad_out, 1.0f)
-            : 0.0f;
-        float hardMv = refR * hRatio;
-        if (hardMv > 2.0f) {
-            DrawRing(ctr, hardMv - 1.5f, hardMv + 1.5f, hardStartMath, hardEndMath, 0, WHITE);
-        }
-
-        // Curve moving arc
-        float curveMv = refR * (1.0f - state->currentBrush.Realb.crv);
-        if (curveMv > 2.0f) {
-            DrawRing(ctr, curveMv - 1.5f, curveMv + 1.5f, curveStartMath, curveEndMath, 0, WHITE);
-        }
-
-        rlSetBlendMode(RL_BLEND_ALPHA);
+        Gizmo_DrawXOROverlay(state);
     }
 
     EndDrawing();

@@ -2,119 +2,44 @@
 #include "imgui.h"
 #include <math.h>
 
-bool gizmoShow = false;
-int gizmoMouseMode = 0;
-bool g_colorPicking = false;
-
-#define GIZMO_TOOL_N 6
-static const char* gizmoToolLabels[GIZMO_TOOL_N] = {"Br","Sm","Li","Er","Di","Co"};
-static const int gizmoToolModes[GIZMO_TOOL_N] = {eBrush, eSmudge, eLine, -1, eDisp, eCont};
-
+// Gizmo layout constants
 #define GIZMO_SLIDER_W 24
 #define GIZMO_SLIDER_H 256
 #define GIZMO_SLIDER_GAP 8
 #define GIZMO_CTRL_SZ 24
 #define GIZMO_SPACING 4
 
-static RenderTexture2D gizmoStamp = {0};
+// Sub-component declarations (defined in their own files)
+void BrushPreview_RenderStamp(AppState*, float drawRadOut);
+void BrushPreview_DrawStamp(ImDrawList* dl, ImVec2 org, float drawRadOut);
+void DrawSliderVertical(ImDrawList*, BParam*, int x, int y, int w, int h, float val, int colorMode);
+void BrushGizmo_Draw(ImDrawList* dl, ImVec2 org, int gcx, int gcy, AppState*);
+void QuickInfo_Draw(ImDrawList*, int gcx, int gcy, int gizR, AppState*);
+void FilePanel_Draw(AppState*, Rectangle vp);
+void ToolBox_Draw(AppState*, Rectangle vp);
 
-#define FILE_BTN_N 7
-static const char* fileBtnLabels[FILE_BTN_N] = {"New","Open","SaveAs","Save","Reload","Snap","Pin"};
-static Texture2D fileBtnTex[FILE_BTN_N];
-
-#define TOOL_ICON_N 5
-static Texture2D toolIconTex[TOOL_ICON_N];
-static const char* toolIconNames[TOOL_ICON_N] = {"tbrush","tsmudge","tline","tdisp","tcont"};
-
-void LoadGizmoIcons(void) {
-    if (gizmoStamp.id == 0) {
-        gizmoStamp = LoadRenderTexture(256, 256);
-        SetTextureFilter(gizmoStamp.texture, TEXTURE_FILTER_BILINEAR);
-        SetTextureWrap(gizmoStamp.texture, TEXTURE_WRAP_CLAMP);
-    }
-    const char* names[FILE_BTN_N] = {"btnnew","btnopen","btnsaveas","btnsave","btnreload","btnsnap","btnpin"};
-    for (int i = 0; i < FILE_BTN_N; i++) {
-        char path[128];
-        sprintf(path, "resources/%s.png", names[i]);
-        if (FileExists(path)) {
-            Image img = LoadImage(path);
-            ImageResize(&img, 24, 24);
-            fileBtnTex[i] = LoadTextureFromImage(img);
-            UnloadImage(img);
-        } else {
-            fileBtnTex[i] = Texture2D{0};
-        }
-    }
-    for (int i = 0; i < TOOL_ICON_N; i++) {
-        char path[128];
-        sprintf(path, "resources/%s.png", toolIconNames[i]);
-        if (FileExists(path)) {
-            Image img = LoadImage(path);
-            ImageResize(&img, 24, 24);
-            toolIconTex[i] = LoadTextureFromImage(img);
-            UnloadImage(img);
-        } else {
-            toolIconTex[i] = Texture2D{0};
-        }
-    }
-}
-
-void UnloadGizmoIcons(void) {
-    for (int i = 0; i < FILE_BTN_N; i++) {
-        if (fileBtnTex[i].id > 0) UnloadTexture(fileBtnTex[i]);
-    }
-    for (int i = 0; i < TOOL_ICON_N; i++) {
-        if (toolIconTex[i].id > 0) UnloadTexture(toolIconTex[i]);
-    }
-    if (gizmoStamp.id > 0) {
-        UnloadRenderTexture(gizmoStamp);
-        gizmoStamp.id = 0;
-    }
-}
-
-static Rectangle VpRect(void) { return viewport.bounds; }
-static int GizmoCX(void) { Rectangle vp = VpRect(); return (int)(vp.x + vp.width * 0.5f); }
-static int GizmoCY(void) { Rectangle vp = VpRect(); return (int)(vp.y + vp.height * 0.5f); }
+bool gizmoShow = false;
+int gizmoMouseMode = 0;
+bool g_colorPicking = false;
 
 void Gizmo_HandleInput(AppState*, Vector2) {}
 
-static void DrawSliderVertical(ImDrawList* dl, BParam* bp, int x, int y, int w, int h, float val, int colorMode) {
-    DualSlider* ds = &bp->slider;
-    int y0 = y, y1 = y + h;
-    for (int yy = y0; yy < y1; yy++) {
-        float t = (float)(y1 - 1 - yy) / (float)(y1 - y0 - 1);
-        ImU32 col;
-        if (colorMode >= 0) {
-            Color c;
-            if (colorMode == 0) c = HSLToRGB(t, 1.0f, 0.5f);
-            else if (colorMode == 1) c = HSLToRGB(colorHue, t, colorLit);
-            else c = HSLToRGB(colorHue, colorSat, t);
-            col = IM_COL32(c.r, c.g, c.b, 255);
-        } else {
-            uint8_t r = (uint8_t)(ds->gradStart.r * (1 - t) + ds->gradEnd.r * t);
-            uint8_t g = (uint8_t)(ds->gradStart.g * (1 - t) + ds->gradEnd.g * t);
-            uint8_t b = (uint8_t)(ds->gradStart.b * (1 - t) + ds->gradEnd.b * t);
-            col = IM_COL32(r, g, b, 255);
-        }
-        dl->AddRectFilled(ImVec2(x, yy), ImVec2(x + w, yy + 1), col);
-    }
-    dl->AddRect(ImVec2(x, y), ImVec2(x + w, y + h), IM_COL32(180, 180, 200, 180));
-    float grabY = y + (1.0f - val) * h;
-    float grabHalf = GIZMO_CTRL_SZ * 0.25f;
-    dl->AddRectFilled(ImVec2(x + 1, grabY - grabHalf), ImVec2(x + w - 1, grabY + grabHalf), IM_COL32_WHITE);
-    dl->AddRect(ImVec2(x + 1, grabY - grabHalf), ImVec2(x + w - 1, grabY + grabHalf), IM_COL32(50, 50, 50, 200));
-    char txt[16];
-    float disp = BParam_GetValue(bp);
-    if (bp->outMax - bp->outMin >= 1.0f) snprintf(txt, sizeof(txt), "%.1f", disp);
-    else snprintf(txt, sizeof(txt), "%.2f", disp);
-    ImVec2 tsz = ImGui::CalcTextSize(txt);
-    dl->AddText(ImVec2(x + (w - tsz.x) / 2, grabY - tsz.y / 2), IM_COL32(255, 255, 255, 220), txt);
+void LoadGizmoIcons(void) {
+    BrushPreview_Init();
+    FilePanel_Init();
+    ToolBox_Init();
+}
+
+void UnloadGizmoIcons(void) {
+    BrushPreview_Shutdown();
+    FilePanel_Shutdown();
+    ToolBox_Shutdown();
 }
 
 void Gizmo_Draw(AppState* state) {
     if (!gizmoShow) return;
 
-    Rectangle vp = VpRect();
+    Rectangle vp = viewport.bounds;
     int gcx = (int)(vp.x + vp.width * 0.5f);
     int gcy = (int)(vp.y + vp.height * 0.5f);
 
@@ -123,22 +48,9 @@ void Gizmo_Draw(AppState* state) {
     if (drawRadIn > drawRadOut) drawRadIn = drawRadOut;
 
     // ── Render stamp texture before ImGui window (avoids state conflicts) ─
-    {
-        if (gizmoStamp.id != 0 && drawRadOut > 1.0f) {
-            float scale = 128.0f / fmaxf(drawRadOut, 1.0f);
-            d_Brush pb = state->currentBrush;
-            pb.Realb.rad_out = 128.0f;
-            pb.Realb.rad_in  = state->currentBrush.Realb.rad_in * state->camera.zoom * scale;
-            pb.Realb.bmidx   = 0;
+    BrushPreview_RenderStamp(state, drawRadOut);
 
-            BeginTextureMode(gizmoStamp);
-            ClearBackground(BLANK);
-            EndTextureMode();
-
-            BrushBlend_ApplyStamp(gizmoStamp, &pb, 128, 128);
-        }
-    }
-
+    // ── Transparent overlay for gizmo visuals + interactive controls ─────
     ImGui::SetNextWindowPos(ImVec2(vp.x, vp.y));
     ImGui::SetNextWindowSize(ImVec2(vp.width, vp.height));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
@@ -155,45 +67,9 @@ void Gizmo_Draw(AppState* state) {
     int gizR = 200;
     float d30 = (float)(M_PI * 30.0 / 180.0);
 
-    // ── Brush stamp preview at center ──────────────────────────────────
-    if (gizmoStamp.id != 0 && drawRadOut > 1.0f) {
-        dl->AddImage((ImTextureID)(intptr_t)gizmoStamp.texture.id,
-            ImVec2(org.x - drawRadOut, org.y - drawRadOut),
-            ImVec2(org.x + drawRadOut, org.y + drawRadOut),
-            ImVec2(0, 0), ImVec2(1, 1),
-            IM_COL32(255, 255, 255, 255));
-    }
-
-    // ── Rotation arrow ──────────────────────────────────────────────────
-    float rang = state->currentBrush.Realb.resangle * (float)(M_PI * 2.0 / 360.0);
-    int arrLen = 80;
-    ImVec2 arrTip(gcx + arrLen * cosf(rang), gcy + arrLen * sinf(rang));
-    dl->AddLine(org, arrTip, IM_COL32(200, 40, 40, 255), 3);
-    float ah = (float)(M_PI * 0.2);
-    ImVec2 a1(arrTip.x + 10 * cosf(rang - (float)M_PI + ah), arrTip.y + 10 * sinf(rang - (float)M_PI + ah));
-    ImVec2 a2(arrTip.x + 10 * cosf(rang - (float)M_PI - ah), arrTip.y + 10 * sinf(rang - (float)M_PI - ah));
-    dl->AddLine(arrTip, a1, IM_COL32(200, 40, 40, 255), 3);
-    dl->AddLine(arrTip, a2, IM_COL32(200, 40, 40, 255), 3);
-
-    dl->AddCircleFilled(org, 3, IM_COL32_BLACK);
-    dl->AddCircleFilled(org, 2, IM_COL32_WHITE);
-
-    // ── Info text ───────────────────────────────────────────────────────
-    char buf[96];
-    float hardness = 1.0f - state->currentBrush.Realb.rad_in / fmaxf(1.0f, state->currentBrush.Realb.rad_out);
-    snprintf(buf, sizeof(buf), "Sz:%.0f Hd:%.0f%% Op:%.0f%% Crv:%.0f%% Sp:%.2f Sc:%.2f",
-        state->currentBrush.Realb.rad_out, hardness * 100,
-        state->currentBrush.Realb.opacity * 100,
-        state->currentBrush.Realb.crv * 100,
-        BParam_GetValue(&bpSpacing), BParam_GetValue(&bpScatter));
-    ImVec2 tsz = ImGui::CalcTextSize(buf);
-    dl->AddText(ImVec2(gcx - tsz.x / 2, gcy + gizR + 8), IM_COL32(211, 211, 211, 230), buf);
-
-    // ── Color swatch ────────────────────────────────────────────────────
-    int swY = gcy + gizR + 14;
-    Color curCol = HSLToRGB(colorHue, colorSat, colorLit);
-    dl->AddRectFilled(ImVec2(gcx - 50, swY), ImVec2(gcx + 50, swY + 24), IM_COL32(curCol.r, curCol.g, curCol.b, 255));
-    dl->AddRect(ImVec2(gcx - 50, swY), ImVec2(gcx + 50, swY + 24), IM_COL32_WHITE);
+    BrushPreview_DrawStamp(dl, org, drawRadOut);
+    BrushGizmo_Draw(dl, org, gcx, gcy, state);
+    QuickInfo_Draw(dl, gcx, gcy, gizR, state);
 
     // ── Radial input handling ───────────────────────────────────────────
     ImVec2 mp = ImGui::GetMousePos();
@@ -265,96 +141,6 @@ void Gizmo_Draw(AppState* state) {
     }
 
     if (released) gizmoMouseMode = 0;
-
-    // ── File buttons (top-left) ─────────────────────────────────────────
-    ImGui::SetCursorScreenPos(ImVec2(vp.x + 8, vp.y + 8));
-    for (int i = 0; i < FILE_BTN_N; i++) {
-        ImGui::PushID(100 + i);
-        ImTextureID tid = (fileBtnTex[i].id > 0) ? (ImTextureID)(intptr_t)fileBtnTex[i].id : 0;
-        if (tid) {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.27f, 0.27f, 0.31f, 0.86f));
-            if (ImGui::ImageButton("##fb", tid, ImVec2(24, 24))) {
-                if (i == 0) App_FileNew();
-                else if (i == 1) App_FileOpen();
-                else if (i == 2) App_FileSaveAs();
-                else if (i == 3) App_FileSave();
-                else if (i == 4) App_FileReload();
-                else if (i == 5) App_FileSnap();
-            }
-            ImGui::PopStyleColor();
-        } else {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.27f, 0.27f, 0.31f, 0.86f));
-            if (ImGui::Button(fileBtnLabels[i], ImVec2(36, 28))) {
-                if (i == 0) App_FileNew();
-                else if (i == 1) App_FileOpen();
-                else if (i == 2) App_FileSaveAs();
-                else if (i == 3) App_FileSave();
-                else if (i == 4) App_FileReload();
-                else if (i == 5) App_FileSnap();
-            }
-            ImGui::PopStyleColor();
-        }
-        ImGui::PopID();
-        ImGui::SameLine();
-    }
-
-    // ── Tool buttons (top-right) ────────────────────────────────────────
-    // Icon index per tool: Br->0, Sm->1, Li->2, Er->-1(no icon), Di->3, Co->4
-    static const int toolIconIdx[GIZMO_TOOL_N] = {0, 1, 2, -1, 3, 4};
-    int totalToolW = GIZMO_TOOL_N * 36 + (GIZMO_TOOL_N - 1) * 4;
-    ImGui::SetCursorScreenPos(ImVec2(vp.x + vp.width - totalToolW - 8, vp.y + 8));
-    for (int i = 0; i < GIZMO_TOOL_N; i++) {
-        bool active;
-        if (i == 3) active = (state->mode == eBrush && state->currentBrush.Realb.col.a == 0);
-        else active = (state->mode == gizmoToolModes[i]);
-
-        ImGui::PushID(200 + i);
-        if (active) {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.45f, 0.45f, 0.45f, 0.85f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.50f, 0.50f, 0.50f, 0.90f));
-        } else {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.27f, 0.27f, 0.31f, 0.86f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.35f, 0.35f, 0.40f, 0.90f));
-        }
-
-        int ii = toolIconIdx[i];
-        bool hasIcon = (ii >= 0 && ii < TOOL_ICON_N && toolIconTex[ii].id > 0);
-        if (hasIcon) {
-            ImTextureID tid = (ImTextureID)(intptr_t)toolIconTex[ii].id;
-            if (ImGui::ImageButton("##ti", tid, ImVec2(28, 28))) {
-                if (i == 3) {
-                    if (state->mode == eBrush && state->currentBrush.Realb.col.a == 0) {
-                        state->mode = eBrush;
-                        state->currentBrush.Realb.col.a = 255;
-                    } else {
-                        state->mode = eBrush;
-                        state->currentBrush.Realb.col.a = 0;
-                    }
-                } else {
-                    state->mode = gizmoToolModes[i];
-                    state->currentBrush.Realb.col.a = 255;
-                }
-            }
-        } else {
-            if (ImGui::Button(gizmoToolLabels[i], ImVec2(36, 28))) {
-                if (i == 3) {
-                    if (state->mode == eBrush && state->currentBrush.Realb.col.a == 0) {
-                        state->mode = eBrush;
-                        state->currentBrush.Realb.col.a = 255;
-                    } else {
-                        state->mode = eBrush;
-                        state->currentBrush.Realb.col.a = 0;
-                    }
-                } else {
-                    state->mode = gizmoToolModes[i];
-                    state->currentBrush.Realb.col.a = 255;
-                }
-            }
-        }
-        ImGui::PopStyleColor(2);
-        ImGui::PopID();
-        ImGui::SameLine();
-    }
 
     // ── Slider columns ──────────────────────────────────────────────────
     int totalColH = GIZMO_CTRL_SZ + GIZMO_SPACING + GIZMO_SLIDER_H + GIZMO_SPACING + GIZMO_CTRL_SZ;
@@ -445,6 +231,12 @@ void Gizmo_Draw(AppState* state) {
     }
 
     ImGui::End();
+
+    // ── Separate panels (outside transparent overlay) ───────────────────
+    if (gizmoShow) {
+        FilePanel_Draw(state, vp);
+        ToolBox_Draw(state, vp);
+    }
 }
 
 void Gizmo_DrawPenPopups(AppState*) {}
