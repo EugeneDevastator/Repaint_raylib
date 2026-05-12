@@ -147,7 +147,7 @@ typedef struct {
 } Canvas;
 
 // ── Network painter architecture ─────────────────────────────────────────
-struct InputEvent  { float x, y; uint32_t color; float radius; };
+struct InputEvent  { float x, y; float srcX, srcY; uint32_t color; float radius; };
 struct DrawCommand { float x, y; uint32_t color; float radius; };
 
 struct AppState;
@@ -164,7 +164,9 @@ struct LocalBroker : ICommandBroker {
     struct QueuedDab {
         RenderTexture2D targetRT;
         float x, y;
+        float srcX, srcY;
         float rad_in, rad_out, opacity, crv, x2y, sol, sol2op, resangle;
+        float cop;
         Color color;
         int bmidx;
         uint16_t seed;
@@ -217,6 +219,7 @@ typedef struct {
     int strokeLen;
     bool wasMouseDown;
     Vector2 lastDabPos;
+    Vector2 smudgeSrcPos;
     float strokeDabAccum;
     bool debugShowStamps;
     bool rightMouseDown;
@@ -280,7 +283,7 @@ void Painter_Shutdown(void);
 void BrushBlend_Init(void);
 void BrushBlend_Shutdown(void);
 void BrushBlend_ApplyStamp(RenderTexture2D dstRT, d_Brush* brush,
-    float stampX, float stampY);
+    float stampX, float stampY, float srcX, float srcY);
 
 void DualSlider_Init(DualSlider* slider);
 
@@ -341,6 +344,7 @@ extern BParam bpHardness;
 extern BParam bpSpacing;
 extern BParam bpCurvature;
 extern BParam bpScatter;
+extern BParam bpCloneOpacity;
 extern BParam bpQuickHue;
 extern BParam bpQuickSat;
 extern BParam bpQuickLit;

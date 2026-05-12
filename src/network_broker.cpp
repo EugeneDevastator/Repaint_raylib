@@ -202,6 +202,8 @@ void NetworkBroker::on_input(const InputEvent& e) {
 
     localQueue[localTail].x     = e.x;
     localQueue[localTail].y     = e.y;
+    localQueue[localTail].srcX  = e.srcX;
+    localQueue[localTail].srcY  = e.srcY;
     localQueue[localTail].color = Color{
         (uint8_t)((e.color >> 16) & 0xFF),
         (uint8_t)((e.color >>  8) & 0xFF),
@@ -216,6 +218,7 @@ void NetworkBroker::on_input(const InputEvent& e) {
     localQueue[localTail].sol       = br->Realb.sol;
     localQueue[localTail].sol2op    = br->Realb.sol2op;
     localQueue[localTail].resangle  = (float)br->Realb.resangle;
+    localQueue[localTail].cop       = br->Realb.cop;
     localQueue[localTail].bmidx     = (int)br->Realb.bmidx;
     localQueue[localTail].seed      = br->Realb.seed;
     localQueue[localTail].activeLayer = layer;
@@ -241,13 +244,14 @@ void NetworkBroker::poll(AppState* st) {
             brush.Realb.sol      = d->sol;
             brush.Realb.sol2op   = d->sol2op;
             brush.Realb.resangle = d->resangle;
+            brush.Realb.cop      = d->cop;
             brush.Realb.bmidx    = (uint8_t)d->bmidx;
             brush.Realb.seed     = d->seed;
             brush.Realb.col      = d->color;
 
             RenderTexture2D rt = st->layerRTs[d->activeLayer];
             if (rt.id > 0) {
-                BrushBlend_ApplyStamp(rt, &brush, d->x, d->y);
+                BrushBlend_ApplyStamp(rt, &brush, d->x, d->y, d->srcX, d->srcY);
                 applied = true;
             }
         }
@@ -264,13 +268,14 @@ void NetworkBroker::poll(AppState* st) {
             act.Brush.Realb.sol      = d->sol;
             act.Brush.Realb.sol2op   = d->sol2op;
             act.Brush.Realb.resangle = d->resangle;
+            act.Brush.Realb.cop      = d->cop;
             act.Brush.Realb.bmidx    = (uint8_t)d->bmidx;
             act.Brush.Realb.seed     = d->seed;
             act.Brush.Realb.col      = d->color;
             act.startseed  = 0;
             act.Noisemode  = 0;
             act.Stroke.pos1 = Vector2{d->x, d->y};
-            act.Stroke.pos2 = Vector2{d->x, d->y};
+            act.Stroke.pos2 = Vector2{d->srcX, d->srcY};
             act.layer = (uint8_t)d->activeLayer;
             SendAction(&act);
         }
@@ -463,9 +468,10 @@ void NetworkBroker::EnqueueRemoteDab(const d_Action* act) {
 
     d_Brush brush = act->Brush;
     Vector2 pos1  = act->Stroke.pos1;
+    Vector2 pos2  = act->Stroke.pos2;
     RenderTexture2D rt = appState->layerRTs[layer];
     if (rt.id > 0)
-        BrushBlend_ApplyStamp(rt, &brush, pos1.x, pos1.y);
+        BrushBlend_ApplyStamp(rt, &brush, pos1.x, pos1.y, pos2.x, pos2.y);
 }
 
 /* ── Config ─────────────────────────────────────────────────────────────── */

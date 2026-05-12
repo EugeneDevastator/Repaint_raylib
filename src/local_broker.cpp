@@ -16,6 +16,8 @@ void LocalBroker::on_input(const InputEvent& e) {
 
     queue[tail].x = e.x;
     queue[tail].y = e.y;
+    queue[tail].srcX = e.srcX;
+    queue[tail].srcY = e.srcY;
     queue[tail].color = Color{
         (uint8_t)((e.color >> 16) & 0xFF),
         (uint8_t)((e.color >> 8) & 0xFF),
@@ -30,6 +32,7 @@ void LocalBroker::on_input(const InputEvent& e) {
     queue[tail].sol = br->Realb.sol;
     queue[tail].sol2op = br->Realb.sol2op;
     queue[tail].resangle = (float)br->Realb.resangle;
+    queue[tail].cop = br->Realb.cop;
     queue[tail].bmidx = (int)br->Realb.bmidx;
     queue[tail].seed = br->Realb.seed;
     queue[tail].activeLayer = layer;
@@ -52,13 +55,14 @@ void LocalBroker::poll(AppState* state) {
             brush.Realb.sol = d->sol;
             brush.Realb.sol2op = d->sol2op;
             brush.Realb.resangle = d->resangle;
+            brush.Realb.cop = d->cop;
             brush.Realb.bmidx = (uint8_t)d->bmidx;
             brush.Realb.seed = d->seed;
             brush.Realb.col = d->color;
 
             RenderTexture2D rt = state->layerRTs[d->activeLayer];
             if (rt.id > 0)
-                BrushBlend_ApplyStamp(rt, &brush, d->x, d->y);
+                BrushBlend_ApplyStamp(rt, &brush, d->x, d->y, d->srcX, d->srcY);
         }
 
         head = (head + 1) % CMD_CAPACITY;

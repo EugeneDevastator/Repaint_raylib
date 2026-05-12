@@ -25,12 +25,13 @@ void BrushPreview_RenderStamp(AppState* state, float drawRadOut) {
     pb.Realb.rad_out = 128.0f;
     pb.Realb.rad_in  = state->currentBrush.Realb.rad_in * state->camera.zoom * scale;
     pb.Realb.bmidx   = 0;
+    pb.Realb.cop     = 0.0f;
 
     BeginTextureMode(gizmoStamp);
     ClearBackground(BLANK);
     EndTextureMode();
 
-    BrushBlend_ApplyStamp(gizmoStamp, &pb, 128, 128);
+    BrushBlend_ApplyStamp(gizmoStamp, &pb, 128, 128, 128, 128);
 }
 
 void BrushPreview_DrawStamp(ImDrawList* dl, ImVec2 org, float drawRadOut) {

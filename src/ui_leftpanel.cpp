@@ -7,7 +7,7 @@
 extern bool layersDirty;
 extern bool panelResizing;
 extern int uiPanelWidth;
-extern BParam bpOpacity, bpSize, bpHardness, bpSpacing, bpCurvature, bpScatter;
+extern BParam bpOpacity, bpSize, bpHardness, bpSpacing, bpCurvature, bpScatter, bpCloneOpacity;
 
 static RenderTexture2D stampPrev = {0};
 static bool stampPrevInited = false;
@@ -46,8 +46,7 @@ void LeftPanel_Draw(AppState* state) {
     ImGui::SetNextWindowSize(ImVec2((float)uiPanelWidth, (float)SCREEN_HEIGHT), ImGuiCond_Always);
     ImGui::Begin("Tools", NULL,
         ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar |
-        ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
 
     // Brush type
     {
@@ -81,12 +80,13 @@ void LeftPanel_Draw(AppState* state) {
         Color pc = pb.Realb.col;
         pb.Realb.col = WHITE;
         pb.Realb.opacity = 1.0f;
+        pb.Realb.cop = 0.0f;
         float prevRadOut = pb.Realb.rad_out;
         if (prevRadOut > 45.0f) {
             pb.Realb.rad_out = 45.0f;
             pb.Realb.rad_in = pb.Realb.rad_in * (45.0f / fmaxf(prevRadOut, 1.0f));
         }
-        BrushBlend_ApplyStamp(stampPrev, &pb, 50, 50);
+        BrushBlend_ApplyStamp(stampPrev, &pb, 50, 50, 50, 50);
         pb.Realb.rad_out = prevRadOut;
         pb.Realb.col = pc;
 
@@ -98,8 +98,8 @@ void LeftPanel_Draw(AppState* state) {
     }
 
     // BParam sliders
-    BParam* bps[] = {&bpSize, &bpHardness, &bpCurvature, &bpSpacing, &bpOpacity, &bpScatter};
-    for (int i = 0; i < 6; i++)
+    BParam* bps[] = {&bpSize, &bpHardness, &bpCurvature, &bpSpacing, &bpOpacity, &bpCloneOpacity, &bpScatter};
+    for (int i = 0; i < 7; i++)
         DrawBParamSlider(bps[i]);
 
     ImGui::Spacing();
@@ -139,7 +139,7 @@ void LeftPanel_Draw(AppState* state) {
         sprintf(zoomInfo, "Zoom: %.0f%%", state->camera.zoom * 100.0f);
         ImGui::Text("%s", zoomInfo);
 
-        const char* modeNames[] = {"None", "Brush", "Smudge", "Disp", "Cont", "Line"};
+        const char* modeNames[] = {"Brush", "Smudge", "Disp", "Cont", "STOP", "Line"};
         ImGui::Text("%s", modeNames[state->mode > 5 ? 0 : state->mode]);
     }
 

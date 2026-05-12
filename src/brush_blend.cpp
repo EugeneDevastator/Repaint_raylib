@@ -15,6 +15,8 @@ static int locSol = -1;
 static int locSol2op = -1;
 static int locBmidx = -1;
 static int locPreserveOp = -1;
+static int locSmudgeStrength = -1;
+static int locSmudgeOffsetUV = -1;
 static bool brushBlendInited = false;
 
 // Temp render target to avoid feedback loop (reading from dstRT while writing to it)
@@ -45,6 +47,8 @@ void BrushBlend_Init(void) {
     locSol2op     = GetShaderLocation(brushBlendShader, "sol2op");
     locBmidx      = GetShaderLocation(brushBlendShader, "bmidx");
     locPreserveOp = GetShaderLocation(brushBlendShader, "preserveop");
+    locSmudgeStrength = GetShaderLocation(brushBlendShader, "smudgeStrength");
+    locSmudgeOffsetUV = GetShaderLocation(brushBlendShader, "smudgeOffsetUV");
 
     brushBlendInited = true;
 }
@@ -64,7 +68,8 @@ static float randf(void) {
 void BrushBlend_ApplyStamp(
     RenderTexture2D dstRT,
     d_Brush* brush,
-    float stampX, float stampY
+    float stampX, float stampY,
+    float srcX, float srcY
 ) {
     if (!brushBlendInited || brushBlendShader.id == 0) return;
     if (dstRT.id == 0) return;
@@ -122,6 +127,15 @@ void BrushBlend_ApplyStamp(
     SetShaderValue(brushBlendShader, locBmidx,    &bmidx,                 SHADER_UNIFORM_INT);
     float preserveop = (brush->Realb.preserveop > 0) ? 1.0f : 0.0f;
     SetShaderValue(brushBlendShader, locPreserveOp, &preserveop,          SHADER_UNIFORM_FLOAT);
+
+    float smudgeStrength = brush->Realb.cop;
+    SetShaderValue(brushBlendShader, locSmudgeStrength, &smudgeStrength,  SHADER_UNIFORM_FLOAT);
+
+    float offsetUV[2] = {
+        (stampX - srcX) / (float)canvasW,
+        (stampY - srcY) / (float)canvasH
+    };
+    SetShaderValue(brushBlendShader, locSmudgeOffsetUV, offsetUV, SHADER_UNIFORM_VEC2);
 
     // Step 1: copy dstRT to tempRT (read from dstRT, write to tempRT)
     rlSetBlendMode(RL_BLEND_CUSTOM);

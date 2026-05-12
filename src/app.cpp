@@ -18,6 +18,7 @@ BParam bpHardness;
 BParam bpSpacing;
 BParam bpCurvature;
 BParam bpScatter;
+BParam bpCloneOpacity;
 BParam bpQuickHue;
 BParam bpQuickSat;
 BParam bpQuickLit;
@@ -129,6 +130,9 @@ void UpdateUI(AppState* state) {
     state->currentBrush.Realb.rad_in = state->currentBrush.Realb.rad_out * BParam_GetValue(&bpHardness);
     state->currentBrush.Realb.crv = BParam_GetValue(&bpCurvature);
     state->currentBrush.Realb.opacity = BParam_GetValue(&bpOpacity);
+
+    state->currentBrush.Realb.cop = (state->mode == eSmudge)
+        ? BParam_GetValue(&bpCloneOpacity) : 0.0f;
 
     colorHue = bpQuickHue.slider.clipmaxF;
     colorSat = bpQuickSat.slider.clipmaxF;
@@ -322,6 +326,9 @@ void App_Init(AppState* state) {
 
     BParam_Init(&bpScatter, 5, "Scatter", 0.0f, 5.0f, 0.0f);
     BParam_SetIcon(&bpScatter, "ctlspcjit");
+
+    BParam_Init(&bpCloneOpacity, 6, "Clone", 0.0f, 1.0f, 1.0f);
+    BParam_SetIcon(&bpCloneOpacity, "ctlcop");
 
     BParam_Init(&bpQuickHue, 10, "Hue", 0.0f, 1.0f, 0.35f);
     bpQuickHue.slider.clipmaxF = 0.35f;
@@ -559,6 +566,7 @@ void App_Close(AppState* state) {
     if (bpSpacing.iconLoaded) UnloadTexture(bpSpacing.iconTex);
     if (bpCurvature.iconLoaded) UnloadTexture(bpCurvature.iconTex);
     if (bpScatter.iconLoaded) UnloadTexture(bpScatter.iconTex);
+    if (bpCloneOpacity.iconLoaded) UnloadTexture(bpCloneOpacity.iconTex);
     UnloadPenIcons();
     QuickPanel_Shutdown();
     if (g_dialogFont.texture.id > 0) UnloadFont(g_dialogFont);

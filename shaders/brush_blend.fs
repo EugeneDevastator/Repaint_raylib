@@ -29,6 +29,8 @@ uniform float sol2op;
 uniform int bmidx;
 uniform float seed;
 uniform float preserveop;
+uniform float smudgeStrength;
+uniform vec2  smudgeOffsetUV;
 
 float hash2(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
@@ -133,5 +135,13 @@ void main() {
     if (preserveop > 0.5) finalAlpha *= dst.a;
     if (finalAlpha < 0.001) { finalColor = dst; return; }
 
-    finalColor = applyBlend(bmidx, dst, brushColor.rgb, finalAlpha);
+    vec3 srcRGBout = brushColor.rgb;
+    if (smudgeStrength > 0.001) {
+        vec2 srcUV = uv - smudgeOffsetUV;
+        vec4 srcCanvas = texture(texture0, srcUV);
+        float ca = srcCanvas.a;
+        srcRGBout = srcCanvas.rgb * smudgeStrength + brushColor.rgb * (1.0 - smudgeStrength) * ca;
+    }
+
+    finalColor = applyBlend(bmidx, dst, srcRGBout, finalAlpha);
 }
