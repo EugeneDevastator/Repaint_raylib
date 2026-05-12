@@ -309,7 +309,7 @@ extern bool g_colorPicking;
 // Curve arc starts where hardness ends and spans CURVE_ANG_SPAN CCW.
 #define GIZMO_FIXED_RADIUS_PX  128.0f
 
-#define GIZMO_HARD_ANG_START   270.0f
+#define GIZMO_HARD_ANG_START   150.0f
 #define GIZMO_HARD_ANG_SPAN    120.0f
 #define GIZMO_CURVE_ANG_SPAN   120.0f
 

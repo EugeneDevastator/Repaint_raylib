@@ -54,7 +54,6 @@ void BrushGizmo_Draw(ImDrawList* dl, ImVec2 org, int gcx, int gcy, AppState* sta
     dl->AddCircleFilled(org, 3, IM_COL32_BLACK);
     dl->AddCircleFilled(org, 2, IM_COL32_WHITE);
 }
-
 void Gizmo_DrawXOROverlay(AppState* state) {
     Rectangle vp = viewport.bounds;
     int gcx = (int)(vp.x + vp.width * 0.5f);
@@ -64,7 +63,6 @@ void Gizmo_DrawXOROverlay(AppState* state) {
     rlSetBlendMode(RL_BLEND_CUSTOM);
     rlSetBlendFactors(RL_ONE_MINUS_DST_COLOR, RL_ZERO, RL_FUNC_ADD);
 
-    // Guide lines (sector boundaries)
     for (int gi = 1; gi <= 5; gi += 2) {
         float a = -d30 * (2 * gi - 1);
         float len = 220.0f;
@@ -73,39 +71,32 @@ void Gizmo_DrawXOROverlay(AppState* state) {
                    3.0f, WHITE);
     }
 
-    // All arcs drawn as thick XOR rings/segments
     Vector2 ctr = {(float)gcx, (float)gcy};
     float drawRadOut = state->currentBrush.Realb.rad_out * state->camera.zoom;
 
-    // Brush size — full thick XOR ring
     if (drawRadOut > 2.0f) {
         DrawRing(ctr, drawRadOut - 1.5f, drawRadOut + 1.5f, 0, 360, 0, WHITE);
     }
 
-    // Sector arcs: hardness then curve (contiguous, CCW in math coords)
-    float hardStart = GIZMO_HARD_ANG_START;
-    float hardEnd   = fmodf(hardStart + GIZMO_HARD_ANG_SPAN, 360.0f);
-    float curveStart = hardEnd;
-    float curveEnd   = fmodf(curveStart + GIZMO_CURVE_ANG_SPAN, 360.0f);
+    float hardStart  = -GIZMO_HARD_ANG_START;
+    float hardEnd    = hardStart - GIZMO_HARD_ANG_SPAN;
+    float curveStart = -( GIZMO_HARD_ANG_START + GIZMO_HARD_ANG_SPAN );
+    float curveEnd   = curveStart - GIZMO_CURVE_ANG_SPAN;
 
-    // Hardness reference arc
-    DrawRing(ctr, GIZMO_FIXED_RADIUS_PX - 1.5f, GIZMO_FIXED_RADIUS_PX + 1.5f, hardStart, hardEnd, 0, WHITE);
-    // Curve reference arc
-    DrawRing(ctr, GIZMO_FIXED_RADIUS_PX - 1.5f, GIZMO_FIXED_RADIUS_PX + 1.5f, curveStart, curveEnd, 0, WHITE);
+    DrawRing(ctr, GIZMO_FIXED_RADIUS_PX - 1.5f, GIZMO_FIXED_RADIUS_PX + 1.5f, hardEnd,   hardStart,   0, WHITE);
+    DrawRing(ctr, GIZMO_FIXED_RADIUS_PX - 1.5f, GIZMO_FIXED_RADIUS_PX + 1.5f, curveEnd,  curveStart,  0, WHITE);
 
-    // Hardness moving arc
     float hRatio = (state->currentBrush.Realb.rad_out > 0)
         ? fminf(state->currentBrush.Realb.rad_in / state->currentBrush.Realb.rad_out, 1.0f)
         : 0.0f;
     float hardMv = GIZMO_FIXED_RADIUS_PX * hRatio;
     if (hardMv > 2.0f) {
-        DrawRing(ctr, hardMv - 1.5f, hardMv + 1.5f, hardStart, hardEnd, 0, WHITE);
+        DrawRing(ctr, hardMv - 1.5f, hardMv + 1.5f, hardEnd, hardStart, 0, WHITE);
     }
 
-    // Curve moving arc
     float curveMv = GIZMO_FIXED_RADIUS_PX * (1.0f - state->currentBrush.Realb.crv);
     if (curveMv > 2.0f) {
-        DrawRing(ctr, curveMv - 1.5f, curveMv + 1.5f, curveStart, curveEnd, 0, WHITE);
+        DrawRing(ctr, curveMv - 1.5f, curveMv + 1.5f, curveEnd, curveStart, 0, WHITE);
     }
 
     rlSetBlendMode(RL_BLEND_ALPHA);
