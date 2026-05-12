@@ -36,15 +36,14 @@ void FilePanel_Draw(AppState* state, Rectangle vp) {
     ImGui::Begin("##filepanel", NULL,
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
-        ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoFocusOnAppearing |
-        ImGuiWindowFlags_AlwaysAutoResize);
+        ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoFocusOnAppearing);
 
-    ImGui::SetCursorScreenPos(ImVec2(4, 4));
+    ImGui::SetCursorPos(ImVec2(4, 4));
     for (int i = 0; i < FILE_BTN_N; i++) {
         ImGui::PushID(100 + i);
+
         ImTextureID tid = (fileBtnTex[i].id > 0) ? (ImTextureID)(intptr_t)fileBtnTex[i].id : 0;
         if (tid) {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.27f, 0.27f, 0.31f, 0.86f));
             if (ImGui::ImageButton("##fb", tid, ImVec2(24, 24))) {
                 if (i == 0) App_FileNew();
                 else if (i == 1) App_FileOpen();
@@ -53,9 +52,7 @@ void FilePanel_Draw(AppState* state, Rectangle vp) {
                 else if (i == 4) App_FileReload();
                 else if (i == 5) App_FileSnap();
             }
-            ImGui::PopStyleColor();
         } else {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.27f, 0.27f, 0.31f, 0.86f));
             if (ImGui::Button(fileBtnLabels[i], ImVec2(36, 28))) {
                 if (i == 0) App_FileNew();
                 else if (i == 1) App_FileOpen();
@@ -64,10 +61,10 @@ void FilePanel_Draw(AppState* state, Rectangle vp) {
                 else if (i == 4) App_FileReload();
                 else if (i == 5) App_FileSnap();
             }
-            ImGui::PopStyleColor();
         }
+
         ImGui::PopID();
-        ImGui::SameLine();
+        if (i < FILE_BTN_N - 1) ImGui::SameLine();
     }
 
     ImGui::End();

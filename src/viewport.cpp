@@ -1,7 +1,7 @@
 #include "repaint.h"
 #include "rlgl.h"
 
-extern bool gizmoShow;
+extern bool quickPanelShow;
 
 static uint32_t PackColor(Color c) {
     return (uint32_t)c.r << 16 | (uint32_t)c.g << 8 | (uint32_t)c.b | (uint32_t)c.a << 24;
@@ -120,7 +120,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
     if (IsKeyDown(KEY_LEFT_ALT)) return;
 
     // Gizmo shown — skip painting, interaction handled by gizmo
-    if (gizmoShow) return;
+    if (quickPanelShow) return;
 
     Vector2 canvasPos = GetScreenToWorld2D(mousePos, state->camera);
     bool leftDown = IsMouseButtonDown(MOUSE_LEFT_BUTTON);

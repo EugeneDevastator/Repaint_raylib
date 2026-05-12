@@ -1,42 +1,8 @@
 #include "repaint.h"
 #include "rlgl.h"
 #include "imgui.h"
-#include <math.h>
 #include <GL/gl.h>
-#define GIZMO_CTRL_SZ 24
-
-void DrawSliderVertical(ImDrawList* dl, BParam* bp, int x, int y, int w, int h, float val, int colorMode) {
-    DualSlider* ds = &bp->slider;
-    int y0 = y, y1 = y + h;
-    for (int yy = y0; yy < y1; yy++) {
-        float t = (float)(y1 - 1 - yy) / (float)(y1 - y0 - 1);
-        ImU32 col;
-        if (colorMode >= 0) {
-            Color c;
-            if (colorMode == 0) c = HSLToRGB(t, 1.0f, 0.5f);
-            else if (colorMode == 1) c = HSLToRGB(colorHue, t, colorLit);
-            else c = HSLToRGB(colorHue, colorSat, t);
-            col = IM_COL32(c.r, c.g, c.b, 255);
-        } else {
-            uint8_t r = (uint8_t)(ds->gradStart.r * (1 - t) + ds->gradEnd.r * t);
-            uint8_t g = (uint8_t)(ds->gradStart.g * (1 - t) + ds->gradEnd.g * t);
-            uint8_t b = (uint8_t)(ds->gradStart.b * (1 - t) + ds->gradEnd.b * t);
-            col = IM_COL32(r, g, b, 255);
-        }
-        dl->AddRectFilled(ImVec2(x, yy), ImVec2(x + w, yy + 1), col);
-    }
-    dl->AddRect(ImVec2(x, y), ImVec2(x + w, y + h), IM_COL32(180, 180, 200, 180));
-    float grabY = y + (1.0f - val) * h;
-    float grabHalf = GIZMO_CTRL_SZ * 0.25f;
-    dl->AddRectFilled(ImVec2(x + 1, grabY - grabHalf), ImVec2(x + w - 1, grabY + grabHalf), IM_COL32_WHITE);
-    dl->AddRect(ImVec2(x + 1, grabY - grabHalf), ImVec2(x + w - 1, grabY + grabHalf), IM_COL32(50, 50, 50, 200));
-    char txt[16];
-    float disp = BParam_GetValue(bp);
-    if (bp->outMax - bp->outMin >= 1.0f) snprintf(txt, sizeof(txt), "%.1f", disp);
-    else snprintf(txt, sizeof(txt), "%.2f", disp);
-    ImVec2 tsz = ImGui::CalcTextSize(txt);
-    dl->AddText(ImVec2(x + (w - tsz.x) / 2, grabY - tsz.y / 2), IM_COL32(255, 255, 255, 220), txt);
-}
+#include <math.h>
 
 void BrushGizmo_Draw(ImDrawList* dl, ImVec2 org, int gcx, int gcy, AppState* state) {
     // ── Rotation arrow ──────────────────────────────────────────────────
@@ -54,7 +20,7 @@ void BrushGizmo_Draw(ImDrawList* dl, ImVec2 org, int gcx, int gcy, AppState* sta
     dl->AddCircleFilled(org, 3, IM_COL32_BLACK);
     dl->AddCircleFilled(org, 2, IM_COL32_WHITE);
 }
-void Gizmo_DrawXOROverlay(AppState* state) {
+void BrushGizmo_DrawXOROverlay(AppState* state) {
     Rectangle vp = viewport.bounds;
     int gcx = (int)(vp.x + vp.width * 0.5f);
     int gcy = (int)(vp.y + vp.height * 0.5f);

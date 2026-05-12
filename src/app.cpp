@@ -112,12 +112,12 @@ void UpdateUI(AppState* state) {
         g_panelsVisible = !g_panelsVisible;
 
     if (IsKeyPressed(KEY_LEFT_SHIFT) || IsKeyPressed(KEY_RIGHT_SHIFT))
-        gizmoShow = !gizmoShow;
+        quickPanelShow = !quickPanelShow;
 
-    if (gizmoShow)
-        Gizmo_HandleInput(state, mousePos);
+    if (quickPanelShow)
+        ; // QuickPanel handles input internally
     else
-        gizmoMouseMode = 0;
+        quickPanelMouseMode = 0;
 
     if (IsKeyPressed(KEY_ONE)) state->mode = eBrush;
     if (IsKeyPressed(KEY_TWO)) state->mode = eSmudge;
@@ -296,7 +296,7 @@ void App_Init(AppState* state) {
     Painter_Init();
     BrushBlend_Init();
     LoadPenIcons();
-    LoadGizmoIcons();
+    QuickPanel_Init();
 
     networkBroker.appState = state;
 
@@ -445,12 +445,11 @@ void App_Draw(AppState* state) {
 
     if (g_panelsVisible)
         networkBroker.DrawConnectionUI();
-    Gizmo_Draw(state);
+    QuickPanel_Draw(state);
     if (g_panelsVisible) {
         LeftPanel_Draw(state);
         LayerPanel_Draw(state);
     }
-    Gizmo_DrawPenPopups(state);
 
     // ── Color picker preview swatch (always visible during Alt+click) ──
     if (g_colorPicking) {
@@ -527,8 +526,8 @@ void App_Draw(AppState* state) {
     rlImGuiEnd();
 
     // XOR overlay for gizmo lines (always visible on any background)
-    if (gizmoShow) {
-        Gizmo_DrawXOROverlay(state);
+    if (quickPanelShow) {
+        BrushGizmo_DrawXOROverlay(state);
     }
 
     EndDrawing();
@@ -561,7 +560,7 @@ void App_Close(AppState* state) {
     if (bpCurvature.iconLoaded) UnloadTexture(bpCurvature.iconTex);
     if (bpScatter.iconLoaded) UnloadTexture(bpScatter.iconTex);
     UnloadPenIcons();
-    UnloadGizmoIcons();
+    QuickPanel_Shutdown();
     if (g_dialogFont.texture.id > 0) UnloadFont(g_dialogFont);
     UIStyle::Shutdown();
     Painter_Shutdown();

@@ -299,17 +299,23 @@ extern float colorHue;
 extern float colorSat;
 extern float colorLit;
 
-extern bool gizmoShow;
-extern int gizmoMouseMode;
+extern bool quickPanelShow;
+extern int quickPanelMouseMode;
 extern bool g_colorPicking;
+
+// ── QuickPanel layout constants ────────────────────────────────────────
+#define QP_SLIDER_W 24
+#define QP_SLIDER_H 256
+#define QP_SLIDER_GAP 8
+#define QP_CTRL_SZ 24
+#define QP_SPACING 4
 
 // ── Gizmo sector arc configuration ─────────────────────────────────────
 // All angles in degrees, counter-clockwise in math coords (right=0°, up=90°)
 // Hardness arc starts at HARD_ANG_START and spans HARD_ANG_SPAN CCW.
 // Curve arc starts where hardness ends and spans CURVE_ANG_SPAN CCW.
-#define GIZMO_FIXED_RADIUS_PX  128.0f
-
-#define GIZMO_HARD_ANG_START   150.0f
+#define GIZMO_FIXED_RADIUS_PX  180.0f
+#define GIZMO_HARD_ANG_START   270.0f
 #define GIZMO_HARD_ANG_SPAN    120.0f
 #define GIZMO_CURVE_ANG_SPAN   120.0f
 
@@ -318,8 +324,10 @@ void BrushPreview_Init(void);
 void BrushPreview_Shutdown(void);
 void FilePanel_Init(void);
 void FilePanel_Shutdown(void);
+void FilePanel_Draw(AppState* state, Rectangle vp);
 void ToolBox_Init(void);
 void ToolBox_Shutdown(void);
+void ToolBox_Draw(AppState* state, Rectangle vp);
 
 extern int dragFromIdx;
 extern bool dragActive;
@@ -347,12 +355,14 @@ void LeftPanel_Init(void);
 void LeftPanel_Shutdown(void);
 void LeftPanel_Draw(AppState* state);
 
-void Gizmo_Draw(AppState* state);
-void Gizmo_HandleInput(AppState* state, Vector2 mousePos);
-void Gizmo_DrawPenPopups(AppState* state);
-void Gizmo_DrawXOROverlay(AppState* state);
-void LoadGizmoIcons(void);
-void UnloadGizmoIcons(void);
+struct ImDrawList; // forward decl — repaint.h avoids pulling in imgui.h
+void DrawBParamSlider(BParam* bp);
+void DrawSliderVertical(ImDrawList* dl, BParam* bp, int x, int y, int w, int h, float val, int colorMode);
+
+void QuickPanel_Draw(AppState* state);
+void QuickPanel_Init(void);
+void QuickPanel_Shutdown(void);
+void BrushGizmo_DrawXOROverlay(AppState* state);
 
 extern bool layersDirty;
 

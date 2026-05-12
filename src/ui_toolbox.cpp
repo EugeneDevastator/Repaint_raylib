@@ -42,23 +42,11 @@ void ToolBox_Draw(AppState* state, Rectangle vp) {
     ImGui::Begin("##toolbox", NULL,
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
-        ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoFocusOnAppearing |
-        ImGuiWindowFlags_AlwaysAutoResize);
+        ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoFocusOnAppearing);
 
-    ImGui::SetCursorScreenPos(ImVec2(4, 4));
+    ImGui::SetCursorPos(ImVec2(4, 4));
     for (int i = 0; i < GIZMO_TOOL_N; i++) {
-        bool active;
-        if (i == 3) active = (state->mode == eBrush && state->currentBrush.Realb.col.a == 0);
-        else active = (state->mode == gizmoToolModes[i]);
-
         ImGui::PushID(200 + i);
-        if (active) {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.45f, 0.45f, 0.45f, 0.85f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.50f, 0.50f, 0.50f, 0.90f));
-        } else {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.27f, 0.27f, 0.31f, 0.86f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.35f, 0.35f, 0.40f, 0.90f));
-        }
 
         int ii = toolIconIdx[i];
         bool hasIcon = (ii >= 0 && ii < TOOL_ICON_N && toolIconTex[ii].id > 0);
@@ -94,9 +82,8 @@ void ToolBox_Draw(AppState* state, Rectangle vp) {
                 }
             }
         }
-        ImGui::PopStyleColor(2);
         ImGui::PopID();
-        ImGui::SameLine();
+        if (i < GIZMO_TOOL_N - 1) ImGui::SameLine();
     }
 
     ImGui::End();
