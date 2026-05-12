@@ -133,7 +133,7 @@ void BrushBlend_ApplyStamp(
 
     float offsetUV[2] = {
         (stampX - srcX) / (float)canvasW,
-        (stampY - srcY) / (float)canvasH
+        -(stampY - srcY) / (float)canvasH
     };
     SetShaderValue(brushBlendShader, locSmudgeOffsetUV, offsetUV, SHADER_UNIFORM_VEC2);
 
@@ -147,7 +147,7 @@ void BrushBlend_ApplyStamp(
     // Step 2: apply brush stamp using tempRT as source (avoid feedback loop)
     BeginTextureMode(dstRT);
     BeginShaderMode(brushBlendShader);
-    DrawTextureRec(brushTempRT.texture, Rectangle{0, 0, (float)canvasW, (float)-canvasH}, Vector2{0, 0}, WHITE);
+    DrawTextureRec(brushTempRT.texture, Rectangle{0, 0, (float)canvasW, (float)(-canvasH)}, Vector2{0, 0}, WHITE);
     EndShaderMode();
     EndTextureMode();
 

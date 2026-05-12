@@ -102,15 +102,41 @@ if(WIN32)
     target_link_libraries(repaint PRIVATE opengl32 gdi32 winmm)
 endif()
 
-# ── post-build copies ─────────────────────────────────────────────────────────
-add_custom_command(TARGET repaint POST_BUILD
+# ── resource copies (configure-time + post-build) ───────────────────────────
+# Force-copy always by removing destination dir first, then re-copying
+set(RESOURCE_SHADER_FILES
+    "${CMAKE_SOURCE_DIR}/shaders/brush_gen.vs"
+    "${CMAKE_SOURCE_DIR}/shaders/brush_blend.fs"
+    "${CMAKE_SOURCE_DIR}/shaders/layer_blend.fs")
+
+add_custom_target(copy_shaders ALL
+    COMMAND ${CMAKE_COMMAND} -E remove_directory "${CMAKE_BINARY_DIR}/shaders"
     COMMAND ${CMAKE_COMMAND} -E copy_directory
-    "${CMAKE_SOURCE_DIR}/shaders"
-    "$<TARGET_FILE_DIR:repaint>/shaders")
+        "${CMAKE_SOURCE_DIR}/shaders"
+        "${CMAKE_BINARY_DIR}/shaders"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_SOURCE_DIR}/shaders"
+        "$<TARGET_FILE_DIR:repaint>/shaders"
+    DEPENDS ${RESOURCE_SHADER_FILES}
+    COMMENT "Force-copying shaders to build/bin dirs")
 
 if(EXISTS "${CMAKE_SOURCE_DIR}/resources")
-    add_custom_command(TARGET repaint POST_BUILD
+    set(RESOURCE_FILES
+        "${CMAKE_SOURCE_DIR}/resources/btnnew.png"
+        "${CMAKE_SOURCE_DIR}/resources/btnopen.png"
+        "${CMAKE_SOURCE_DIR}/resources/btnsaveas.png"
+        "${CMAKE_SOURCE_DIR}/resources/btnsave.png"
+        "${CMAKE_SOURCE_DIR}/resources/btnreload.png"
+        "${CMAKE_SOURCE_DIR}/resources/btnsnap.png"
+        "${CMAKE_SOURCE_DIR}/resources/btnpin.png")
+    add_custom_target(copy_resources ALL
+        COMMAND ${CMAKE_COMMAND} -E remove_directory "${CMAKE_BINARY_DIR}/resources"
         COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${CMAKE_SOURCE_DIR}/resources"
-        "$<TARGET_FILE_DIR:repaint>/resources")
+            "${CMAKE_SOURCE_DIR}/resources"
+            "${CMAKE_BINARY_DIR}/resources"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_SOURCE_DIR}/resources"
+            "$<TARGET_FILE_DIR:repaint>/resources"
+        DEPENDS ${RESOURCE_FILES}
+        COMMENT "Force-copying resources to build/bin dirs")
 endif()

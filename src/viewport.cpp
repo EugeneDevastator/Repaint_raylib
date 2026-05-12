@@ -96,7 +96,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             }
             float tH, tS, tL;
             RGBToHSL(picked, tH, tS, tL);
-            if (picked.a == 0) { tL = 1.0f; tS = 0.0f; }
+            if (picked.a == 0) { tS = 0.0f; tL = 1.0f; }
             // Slow down color change by lerping at 0.5 speed
             float spd = 0.5f;
             float dh = tH - colorHue;
@@ -133,10 +133,12 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             if (state->mode == eBrush || state->mode == eSmudge) {
                 if (!vp->wasMouseDown) {
                     if (vp->broker) {
-                        InputEvent ev = {canvasPos.x, canvasPos.y,canvasPos.x, canvasPos.y, PackColor(state->currentBrush.Realb.col), state->currentBrush.Realb.rad_out};
+                        InputEvent ev = {canvasPos.x, canvasPos.y, canvasPos.x, canvasPos.y,
+                            PackColor(state->currentBrush.Realb.col), state->currentBrush.Realb.rad_out};
                         vp->broker->on_input(ev);
                     }
                     vp->lastDabPos = canvasPos;
+                    vp->smudgeSrcPos = canvasPos;
                     vp->strokeDabAccum = 0.0f;
                     vp->wasMouseDown = true;
                     if (vp->strokeLen < MAX_STROKE_PTS)
@@ -162,9 +164,13 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                                 if (d > stdist) break;
                                 Vector2 pos = {from.x + d * x2r, from.y + d * y2r};
                                 if (vp->broker) {
-                                    InputEvent ev = {pos.x, pos.y, pos.x-dx, pos.y-dy, PackColor(state->currentBrush.Realb.col), state->currentBrush.Realb.rad_out};
+                                    float srcX = (state->mode == eSmudge) ? vp->smudgeSrcPos.x : pos.x;
+                                    float srcY = (state->mode == eSmudge) ? vp->smudgeSrcPos.y : pos.y;
+                                    InputEvent ev = {pos.x, pos.y, srcX, srcY,
+                                        PackColor(state->currentBrush.Realb.col), state->currentBrush.Realb.rad_out};
                                     vp->broker->on_input(ev);
                                 }
+                                if (state->mode == eSmudge) vp->smudgeSrcPos = pos;
                                 if (vp->strokeLen < MAX_STROKE_PTS)
                                     vp->strokePts[vp->strokeLen++] = pos;
                             }
@@ -177,19 +183,23 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     }
                 }
             } else {
+                // Disp / Cont: simple threshold-based dabbing
                 float spacing = state->currentBrush.Realb.rad_out * BParam_GetValue(&bpSpacing);
                 if (spacing < 2.0f) spacing = 2.0f;
                 if (!vp->wasMouseDown) {
                     if (vp->broker) {
-                        InputEvent ev = {canvasPos.x, canvasPos.y, canvasPos.x, canvasPos.y, PackColor(state->currentBrush.Realb.col), state->currentBrush.Realb.rad_out};
+                        InputEvent ev = {canvasPos.x, canvasPos.y, canvasPos.x, canvasPos.y,
+                            PackColor(state->currentBrush.Realb.col), state->currentBrush.Realb.rad_out};
                         vp->broker->on_input(ev);
                     }
+                    vp->smudgeSrcPos = canvasPos;
                     vp->lastDabPos = canvasPos;
                     vp->wasMouseDown = true;
                 } else {
                     if (Dist2D(vp->lastDabPos, canvasPos) >= spacing) {
                         if (vp->broker) {
-                            InputEvent ev = {canvasPos.x, canvasPos.y, canvasPos.x, canvasPos.y, PackColor(state->currentBrush.Realb.col), state->currentBrush.Realb.rad_out};
+                            InputEvent ev = {canvasPos.x, canvasPos.y, canvasPos.x, canvasPos.y,
+                                PackColor(state->currentBrush.Realb.col), state->currentBrush.Realb.rad_out};
                             vp->broker->on_input(ev);
                         }
                         vp->lastDabPos = canvasPos;
@@ -234,7 +244,8 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                         vp->lastDabPos.y + (canvasPos.y - vp->lastDabPos.y) * t
                     };
                     if (vp->broker) {
-                        InputEvent ev = {pos.x, pos.y, pos.x, pos.y,PackColor(state->currentBrush.Realb.col), state->currentBrush.Realb.rad_out};
+                        InputEvent ev = {pos.x, pos.y, pos.x, pos.y,
+                            PackColor(state->currentBrush.Realb.col), state->currentBrush.Realb.rad_out};
                         vp->broker->on_input(ev);
                     }
                 }
