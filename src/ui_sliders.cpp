@@ -66,6 +66,26 @@ static void DrawSliderCore(ImDrawList* dl, int x, int y, int length, int thickne
         }
     }
 
+    // ── Value text (centered in slider, before grabbers) ─────────────
+    if (bp) {
+        float disp = BParam_GetValue(bp);
+        char txt[32];
+        if (bp->outMax - bp->outMin >= 1.0f)
+            snprintf(txt, sizeof(txt), "%.1f", disp);
+        else
+            snprintf(txt, sizeof(txt), "%.2f", disp);
+        ImVec2 sz = ImGui::CalcTextSize(txt);
+        int tx, ty;
+        if (orient == 0) {
+            tx = x + (length - (int)sz.x) / 2;
+            ty = y + (thickness - (int)sz.y) / 2;
+        } else {
+            tx = x + (thickness - (int)sz.x) / 2;
+            ty = y + (length - (int)sz.y) / 2;
+        }
+        dl->AddText(ImVec2(tx, ty), IM_COL32(255, 255, 255, 255), txt);
+    }
+
     // ── Grabber "tick marks" (thin bar matching Qt, with 3D frame) ──
     int sliderrad = (int)(thickness * 0.125f);
     if (sliderrad < 2) sliderrad = 2;
@@ -94,10 +114,7 @@ static void DrawSliderCore(ImDrawList* dl, int x, int y, int length, int thickne
     drawGrabber(clipminF, IM_COL32(60, 60, 60, 255), IM_COL32(40, 40, 40, 255), IM_COL32(130, 130, 130, 255));
     drawGrabber(clipmaxF, IM_COL32(255, 255, 255, 255), IM_COL32(200, 200, 200, 255), IM_COL32(80, 80, 80, 255));
 
-    // ── Border frame ──────────────────────────────────────────────────
-    dl->AddRect(ImVec2(x, y), ImVec2(x + length, y + thickness), IM_COL32(180, 180, 200, 180));
-
-    // ── Value text (centered in slider, matching Qt) ───────────────────
+    // ── Value text (centered in slider, dark background for readability) ─
     if (bp) {
         float disp = BParam_GetValue(bp);
         char txt[32];
@@ -108,9 +125,9 @@ static void DrawSliderCore(ImDrawList* dl, int x, int y, int length, int thickne
         ImVec2 sz = ImGui::CalcTextSize(txt);
         int tx = x + (length - (int)sz.x) / 2;
         int ty = y + (thickness - (int)sz.y) / 2;
-        tx = fmaxf(x + 2, fminf(tx, x + length - (int)sz.x - 2));
-        ty = fmaxf(y + 2, fminf(ty, y + thickness - (int)sz.y - 2));
-        dl->AddText(ImVec2(tx, ty), IM_COL32(255, 255, 255, 220), txt);
+        dl->AddRectFilled(ImVec2(tx - 2, ty - 2), ImVec2(tx + (int)sz.x + 2, ty + (int)sz.y + 2),
+            IM_COL32(0, 0, 0, 140));
+        dl->AddText(ImVec2(tx, ty), IM_COL32(255, 255, 255, 255), txt);
     }
 }
 
@@ -171,6 +188,7 @@ void DrawBParamSlider(BParam* bp) {
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.85f, 0.85f, 0.85f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.75f, 0.75f, 0.75f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.65f, 0.65f, 0.65f, 1.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
 
         char pname[32];
         snprintf(pname, sizeof(pname), "penpop_%d", bp->id);
@@ -183,6 +201,7 @@ void DrawBParamSlider(BParam* bp) {
                 ImGui::OpenPopup(pname);
         }
         ImGui::PopStyleColor(3);
+        ImGui::PopStyleVar();
 
         if (ImGui::BeginPopup(pname)) {
             for (int p = 0; p < PEN_MODE_COUNT; p++) {

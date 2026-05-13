@@ -168,6 +168,7 @@ void QuickPanel_Draw(AppState* state) {
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.90f, 0.90f, 0.90f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.80f, 0.80f, 0.80f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.72f, 0.72f, 0.72f, 1.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
         if (penTid) {
             if (ImGui::ImageButton("##pb", penTid, ImVec2(QP_CTRL_SZ, QP_CTRL_SZ)))
                 ImGui::OpenPopup(pname);
@@ -176,6 +177,7 @@ void QuickPanel_Draw(AppState* state) {
                 ImGui::OpenPopup(pname);
         }
         ImGui::PopStyleColor(3);
+        ImGui::PopStyleVar();
 
         if (ImGui::BeginPopup(pname, ImGuiWindowFlags_NoScrollbar)) {
             for (int p = 0; p < PEN_MODE_COUNT; p++) {
