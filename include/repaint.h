@@ -441,4 +441,6 @@ void App_FileSaveAs(void);
 void App_FileReload(void);
 void App_FileSnap(void);
 
+RenderTexture2D Load16BitRT(int width, int height);
+
 #endif

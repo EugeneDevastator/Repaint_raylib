@@ -57,7 +57,7 @@ void EnsureRTs(AppState* state) {
         memset(&state->layerRTs[old], 0, (newCount - old) * sizeof(RenderTexture2D));
         memset(&state->layerTextures[old], 0, (newCount - old) * sizeof(Texture2D));
         for (int i = old; i < newCount; i++) {
-            state->layerRTs[i] = LoadRenderTexture(state->canvas.width, state->canvas.height);
+            state->layerRTs[i] = Load16BitRT(state->canvas.width, state->canvas.height);
             BeginTextureMode(state->layerRTs[i]);
             ClearBackground(BLANK);
             EndTextureMode();
@@ -70,7 +70,7 @@ void SyncRTFromImage(AppState* state, int layer) {
     if (layer < 0 || layer >= state->texCount) return;
     Image* img = &state->canvas.layerImages[layer];
     if (state->layerRTs[layer].id == 0) {
-        state->layerRTs[layer] = LoadRenderTexture(img->width, img->height);
+        state->layerRTs[layer] = Load16BitRT(img->width, img->height);
     }
     Texture2D tmp = LoadTextureFromImage(*img);
     BeginTextureMode(state->layerRTs[layer]);

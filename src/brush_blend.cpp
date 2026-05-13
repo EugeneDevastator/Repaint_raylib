@@ -80,7 +80,7 @@ void BrushBlend_ApplyStamp(
     // Ensure temp RT matches canvas size (avoids feedback loop)
     if (brushTempRT.id == 0 || brushTempW != canvasW || brushTempH != canvasH) {
         if (brushTempRT.id > 0) UnloadRenderTexture(brushTempRT);
-        brushTempRT = LoadRenderTexture(canvasW, canvasH);
+        brushTempRT = Load16BitRT(canvasW, canvasH);
         brushTempW = canvasW;
         brushTempH = canvasH;
     }
@@ -145,7 +145,10 @@ void BrushBlend_ApplyStamp(
     EndTextureMode();
 
     // Step 2: apply brush stamp using tempRT as source (avoid feedback loop)
+    // ONE,ZERO prevents double-blending: shader already computes fully blended result
     BeginTextureMode(dstRT);
+    rlSetBlendMode(RL_BLEND_CUSTOM);
+    rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
     BeginShaderMode(brushBlendShader);
     DrawTextureRec(brushTempRT.texture, Rectangle{0, 0, (float)canvasW, (float)(-canvasH)}, Vector2{0, 0}, WHITE);
     EndShaderMode();

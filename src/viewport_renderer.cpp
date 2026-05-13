@@ -1,6 +1,30 @@
 #include "repaint.h"
 #include "rlgl.h"
 
+// ── 16-bit render texture (65536 levels per channel vs 256 for standard) ──
+RenderTexture2D Load16BitRT(int width, int height) {
+    RenderTexture2D target = { 0 };
+    target.id = rlLoadFramebuffer();
+    if (target.id > 0) {
+        rlEnableFramebuffer(target.id);
+        target.texture.id = rlLoadTexture(NULL, width, height, PIXELFORMAT_UNCOMPRESSED_R16G16B16A16, 1);
+        target.texture.width = width;
+        target.texture.height = height;
+        target.texture.format = PIXELFORMAT_UNCOMPRESSED_R16G16B16A16;
+        target.texture.mipmaps = 1;
+        target.depth.id = rlLoadTextureDepth(width, height, true);
+        target.depth.width = width;
+        target.depth.height = height;
+        target.depth.format = 19;
+        target.depth.mipmaps = 1;
+        rlFramebufferAttach(target.id, target.texture.id, RL_ATTACHMENT_COLOR_CHANNEL0, RL_ATTACHMENT_TEXTURE2D, 0);
+        rlFramebufferAttach(target.id, target.depth.id, RL_ATTACHMENT_DEPTH, RL_ATTACHMENT_RENDERBUFFER, 0);
+        rlFramebufferComplete(target.id);
+        rlDisableFramebuffer();
+    }
+    return target;
+}
+
 static RenderTexture2D accumA = {0};
 static RenderTexture2D accumB = {0};
 static RenderTexture2D cleanComposite = {0};  // stamp-free composite snapshot
@@ -42,9 +66,9 @@ static void EnsureAccumulators(int w, int h) {
         UnloadRenderTexture(accumB);
         if (cleanComposite.id > 0) UnloadRenderTexture(cleanComposite);
     }
-    accumA = LoadRenderTexture(w, h);
-    accumB = LoadRenderTexture(w, h);
-    cleanComposite = LoadRenderTexture(w, h);
+    accumA = Load16BitRT(w, h);
+    accumB = Load16BitRT(w, h);
+    cleanComposite = Load16BitRT(w, h);
     curCanvasW = w;
     curCanvasH = h;
     accumInited = true;
@@ -99,6 +123,8 @@ void DrawViewport(AppState* state, Rectangle screenRect, Camera2D camera) {
             ClearBackground(BLANK);
 
             if (shaderInited) {
+                rlSetBlendMode(RL_BLEND_CUSTOM);
+                rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
                 BeginShaderMode(layerBlendShader);
 
                 SetShaderValueTexture(layerBlendShader, locLayerTex, state->layerRTs[i].texture);
