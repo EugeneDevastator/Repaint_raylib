@@ -97,7 +97,7 @@ static void DrawSliderCore(ImDrawList* dl, int x, int y, int length, int thickne
     // ── Border frame ──────────────────────────────────────────────────
     dl->AddRect(ImVec2(x, y), ImVec2(x + length, y + thickness), IM_COL32(180, 180, 200, 180));
 
-    // ── Value text ────────────────────────────────────────────────────
+    // ── Value text (centered in slider, matching Qt) ───────────────────
     if (bp) {
         float disp = BParam_GetValue(bp);
         char txt[32];
@@ -106,12 +106,8 @@ static void DrawSliderCore(ImDrawList* dl, int x, int y, int length, int thickne
         else
             snprintf(txt, sizeof(txt), "%.2f", disp);
         ImVec2 sz = ImGui::CalcTextSize(txt);
-        int tx = orient == 0
-            ? x + (int)(length * clipmaxF) - (int)sz.x / 2
-            : x + (thickness - (int)sz.x) / 2;
-        int ty = orient == 0
-            ? y + (thickness - (int)sz.y) / 2
-            : y + (int)(length * (1.0f - clipmaxF)) - (int)sz.y / 2;
+        int tx = x + (length - (int)sz.x) / 2;
+        int ty = y + (thickness - (int)sz.y) / 2;
         tx = fmaxf(x + 2, fminf(tx, x + length - (int)sz.x - 2));
         ty = fmaxf(y + 2, fminf(ty, y + thickness - (int)sz.y - 2));
         dl->AddText(ImVec2(tx, ty), IM_COL32(255, 255, 255, 220), txt);
