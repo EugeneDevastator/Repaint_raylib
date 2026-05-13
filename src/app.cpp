@@ -315,6 +315,8 @@ void App_FileSnap(void) {
              t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
              t->tm_hour, t->tm_min, t->tm_sec);
 
+    Image_CompositeDithered(flat);
+
     ExportImage(flat, path);
     UnloadImage(flat);
 }
@@ -497,16 +499,22 @@ void App_Draw(AppState* state) {
         LayerPanel_Draw(state);
     }
 
-    // ── Color picker preview swatch (always visible during Alt+click) ──
+    // ── Color picker 3×3 magnifier ──────────────────────────────────
     if (g_colorPicking) {
         ImDrawList* fdl = ImGui::GetForegroundDrawList();
         ImVec2 mp = ImGui::GetMousePos();
-        Color pc = HSLToRGB(colorHue, colorSat, colorLit);
-        ImU32 pCol = IM_COL32(pc.r, pc.g, pc.b, 255);
-        float r = 12.0f;
-        fdl->AddCircleFilled(ImVec2(mp.x + 20, mp.y + 20), r, pCol, 24);
-        fdl->AddCircle(ImVec2(mp.x + 20, mp.y + 20), r, IM_COL32_BLACK, 24, 3.0f);
-        fdl->AddCircle(ImVec2(mp.x + 20, mp.y + 20), r + 1, IM_COL32_WHITE, 24, 1.0f);
+        int sz = 32;
+        ImVec2 org(mp.x + 12, mp.y + 12);
+        for (int i = 0; i < 9; i++) {
+            int gx = i % 3, gy = i / 3;
+            Color c = g_colorPickGrid[i];
+            ImU32 col = IM_COL32(c.r, c.g, c.b, 255);
+            fdl->AddRectFilled(ImVec2(org.x + gx * sz, org.y + gy * sz),
+                ImVec2(org.x + (gx + 1) * sz, org.y + (gy + 1) * sz), col);
+            fdl->AddRect(ImVec2(org.x + gx * sz, org.y + gy * sz),
+                ImVec2(org.x + (gx + 1) * sz, org.y + (gy + 1) * sz),
+                IM_COL32(100, 100, 100, 200));
+        }
     }
 
     /* New canvas dialog (imgui modal) */

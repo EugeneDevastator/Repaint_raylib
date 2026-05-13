@@ -1,7 +1,6 @@
 #include "repaint.h"
 #include "rlgl.h"
 
-// ── 16-bit render texture (65536 levels per channel vs 256 for standard) ──
 RenderTexture2D Load16BitRT(int width, int height) {
     RenderTexture2D target = { 0 };
     target.id = rlLoadFramebuffer();
@@ -25,9 +24,11 @@ RenderTexture2D Load16BitRT(int width, int height) {
     return target;
 }
 
+// ── Statics first so Image_CompositeDithered can see them ──
 static RenderTexture2D accumA = {0};
 static RenderTexture2D accumB = {0};
-static RenderTexture2D cleanComposite = {0};  // stamp-free composite snapshot
+static RenderTexture2D cleanComposite = {0};
+static RenderTexture2D stampedComposite = {0};
 static bool accumInited = false;
 static Texture2D checkerTex = {0};
 static bool checkerValid = false;
@@ -43,8 +44,38 @@ static Shader presentShader = {0};
 static bool presentInited = false;
 
 bool layersDirty = true;
+static bool stampDirty = true;
 
 static void EnsurePresentShader(void);
+
+// ── Now safe to use EnsurePresentShader and presentShader ──
+Image Image_CompositeDithered(Image flat) {
+    if (!flat.data || flat.format == PIXELFORMAT_UNCOMPRESSED_R8G8B8A8) return flat;
+    EnsurePresentShader();
+    if (!presentInited) return flat;
+
+    int w = flat.width, h = flat.height;
+
+    Texture2D flatTex = LoadTextureFromImage(flat);
+    UnloadImage(flat);
+
+    RenderTexture2D out = LoadRenderTexture(w, h);
+    BeginTextureMode(out);
+    ClearBackground(BLANK);
+    BeginShaderMode(presentShader);
+    DrawTextureRec(flatTex, (Rectangle){0, 0, (float)w, (float)-h}, (Vector2){0, 0}, WHITE);
+    EndShaderMode();
+    EndTextureMode();
+
+    UnloadTexture(flatTex);
+
+    Image result = LoadImageFromTexture(out.texture);
+    ImageFlipVertical(&result);
+    ImageFormat(&result, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+    UnloadRenderTexture(out);
+
+    return result;
+}
 
 static void EnsureChecker(int w, int h) {
     if (checkerValid && checkerTex.width == w && checkerTex.height == h) return;
@@ -73,7 +104,11 @@ static void EnsureAccumulators(int w, int h) {
     accumA = Load16BitRT(w, h);
     accumB = Load16BitRT(w, h);
     cleanComposite = Load16BitRT(w, h);
-    curCanvasW = w;
+    if (stampedComposite.id == 0 || stampedComposite.texture.width != (unsigned int)w || stampedComposite.texture.height != (unsigned int)h) {
+        if (stampedComposite.id > 0) UnloadRenderTexture(stampedComposite);
+        stampedComposite = Load16BitRT(w, h);
+        curCanvasW = w;
+    }
     curCanvasH = h;
     accumInited = true;
     finalAcc = NULL;
@@ -96,7 +131,6 @@ static void EnsureShader(void) {
     TraceLog(LOG_INFO, "Shader locs: layerTex=%d alpha=%d bm=%d", locLayerTex, locLayerAlpha, locBmIdx);
     shaderInited = true;
 }
-
 
 void DrawViewport(AppState* state, Rectangle screenRect, Camera2D camera) {
     int cw = state->canvas.width;
@@ -160,43 +194,58 @@ void DrawViewport(AppState* state, Rectangle screenRect, Camera2D camera) {
         finalAcc = src;
         layersDirty = false;
 
-        // Save clean composite (no stamp) for the preview overlay
         BeginTextureMode(cleanComposite);
         ClearBackground(BLANK);
         DrawTextureRec(finalAcc->texture,
             Rectangle{0, 0, (float)cw, (float)-ch}, Vector2{0, 0}, WHITE);
         EndTextureMode();
+        stampDirty = true;
     }
 
     if (!accumInited || finalAcc == NULL) return;
 
-    // ── Brush preview stamp compositing (visual fake layer) ─────────
     extern bool quickPanelShow;
     if (quickPanelShow && shaderInited) {
         extern Viewport viewport;
-        RenderTexture2D* overlay = (finalAcc == &accumA) ? &accumB : &accumA;
 
-        // Copy clean composite (no stamp) into overlay
-        BeginTextureMode(*overlay);
-        ClearBackground(BLANK);
-        DrawTextureRec(cleanComposite.texture,
-            Rectangle{0, 0, (float)cw, (float)-ch}, Vector2{0, 0}, WHITE);
-        EndTextureMode();
+        static d_RealBrush prevBrush;
+        static bool prevValid = false;
+        d_RealBrush curBrush = state->currentBrush.Realb;
+        bool brushChanged = !prevValid ||
+            curBrush.rad_out != prevBrush.rad_out ||
+            curBrush.rad_in  != prevBrush.rad_in  ||
+            curBrush.crv     != prevBrush.crv     ||
+            curBrush.opacity != prevBrush.opacity ||
+            curBrush.bmidx   != prevBrush.bmidx   ||
+            curBrush.col.r   != prevBrush.col.r   ||
+            curBrush.col.g   != prevBrush.col.g   ||
+            curBrush.col.b   != prevBrush.col.b;
 
-        // Render brush stamp onto overlay with the actual blend mode
-        d_Brush sb;
-        memset(&sb, 0, sizeof(sb));
-        sb.Realb = state->currentBrush.Realb;
-        sb.Realb.opacity = 1.0f;
+        if (stampDirty || brushChanged) {
+            prevBrush = curBrush;
+            prevValid = true;
+            stampDirty = false;
 
-        Vector2 sc = {
-            viewport.bounds.x + viewport.bounds.width * 0.5f,
-            viewport.bounds.y + viewport.bounds.height * 0.5f
-        };
-        Vector2 cc = GetScreenToWorld2D(sc, camera);
-        BrushBlend_ApplyStamp(*overlay, &sb, cc.x, cc.y, cc.x, cc.y);
+            BeginTextureMode(stampedComposite);
+            ClearBackground(BLANK);
+            DrawTextureRec(cleanComposite.texture,
+                Rectangle{0, 0, (float)cw, (float)-ch}, Vector2{0, 0}, WHITE);
+            EndTextureMode();
 
-        finalAcc = overlay;
+            d_Brush sb;
+            memset(&sb, 0, sizeof(sb));
+            sb.Realb = curBrush;
+            sb.Realb.opacity = 1.0f;
+
+            Vector2 sc = {
+                viewport.bounds.x + viewport.bounds.width * 0.5f,
+                viewport.bounds.y + viewport.bounds.height * 0.5f
+            };
+            Vector2 cc = GetScreenToWorld2D(sc, camera);
+            BrushBlend_ApplyStamp(stampedComposite, &sb, cc.x, cc.y, cc.x, cc.y);
+        }
+
+        finalAcc = &stampedComposite;
     }
 
     int sw = (int)screenRect.width;
@@ -211,7 +260,6 @@ void DrawViewport(AppState* state, Rectangle screenRect, Camera2D camera) {
     Rectangle srcRect = {0, 0, (float)cw, (float)-ch};
     Rectangle dstRect = {dstX, dstY, dstW, dstH};
 
-    // Dithering present shader — breaks up 8-bit banding from 16-bit composite
     if (presentInited) BeginShaderMode(presentShader);
     DrawTexturePro(finalAcc->texture, srcRect, dstRect, Vector2{0, 0}, 0.0f, WHITE);
     if (presentInited) EndShaderMode();
@@ -245,11 +293,9 @@ void MergeDownLayer(AppState* state, int idx) {
     int ch = state->canvas.height;
     if (cw < 1 || ch < 1) return;
 
-    // Ensure both layers have valid render textures
     if (state->texCount <= idx || state->layerRTs[idx].id == 0) return;
     if (state->texCount <= idx - 1 || state->layerRTs[idx - 1].id == 0) return;
 
-    // Create temp RT, copy dest layer into it
     RenderTexture2D tempRT = LoadRenderTexture(cw, ch);
     BeginTextureMode(tempRT);
     ClearBackground(BLANK);
@@ -257,7 +303,6 @@ void MergeDownLayer(AppState* state, int idx) {
         Rectangle{0, 0, (float)cw, (float)-ch}, Vector2{0, 0}, WHITE);
     EndTextureMode();
 
-    // Blend source layer onto tempRT using the same shader as viewport compositing
     float alpha = state->canvas.layerProps[idx].op;
     int bmidx = state->canvas.layerProps[idx].blendmode;
     BeginTextureMode(tempRT);
@@ -270,25 +315,21 @@ void MergeDownLayer(AppState* state, int idx) {
     EndShaderMode();
     EndTextureMode();
 
-    // Read back to destination Image
     Image cap = LoadImageFromTexture(tempRT.texture);
     ImageFlipVertical(&cap);
     Image* dstImg = &state->canvas.layerImages[idx - 1];
     UnloadImage(*dstImg);
     *dstImg = cap;
 
-    // Update destination RT
     BeginTextureMode(state->layerRTs[idx - 1]);
     ClearBackground(BLANK);
     DrawTextureRec(tempRT.texture, Rectangle{0, 0, (float)cw, (float)-ch}, Vector2{0, 0}, WHITE);
     EndTextureMode();
     UnloadRenderTexture(tempRT);
 
-    // Remove source layer
     UnloadRenderTexture(state->layerRTs[idx]);
     Canvas_DeleteLayer(&state->canvas, idx);
 
-    // Fix RT array: shift remaining entries down
     int n = state->canvas.layerCount;
     for (int i = idx; i < n; i++) {
         state->layerRTs[i] = state->layerRTs[i + 1];
@@ -306,6 +347,7 @@ void UnloadViewportRenderer(void) {
         UnloadRenderTexture(accumA);
         UnloadRenderTexture(accumB);
         if (cleanComposite.id > 0) UnloadRenderTexture(cleanComposite);
+        if (stampedComposite.id > 0) UnloadRenderTexture(stampedComposite);
         accumInited = false;
     }
     if (checkerValid) {

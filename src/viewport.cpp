@@ -74,34 +74,43 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
     if (IsKeyDown(KEY_LEFT_ALT) && IsMouseButtonDown(MOUSE_LEFT_BUTTON) && vp->inBounds) {
         g_colorPicking = true;
         Vector2 cp = GetScreenToWorld2D(mousePos, state->camera);
-        int px = (int)cp.x;
-        int py = (int)cp.y;
-        if (px >= 0 && px < state->canvas.width && py >= 0 && py < state->canvas.height) {
-            Color picked = {0, 0, 0, 0};
-            for (int li = 0; li < state->canvas.layerCount; li++) {
-                if (!state->canvas.layerProps[li].visible) continue;
-                Color* lpix = (Color*)state->canvas.layerImages[li].data;
-                Color sp = lpix[py * state->canvas.width + px];
-                float sa = sp.a / 255.0f * state->canvas.layerProps[li].op;
-                float da = picked.a / 255.0f;
-                float outa = sa + da * (1.0f - sa);
-                if (outa > 0.0f) {
-                    picked.r = (uint8_t)((sp.r * sa + picked.r * da * (1.0f - sa)) / outa);
-                    picked.g = (uint8_t)((sp.g * sa + picked.g * da * (1.0f - sa)) / outa);
-                    picked.b = (uint8_t)((sp.b * sa + picked.b * da * (1.0f - sa)) / outa);
-                    picked.a = (uint8_t)(outa * 255.0f);
+z        int cx = (int)cp.x;
+        int cy = (int)cp.y;
+        Color picked = {0, 0, 0, 0};
+        int gi = 0;
+        for (int dy = -1; dy <= 1; dy++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                int px = cx + dx;
+                int py = cy + dy;
+                Color c = {0, 0, 0, 0};
+                if (px >= 0 && px < state->canvas.width && py >= 0 && py < state->canvas.height) {
+                    for (int li = 0; li < state->canvas.layerCount; li++) {
+                        if (!state->canvas.layerProps[li].visible) continue;
+                        Color* lpix = (Color*)state->canvas.layerImages[li].data;
+                        Color sp = lpix[py * state->canvas.width + px];
+                        float sa = sp.a / 255.0f * state->canvas.layerProps[li].op;
+                        float da = c.a / 255.0f;
+                        float outa = sa + da * (1.0f - sa);
+                        if (outa > 0.0f) {
+                            c.r = (uint8_t)((sp.r * sa + c.r * da * (1.0f - sa)) / outa);
+                            c.g = (uint8_t)((sp.g * sa + c.g * da * (1.0f - sa)) / outa);
+                            c.b = (uint8_t)((sp.b * sa + c.b * da * (1.0f - sa)) / outa);
+                            c.a = (uint8_t)(outa * 255.0f);
+                        }
+                    }
                 }
+                g_colorPickGrid[gi++] = c;
+                if (dy == 0 && dx == 0) picked = c;
             }
+        }
+        if (picked.a > 0) {
             float tH, tS, tL;
             RGBToHSL(picked, tH, tS, tL);
-            if (picked.a == 0) { tS = 0.0f; tL = 1.0f; }
             float spd = 0.5f;
             float dh = tH - colorHue;
-            if (dh > 0.5f) dh -= 1.0f;
-            else if (dh < -0.5f) dh += 1.0f;
+            if (dh > 0.5f) dh -= 1.0f; else if (dh < -0.5f) dh += 1.0f;
             colorHue += dh * spd;
-            if (colorHue < 0.0f) colorHue += 1.0f;
-            else if (colorHue > 1.0f) colorHue -= 1.0f;
+            if (colorHue < 0.0f) colorHue += 1.0f; else if (colorHue > 1.0f) colorHue -= 1.0f;
             colorSat += (tS - colorSat) * spd;
             colorLit += (tL - colorLit) * spd;
             bpQuickHue.slider.clipmaxF = colorHue;

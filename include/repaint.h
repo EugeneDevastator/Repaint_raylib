@@ -289,6 +289,7 @@ float RngConv(float inval, float inmin, float inmax, float outmin, float outmax)
 
 Canvas Canvas_Create(int width, int height, Color bgColor);
 void Canvas_Destroy(Canvas* canvas);
+Image Image_CompositeDithered(Image flat);
 void Canvas_AddLayer(Canvas* canvas);
 void Canvas_InsertLayer(Canvas* canvas, int idx);
 void Canvas_DeleteLayer(Canvas* canvas, int index);
@@ -343,6 +344,7 @@ extern float g_velocity;
 extern bool quickPanelShow;
 extern int quickPanelMouseMode;
 extern bool g_colorPicking;
+extern Color g_colorPickGrid[9];
 
 // ── QuickPanel layout constants ────────────────────────────────────────
 #define QP_SLIDER_W 28

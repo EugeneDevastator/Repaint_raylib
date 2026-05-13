@@ -11,6 +11,7 @@ void ToolBox_Draw(AppState* state, Rectangle vp);
 bool quickPanelShow = false;
 int quickPanelMouseMode = 0;
 bool g_colorPicking = false;
+Color g_colorPickGrid[9] = {};
 
 void QuickPanel_Init(void) {
     BrushPreview_Init();
