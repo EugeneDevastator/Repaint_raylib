@@ -39,8 +39,12 @@ static int locBmIdx = -1;
 static int curCanvasW = 0;
 static int curCanvasH = 0;
 static RenderTexture2D* finalAcc = NULL;
+static Shader presentShader = {0};
+static bool presentInited = false;
 
 bool layersDirty = true;
+
+static void EnsurePresentShader(void);
 
 static void EnsureChecker(int w, int h) {
     if (checkerValid && checkerTex.width == w && checkerTex.height == h) return;
@@ -102,6 +106,7 @@ void DrawViewport(AppState* state, Rectangle screenRect, Camera2D camera) {
     EnsureAccumulators(cw, ch);
     EnsureChecker(cw, ch);
     EnsureShader();
+    EnsurePresentShader();
 
     if (layersDirty) {
         RenderTexture2D* src = &accumA;
@@ -205,7 +210,11 @@ void DrawViewport(AppState* state, Rectangle screenRect, Camera2D camera) {
 
     Rectangle srcRect = {0, 0, (float)cw, (float)-ch};
     Rectangle dstRect = {dstX, dstY, dstW, dstH};
+
+    // Dithering present shader — breaks up 8-bit banding from 16-bit composite
+    if (presentInited) BeginShaderMode(presentShader);
     DrawTexturePro(finalAcc->texture, srcRect, dstRect, Vector2{0, 0}, 0.0f, WHITE);
+    if (presentInited) EndShaderMode();
 }
 
 void ReloadViewportShader(void) {
@@ -216,6 +225,16 @@ void ReloadViewportShader(void) {
     }
     EnsureShader();
     if (!shaderInited) TraceLog(LOG_WARNING, "ReloadViewportShader: layer_blend.fs still failed");
+}
+
+static void EnsurePresentShader(void) {
+    if (presentInited) return;
+    const char* ad = GetApplicationDirectory();
+    char fsPath[512];
+    snprintf(fsPath, sizeof(fsPath), "%sshaders/present.fs", ad);
+    presentShader = LoadShader(0, fsPath);
+    presentInited = presentShader.id > 0;
+    if (!presentInited) TraceLog(LOG_WARNING, "present.fs failed to load");
 }
 
 void MergeDownLayer(AppState* state, int idx) {
@@ -296,5 +315,9 @@ void UnloadViewportRenderer(void) {
     if (shaderInited) {
         UnloadShader(layerBlendShader);
         shaderInited = false;
+    }
+    if (presentInited) {
+        UnloadShader(presentShader);
+        presentInited = false;
     }
 }
