@@ -194,15 +194,21 @@ void QuickPanel_Draw(AppState* state) {
         // Slider body
         DrawSliderVertical(dl, bp, colX, slY, QP_SLIDER_W, QP_SLIDER_H, bp->slider.clipmaxF, colorModes[i]);
 
-        // Invisible button — direct position mapping
+        // Invisible button — per-item activation via ImGui button flags
         ImGui::PushID(400 + i);
         ImGui::SetCursorScreenPos(ImVec2(colX, slY));
-        ImGui::InvisibleButton("##sb", ImVec2(QP_SLIDER_W, QP_SLIDER_H));
+        ImGui::InvisibleButton("##sb", ImVec2(QP_SLIDER_W, QP_SLIDER_H),
+            ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle);
         if (ImGui::IsItemActive()) {
             float t = (mp.y - slY) / (float)QP_SLIDER_H;
             t = fminf(1.0f, fmaxf(0.0f, t));
             t = 1.0f - t;
-            bps[i]->slider.clipmaxF = t;
+            if (ImGui::IsMouseDown(0))
+                bps[i]->slider.clipmaxF = t;
+            else if (ImGui::IsMouseDown(1))
+                bps[i]->slider.clipminF = t;
+            else if (ImGui::IsMouseDown(2))
+                bps[i]->slider.jitter = t;
         }
         ImGui::PopID();
 

@@ -20,6 +20,8 @@ BParam bpCurvature;
 BParam bpScatter;
 BParam bpCloneOpacity;
 BParam bpQuickHue;
+
+float g_velocity = 0.0f;
 BParam bpQuickSat;
 BParam bpQuickLit;
 
@@ -106,6 +108,20 @@ void SyncAllRTs(AppState* state) {
     }
 }
 
+static float GetModVal(BParam* bp) {
+    float cpar = 1.0f;
+    if (bp->penMode == csVel)
+        cpar = g_velocity;
+    else if (bp->penMode == csNone)
+        cpar = 1.0f;
+
+    float rng = bp->slider.clipmaxF - bp->slider.clipminF;
+    float respar = cpar * rng + bp->slider.clipminF;
+    float randm = (((float)rand() / (float)RAND_MAX) - 0.5f) * 2.0f * bp->slider.jitter;
+    float res = fminf(fmaxf(respar + randm, 0.0f), 1.0f);
+    return res * (bp->outMax - bp->outMin) + bp->outMin;
+}
+
 void UpdateUI(AppState* state) {
     Vector2 mousePos = GetMousePosition();
 
@@ -126,13 +142,13 @@ void UpdateUI(AppState* state) {
     if (IsKeyPressed(KEY_FOUR)) state->mode = eDisp;
     if (IsKeyPressed(KEY_FIVE)) state->mode = eCont;
 
-    state->currentBrush.Realb.rad_out = BParam_GetValue(&bpSize);
-    state->currentBrush.Realb.rad_in = state->currentBrush.Realb.rad_out * BParam_GetValue(&bpHardness);
-    state->currentBrush.Realb.crv = BParam_GetValue(&bpCurvature);
-    state->currentBrush.Realb.opacity = BParam_GetValue(&bpOpacity);
+    state->currentBrush.Realb.rad_out = GetModVal(&bpSize);
+    state->currentBrush.Realb.rad_in = state->currentBrush.Realb.rad_out * GetModVal(&bpHardness);
+    state->currentBrush.Realb.crv = GetModVal(&bpCurvature);
+    state->currentBrush.Realb.opacity = GetModVal(&bpOpacity);
 
     state->currentBrush.Realb.cop = (state->mode == eSmudge)
-        ? BParam_GetValue(&bpCloneOpacity) : 0.0f;
+        ? GetModVal(&bpCloneOpacity) : 0.0f;
 
     colorHue = bpQuickHue.slider.clipmaxF;
     colorSat = bpQuickSat.slider.clipmaxF;
@@ -310,8 +326,7 @@ void App_Init(AppState* state) {
     BParam_Init(&bpOpacity, 0, "Opacity", 0.0f, 1.0f, 1.0f);
     BParam_SetIcon(&bpOpacity, "ctlop");
 
-    BParam_Init(&bpSize, 1, "Size", 1.0f, 4096.0f, 20.0f);
-    bpSize.slider.clipmaxF = 19.0f / 99.0f;
+    BParam_Init(&bpSize, 1, "Size", 1.0f, 4096.0f, 128.0f);
     BParam_SetIcon(&bpSize, "ctlrad");
 
     BParam_Init(&bpHardness, 2, "Hardness", 0.0f, 1.0f, 0.5f);
@@ -327,7 +342,7 @@ void App_Init(AppState* state) {
     BParam_Init(&bpScatter, 5, "Scatter", 0.0f, 5.0f, 0.0f);
     BParam_SetIcon(&bpScatter, "ctlspcjit");
 
-    BParam_Init(&bpCloneOpacity, 6, "Clone", 0.0f, 1.0f, 1.0f);
+    BParam_Init(&bpCloneOpacity, 6, "Clone", 0.7f, 1.0f, 1.0f);
     BParam_SetIcon(&bpCloneOpacity, "ctlcop");
 
     BParam_Init(&bpQuickHue, 10, "Hue", 0.0f, 1.0f, 0.35f);

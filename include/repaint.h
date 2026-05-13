@@ -302,15 +302,17 @@ extern float colorHue;
 extern float colorSat;
 extern float colorLit;
 
+extern float g_velocity;
+
 extern bool quickPanelShow;
 extern int quickPanelMouseMode;
 extern bool g_colorPicking;
 
 // ── QuickPanel layout constants ────────────────────────────────────────
-#define QP_SLIDER_W 24
+#define QP_SLIDER_W 28
 #define QP_SLIDER_H 256
 #define QP_SLIDER_GAP 8
-#define QP_CTRL_SZ 24
+#define QP_CTRL_SZ 28
 #define QP_SPACING 4
 
 // ── Gizmo sector arc configuration ─────────────────────────────────────

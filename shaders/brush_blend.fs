@@ -137,7 +137,7 @@ void main() {
 
     vec3 srcRGBout = brushColor.rgb;
     if (smudgeStrength > 0.001) {
-        vec2 srcUV = uv - smudgeOffsetUV;
+        vec2 srcUV = clamp(uv - smudgeOffsetUV, 0.001, 0.999);
         vec4 srcCanvas = texture(texture0, srcUV);
         float ca = srcCanvas.a;
         srcRGBout = srcCanvas.rgb * smudgeStrength + brushColor.rgb * (1.0 - smudgeStrength) * ca;
