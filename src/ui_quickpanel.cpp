@@ -79,13 +79,20 @@ void QuickPanel_Draw(AppState* state) {
     bool released = ImGui::IsMouseReleased(0);
 
     if (clicked && !ImGui::IsAnyItemHovered()) {
-        float angDeg = (ang + (float)M_PI) * 180.0f / (float)M_PI;
-        float rotDiff = fabsf(angDeg - fmodf(state->currentBrush.Realb.resangle, 360.0f));
-        if (rotDiff > 180.0f) rotDiff = 360.0f - rotDiff;
-        if (rotDiff < 5.0f && dist > 40.0f) quickPanelMouseMode = 4;
-        else if (ang > d30 && ang < d30 * 5) quickPanelMouseMode = 1;
-        else if (ang < d30 && ang > -(float)M_PI * 0.5f) quickPanelMouseMode = 2;
-        else quickPanelMouseMode = 3;
+        // Sector-based mode detection
+        bool inSector1 = (ang > d30 && ang < d30 * 5);       // size sector
+        bool inSector2 = (ang < d30 && ang > -(float)M_PI * 0.5f);  // hardness sector
+        bool inSector3 = !inSector1 && !inSector2;            // curve sector
+
+        if (dist <= GIZMO_FIXED_RADIUS_PX) {
+            // Inside fixed radius: hardness, curve, or size
+            if (inSector1) quickPanelMouseMode = 1;
+            else if (inSector2) quickPanelMouseMode = 2;
+            else quickPanelMouseMode = 3;
+        } else {
+            // Outside fixed radius: size in sector 1, otherwise rotation
+            quickPanelMouseMode = inSector1 ? 1 : 4;
+        }
     }
 
     if (quickPanelMouseMode > 0 && down) {
@@ -111,22 +118,21 @@ void QuickPanel_Draw(AppState* state) {
             BParam_SetValue(&bpHardness, h);
         }
         if (quickPanelMouseMode == 2) {
-            float newRadIn = fminf(rad, state->currentBrush.Realb.rad_out);
-            if (curMode != 2) newRadIn = 0;
-            if (newRadIn < 7) newRadIn = 0;
-            if (newRadIn > state->currentBrush.Realb.rad_out * 0.98f)
-                newRadIn = state->currentBrush.Realb.rad_out * 0.98f;
-            state->currentBrush.Realb.rad_in = newRadIn;
-            float h = (state->currentBrush.Realb.rad_out > 0)
-                ? (state->currentBrush.Realb.rad_in / state->currentBrush.Realb.rad_out) : 0;
+            // Hardness: captured inside radius, but tracks continuously once active
+            float h = fminf(absrad / GIZMO_FIXED_RADIUS_PX, 1.0f);
+            if (curMode != 2) h = 0.0f;
+            if (h < 0.05f) h = 0.0f;
+            state->currentBrush.Realb.rad_in = h * state->currentBrush.Realb.rad_out;
+            if (state->currentBrush.Realb.rad_in > state->currentBrush.Realb.rad_out * 0.98f)
+                state->currentBrush.Realb.rad_in = state->currentBrush.Realb.rad_out * 0.98f;
             BParam_SetValue(&bpHardness, h);
         }
         if (quickPanelMouseMode == 3) {
-            float ir = fminf(rad, state->currentBrush.Realb.rad_out);
-            if (curMode != 3) ir = 0;
-            float t = ir / fmaxf(1.0f, state->currentBrush.Realb.rad_out);
-            state->currentBrush.Realb.crv = 1.0f - t;
-            BParam_SetValue(&bpCurvature, 1.0f - t);
+            // Curve: captured inside radius, but tracks continuously once active
+            float h = fminf(absrad / GIZMO_FIXED_RADIUS_PX, 1.0f);
+            if (curMode != 3) h = 0.0f;
+            state->currentBrush.Realb.crv = 1.0f - h;
+            BParam_SetValue(&bpCurvature, 1.0f - h);
         }
         if (quickPanelMouseMode == 4) {
             float newAng = (ang + (float)M_PI) * 180.0f / (float)M_PI;

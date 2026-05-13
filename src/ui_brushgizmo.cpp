@@ -25,7 +25,6 @@ void BrushGizmo_DrawXOROverlay(AppState* state) {
     float d30 = (float)(M_PI * 30.0 / 180.0);
 
     rlDrawRenderBatchActive();
-
     glEnable(GL_COLOR_LOGIC_OP);
     glLogicOp(GL_XOR);
 
@@ -37,12 +36,10 @@ void BrushGizmo_DrawXOROverlay(AppState* state) {
                    3.0f, WHITE);
     }
 
-    // Use base slider values for gizmo display (not velocity-modulated)
     float baseRadOut = BParam_GetValue(&bpSize);
     float baseHard   = BParam_GetValue(&bpHardness);
     float baseCrv    = BParam_GetValue(&bpCurvature);
     float baseZoom   = state->camera.zoom;
-
     Vector2 ctr = {(float)gcx, (float)gcy};
     float drawRadOut = baseRadOut * baseZoom;
 
@@ -54,15 +51,19 @@ void BrushGizmo_DrawXOROverlay(AppState* state) {
     float curveStart = -(GIZMO_HARD_ANG_START + GIZMO_HARD_ANG_SPAN);
     float curveEnd   = curveStart - GIZMO_CURVE_ANG_SPAN;
 
-    DrawRing(ctr, GIZMO_FIXED_RADIUS_PX - 1.5f, GIZMO_FIXED_RADIUS_PX + 1.5f, hardEnd,  hardStart,  0, WHITE);
-    DrawRing(ctr, GIZMO_FIXED_RADIUS_PX - 1.5f, GIZMO_FIXED_RADIUS_PX + 1.5f, curveEnd, curveStart, 0, WHITE);
+    // Reference arcs at slightly larger radius so max-value arcs don't XOR-cancel
+    float refR = GIZMO_FIXED_RADIUS_PX + 3.0f;
+    DrawRing(ctr, refR - 1.5f, refR + 1.5f, hardEnd,  hardStart,  0, WHITE);
+    DrawRing(ctr, refR - 1.5f, refR + 1.5f, curveEnd, curveStart, 0, WHITE);
 
+    // Value arcs: span the full sector angle, radius varies with value (0 → center, 1 → fixed radius)
     float hRatio = fminf(baseHard, 1.0f);
     float hardMv = GIZMO_FIXED_RADIUS_PX * hRatio;
     if (hardMv > 2.0f)
         DrawRing(ctr, hardMv - 1.5f, hardMv + 1.5f, hardEnd, hardStart, 0, WHITE);
 
-    float curveMv = GIZMO_FIXED_RADIUS_PX * (1.0f - baseCrv);
+    float curvRatio = fminf(fmaxf(1.0f - baseCrv, 0.0f), 1.0f);
+    float curveMv = GIZMO_FIXED_RADIUS_PX * curvRatio;
     if (curveMv > 2.0f)
         DrawRing(ctr, curveMv - 1.5f, curveMv + 1.5f, curveEnd, curveStart, 0, WHITE);
 

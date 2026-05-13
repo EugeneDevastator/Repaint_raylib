@@ -482,11 +482,6 @@ void App_Draw(AppState* state) {
 
     Viewport_Draw(&viewport, state);
 
-    // XOR overlay for gizmo lines (under ImGui content, so sliders render on top)
-    if (quickPanelShow) {
-        BrushGizmo_DrawXOROverlay(state);
-    }
-
     rlImGuiBegin();
 
     if (g_panelsVisible)
@@ -570,6 +565,11 @@ void App_Draw(AppState* state) {
     }
 
     rlImGuiEnd();
+
+    // XOR overlay for guide lines and rings (always visible on any background)
+    if (quickPanelShow) {
+        BrushGizmo_DrawXOROverlay(state);
+    }
 
     EndDrawing();
 
