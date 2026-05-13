@@ -108,7 +108,7 @@ void SyncAllRTs(AppState* state) {
     }
 }
 
-static float GetModVal(BParam* bp) {
+float GetModVal(BParam* bp) {
     float cpar = 1.0f;
     if (bp->penMode == csVel)
         cpar = g_velocity;
@@ -123,6 +123,18 @@ static float GetModVal(BParam* bp) {
 }
 
 void UpdateUI(AppState* state) {
+    // ── Track mouse velocity first (before brush reads g_velocity) ──
+    {
+        static Vector2 lastVelPos = {0, 0};
+        Vector2 mp = GetMousePosition();
+        float dxv = mp.x - lastVelPos.x;
+        float dyv = mp.y - lastVelPos.y;
+        lastVelPos = mp;
+        float distV = sqrtf(dxv * dxv + dyv * dyv);
+        float rawVel = fminf(distV / 50.0f, 1.0f);
+        g_velocity = g_velocity * 0.7f + rawVel * 0.3f;
+    }
+
     Vector2 mousePos = GetMousePosition();
 
     if (IsKeyPressed(KEY_TAB))
@@ -153,7 +165,11 @@ void UpdateUI(AppState* state) {
     colorHue = bpQuickHue.slider.clipmaxF;
     colorSat = bpQuickSat.slider.clipmaxF;
     colorLit = bpQuickLit.slider.clipmaxF;
-    state->currentBrush.Realb.col = HSLToRGB(colorHue, colorSat, colorLit);
+    // Apply pen mode modulation to color channels for the brush
+    float colH = GetModVal(&bpQuickHue);
+    float colS = GetModVal(&bpQuickSat);
+    float colL = GetModVal(&bpQuickLit);
+    state->currentBrush.Realb.col = HSLToRGB(colH, colS, colL);
 }
 
 NetworkBroker networkBroker;

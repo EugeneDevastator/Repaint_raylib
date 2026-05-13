@@ -113,22 +113,6 @@ static void DrawSliderCore(ImDrawList* dl, int x, int y, int length, int thickne
 
     drawGrabber(clipminF, IM_COL32(60, 60, 60, 255), IM_COL32(40, 40, 40, 255), IM_COL32(130, 130, 130, 255));
     drawGrabber(clipmaxF, IM_COL32(255, 255, 255, 255), IM_COL32(200, 200, 200, 255), IM_COL32(80, 80, 80, 255));
-
-    // ── Value text (centered in slider, dark background for readability) ─
-    if (bp) {
-        float disp = BParam_GetValue(bp);
-        char txt[32];
-        if (bp->outMax - bp->outMin >= 1.0f)
-            snprintf(txt, sizeof(txt), "%.1f", disp);
-        else
-            snprintf(txt, sizeof(txt), "%.2f", disp);
-        ImVec2 sz = ImGui::CalcTextSize(txt);
-        int tx = x + (length - (int)sz.x) / 2;
-        int ty = y + (thickness - (int)sz.y) / 2;
-        dl->AddRectFilled(ImVec2(tx - 2, ty - 2), ImVec2(tx + (int)sz.x + 2, ty + (int)sz.y + 2),
-            IM_COL32(0, 0, 0, 140));
-        dl->AddText(ImVec2(tx, ty), IM_COL32(255, 255, 255, 255), txt);
-    }
 }
 
 /* ── DrawBParamSlider (horizontal — full widget) ──────────────────────── */

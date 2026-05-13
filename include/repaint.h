@@ -220,6 +220,7 @@ typedef struct {
     bool wasMouseDown;
     Vector2 lastDabPos;
     Vector2 smudgeSrcPos;
+    d_Brush segBrushFrom;        // brush at lastDabPos (segment start — saved per segment)
     float strokeDabAccum;
     bool debugShowStamps;
     bool rightMouseDown;
@@ -297,6 +298,7 @@ void BParam_SetValue(BParam* bp, float val);
 
 Color HSLToRGB(float h, float s, float l);
 void RGBToHSL(Color c, float& h, float& s, float& l);
+float GetModVal(BParam* bp);
 
 extern float colorHue;
 extern float colorSat;

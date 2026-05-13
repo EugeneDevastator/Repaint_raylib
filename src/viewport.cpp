@@ -1,8 +1,8 @@
 #include "repaint.h"
 #include "rlgl.h"
+#include "stroke.h"
 
 extern bool quickPanelShow;
-extern float g_velocity;
 
 static uint32_t PackColor(Color c) {
     return (uint32_t)c.r << 16 | (uint32_t)c.g << 8 | (uint32_t)c.b | (uint32_t)c.a << 24;
@@ -22,6 +22,7 @@ void Viewport_Init(Viewport* vp, Rectangle bounds) {
     vp->wasMouseDown = false;
     vp->lastDabPos = Vector2{0, 0};
     vp->smudgeSrcPos = Vector2{0, 0};
+    memset(&vp->segBrushFrom, 0, sizeof(vp->segBrushFrom));
     vp->strokeDabAccum = 0.0f;
     vp->debugShowStamps = false;
     vp->rightMouseDown = false;
@@ -119,14 +120,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         g_colorPicking = false;
     }
 
-    // Track mouse velocity for pen-mode modulation
-    {
-        float ddx = mousePos.x - vp->lastMousePos.x;
-        float ddy = mousePos.y - vp->lastMousePos.y;
-        float distArr = sqrtf(ddx * ddx + ddy * ddy);
-        float rawVel = fminf(distArr / 50.0f, 1.0f);
-        g_velocity = g_velocity * 0.7f + rawVel * 0.3f;
-    }
+    // Track mouse position for camera pan delta
     vp->lastMousePos = mousePos;
 
     // Alt is held for color picking — skip painting
@@ -147,13 +141,15 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                         vp->broker->on_input(ev);
                     }
                     vp->lastDabPos = canvasPos;
-                    vp->smudgeSrcPos = canvasPos;
-                    vp->strokeDabAccum = 0.0f;
+                     vp->smudgeSrcPos = canvasPos;
+                     vp->segBrushFrom = state->currentBrush;
+                     vp->strokeDabAccum = 0.0f;
                     vp->wasMouseDown = true;
                     if (vp->strokeLen < MAX_STROKE_PTS)
                         vp->strokePts[vp->strokeLen++] = canvasPos;
                 } else {
-                    float spacing = fmaxf(state->currentBrush.Realb.rad_out * BParam_GetValue(&bpSpacing), 1.0f);
+                    // Qt-style spacing: step = rad_out * spacing slider (fixed for segment)
+                    float spacing = fmaxf(vp->segBrushFrom.Realb.rad_out * BParam_GetValue(&bpSpacing), 1.0f);
                     Vector2 from = vp->lastDabPos;
                     Vector2 to = canvasPos;
                     float stdist = Dist2D(from, to);
@@ -172,6 +168,10 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                                 float d = firstDist + i * spacing;
                                 if (d > stdist) break;
                                 Vector2 pos = {from.x + d * x2r, from.y + d * y2r};
+                                // Per-segment interpolation: k=0 at lastDabPos, k=1 at canvasPos
+                                float k = fminf(d / fmaxf(stdist, 0.001f), 1.0f);
+                                d_RealBrush ib = Stroke_BlendBrushes(vp->segBrushFrom.Realb, state->currentBrush.Realb, k);
+                                state->currentBrush.Realb = ib;
                                 if (vp->broker) {
                                     float srcX = (state->mode == eSmudge) ? vp->smudgeSrcPos.x : pos.x;
                                     float srcY = (state->mode == eSmudge) ? vp->smudgeSrcPos.y : pos.y;
@@ -180,15 +180,17 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                                     vp->broker->on_input(ev);
                                 }
                                 if (state->mode == eSmudge) vp->smudgeSrcPos = pos;
-                                if (vp->strokeLen < MAX_STROKE_PTS)
-                                    vp->strokePts[vp->strokeLen++] = pos;
-                            }
-                            float lastDabDist = firstDist + extraDabs * spacing;
-                            vp->strokeDabAccum = stdist - lastDabDist;
-                        } else {
-                            vp->strokeDabAccum += stdist;
-                        }
-                        vp->lastDabPos = to;
+                                 if (vp->strokeLen < MAX_STROKE_PTS)
+                                     vp->strokePts[vp->strokeLen++] = pos;
+                             }
+                              float lastDabDist = firstDist + extraDabs * spacing;
+                              vp->strokeDabAccum = stdist - lastDabDist;
+                              vp->lastDabPos = Vector2{from.x + lastDabDist * x2r, from.y + lastDabDist * y2r};
+                         } else {
+                             vp->strokeDabAccum += stdist;
+                         }
+                         vp->segBrushFrom = state->currentBrush;
+                        vp->segBrushFrom = state->currentBrush;
                     }
                 }
             } else {
