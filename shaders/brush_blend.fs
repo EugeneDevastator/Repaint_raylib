@@ -41,7 +41,7 @@ vec4 applyBlend(int mode, vec4 canvas, vec3 brushRGB, float brushA) {
     vec3 outRGB;
     float outA;
 
-    if (canvas.a <= 0.01) {
+    if (canvas.a <= 0.00000001) {
         outRGB = brushRGB;
         outA   = brushA;
         return vec4(clamp(outRGB, 0.0, 1.0), clamp(outA, 0.0, 1.0));
@@ -134,10 +134,10 @@ void main() {
 
     float finalAlpha = clamp(alpha, 0.0, 1.0) * opacity;
     if (preserveop > 0.5) finalAlpha *= canvas.a;
-    if (finalAlpha < 0.001) { finalColor = canvas; return; }
+    if (finalAlpha < 0.000000001) { finalColor = canvas; return; }
 
     vec3 brushFinal = brushColor.rgb;
-    if (smudgeStrength > 0.001) {
+    if (smudgeStrength > 0.000001) {
         vec2 smudgeUV = clamp(uv - smudgeOffsetUV, 0.001, 0.999);
         vec4 smudgeSample = texture(texture0, smudgeUV);
         float ca = smudgeSample.a;
