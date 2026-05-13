@@ -37,8 +37,14 @@ void BrushGizmo_DrawXOROverlay(AppState* state) {
                    3.0f, WHITE);
     }
 
+    // Use base slider values for gizmo display (not velocity-modulated)
+    float baseRadOut = BParam_GetValue(&bpSize);
+    float baseHard   = BParam_GetValue(&bpHardness);
+    float baseCrv    = BParam_GetValue(&bpCurvature);
+    float baseZoom   = state->camera.zoom;
+
     Vector2 ctr = {(float)gcx, (float)gcy};
-    float drawRadOut = state->currentBrush.Realb.rad_out * state->camera.zoom;
+    float drawRadOut = baseRadOut * baseZoom;
 
     if (drawRadOut > 2.0f)
         DrawRing(ctr, drawRadOut - 1.5f, drawRadOut + 1.5f, 0, 360, 0, WHITE);
@@ -51,14 +57,12 @@ void BrushGizmo_DrawXOROverlay(AppState* state) {
     DrawRing(ctr, GIZMO_FIXED_RADIUS_PX - 1.5f, GIZMO_FIXED_RADIUS_PX + 1.5f, hardEnd,  hardStart,  0, WHITE);
     DrawRing(ctr, GIZMO_FIXED_RADIUS_PX - 1.5f, GIZMO_FIXED_RADIUS_PX + 1.5f, curveEnd, curveStart, 0, WHITE);
 
-    float hRatio = (state->currentBrush.Realb.rad_out > 0)
-        ? fminf(state->currentBrush.Realb.rad_in / state->currentBrush.Realb.rad_out, 1.0f)
-        : 0.0f;
+    float hRatio = fminf(baseHard, 1.0f);
     float hardMv = GIZMO_FIXED_RADIUS_PX * hRatio;
     if (hardMv > 2.0f)
         DrawRing(ctr, hardMv - 1.5f, hardMv + 1.5f, hardEnd, hardStart, 0, WHITE);
 
-    float curveMv = GIZMO_FIXED_RADIUS_PX * (1.0f - state->currentBrush.Realb.crv);
+    float curveMv = GIZMO_FIXED_RADIUS_PX * (1.0f - baseCrv);
     if (curveMv > 2.0f)
         DrawRing(ctr, curveMv - 1.5f, curveMv + 1.5f, curveEnd, curveStart, 0, WHITE);
 

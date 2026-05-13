@@ -33,8 +33,11 @@ void QuickPanel_Draw(AppState* state) {
     int gcx = (int)(vp.x + vp.width * 0.5f);
     int gcy = (int)(vp.y + vp.height * 0.5f);
 
-    float drawRadOut = state->currentBrush.Realb.rad_out * state->camera.zoom;
-    float drawRadIn = state->currentBrush.Realb.rad_in * state->camera.zoom;
+    // Use base slider values (not velocity-modulated) for gizmo display
+    float baseRadOut = BParam_GetValue(&bpSize);
+    float baseHard   = BParam_GetValue(&bpHardness);
+    float drawRadOut = baseRadOut * state->camera.zoom;
+    float drawRadIn  = baseRadOut * baseHard * state->camera.zoom;
     if (drawRadIn > drawRadOut) drawRadIn = drawRadOut;
 
     // ── Render stamp texture before ImGui window (avoids state conflicts) ─

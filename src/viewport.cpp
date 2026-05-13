@@ -121,7 +121,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
     int active = state->activeLayer;
 
     // ── Brush / Smudge ───────────────────────────────────────────────
-    if (vp->inBounds && leftDown &&
+    if ((vp->inBounds || vp->wasMouseDown) && leftDown &&
         (state->mode == eBrush || state->mode == eSmudge || state->mode == eDisp || state->mode == eCont))
     {
         if (active >= 0 && active < state->texCount && state->layerRTs[active].id > 0) {

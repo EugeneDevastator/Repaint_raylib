@@ -21,11 +21,22 @@ void BrushPreview_Shutdown(void) {
 void BrushPreview_RenderStamp(AppState* state, float drawRadOut) {
     if (gizmoStamp.id == 0 || drawRadOut <= 1.0f) return;
     float scale = 128.0f / fmaxf(drawRadOut, 1.0f);
-    d_Brush pb = state->currentBrush;
-    pb.Realb.rad_out = 128.0f;
-    pb.Realb.rad_in  = state->currentBrush.Realb.rad_in * state->camera.zoom * scale;
-    pb.Realb.bmidx   = 0;
-    pb.Realb.cop     = 0.0f;
+
+    // Use base slider values — never modulated (velocity, pressure, etc.)
+    d_Brush pb;
+    memset(&pb, 0, sizeof(pb));
+    pb.Realb.rad_out  = 128.0f;
+    pb.Realb.rad_in   = BParam_GetValue(&bpSize) * BParam_GetValue(&bpHardness) * state->camera.zoom * scale;
+    pb.Realb.crv      = BParam_GetValue(&bpCurvature);
+    pb.Realb.opacity  = 1.0f;
+    pb.Realb.col      = HSLToRGB(colorHue, colorSat, colorLit);
+    pb.Realb.bmidx    = 0;
+    pb.Realb.cop      = 0.0f;
+    pb.Realb.x2y      = 1.0f;
+    pb.Realb.sol      = 1.0f;
+    pb.Realb.sol2op   = 0.0f;
+    pb.Realb.resangle = 0.0f;
+    pb.Realb.seed     = 0;
 
     BeginTextureMode(gizmoStamp);
     ClearBackground(BLANK);

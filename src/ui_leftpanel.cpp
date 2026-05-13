@@ -76,19 +76,22 @@ void LeftPanel_Draw(AppState* state) {
         ClearBackground(BLANK);
         EndTextureMode();
 
-        d_Brush pb = state->currentBrush;
-        Color pc = pb.Realb.col;
-        pb.Realb.col = WHITE;
-        pb.Realb.opacity = 1.0f;
-        pb.Realb.cop = 0.0f;
-        float prevRadOut = pb.Realb.rad_out;
-        if (prevRadOut > 45.0f) {
-            pb.Realb.rad_out = 45.0f;
-            pb.Realb.rad_in = pb.Realb.rad_in * (45.0f / fmaxf(prevRadOut, 1.0f));
-        }
+        // Use base slider values — never modulated
+        d_Brush pb;
+        memset(&pb, 0, sizeof(pb));
+        pb.Realb.rad_out  = fminf(BParam_GetValue(&bpSize), 45.0f);
+        pb.Realb.rad_in   = pb.Realb.rad_out * fminf(BParam_GetValue(&bpHardness), 1.0f);
+        pb.Realb.crv      = BParam_GetValue(&bpCurvature);
+        pb.Realb.col      = WHITE;
+        pb.Realb.opacity  = 1.0f;
+        pb.Realb.cop      = 0.0f;
+        pb.Realb.bmidx    = 0;
+        pb.Realb.x2y      = 1.0f;
+        pb.Realb.sol      = 1.0f;
+        pb.Realb.sol2op   = 0.0f;
+        pb.Realb.resangle = 0.0f;
+        pb.Realb.seed     = 0;
         BrushBlend_ApplyStamp(stampPrev, &pb, 50, 50, 50, 50);
-        pb.Realb.rad_out = prevRadOut;
-        pb.Realb.col = pc;
 
         float cw = ImGui::GetContentRegionAvail().x;
         float previewSize = fminf(cw, 100.0f);
