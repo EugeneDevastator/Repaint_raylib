@@ -297,7 +297,6 @@ void Canvas_SetLayerBlendMode(Canvas* canvas, int layer, int bm);
 void Canvas_SetLayerVisible(Canvas* canvas, int layer, bool visible);
 void Canvas_MoveLayer(Canvas* canvas, int from, int to);
 void Canvas_DuplicateLayer(Canvas* canvas, int idx);
-void Canvas_MergeDown(Canvas* canvas, int idx);
 
 size_t Stroke_Serialize(d_Stroke* st, uint8_t* buf, size_t cap);
 bool Stroke_Deserialize(d_Stroke* st, uint8_t* buf, size_t len);
@@ -410,6 +409,7 @@ void BrushGizmo_DrawXOROverlay(AppState* state);
 extern bool layersDirty;
 
 void DrawViewport(AppState* state, Rectangle screenRect, Camera2D camera);
+void MergeDownLayer(AppState* state, int idx);
 void UnloadViewportRenderer(void);
 void ReloadViewportShader(void);
 

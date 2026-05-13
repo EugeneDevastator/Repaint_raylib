@@ -13,6 +13,13 @@ vec4 applyBlend(int mode, vec4 dst, vec3 srcRGB, float srcA) {
     vec3 outRGB;
     float outA;
 
+    // When destination is transparent, force source color directly
+    if (dst.a <= 0.01) {
+        outRGB = srcRGB;
+        outA   = srcA;
+        return vec4(clamp(outRGB, 0.0, 1.0), clamp(outA, 0.0, 1.0));
+    }
+
     if (mode == 0) {         // Normal gamma-correct
         vec3 srcLin = srcRGB * srcRGB;
         vec3 dstLin = dst.rgb * dst.rgb;

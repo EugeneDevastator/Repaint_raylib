@@ -40,10 +40,9 @@ static void CommitLayerOp(AppState* state, d_LAction* lact) {
         }
         case laDrop: {
             int idx = lact->layer;
-            Canvas_MergeDown(&state->canvas, idx);
+            MergeDownLayer(state, idx);
             if (state->activeLayer >= state->canvas.layerCount)
                 state->activeLayer = state->canvas.layerCount - 1;
-            SyncAllRTs(state);
             break;
         }
         case laMove: {

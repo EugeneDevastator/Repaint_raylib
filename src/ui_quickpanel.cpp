@@ -3,8 +3,6 @@
 #include <math.h>
 
 // Sub-component declarations (defined in their own files)
-void BrushPreview_RenderStamp(AppState*, float drawRadOut);
-void BrushPreview_DrawStamp(ImDrawList* dl, ImVec2 org, float drawRadOut);
 void BrushGizmo_Draw(ImDrawList* dl, ImVec2 org, int gcx, int gcy, AppState*);
 void QuickInfo_Draw(ImDrawList*, int gcx, int gcy, int gizR, AppState*);
 void FilePanel_Draw(AppState* state, Rectangle vp);
@@ -40,9 +38,6 @@ void QuickPanel_Draw(AppState* state) {
     float drawRadIn  = baseRadOut * baseHard * state->camera.zoom;
     if (drawRadIn > drawRadOut) drawRadIn = drawRadOut;
 
-    // ── Render stamp texture before ImGui window (avoids state conflicts) ─
-    BrushPreview_RenderStamp(state, drawRadOut);
-
     // ── Separate panels (top-level windows, drawn before overlay) ────────
     FilePanel_Draw(state, vp);
     ToolBox_Draw(state, vp);
@@ -64,7 +59,6 @@ void QuickPanel_Draw(AppState* state) {
     int gizR = 200;
     float d30 = (float)(M_PI * 30.0 / 180.0);
 
-    BrushPreview_DrawStamp(dl, org, drawRadOut);
     BrushGizmo_Draw(dl, org, gcx, gcy, state);
     QuickInfo_Draw(dl, gcx, gcy, gizR, state);
 

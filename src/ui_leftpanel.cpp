@@ -85,7 +85,7 @@ void LeftPanel_Draw(AppState* state) {
         pb.Realb.col      = WHITE;
         pb.Realb.opacity  = 1.0f;
         pb.Realb.cop      = 0.0f;
-        pb.Realb.bmidx    = 0;
+        pb.Realb.bmidx    = state->currentBrush.Realb.bmidx;
         pb.Realb.x2y      = 1.0f;
         pb.Realb.sol      = 1.0f;
         pb.Realb.sol2op   = 0.0f;

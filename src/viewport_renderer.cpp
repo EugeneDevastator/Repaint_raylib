@@ -3,6 +3,7 @@
 
 static RenderTexture2D accumA = {0};
 static RenderTexture2D accumB = {0};
+static RenderTexture2D cleanComposite = {0};  // stamp-free composite snapshot
 static bool accumInited = false;
 static Texture2D checkerTex = {0};
 static bool checkerValid = false;
@@ -39,9 +40,11 @@ static void EnsureAccumulators(int w, int h) {
     if (accumInited) {
         UnloadRenderTexture(accumA);
         UnloadRenderTexture(accumB);
+        if (cleanComposite.id > 0) UnloadRenderTexture(cleanComposite);
     }
     accumA = LoadRenderTexture(w, h);
     accumB = LoadRenderTexture(w, h);
+    cleanComposite = LoadRenderTexture(w, h);
     curCanvasW = w;
     curCanvasH = h;
     accumInited = true;
@@ -125,9 +128,45 @@ void DrawViewport(AppState* state, Rectangle screenRect, Camera2D camera) {
 
         finalAcc = src;
         layersDirty = false;
+
+        // Save clean composite (no stamp) for the preview overlay
+        BeginTextureMode(cleanComposite);
+        ClearBackground(BLANK);
+        DrawTextureRec(finalAcc->texture,
+            Rectangle{0, 0, (float)cw, (float)-ch}, Vector2{0, 0}, WHITE);
+        EndTextureMode();
     }
 
     if (!accumInited || finalAcc == NULL) return;
+
+    // ── Brush preview stamp compositing (visual fake layer) ─────────
+    extern bool quickPanelShow;
+    if (quickPanelShow && shaderInited) {
+        extern Viewport viewport;
+        RenderTexture2D* overlay = (finalAcc == &accumA) ? &accumB : &accumA;
+
+        // Copy clean composite (no stamp) into overlay
+        BeginTextureMode(*overlay);
+        ClearBackground(BLANK);
+        DrawTextureRec(cleanComposite.texture,
+            Rectangle{0, 0, (float)cw, (float)-ch}, Vector2{0, 0}, WHITE);
+        EndTextureMode();
+
+        // Render brush stamp onto overlay with the actual blend mode
+        d_Brush sb;
+        memset(&sb, 0, sizeof(sb));
+        sb.Realb = state->currentBrush.Realb;
+        sb.Realb.opacity = 1.0f;
+
+        Vector2 sc = {
+            viewport.bounds.x + viewport.bounds.width * 0.5f,
+            viewport.bounds.y + viewport.bounds.height * 0.5f
+        };
+        Vector2 cc = GetScreenToWorld2D(sc, camera);
+        BrushBlend_ApplyStamp(*overlay, &sb, cc.x, cc.y, cc.x, cc.y);
+
+        finalAcc = overlay;
+    }
 
     int sw = (int)screenRect.width;
     int sh = (int)screenRect.height;
@@ -153,10 +192,75 @@ void ReloadViewportShader(void) {
     if (!shaderInited) TraceLog(LOG_WARNING, "ReloadViewportShader: layer_blend.fs still failed");
 }
 
+void MergeDownLayer(AppState* state, int idx) {
+    if (idx <= 0 || idx >= state->canvas.layerCount) return;
+    if (!shaderInited) return;
+
+    int cw = state->canvas.width;
+    int ch = state->canvas.height;
+    if (cw < 1 || ch < 1) return;
+
+    // Ensure both layers have valid render textures
+    if (state->texCount <= idx || state->layerRTs[idx].id == 0) return;
+    if (state->texCount <= idx - 1 || state->layerRTs[idx - 1].id == 0) return;
+
+    // Create temp RT, copy dest layer into it
+    RenderTexture2D tempRT = LoadRenderTexture(cw, ch);
+    BeginTextureMode(tempRT);
+    ClearBackground(BLANK);
+    DrawTextureRec(state->layerRTs[idx - 1].texture,
+        Rectangle{0, 0, (float)cw, (float)-ch}, Vector2{0, 0}, WHITE);
+    EndTextureMode();
+
+    // Blend source layer onto tempRT using the same shader as viewport compositing
+    float alpha = state->canvas.layerProps[idx].op;
+    int bmidx = state->canvas.layerProps[idx].blendmode;
+    BeginTextureMode(tempRT);
+    BeginShaderMode(layerBlendShader);
+    SetShaderValueTexture(layerBlendShader, locLayerTex, state->layerRTs[idx].texture);
+    SetShaderValue(layerBlendShader, locLayerAlpha, &alpha, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(layerBlendShader, locBmIdx, &bmidx, SHADER_UNIFORM_INT);
+    DrawTextureRec(state->layerRTs[idx - 1].texture,
+        Rectangle{0, 0, (float)cw, (float)-ch}, Vector2{0, 0}, WHITE);
+    EndShaderMode();
+    EndTextureMode();
+
+    // Read back to destination Image
+    Image cap = LoadImageFromTexture(tempRT.texture);
+    ImageFlipVertical(&cap);
+    Image* dstImg = &state->canvas.layerImages[idx - 1];
+    UnloadImage(*dstImg);
+    *dstImg = cap;
+
+    // Update destination RT
+    BeginTextureMode(state->layerRTs[idx - 1]);
+    ClearBackground(BLANK);
+    DrawTextureRec(tempRT.texture, Rectangle{0, 0, (float)cw, (float)-ch}, Vector2{0, 0}, WHITE);
+    EndTextureMode();
+    UnloadRenderTexture(tempRT);
+
+    // Remove source layer
+    UnloadRenderTexture(state->layerRTs[idx]);
+    Canvas_DeleteLayer(&state->canvas, idx);
+
+    // Fix RT array: shift remaining entries down
+    int n = state->canvas.layerCount;
+    for (int i = idx; i < n; i++) {
+        state->layerRTs[i] = state->layerRTs[i + 1];
+        state->layerTextures[i] = state->layerTextures[i + 1];
+    }
+    state->layerRTs[n] = RenderTexture2D{0};
+    state->layerTextures[n] = Texture2D{0};
+    state->texCount = n;
+
+    layersDirty = true;
+}
+
 void UnloadViewportRenderer(void) {
     if (accumInited) {
         UnloadRenderTexture(accumA);
         UnloadRenderTexture(accumB);
+        if (cleanComposite.id > 0) UnloadRenderTexture(cleanComposite);
         accumInited = false;
     }
     if (checkerValid) {

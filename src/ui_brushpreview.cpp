@@ -30,7 +30,7 @@ void BrushPreview_RenderStamp(AppState* state, float drawRadOut) {
     pb.Realb.crv      = BParam_GetValue(&bpCurvature);
     pb.Realb.opacity  = 1.0f;
     pb.Realb.col      = HSLToRGB(colorHue, colorSat, colorLit);
-    pb.Realb.bmidx    = 0;
+    pb.Realb.bmidx    = state->currentBrush.Realb.bmidx;
     pb.Realb.cop      = 0.0f;
     pb.Realb.x2y      = 1.0f;
     pb.Realb.sol      = 1.0f;

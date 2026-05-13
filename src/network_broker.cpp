@@ -418,8 +418,7 @@ void NetworkBroker::ProcessReceived(uint8_t hid, uint8_t* data, uint32_t size) {
         case laDrop: {
             int idx = lact.layer;
             if (idx <= 0 || idx >= appState->canvas.layerCount) break;
-            Canvas_MergeDown(&appState->canvas, idx);
-            SyncAllRTs(appState);
+            MergeDownLayer(appState, idx);
             if (appState->activeLayer >= appState->canvas.layerCount)
                 appState->activeLayer = appState->canvas.layerCount - 1;
             layersDirty = true;
