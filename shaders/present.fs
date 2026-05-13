@@ -16,7 +16,8 @@ float hash21(vec2 p) {
 void main() {
     vec4 col = texture(texture0, fragTexCoord);
 
-    float d = hash21(floor(gl_FragCoord.xy));
+	float pixsize = 1.0;
+    float d = hash21(floor(gl_FragCoord.xy / pixsize));
     float bias = (d - 0.5) / 255.0;
     vec3 result = col.rgb + bias;
 
