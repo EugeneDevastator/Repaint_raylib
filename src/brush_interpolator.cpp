@@ -37,8 +37,8 @@ int BrushInterpolator::FeedStrokePoint(
     float stdist = Dist2D(from, to);
     if (stdist < 0.001f) return 0;
 
-    // Qt-style spacing: fixed from segment-start brush
-    float spacing = fmaxf(segBrushFrom.Realb.rad_out * spacingVal, 1.0f);
+    // Qt-style spacing: squared spacing control, like SpacingCtl^2 * rad
+    float spacing = fmaxf(segBrushFrom.Realb.rad_out * spacingVal * spacingVal, 1.0f);
 
     float dx = to.x - from.x;
     float dy = to.y - from.y;
@@ -85,10 +85,15 @@ int BrushInterpolator::FeedStrokePoint(
         count++;
     }
 
-    // Chain last dab position (Qt CalcLastPos)
-    float lastDabDist = firstDist + extraDabs * spacing;
-    dabAccum = stdist - lastDabDist;
-    lastDabPos = Vector2{from.x + lastDabDist * x2r, from.y + lastDabDist * y2r};
+    // Chain last dab position (Qt CalcLastPos) using actual placed count
+    if (count > 0) {
+        float lastDabDist = firstDist + (count - 1) * spacing;
+        dabAccum = stdist - lastDabDist;
+        lastDabPos = Vector2{from.x + lastDabDist * x2r, from.y + lastDabDist * y2r};
+    } else {
+        // No dabs placed this frame, but we still moved — accumulate
+        dabAccum += stdist;
+    }
     segBrushFrom.Realb = targetBrush;
 
     return count;

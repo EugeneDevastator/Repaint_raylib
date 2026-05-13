@@ -68,22 +68,21 @@ void QuickPanel_Draw(AppState* state) {
     BrushGizmo_Draw(dl, org, gcx, gcy, state);
     QuickInfo_Draw(dl, gcx, gcy, gizR, state);
 
-    // ── Radial input handling ───────────────────────────────────────────
+    // ── Radial input handling (sector-based, no distance limit) ─────────
     ImVec2 mp = ImGui::GetMousePos();
     float dx = mp.x - gcx, dy = mp.y - gcy;
     float dist = sqrtf(dx * dx + dy * dy);
     float ang = AtanXY(dx, dy);
 
-    bool radialHovered = (dist < gizR && dist > 3);
     bool down = ImGui::IsMouseDown(0);
     bool clicked = ImGui::IsMouseClicked(0);
     bool released = ImGui::IsMouseReleased(0);
 
-    if (clicked && !ImGui::IsAnyItemHovered() && radialHovered) {
+    if (clicked && !ImGui::IsAnyItemHovered()) {
         float angDeg = (ang + (float)M_PI) * 180.0f / (float)M_PI;
         float rotDiff = fabsf(angDeg - fmodf(state->currentBrush.Realb.resangle, 360.0f));
         if (rotDiff > 180.0f) rotDiff = 360.0f - rotDiff;
-        if (rotDiff < 5.0f) quickPanelMouseMode = 4;
+        if (rotDiff < 5.0f && dist > 40.0f) quickPanelMouseMode = 4;
         else if (ang > d30 && ang < d30 * 5) quickPanelMouseMode = 1;
         else if (ang < d30 && ang > -(float)M_PI * 0.5f) quickPanelMouseMode = 2;
         else quickPanelMouseMode = 3;
@@ -139,13 +138,21 @@ void QuickPanel_Draw(AppState* state) {
 
     if (released) quickPanelMouseMode = 0;
 
-    // ── Slider columns ──────────────────────────────────────────────────
-    int totalColH = QP_CTRL_SZ + QP_SPACING + QP_SLIDER_H + QP_SPACING + QP_CTRL_SZ;
-    int sliderLeftX = gcx - gizR - 3 * QP_SLIDER_W - 2 * QP_SLIDER_GAP - 12;
+    // ── Slider columns (dynamic sizes proportional to viewport) ────────
+    int sw = GetScreenWidth();
+    int sh = GetScreenHeight();
+    float dThick = fmaxf(20.0f, fminf(sw / 12.0f, 48.0f));   // 1/12 screen width
+    float dLen   = fmaxf(100.0f, fminf(sh / 3.0f, 400.0f));  // 1/3 screen height
+    int dCtrl    = (int)dThick;
+    int dGap     = fmaxf(4, dCtrl / 3);
+    int dSpacing = fmaxf(2, dCtrl / 6);
+
+    int totalColH = dCtrl + dSpacing + (int)dLen + dSpacing + dCtrl;
+    int sliderLeftX = gcx - gizR - 3 * dCtrl - 2 * dGap - 12;
     int sliderRightX = gcx + gizR + 12;
     int penBtnY = gcy - totalColH / 2;
-    int slY = penBtnY + QP_CTRL_SZ + QP_SPACING;
-    int iconY = slY + QP_SLIDER_H + QP_SPACING;
+    int slY = penBtnY + dCtrl + dSpacing;
+    int iconY = slY + (int)dLen + dSpacing;
 
     BParam* bps[6] = {&bpOpacity, &bpSpacing, &bpScatter, &bpQuickHue, &bpQuickSat, &bpQuickLit};
     const char* labels[6] = {"Op", "Sp", "Sc", "H", "S", "L"};
@@ -153,11 +160,11 @@ void QuickPanel_Draw(AppState* state) {
 
     for (int i = 0; i < 6; i++) {
         int colX = (i < 3)
-            ? sliderLeftX + i * (QP_SLIDER_W + QP_SLIDER_GAP)
-            : sliderRightX + (i - 3) * (QP_SLIDER_W + QP_SLIDER_GAP);
+            ? sliderLeftX + i * (dCtrl + dGap)
+            : sliderRightX + (i - 3) * (dCtrl + dGap);
         BParam* bp = bps[i];
 
-        dl->AddText(ImVec2(colX + QP_SLIDER_W / 2 - 6, penBtnY - 14), IM_COL32(211, 211, 211, 230), labels[i]);
+        dl->AddText(ImVec2(colX + dCtrl / 2 - 6, penBtnY - 14), IM_COL32(211, 211, 211, 230), labels[i]);
 
         // Pen mode button
         ImGui::SetCursorScreenPos(ImVec2(colX, penBtnY));
@@ -173,10 +180,10 @@ void QuickPanel_Draw(AppState* state) {
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.72f, 0.72f, 0.72f, 1.0f));
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
         if (penTid) {
-            if (ImGui::ImageButton("##pb", penTid, ImVec2(QP_CTRL_SZ, QP_CTRL_SZ)))
+            if (ImGui::ImageButton("##pb", penTid, ImVec2(dCtrl, dCtrl)))
                 ImGui::OpenPopup(pname);
         } else {
-            if (ImGui::Button("...", ImVec2(QP_CTRL_SZ, QP_CTRL_SZ)))
+            if (ImGui::Button("...", ImVec2(dCtrl, dCtrl)))
                 ImGui::OpenPopup(pname);
         }
         ImGui::PopStyleColor(3);
@@ -197,15 +204,15 @@ void QuickPanel_Draw(AppState* state) {
         ImGui::PopID();
 
         // Slider body
-        DrawSliderVertical(dl, bp, colX, slY, QP_SLIDER_W, QP_SLIDER_H, bp->slider.clipmaxF, colorModes[i]);
+        DrawSliderVertical(dl, bp, colX, slY, dCtrl, (int)dLen, bp->slider.clipmaxF, colorModes[i]);
 
         // Invisible button — per-item activation via ImGui button flags
         ImGui::PushID(400 + i);
         ImGui::SetCursorScreenPos(ImVec2(colX, slY));
-        ImGui::InvisibleButton("##sb", ImVec2(QP_SLIDER_W, QP_SLIDER_H),
+        ImGui::InvisibleButton("##sb", ImVec2(dCtrl, (int)dLen),
             ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle);
         if (ImGui::IsItemActive()) {
-            float t = (mp.y - slY) / (float)QP_SLIDER_H;
+            float t = (mp.y - slY) / (float)dLen;
             t = fminf(1.0f, fmaxf(0.0f, t));
             t = 1.0f - t;
             if (ImGui::IsMouseDown(0))
@@ -222,15 +229,15 @@ void QuickPanel_Draw(AppState* state) {
             ImTextureID iconTid = (ImTextureID)(intptr_t)bp->iconTex.id;
             if (iconTid) {
                 ImGui::SetCursorScreenPos(ImVec2(colX, iconY));
-                ImGui::Image(iconTid, ImVec2(QP_CTRL_SZ, QP_CTRL_SZ));
+                ImGui::Image(iconTid, ImVec2(dCtrl, dCtrl));
             }
         } else {
             Color swatch = (i == 3) ? HSLToRGB(colorHue, 1.0f, 0.5f)
                         : (i == 4) ? HSLToRGB(colorHue, colorSat, colorLit)
                         : HSLToRGB(colorHue, colorSat, colorLit);
             ImU32 swCol = IM_COL32(swatch.r, swatch.g, swatch.b, 255);
-            dl->AddRectFilled(ImVec2(colX, iconY), ImVec2(colX + QP_CTRL_SZ, iconY + QP_CTRL_SZ), swCol);
-            dl->AddRect(ImVec2(colX, iconY), ImVec2(colX + QP_CTRL_SZ, iconY + QP_CTRL_SZ), IM_COL32(200, 200, 200, 200));
+            dl->AddRectFilled(ImVec2(colX, iconY), ImVec2(colX + dCtrl, iconY + dCtrl), swCol);
+            dl->AddRect(ImVec2(colX, iconY), ImVec2(colX + dCtrl, iconY + dCtrl), IM_COL32(200, 200, 200, 200));
         }
     }
 

@@ -104,7 +104,8 @@ static void DrawSliderCore(ImDrawList* dl, int x, int y, int length, int thickne
             gw = thickness - 2;
             gh = sliderrad * 2;
         }
-        dl->AddRectFilled(ImVec2(gx, gy), ImVec2(gx + gw, gy + gh), fill);
+        int fa = (colorMode >= 0) ? 140 : 255;
+        dl->AddRectFilled(ImVec2(gx, gy), ImVec2(gx + gw, gy + gh), fill & 0x00FFFFFF | (fa << 24));
         dl->AddRectFilled(ImVec2(gx, gy), ImVec2(gx + gw, gy + 1), shade);
         dl->AddRectFilled(ImVec2(gx, gy), ImVec2(gx + 1, gy + gh), shade);
         dl->AddRectFilled(ImVec2(gx + gw - 1, gy + 1), ImVec2(gx + gw, gy + gh), hlite);

@@ -163,8 +163,8 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
 
                     // Feed through BrushInterpolator → dabs
                     float spacingVal = BParam_GetValue(&bpSpacing);
-                    InputEvent dabs[32];
-                    int n = vp->brushInterp.FeedStrokePoint(sp, targetBr, dabs, 32, spacingVal, state->mode);
+                InputEvent dabs[128];
+                int n = vp->brushInterp.FeedStrokePoint(sp, targetBr, dabs, 128, spacingVal, state->mode);
                     for (int i = 0; i < n; i++) {
                         if (vp->broker) vp->broker->on_input(dabs[i]);
                         if (vp->strokeLen < MAX_STROKE_PTS)
@@ -173,7 +173,8 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                 }
             } else {
                 // Disp / Cont: simple threshold-based dabbing (old path, kept for now)
-                float spacing = state->currentBrush.Realb.rad_out * BParam_GetValue(&bpSpacing);
+                float sv = BParam_GetValue(&bpSpacing);
+                float spacing = state->currentBrush.Realb.rad_out * sv * sv;
                 if (spacing < 2.0f) spacing = 2.0f;
                 if (!vp->wasMouseDown) {
                     if (vp->broker) {
