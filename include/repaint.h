@@ -147,8 +147,43 @@ typedef struct {
 } Canvas;
 
 // ── Network painter architecture ─────────────────────────────────────────
-struct InputEvent  { float x, y; float srcX, srcY; uint32_t color; float radius; };
+struct InputEvent  { float x, y; float srcX, srcY; d_RealBrush brush; };
 struct DrawCommand { float x, y; uint32_t color; float radius; };
+
+// ── Input pipeline architecture ─────────────────────────────────────────
+struct StrokePoint {
+    float x, y;
+    float velocity;    // 0–1 normalized
+    float pressure;    // 0–1
+};
+
+class InputFilter {
+public:
+    static const int RING_SIZE = 16;
+    struct RawPt { float x, y; double t; };
+    RawPt ring[RING_SIZE];
+    int head, tail;
+
+    InputFilter() : head(0), tail(0) { memset(ring, 0, sizeof(ring)); }
+    void Reset() { head = tail = 0; }
+    StrokePoint Feed(float x, float y, double time);
+};
+
+class BrushInterpolator {
+public:
+    d_Brush segBrushFrom;          // brush at segment start (snapshot)
+    Vector2 lastDabPos;            // last placed dab position (Qt chaining)
+    Vector2 smudgeSrcPos;          // smudge source position
+    float dabAccum;                // leftover for spacing
+    bool inStroke;
+
+    BrushInterpolator();
+    void BeginStroke(const d_Brush& userBrush, float startX, float startY);
+    void EndStroke();
+    int FeedStrokePoint(const StrokePoint& pt, const d_RealBrush& targetBrush,
+                        InputEvent* out, int maxOut,
+                        float spacingVal, int toolMode);
+};
 
 struct AppState;
 
@@ -218,10 +253,6 @@ typedef struct {
     Vector2 strokePts[MAX_STROKE_PTS];
     int strokeLen;
     bool wasMouseDown;
-    Vector2 lastDabPos;
-    Vector2 smudgeSrcPos;
-    d_Brush segBrushFrom;        // brush at lastDabPos (segment start — saved per segment)
-    float strokeDabAccum;
     bool debugShowStamps;
     bool rightMouseDown;
     Vector2 lastMousePos;
@@ -229,6 +260,9 @@ typedef struct {
     bool strokeEnded;
     int endLayer;
     ICommandBroker* broker;
+    InputFilter inputFilter;
+    BrushInterpolator brushInterp;
+    Vector2 lineLastDabPos;          // line tool dab chaining
 } Viewport;
 
 struct AppState {
@@ -299,6 +333,7 @@ void BParam_SetValue(BParam* bp, float val);
 Color HSLToRGB(float h, float s, float l);
 void RGBToHSL(Color c, float& h, float& s, float& l);
 float GetModVal(BParam* bp);
+float GetModValFor(BParam* bp, float cpar);
 
 extern float colorHue;
 extern float colorSat;

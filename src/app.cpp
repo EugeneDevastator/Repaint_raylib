@@ -114,7 +114,10 @@ float GetModVal(BParam* bp) {
         cpar = g_velocity;
     else if (bp->penMode == csNone)
         cpar = 1.0f;
+    return GetModValFor(bp, cpar);
+}
 
+float GetModValFor(BParam* bp, float cpar) {
     float rng = bp->slider.clipmaxF - bp->slider.clipminF;
     float respar = cpar * rng + bp->slider.clipminF;
     float randm = (((float)rand() / (float)RAND_MAX) - 0.5f) * 2.0f * bp->slider.jitter;

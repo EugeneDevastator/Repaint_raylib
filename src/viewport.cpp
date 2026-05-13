@@ -1,12 +1,7 @@
 #include "repaint.h"
 #include "rlgl.h"
-#include "stroke.h"
 
 extern bool quickPanelShow;
-
-static uint32_t PackColor(Color c) {
-    return (uint32_t)c.r << 16 | (uint32_t)c.g << 8 | (uint32_t)c.b | (uint32_t)c.a << 24;
-}
 
 void SyncLayerTexture(AppState* state, int layer) {
     if (layer < 0 || layer >= state->texCount) return;
@@ -20,10 +15,6 @@ void Viewport_Init(Viewport* vp, Rectangle bounds) {
     vp->bounds = bounds;
     vp->strokeLen = 0;
     vp->wasMouseDown = false;
-    vp->lastDabPos = Vector2{0, 0};
-    vp->smudgeSrcPos = Vector2{0, 0};
-    memset(&vp->segBrushFrom, 0, sizeof(vp->segBrushFrom));
-    vp->strokeDabAccum = 0.0f;
     vp->debugShowStamps = false;
     vp->rightMouseDown = false;
     vp->lastMousePos = Vector2{0, 0};
@@ -31,6 +22,8 @@ void Viewport_Init(Viewport* vp, Rectangle bounds) {
     vp->strokeEnded = false;
     vp->endLayer = 0;
     vp->broker = NULL;
+    vp->lineLastDabPos = Vector2{0, 0};
+    // InputFilter and BrushInterpolator are default-constructed
 }
 
 void Viewport_SetBounds(Viewport* vp, Rectangle bounds) {
@@ -40,7 +33,7 @@ void Viewport_SetBounds(Viewport* vp, Rectangle bounds) {
 void Viewport_HandleInput(Viewport* vp, AppState* state) {
     if (IsKeyPressed(KEY_F1)) vp->debugShowStamps = !vp->debugShowStamps;
 
-    // Quick panel open — block ALL viewport interactions (input handled by ImGui)
+    // Quick panel open — block ALL viewport interactions
     if (quickPanelShow) return;
 
     Vector2 mousePos = GetMousePosition();
@@ -65,7 +58,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         vp->rightMouseDown = false;
     }
 
-    // Zoom toward cursor (scroll wheel — works regardless of hover)
+    // Zoom toward cursor (scroll wheel)
     float wheel = GetMouseWheelMove();
     if (wheel != 0) {
         Vector2 worldBefore = GetScreenToWorld2D(mousePos, state->camera);
@@ -77,7 +70,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         layersDirty = true;
     }
 
-    // Alt+Left click/drag color picker — composite from all visible layers
+    // Alt+Left click/drag color picker
     if (IsKeyDown(KEY_LEFT_ALT) && IsMouseButtonDown(MOUSE_LEFT_BUTTON) && vp->inBounds) {
         g_colorPicking = true;
         Vector2 cp = GetScreenToWorld2D(mousePos, state->camera);
@@ -102,7 +95,6 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             float tH, tS, tL;
             RGBToHSL(picked, tH, tS, tL);
             if (picked.a == 0) { tS = 0.0f; tL = 1.0f; }
-            // Slow down color change by lerping at 0.5 speed
             float spd = 0.5f;
             float dh = tH - colorHue;
             if (dh > 0.5f) dh -= 1.0f;
@@ -120,100 +112,84 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         g_colorPicking = false;
     }
 
-    // Track mouse position for camera pan delta
     vp->lastMousePos = mousePos;
 
-    // Alt is held for color picking — skip painting
     if (IsKeyDown(KEY_LEFT_ALT)) return;
 
     Vector2 canvasPos = GetScreenToWorld2D(mousePos, state->camera);
     bool leftDown = IsMouseButtonDown(MOUSE_LEFT_BUTTON);
     int active = state->activeLayer;
 
-    // Brush / Smudge / Disp / Cont
-    if (vp->inBounds && leftDown && (state->mode == eBrush || state->mode == eSmudge || state->mode == eDisp || state->mode == eCont)) {
+    // ── Brush / Smudge ───────────────────────────────────────────────
+    if (vp->inBounds && leftDown &&
+        (state->mode == eBrush || state->mode == eSmudge || state->mode == eDisp || state->mode == eCont))
+    {
         if (active >= 0 && active < state->texCount && state->layerRTs[active].id > 0) {
             if (state->mode == eBrush || state->mode == eSmudge) {
                 if (!vp->wasMouseDown) {
+                    vp->inputFilter.Reset();
+                    vp->brushInterp.BeginStroke(state->currentBrush, canvasPos.x, canvasPos.y);
+
+                    // First dab: use current brush directly (no interpolation)
                     if (vp->broker) {
-                        InputEvent ev = {canvasPos.x, canvasPos.y, canvasPos.x, canvasPos.y,
-                            PackColor(state->currentBrush.Realb.col), state->currentBrush.Realb.rad_out};
+                        d_RealBrush br = state->currentBrush.Realb;
+                        InputEvent ev = {canvasPos.x, canvasPos.y, canvasPos.x, canvasPos.y, br};
                         vp->broker->on_input(ev);
                     }
-                    vp->lastDabPos = canvasPos;
-                     vp->smudgeSrcPos = canvasPos;
-                     vp->segBrushFrom = state->currentBrush;
-                     vp->strokeDabAccum = 0.0f;
                     vp->wasMouseDown = true;
                     if (vp->strokeLen < MAX_STROKE_PTS)
                         vp->strokePts[vp->strokeLen++] = canvasPos;
                 } else {
-                    // Qt-style spacing: step = rad_out * spacing slider (fixed for segment)
-                    float spacing = fmaxf(vp->segBrushFrom.Realb.rad_out * BParam_GetValue(&bpSpacing), 1.0f);
-                    Vector2 from = vp->lastDabPos;
-                    Vector2 to = canvasPos;
-                    float stdist = Dist2D(from, to);
-                    if (stdist > 0.0f) {
-                        float dx = to.x - from.x;
-                        float dy = to.y - from.y;
-                        float x2r = dx / stdist;
-                        float y2r = dy / stdist;
-                        float tdist = stdist + vp->strokeDabAccum;
-                        if (tdist >= spacing) {
-                            float firstDist = spacing - vp->strokeDabAccum;
-                            if (firstDist < 0.0f) firstDist = 0.0f;
-                            float remaining = stdist - firstDist;
-                            int extraDabs = (remaining > 0.0f) ? (int)(remaining / spacing) : 0;
-                            for (int i = 0; i <= extraDabs; i++) {
-                                float d = firstDist + i * spacing;
-                                if (d > stdist) break;
-                                Vector2 pos = {from.x + d * x2r, from.y + d * y2r};
-                                // Per-segment interpolation: k=0 at lastDabPos, k=1 at canvasPos
-                                float k = fminf(d / fmaxf(stdist, 0.001f), 1.0f);
-                                d_RealBrush ib = Stroke_BlendBrushes(vp->segBrushFrom.Realb, state->currentBrush.Realb, k);
-                                state->currentBrush.Realb = ib;
-                                if (vp->broker) {
-                                    float srcX = (state->mode == eSmudge) ? vp->smudgeSrcPos.x : pos.x;
-                                    float srcY = (state->mode == eSmudge) ? vp->smudgeSrcPos.y : pos.y;
-                                    InputEvent ev = {pos.x, pos.y, srcX, srcY,
-                                        PackColor(state->currentBrush.Realb.col), state->currentBrush.Realb.rad_out};
-                                    vp->broker->on_input(ev);
-                                }
-                                if (state->mode == eSmudge) vp->smudgeSrcPos = pos;
-                                 if (vp->strokeLen < MAX_STROKE_PTS)
-                                     vp->strokePts[vp->strokeLen++] = pos;
-                             }
-                              float lastDabDist = firstDist + extraDabs * spacing;
-                              vp->strokeDabAccum = stdist - lastDabDist;
-                              vp->lastDabPos = Vector2{from.x + lastDabDist * x2r, from.y + lastDabDist * y2r};
-                         } else {
-                             vp->strokeDabAccum += stdist;
-                         }
-                         vp->segBrushFrom = state->currentBrush;
-                        vp->segBrushFrom = state->currentBrush;
+                    // Feed input through the pipeline
+                    double now = GetTime();
+                    StrokePoint sp = vp->inputFilter.Feed(canvasPos.x, canvasPos.y, now);
+
+                    // Build the target brush with velocity modulation from the stroke point
+                    d_RealBrush targetBr = state->currentBrush.Realb;
+                    float cpar = (state->currentBrush.Realb.rad_out > 0) ? sp.velocity : 0.0f;
+                    targetBr.rad_out  = GetModValFor(&bpSize,       (bpSize.penMode == csVel) ? sp.velocity : 1.0f);
+                    float hVal        = GetModValFor(&bpHardness,   (bpHardness.penMode == csVel) ? sp.velocity : 1.0f);
+                    targetBr.rad_in   = targetBr.rad_out * hVal;
+                    targetBr.crv      = GetModValFor(&bpCurvature,  (bpCurvature.penMode == csVel) ? sp.velocity : 1.0f);
+                    targetBr.opacity  = GetModValFor(&bpOpacity,    (bpOpacity.penMode == csVel) ? sp.velocity : 1.0f);
+                    float colH        = GetModValFor(&bpQuickHue,   (bpQuickHue.penMode == csVel) ? sp.velocity : 1.0f);
+                    float colS        = GetModValFor(&bpQuickSat,   (bpQuickSat.penMode == csVel) ? sp.velocity : 1.0f);
+                    float colL        = GetModValFor(&bpQuickLit,   (bpQuickLit.penMode == csVel) ? sp.velocity : 1.0f);
+                    targetBr.col      = HSLToRGB(colH, colS, colL);
+                    if (state->mode == eSmudge)
+                        targetBr.cop = GetModValFor(&bpCloneOpacity, (bpCloneOpacity.penMode == csVel) ? sp.velocity : 1.0f);
+                    else
+                        targetBr.cop = 0.0f;
+
+                    // Feed through BrushInterpolator → dabs
+                    float spacingVal = BParam_GetValue(&bpSpacing);
+                    InputEvent dabs[32];
+                    int n = vp->brushInterp.FeedStrokePoint(sp, targetBr, dabs, 32, spacingVal, state->mode);
+                    for (int i = 0; i < n; i++) {
+                        if (vp->broker) vp->broker->on_input(dabs[i]);
+                        if (vp->strokeLen < MAX_STROKE_PTS)
+                            vp->strokePts[vp->strokeLen++] = Vector2{dabs[i].x, dabs[i].y};
                     }
                 }
             } else {
-                // Disp / Cont: simple threshold-based dabbing
+                // Disp / Cont: simple threshold-based dabbing (old path, kept for now)
                 float spacing = state->currentBrush.Realb.rad_out * BParam_GetValue(&bpSpacing);
                 if (spacing < 2.0f) spacing = 2.0f;
                 if (!vp->wasMouseDown) {
                     if (vp->broker) {
                         InputEvent ev = {canvasPos.x, canvasPos.y, canvasPos.x, canvasPos.y,
-                            PackColor(state->currentBrush.Realb.col), state->currentBrush.Realb.rad_out};
+                            state->currentBrush.Realb};
                         vp->broker->on_input(ev);
                     }
-                    vp->smudgeSrcPos = canvasPos;
-                    vp->lastDabPos = canvasPos;
                     vp->wasMouseDown = true;
                 } else {
-                    if (Dist2D(vp->lastDabPos, canvasPos) >= spacing) {
+                    if (Dist2D(vp->brushInterp.lastDabPos, canvasPos) >= spacing) {
                         if (vp->broker) {
                             InputEvent ev = {canvasPos.x, canvasPos.y, canvasPos.x, canvasPos.y,
-                                PackColor(state->currentBrush.Realb.col), state->currentBrush.Realb.rad_out};
+                                state->currentBrush.Realb};
                             vp->broker->on_input(ev);
                         }
-                        vp->lastDabPos = canvasPos;
+                        vp->brushInterp.lastDabPos = canvasPos;
                     }
                 }
             }
@@ -226,6 +202,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             vp->strokeLen = 0;
         }
         if (vp->wasMouseDown) {
+            vp->brushInterp.EndStroke();
             vp->strokeEnded = true;
             vp->endLayer = active;
         }
@@ -237,30 +214,28 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         vp->strokeLen = 0;
     }
 
-    // Line tool
+    // Line tool — separate simple pipeline
     if (state->mode == eLine && vp->inBounds && leftDown && active >= 0 && active < state->texCount && state->layerRTs[active].id > 0) {
         if (!vp->wasMouseDown) {
-            vp->lastDabPos = canvasPos;
+            vp->lineLastDabPos = canvasPos;
             vp->wasMouseDown = true;
         } else {
             float spacing = fmaxf(state->currentBrush.Realb.rad_out * BParam_GetValue(&bpSpacing), 2.0f);
-            if (Dist2D(vp->lastDabPos, canvasPos) > spacing) {
-                float segLen = Dist2D(vp->lastDabPos, canvasPos);
+            if (Dist2D(vp->lineLastDabPos, canvasPos) > spacing) {
+                float segLen = Dist2D(vp->lineLastDabPos, canvasPos);
                 int steps = (int)(segLen / spacing) + 1;
                 if (steps < 1) steps = 1;
+                d_RealBrush br = state->currentBrush.Realb;
                 for (int s = 0; s <= steps; s++) {
                     float t = (float)s / (float)steps;
-                    Vector2 pos = {
-                        vp->lastDabPos.x + (canvasPos.x - vp->lastDabPos.x) * t,
-                        vp->lastDabPos.y + (canvasPos.y - vp->lastDabPos.y) * t
-                    };
+                    Vector2 pos = {vp->lineLastDabPos.x + (canvasPos.x - vp->lineLastDabPos.x) * t,
+                                   vp->lineLastDabPos.y + (canvasPos.y - vp->lineLastDabPos.y) * t};
                     if (vp->broker) {
-                        InputEvent ev = {pos.x, pos.y, pos.x, pos.y,
-                            PackColor(state->currentBrush.Realb.col), state->currentBrush.Realb.rad_out};
+                        InputEvent ev = {pos.x, pos.y, pos.x, pos.y, br};
                         vp->broker->on_input(ev);
                     }
                 }
-                vp->lastDabPos = canvasPos;
+                vp->lineLastDabPos = canvasPos;
             }
         }
     } else if (state->mode != eLine && !leftDown) {

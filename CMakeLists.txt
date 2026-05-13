@@ -66,6 +66,8 @@ set(SOURCES
     src/network_broker.cpp
     src/app_config.cpp
     src/sock_platform.cpp
+    src/input_filter.cpp
+    src/brush_interpolator.cpp
     dialog/dialog.c
     ${imgui_SOURCE_DIR}/imgui.cpp
     ${imgui_SOURCE_DIR}/imgui_draw.cpp

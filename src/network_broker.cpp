@@ -197,32 +197,26 @@ void NetworkBroker::on_input(const InputEvent& e) {
     if (next == localHead) return;
     if (!appState) return;
 
-    d_Brush* br    = &appState->currentBrush;
     int      layer = appState->activeLayer;
 
     localQueue[localTail].x     = e.x;
     localQueue[localTail].y     = e.y;
     localQueue[localTail].srcX  = e.srcX;
     localQueue[localTail].srcY  = e.srcY;
-    localQueue[localTail].color = Color{
-        (uint8_t)((e.color >> 16) & 0xFF),
-        (uint8_t)((e.color >>  8) & 0xFF),
-        (uint8_t)( e.color        & 0xFF),
-        (uint8_t)((e.color >> 24) & 0xFF)
-    };
-    localQueue[localTail].rad_out   = br->Realb.rad_out;
-    localQueue[localTail].rad_in    = br->Realb.rad_in;
-    localQueue[localTail].opacity   = br->Realb.opacity;
-    localQueue[localTail].crv       = br->Realb.crv;
-    localQueue[localTail].x2y       = br->Realb.x2y;
-    localQueue[localTail].sol       = br->Realb.sol;
-    localQueue[localTail].sol2op    = br->Realb.sol2op;
-    localQueue[localTail].resangle  = (float)br->Realb.resangle;
-    localQueue[localTail].cop       = br->Realb.cop;
-    localQueue[localTail].bmidx     = (int)br->Realb.bmidx;
-    localQueue[localTail].seed      = br->Realb.seed;
+    localQueue[localTail].color       = e.brush.col;
+    localQueue[localTail].rad_out     = e.brush.rad_out;
+    localQueue[localTail].rad_in      = e.brush.rad_in;
+    localQueue[localTail].opacity     = e.brush.opacity;
+    localQueue[localTail].crv         = e.brush.crv;
+    localQueue[localTail].x2y         = e.brush.x2y;
+    localQueue[localTail].sol         = e.brush.sol;
+    localQueue[localTail].sol2op      = e.brush.sol2op;
+    localQueue[localTail].resangle    = (float)e.brush.resangle;
+    localQueue[localTail].cop         = e.brush.cop;
+    localQueue[localTail].bmidx       = (int)e.brush.bmidx;
+    localQueue[localTail].seed        = e.brush.seed;
     localQueue[localTail].activeLayer = layer;
-    localQueue[localTail].targetRT  = appState->layerRTs[layer];
+    localQueue[localTail].targetRT    = appState->layerRTs[layer];
 
     localTail = next;
 }
