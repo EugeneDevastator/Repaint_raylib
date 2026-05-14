@@ -131,24 +131,32 @@ static void EnsureShader(void) {
     TraceLog(LOG_INFO, "Shader locs: layerTex=%d alpha=%d bm=%d", locLayerTex, locLayerAlpha, locBmIdx);
     shaderInited = true;
 }
-
 void DrawViewport(AppState* state, Rectangle screenRect, Camera2D camera) {
     int cw = state->canvas.width;
     int ch = state->canvas.height;
     if (cw < 1 || ch < 1) return;
 
-    // ── Texture editing mode — draw the active texture ──────────────
     if (state->editTexMode && state->activeBrushTex >= 0 &&
         state->activeBrushTex < state->brushTexCount &&
         state->brushTex[state->activeBrushTex].rt.id > 0)
     {
+        int tw = state->brushTex[state->activeBrushTex].w;
+        int th = state->brushTex[state->activeBrushTex].h;
+
         float dstX = -camera.target.x * camera.zoom + camera.offset.x;
         float dstY = -camera.target.y * camera.zoom + camera.offset.y;
-        float dstW = cw * camera.zoom;
-        float dstH = ch * camera.zoom;
+        float dstW = tw * camera.zoom;
+        float dstH = th * camera.zoom;
         Rectangle dstRect = {dstX, dstY, dstW, dstH};
-        Rectangle srcR = {0, 0, (float)state->brushTex[state->activeBrushTex].w, (float)-state->brushTex[state->activeBrushTex].h};
-        DrawTexturePro(state->brushTex[state->activeBrushTex].rt.texture, srcR, dstRect, Vector2{0, 0}, 0.0f, WHITE);
+
+        EnsureChecker(tw, th);
+        DrawTexturePro(checkerTex,
+            (Rectangle){0, 0, (float)tw, (float)th},
+            dstRect, Vector2{0,0}, 0.0f, WHITE);
+
+        Rectangle srcR = {0, 0, (float)tw, (float)-th};
+        DrawTexturePro(state->brushTex[state->activeBrushTex].rt.texture,
+            srcR, dstRect, Vector2{0, 0}, 0.0f, WHITE);
         return;
     }
 

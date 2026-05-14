@@ -130,34 +130,40 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
     int active = state->activeLayer;
 
     // ── Texture editing mode ──────────────────────────────────────────
-    if (state->editTexMode && state->activeBrushTex >= 0 &&
+       if (state->editTexMode && state->activeBrushTex >= 0 &&
         state->activeBrushTex < state->brushTexCount)
     {
         BrushTexture* bt = &state->brushTex[state->activeBrushTex];
         if (bt->rt.id > 0 && (state->mode == eBrush || state->mode == eSmudge)) {
-            // Don't use brush texture as pattern on itself
+            float dstX = -state->camera.target.x * state->camera.zoom + state->camera.offset.x;
+            float dstY = -state->camera.target.y * state->camera.zoom + state->camera.offset.y;
+            float dstW = bt->w * state->camera.zoom;
+            float dstH = bt->h * state->camera.zoom;
+            float tx = (mousePos.x - dstX) / dstW * bt->w;
+            float ty = (mousePos.y - dstY) / dstH * bt->h;
+
             Texture2D savedTex = g_activeBrushTex;
             g_activeBrushTex = Texture2D{0};
             if (!vp->wasMouseDown) {
                 if (vp->inBounds && leftDown) {
                     vp->inputFilter.Reset();
-                    vp->brushInterp.BeginStroke(state->currentBrush, canvasPos.x, canvasPos.y);
+                    vp->brushInterp.BeginStroke(state->currentBrush, tx, ty);
                     d_Brush tb; memset(&tb, 0, sizeof(tb));
                     tb.Realb = state->currentBrush.Realb;
                     tb.Realb.opacity = 1.0f;
-                    BrushBlend_ApplyStamp(bt->rt, &tb, canvasPos.x, canvasPos.y, canvasPos.x, canvasPos.y);
+                    BrushBlend_ApplyStamp(bt->rt, &tb, tx, ty, tx, ty);
                     vp->wasMouseDown = true;
                 }
             } else if (leftDown) {
                 double now = GetTime();
-                StrokePoint sp = vp->inputFilter.Feed(canvasPos.x, canvasPos.y, now);
+                StrokePoint sp = vp->inputFilter.Feed(tx, ty, now);
                 d_RealBrush targetBr = state->currentBrush.Realb;
-                targetBr.rad_out  = GetModValFor(&bpSize, (bpSize.penMode == csVel) ? sp.velocity : 1.0f);
-                float hVal = GetModValFor(&bpHardness, (bpHardness.penMode == csVel) ? sp.velocity : 1.0f);
+                targetBr.rad_out  = GetModValFor(&bpSize,      (bpSize.penMode == csVel)      ? sp.velocity : 1.0f);
+                float hVal        = GetModValFor(&bpHardness,  (bpHardness.penMode == csVel)  ? sp.velocity : 1.0f);
                 targetBr.rad_in   = targetBr.rad_out * hVal;
                 targetBr.crv      = GetModValFor(&bpCurvature, (bpCurvature.penMode == csVel) ? sp.velocity : 1.0f);
-                targetBr.opacity  = GetModValFor(&bpOpacity, (bpOpacity.penMode == csVel) ? sp.velocity : 1.0f);
-                float spacingVal = BParam_GetValue(&bpSpacing);
+                targetBr.opacity  = GetModValFor(&bpOpacity,   (bpOpacity.penMode == csVel)   ? sp.velocity : 1.0f);
+                float spacingVal  = BParam_GetValue(&bpSpacing);
                 InputEvent dabs[128];
                 int n = vp->brushInterp.FeedStrokePoint(sp, targetBr, dabs, 128, spacingVal, state->mode);
                 d_Brush tb; memset(&tb, 0, sizeof(tb));
@@ -174,6 +180,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             vp->wasMouseDown = false;
         }
     }
+
 
     // ── Brush / Smudge (normal layer painting) ────────────────────────
     if (!state->editTexMode && (vp->inBounds || vp->wasMouseDown) && leftDown &&
