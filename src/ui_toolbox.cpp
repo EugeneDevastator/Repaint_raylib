@@ -3,11 +3,11 @@
 
 #define GIZMO_TOOL_N 6
 static const char* gizmoToolLabels[GIZMO_TOOL_N] = {"Br","Sm","Li","Er","Di","Co"};
-static const int gizmoToolModes[GIZMO_TOOL_N] = {eBrush, eSmudge, eLine, -1, eDisp, eCont};
+static const int gizmoToolModes[GIZMO_TOOL_N] = {eBrush, eSmudge, eLine,  eCont, eDisp, eCont};
 
-#define TOOL_ICON_N 5
+#define TOOL_ICON_N 6
 static Texture2D toolIconTex[TOOL_ICON_N];
-static const char* toolIconNames[TOOL_ICON_N] = {"tbrush","tsmudge","tline","tdisp","tcont"};
+static const char* toolIconNames[TOOL_ICON_N] = {"tbrush","tsmudge","tline","tdisp","tcont","tcont"};
 
 void ToolBox_Init(void) {
     for (int i = 0; i < TOOL_ICON_N; i++) {
@@ -31,7 +31,7 @@ void ToolBox_Shutdown(void) {
 }
 
 void ToolBox_Draw(AppState* state, Rectangle vp) {
-    static const int toolIconIdx[GIZMO_TOOL_N] = {0, 1, 2, -1, 3, 4};
+    static const int toolIconIdx[GIZMO_TOOL_N] = {0, 1, 2, 4, 3, 4};
     int cols = 3, rows = 2;
     int btnSz = 42;
     int gap = 4;

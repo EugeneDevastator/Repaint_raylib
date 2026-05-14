@@ -41,7 +41,7 @@ static void* RenderLoop(void* arg) {
 int main() {
     AppState state = {0};
     App_Init(&state);
-
+	SetExitKey(KEY_NULL);
     while (!WindowShouldClose()) {
         if (!App_IsDialogActive()) {
             UpdateUI(&state);
