@@ -129,8 +129,54 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
     bool leftDown = IsMouseButtonDown(MOUSE_LEFT_BUTTON);
     int active = state->activeLayer;
 
-    // ── Brush / Smudge ───────────────────────────────────────────────
-    if ((vp->inBounds || vp->wasMouseDown) && leftDown &&
+    // ── Texture editing mode ──────────────────────────────────────────
+    if (state->editTexMode && state->activeBrushTex >= 0 &&
+        state->activeBrushTex < state->brushTexCount)
+    {
+        BrushTexture* bt = &state->brushTex[state->activeBrushTex];
+        if (bt->rt.id > 0 && (state->mode == eBrush || state->mode == eSmudge)) {
+            // Don't use brush texture as pattern on itself
+            Texture2D savedTex = g_activeBrushTex;
+            g_activeBrushTex = Texture2D{0};
+            if (!vp->wasMouseDown) {
+                if (vp->inBounds && leftDown) {
+                    vp->inputFilter.Reset();
+                    vp->brushInterp.BeginStroke(state->currentBrush, canvasPos.x, canvasPos.y);
+                    d_Brush tb; memset(&tb, 0, sizeof(tb));
+                    tb.Realb = state->currentBrush.Realb;
+                    tb.Realb.opacity = 1.0f;
+                    BrushBlend_ApplyStamp(bt->rt, &tb, canvasPos.x, canvasPos.y, canvasPos.x, canvasPos.y);
+                    vp->wasMouseDown = true;
+                }
+            } else if (leftDown) {
+                double now = GetTime();
+                StrokePoint sp = vp->inputFilter.Feed(canvasPos.x, canvasPos.y, now);
+                d_RealBrush targetBr = state->currentBrush.Realb;
+                targetBr.rad_out  = GetModValFor(&bpSize, (bpSize.penMode == csVel) ? sp.velocity : 1.0f);
+                float hVal = GetModValFor(&bpHardness, (bpHardness.penMode == csVel) ? sp.velocity : 1.0f);
+                targetBr.rad_in   = targetBr.rad_out * hVal;
+                targetBr.crv      = GetModValFor(&bpCurvature, (bpCurvature.penMode == csVel) ? sp.velocity : 1.0f);
+                targetBr.opacity  = GetModValFor(&bpOpacity, (bpOpacity.penMode == csVel) ? sp.velocity : 1.0f);
+                float spacingVal = BParam_GetValue(&bpSpacing);
+                InputEvent dabs[128];
+                int n = vp->brushInterp.FeedStrokePoint(sp, targetBr, dabs, 128, spacingVal, state->mode);
+                d_Brush tb; memset(&tb, 0, sizeof(tb));
+                for (int i = 0; i < n; i++) {
+                    tb.Realb = dabs[i].brush;
+                    BrushBlend_ApplyStamp(bt->rt, &tb, dabs[i].x, dabs[i].y, dabs[i].srcX, dabs[i].srcY);
+                }
+            }
+            g_activeBrushTex = savedTex;
+        }
+        layersDirty = true;
+        if (!leftDown) {
+            if (vp->wasMouseDown) vp->brushInterp.EndStroke();
+            vp->wasMouseDown = false;
+        }
+    }
+
+    // ── Brush / Smudge (normal layer painting) ────────────────────────
+    if (!state->editTexMode && (vp->inBounds || vp->wasMouseDown) && leftDown &&
         (state->mode == eBrush || state->mode == eSmudge || state->mode == eDisp || state->mode == eCont))
     {
         if (active >= 0 && active < state->texCount && state->layerRTs[active].id > 0) {
@@ -205,7 +251,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             }
         }
         layersDirty = true;
-    } else {
+    } else if (!state->editTexMode) {
         if (vp->strokeLen > 0) {
             vp->strokeEnded = true;
             vp->endLayer = active;

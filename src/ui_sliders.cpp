@@ -53,7 +53,8 @@ static void DrawSliderCore(ImDrawList* dl, int x, int y, int length, int thickne
     }
 
     // ── Selection range highlight ────────────────────────────────────
-    if (clipmaxF > clipminF + 0.001f) {
+    // temporary disabled
+    if (false && clipmaxF > clipminF + 0.001f) {
         uint32_t selCol = IM_COL32(0, 80, 200, 30);
         if (orient == 0) {
             int l = x + (int)(length * clipminF);
@@ -162,6 +163,9 @@ void DrawBParamSlider(BParam* bp) {
         else if (ImGui::IsMouseDown(2))
             bp->slider.jitter = mx;
     }
+
+    if (ImGui::IsItemHovered() && bp->tooltip[0])
+        ImGui::SetTooltip("%s", bp->tooltip);
 
     ImGui::SameLine(0, spacing);
 

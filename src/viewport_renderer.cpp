@@ -137,6 +137,21 @@ void DrawViewport(AppState* state, Rectangle screenRect, Camera2D camera) {
     int ch = state->canvas.height;
     if (cw < 1 || ch < 1) return;
 
+    // ── Texture editing mode — draw the active texture ──────────────
+    if (state->editTexMode && state->activeBrushTex >= 0 &&
+        state->activeBrushTex < state->brushTexCount &&
+        state->brushTex[state->activeBrushTex].rt.id > 0)
+    {
+        float dstX = -camera.target.x * camera.zoom + camera.offset.x;
+        float dstY = -camera.target.y * camera.zoom + camera.offset.y;
+        float dstW = cw * camera.zoom;
+        float dstH = ch * camera.zoom;
+        Rectangle dstRect = {dstX, dstY, dstW, dstH};
+        Rectangle srcR = {0, 0, (float)state->brushTex[state->activeBrushTex].w, (float)-state->brushTex[state->activeBrushTex].h};
+        DrawTexturePro(state->brushTex[state->activeBrushTex].rt.texture, srcR, dstRect, Vector2{0, 0}, 0.0f, WHITE);
+        return;
+    }
+
     EnsureAccumulators(cw, ch);
     EnsureChecker(cw, ch);
     EnsureShader();
@@ -209,6 +224,7 @@ void DrawViewport(AppState* state, Rectangle screenRect, Camera2D camera) {
         extern Viewport viewport;
 
         static d_RealBrush prevBrush;
+        static int prevActiveTex = -1;
         static bool prevValid = false;
         d_RealBrush curBrush = state->currentBrush.Realb;
         bool brushChanged = !prevValid ||
@@ -219,10 +235,20 @@ void DrawViewport(AppState* state, Rectangle screenRect, Camera2D camera) {
             curBrush.bmidx   != prevBrush.bmidx   ||
             curBrush.col.r   != prevBrush.col.r   ||
             curBrush.col.g   != prevBrush.col.g   ||
-            curBrush.col.b   != prevBrush.col.b;
+            curBrush.col.b   != prevBrush.col.b   ||
+            curBrush.texBlendVal  != prevBrush.texBlendVal  ||
+            curBrush.texScale     != prevBrush.texScale     ||
+            curBrush.texFeather   != prevBrush.texFeather   ||
+            curBrush.texThresh    != prevBrush.texThresh    ||
+            curBrush.texBlendMode != prevBrush.texBlendMode ||
+            curBrush.texNoisemode != prevBrush.texNoisemode ||
+            curBrush.useTexLumAsAlpha != prevBrush.useTexLumAsAlpha ||
+            curBrush.texUseRGB    != prevBrush.texUseRGB    ||
+            state->activeBrushTex != prevActiveTex;
 
         if (stampDirty || brushChanged) {
             prevBrush = curBrush;
+            prevActiveTex = state->activeBrushTex;
             prevValid = true;
             stampDirty = false;
 

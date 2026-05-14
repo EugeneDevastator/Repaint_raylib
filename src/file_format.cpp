@@ -5,7 +5,7 @@
 
 #define MAGIC      "REPAINT"
 #define MAGIC_LEN  8
-#define FILE_VER   1
+#define FILE_VER   3
 
 /* ── Write helpers ─────────────────────────────────────────────────────── */
 
@@ -96,13 +96,27 @@ bool SaveRePaint(const char* path, Canvas* canvas, AppState* state) {
         totalExtra += blobs[i].propsSz + blobs[i].pngSz + 4 + 4;
     }
 
-    /* 3. Allocate final buffer */
+    /* 3. Serialize user textures (skip built-in defaults) */
+    int tc = state->brushTexCount - BUILTIN_TEX_COUNT;
+    if (tc < 0) tc = 0;
+    size_t texTotalSz = 0;
+    int* texPngSizes = (int*)calloc(tc, sizeof(int));
+    unsigned char** texPngData = (unsigned char**)calloc(tc, sizeof(unsigned char*));
+    for (int i = 0; i < tc; i++) {
+        int idx = i + BUILTIN_TEX_COUNT;
+        texPngData[i] = ExportImageToMemory(state->brushTex[idx].cpuImage, ".png", &texPngSizes[i]);
+        if (texPngData[i]) texTotalSz += 4 + 4 + 4 + 4 + 64 + texPngSizes[i];
+    }
+
+    /* 4. Write final buffer */
     size_t hdrSz = MAGIC_LEN + 4 + 4 + 4 + 4;
-    size_t totalSz = compSize + hdrSz + totalExtra;
+    size_t totalSz = compSize + hdrSz + totalExtra + texTotalSz + 4;
     uint8_t* buf = (uint8_t*)malloc(totalSz);
     if (!buf) {
         for (int i = 0; i < lc; i++) { free(blobs[i].propsData); MemFree(blobs[i].pngData); }
-        free(blobs); MemFree(compPng); return false;
+        free(blobs); MemFree(compPng);
+        for (int i = 0; i < tc; i++) if (texPngData[i]) MemFree(texPngData[i]);
+        free(texPngSizes); free(texPngData); return false;
     }
 
     uint8_t* p = buf;
@@ -120,11 +134,26 @@ bool SaveRePaint(const char* path, Canvas* canvas, AppState* state) {
         _wcpy(&p, blobs[i].pngData, blobs[i].pngSz);
     }
 
+    /* User texture section (built-in defaults are not saved) */
+    _wu32(&p, (uint32_t)tc);
+    for (int i = 0; i < tc; i++) {
+        int idx = i + BUILTIN_TEX_COUNT;
+        uint32_t nlen = (uint32_t)strnlen(state->brushTex[idx].name, 64);
+        _wu32(&p, nlen);
+        _wcpy(&p, state->brushTex[idx].name, nlen);
+        _wu32(&p, (uint32_t)state->brushTex[idx].w);
+        _wu32(&p, (uint32_t)state->brushTex[idx].h);
+        _wu32(&p, (uint32_t)texPngSizes[i]);
+        if (texPngSizes[i] > 0) _wcpy(&p, texPngData[i], texPngSizes[i]);
+    }
+
     bool ok = SaveFileData(path, buf, (int)totalSz);
 
     for (int i = 0; i < lc; i++) { free(blobs[i].propsData); MemFree(blobs[i].pngData); }
     free(blobs);
     MemFree(compPng);
+    for (int i = 0; i < tc; i++) if (texPngData[i]) MemFree(texPngData[i]);
+    free(texPngSizes); free(texPngData);
     free(buf);
 
     return ok;
@@ -140,7 +169,7 @@ static uint32_t _ru32(const uint8_t** p) {
 
 /* ── Load ──────────────────────────────────────────────────────────────── */
 
-bool LoadRePaint(const char* path, Canvas* canvas) {
+bool LoadRePaint(const char* path, Canvas* canvas, AppState* state) {
     if (!path || !canvas) return false;
 
     int fileSz = 0;
@@ -196,6 +225,57 @@ bool LoadRePaint(const char* path, Canvas* canvas) {
         canvas->layerImages[layerIdx] = layerImg;
         if (layerImg.width != (int)w || layerImg.height != (int)h)
             ImageResize(&canvas->layerImages[layerIdx], (int)w, (int)h);
+    }
+
+    /* Load textures */
+    if (ver >= 2 && state != NULL) {
+        uint32_t tc = _ru32(&p);
+
+        if (ver < 3) {
+            // v2: textures include built-in + user. Replace all.
+            for (int t = 0; t < state->brushTexCount; t++) {
+                if (state->brushTex[t].rt.id > 0) UnloadRenderTexture(state->brushTex[t].rt);
+                if (state->brushTex[t].cpuImage.data) UnloadImage(state->brushTex[t].cpuImage);
+            }
+            state->brushTexCount = 0;
+        } else {
+            // v3+: only user textures. Clear existing user textures, keep built-in.
+            for (int t = BUILTIN_TEX_COUNT; t < state->brushTexCount; t++) {
+                if (state->brushTex[t].rt.id > 0) UnloadRenderTexture(state->brushTex[t].rt);
+                if (state->brushTex[t].cpuImage.data) UnloadImage(state->brushTex[t].cpuImage);
+            }
+            memset(&state->brushTex[BUILTIN_TEX_COUNT], 0,
+                (MAX_BRUSH_TEX - BUILTIN_TEX_COUNT) * sizeof(BrushTexture));
+            state->brushTexCount = BUILTIN_TEX_COUNT;
+        }
+        state->activeBrushTex = -1;
+
+        uint32_t maxTc = (ver < 3) ? MAX_BRUSH_TEX : (MAX_BRUSH_TEX - BUILTIN_TEX_COUNT);
+        if (tc > maxTc) tc = maxTc;
+        for (uint32_t ti = 0; ti < tc; ti++) {
+            uint32_t nlen = _ru32(&p);
+            if (nlen > 63) nlen = 63;
+            char name[64] = {0};
+            if (nlen > 0) { memcpy(name, p, nlen); p += nlen; }
+
+            uint32_t tw = _ru32(&p);
+            uint32_t th = _ru32(&p);
+            uint32_t tsz = _ru32(&p);
+
+            int idx = BrushTex_Add(state, name, (int)tw, (int)th);
+            if (idx >= 0 && tsz > 0 && (int)(p - fileData) + (int)tsz <= fileSz) {
+                Image timg = LoadImageFromMemory(".png", p, (int)tsz);
+                p += tsz;
+                if (timg.data) {
+                    UnloadImage(state->brushTex[idx].cpuImage);
+                    state->brushTex[idx].cpuImage = timg;
+                    state->brushTex[idx].dirty = true;
+                }
+            } else {
+                p += tsz;
+            }
+        }
+        BrushTex_SyncAll(state);
     }
 
     UnloadFileData(fileData);

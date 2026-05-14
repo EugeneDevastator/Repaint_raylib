@@ -82,6 +82,14 @@ void LeftPanel_Draw(AppState* state) {
         pb.Realb.rad_out  = fminf(BParam_GetValue(&bpSize), 45.0f);
         pb.Realb.rad_in   = pb.Realb.rad_out * fminf(BParam_GetValue(&bpHardness), 1.0f);
         pb.Realb.crv      = BParam_GetValue(&bpCurvature);
+        pb.Realb.texBlendVal  = state->currentBrush.Realb.texBlendVal;
+        pb.Realb.texScale     = state->currentBrush.Realb.texScale;
+        pb.Realb.texFeather   = state->currentBrush.Realb.texFeather;
+        pb.Realb.texThresh    = state->currentBrush.Realb.texThresh;
+        pb.Realb.useTexLumAsAlpha = state->currentBrush.Realb.useTexLumAsAlpha;
+        pb.Realb.texUseRGB    = state->currentBrush.Realb.texUseRGB;
+        pb.Realb.texBlendMode = state->currentBrush.Realb.texBlendMode;
+        pb.Realb.texNoisemode = state->currentBrush.Realb.texNoisemode;
         pb.Realb.col      = WHITE;
         pb.Realb.opacity  = 1.0f;
         pb.Realb.cop      = 0.0f;
@@ -91,7 +99,13 @@ void LeftPanel_Draw(AppState* state) {
         pb.Realb.sol2op   = 0.0f;
         pb.Realb.resangle = 0.0f;
         pb.Realb.seed     = 0;
+        Texture2D savedTex = g_activeBrushTex;
+        if (state->activeBrushTex >= 0 && state->activeBrushTex < state->brushTexCount)
+            g_activeBrushTex = state->brushTex[state->activeBrushTex].rt.texture;
+        else
+            g_activeBrushTex = Texture2D{0};
         BrushBlend_ApplyStamp(stampPrev, &pb, 50, 50, 50, 50);
+        g_activeBrushTex = savedTex;
 
         float cw = ImGui::GetContentRegionAvail().x;
         float previewSize = fminf(cw, 100.0f);

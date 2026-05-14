@@ -41,6 +41,15 @@ d_RealBrush Stroke_BlendBrushes(d_RealBrush from, d_RealBrush to, float k) {
     bbr.pipeID     = from.pipeID;
     bbr.bmidx      = from.bmidx;
     bbr.preserveop = from.preserveop;
+    bbr.texId      = from.texId;
+    bbr.texBlendMode = from.texBlendMode;
+    bbr.texBlendVal  = from.texBlendVal;
+    bbr.texNoisemode = from.texNoisemode;
+    bbr.texScale     = from.texScale;
+    bbr.texFeather   = from.texFeather;
+    bbr.texThresh    = from.texThresh;
+    bbr.useTexLumAsAlpha = from.useTexLumAsAlpha;
+    bbr.texUseRGB    = from.texUseRGB;
 
     return bbr;
 }

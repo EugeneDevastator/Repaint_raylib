@@ -79,6 +79,7 @@ void BParam_Init(BParam* bp, int id, const char* name, float outMin, float outMa
     bp->outMax = outMax;
     bp->id = id;
     strncpy(bp->name, name, sizeof(bp->name) - 1);
+    bp->tooltip[0] = '\0';
 }
 
 void BParam_SetIcon(BParam* bp, const char* filename) {

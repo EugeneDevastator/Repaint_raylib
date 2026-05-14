@@ -28,6 +28,13 @@ struct QueuedNetDab {
     float    srcX, srcY;
     float    rad_in, rad_out, opacity, crv, x2y, sol, sol2op, resangle;
     float    cop;
+    float    texBlendVal;
+    float    texScale;
+    float    texFeather;
+    float    texThresh;
+    bool     useTexLumAsAlpha;
+    bool     texUseRGB;
+    int      texBlendMode, texNoisemode;
     Color    color;
     int      bmidx;
     uint16_t seed;

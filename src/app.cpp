@@ -24,6 +24,10 @@ BParam bpQuickHue;
 float g_velocity = 0.0f;
 BParam bpQuickSat;
 BParam bpQuickLit;
+BParam bpTexScale;
+BParam bpTexFeather;
+BParam bpTexThresh;
+BParam bpTexBlendVal;
 
 Viewport viewport;
 
@@ -158,6 +162,17 @@ void UpdateUI(AppState* state) {
     if (IsKeyPressed(KEY_FOUR)) state->mode = eDisp;
     if (IsKeyPressed(KEY_FIVE)) state->mode = eCont;
 
+    // Toggle texture editing mode with T key
+    if (IsKeyPressed(KEY_T)) {
+        if (state->editTexMode) {
+            state->editTexMode = 0;
+            state->activeBrushTex = -1;
+        } else if (state->brushTexCount > 0) {
+            state->editTexMode = 1;
+            if (state->activeBrushTex < 0) state->activeBrushTex = 0;
+        }
+    }
+
     state->currentBrush.Realb.rad_out = GetModVal(&bpSize);
     state->currentBrush.Realb.rad_in = state->currentBrush.Realb.rad_out * GetModVal(&bpHardness);
     state->currentBrush.Realb.crv = GetModVal(&bpCurvature);
@@ -187,7 +202,7 @@ bool App_IsDialogActive(void) {
 static void OnOpenResult(DialogResult r) {
     if (r.wasClosed && r.success && r.output[0]) {
         SyncAllImages(g_state);
-        if (LoadRePaint(r.output, &g_state->canvas)) {
+        if (LoadRePaint(r.output, &g_state->canvas, g_state)) {
             int len = (int)strlen(r.output);
             if (len < (int)sizeof(g_currentFilePath) - 1)
                 memcpy(g_currentFilePath, r.output, len + 1);
@@ -276,7 +291,7 @@ void App_FileReload(void) {
     SaveRePaint(backupPath, &g_state->canvas, g_state);
 
     // Reload from original
-    if (LoadRePaint(g_currentFilePath, &g_state->canvas)) {
+    if (LoadRePaint(g_currentFilePath, &g_state->canvas, g_state)) {
         g_state->activeLayer = 0;
         g_state->texCount = 0;
         SyncAllRTs(g_state);
@@ -318,6 +333,7 @@ void App_Init(AppState* state) {
     Painter_Init();
     BrushBlend_Init();
     LoadPenIcons();
+    BrushTex_Init(state);
     QuickPanel_Init();
 
     networkBroker.appState = state;
@@ -326,36 +342,55 @@ void App_Init(AppState* state) {
     networkBroker.LoadConfig("repaint.ini");
 
     BParam_Init(&bpOpacity, 0, "Opacity", 0.0f, 1.0f, 1.0f);
+    strncpy(bpOpacity.tooltip, "Overall opacity of the brush stroke", sizeof(bpOpacity.tooltip) - 1);
     BParam_SetIcon(&bpOpacity, "ctlop");
 
     BParam_Init(&bpSize, 1, "Size", 1.0f, 4096.0f, 128.0f);
+    strncpy(bpSize.tooltip, "Outer radius of the brush tip in pixels", sizeof(bpSize.tooltip) - 1);
     BParam_SetIcon(&bpSize, "ctlrad");
 
     BParam_Init(&bpHardness, 2, "Hardness", 0.0f, 1.0f, 0.5f);
+    strncpy(bpHardness.tooltip, "Transition sharpness from brush center to edge", sizeof(bpHardness.tooltip) - 1);
     bpHardness.slider.clipmaxF = 0.5f;
     BParam_SetIcon(&bpHardness, "ctlrrel");
 
     BParam_Init(&bpSpacing, 3, "Spacing", 0.05f, 2.0f, 0.3f);
+    strncpy(bpSpacing.tooltip, "Distance between successive dabs as fraction of brush diameter", sizeof(bpSpacing.tooltip) - 1);
     BParam_SetIcon(&bpSpacing, "ctlspc");
 
     BParam_Init(&bpCurvature, 4, "Curve", 0.0f, 1.0f, 0.0f);
+    strncpy(bpCurvature.tooltip, "Bias toward center (low) or edge (high) of the brush mask", sizeof(bpCurvature.tooltip) - 1);
     BParam_SetIcon(&bpCurvature, "ctlcrv");
 
     BParam_Init(&bpScatter, 5, "Scatter", 0.0f, 5.0f, 0.0f);
+    strncpy(bpScatter.tooltip, "Random jitter of dab position perpendicular to stroke direction", sizeof(bpScatter.tooltip) - 1);
     BParam_SetIcon(&bpScatter, "ctlspcjit");
 
     BParam_Init(&bpCloneOpacity, 6, "Clone", 0.7f, 1.0f, 1.0f);
+    strncpy(bpCloneOpacity.tooltip, "Smudge/clone source opacity", sizeof(bpCloneOpacity.tooltip) - 1);
     BParam_SetIcon(&bpCloneOpacity, "ctlcop");
 
     BParam_Init(&bpQuickHue, 10, "Hue", 0.0f, 1.0f, 0.35f);
+    strncpy(bpQuickHue.tooltip, "Color hue (0=red, 0.33=green, 0.66=blue)", sizeof(bpQuickHue.tooltip) - 1);
     bpQuickHue.slider.clipmaxF = 0.35f;
     BParam_SetIcon(&bpQuickHue, "ctlhue");
     BParam_Init(&bpQuickSat, 11, "Sat", 0.0f, 1.0f, 1.0f);
+    strncpy(bpQuickSat.tooltip, "Color saturation (0=gray, 1=full)", sizeof(bpQuickSat.tooltip) - 1);
     bpQuickSat.slider.clipmaxF = 1.0f;
     BParam_SetIcon(&bpQuickSat, "ctlsat");
     BParam_Init(&bpQuickLit, 12, "Lit", 0.0f, 1.0f, 0.5f);
+    strncpy(bpQuickLit.tooltip, "Color lightness (0=dark, 1=light)", sizeof(bpQuickLit.tooltip) - 1);
     bpQuickLit.slider.clipmaxF = 0.5f;
     BParam_SetIcon(&bpQuickLit, "ctllit");
+
+    BParam_Init(&bpTexScale, 30, "Scale", 0.1f, 5.0f, 1.0f);
+    strncpy(bpTexScale.tooltip, "Texture pattern scale multiplier", sizeof(bpTexScale.tooltip) - 1);
+    BParam_Init(&bpTexFeather, 31, "Feather", 0.0f, 0.5f, 0.05f);
+    strncpy(bpTexFeather.tooltip, "Softness of the threshold mask edge", sizeof(bpTexFeather.tooltip) - 1);
+    BParam_Init(&bpTexThresh, 32, "Thresh Mul", -2.0f, 2.0f, 1.0f);
+    strncpy(bpTexThresh.tooltip, "Threshold multiplier; negative inverts texture mask", sizeof(bpTexThresh.tooltip) - 1);
+    BParam_Init(&bpTexBlendVal, 33, "TexColorBlendStrength", 0.0f, 1.0f, 0.5f);
+    strncpy(bpTexBlendVal.tooltip, "How much brush color tints the texture (0=texture only, 1=texture*brush)", sizeof(bpTexBlendVal.tooltip) - 1);
 
     state->canvas = Canvas_Create(800, 600, WHITE);
     state->activeLayer = 0;
@@ -391,6 +426,15 @@ void App_Init(AppState* state) {
     state->currentBrush.Realb.bmidx = bmNormal;
     state->currentBrush.Realb.pipeID = plCFNSR;
     state->currentBrush.Realb.preserveop = 0;
+    state->currentBrush.Realb.texId = -1;
+    state->currentBrush.Realb.texScale = 1.0f;
+    state->currentBrush.Realb.texFeather = 0.05f;
+    state->currentBrush.Realb.texThresh = 1.0f;
+    state->currentBrush.Realb.useTexLumAsAlpha = false;
+    state->currentBrush.Realb.texUseRGB = true;
+    state->currentBrush.Realb.texBlendVal = 1.0f;
+    state->currentBrush.Realb.texBlendMode = 0;
+    state->currentBrush.Realb.texNoisemode = 2;
     state->currentBrush.Realb.col = BLACK;
 
     colorHue = 0.35f;
@@ -456,6 +500,13 @@ void App_Draw(AppState* state) {
     // toggle network UI
     if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyPressed(KEY_N))
         networkBroker.showUI = !networkBroker.showUI;
+
+    // Set active brush texture for the shader before processing dabs
+    if (state->activeBrushTex >= 0 && state->activeBrushTex < state->brushTexCount) {
+        g_activeBrushTex = state->brushTex[state->activeBrushTex].rt.texture;
+    } else {
+        g_activeBrushTex = Texture2D{0};
+    }
 
     if (viewport.broker) viewport.broker->poll(state);
     if (viewport.strokeEnded) {
@@ -592,6 +643,11 @@ void App_Close(AppState* state) {
     if (bpCloneOpacity.iconLoaded) UnloadTexture(bpCloneOpacity.iconTex);
     UnloadPenIcons();
     QuickPanel_Shutdown();
+    // Cleanup brush textures
+    for (int i = 0; i < state->brushTexCount; i++) {
+        if (state->brushTex[i].rt.id > 0) UnloadRenderTexture(state->brushTex[i].rt);
+        if (state->brushTex[i].cpuImage.data) UnloadImage(state->brushTex[i].cpuImage);
+    }
     if (g_dialogFont.texture.id > 0) UnloadFont(g_dialogFont);
     UIStyle::Shutdown();
     Painter_Shutdown();

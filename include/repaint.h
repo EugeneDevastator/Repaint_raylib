@@ -87,6 +87,19 @@ typedef struct {
     char layerName[256];
 } sLayerProps;
 
+#define MAX_BRUSH_TEX 32
+#define BUILTIN_TEX_COUNT 4
+
+typedef struct {
+    int id;
+    char name[64];
+    int w, h;
+    RenderTexture2D rt;
+    Image cpuImage;
+    bool dirty;
+    bool builtIn;
+} BrushTexture;
+
 typedef struct {
     PackedFloat Prad_in, Prad_out;
     uint8_t crv;
@@ -103,6 +116,15 @@ typedef struct {
     float crv, x2y, scale, cop, pwr, sol, sol2op;
     uint16_t seed, noisex, noisey;
     uint8_t NoiseID, MaskID, pipeID, bmidx, noiseidx, preserveop;
+    int texId;          // -1 = no texture
+    int texBlendMode;   // 0 = Mask, 1 = Thr, 2 = Mul
+    float texBlendVal;  // threshold fraction or multiply strength
+    int texNoisemode;   // 0 = stencil, 1 = random, 2 = constant (Qt Noisemode mapping)
+    float texScale;     // texture UV multiplier
+    float texFeather;
+    float texThresh;
+    bool useTexLumAsAlpha;
+    bool texUseRGB;
     Color col;
 } d_RealBrush;
 
@@ -202,6 +224,13 @@ struct LocalBroker : ICommandBroker {
         float srcX, srcY;
         float rad_in, rad_out, opacity, crv, x2y, sol, sol2op, resangle;
         float cop;
+        float texBlendVal;
+        float texScale;
+        float texFeather;
+        float texThresh;
+        bool useTexLumAsAlpha;
+        bool texUseRGB;
+        int texBlendMode, texNoisemode;
         Color color;
         int bmidx;
         uint16_t seed;
@@ -243,6 +272,7 @@ typedef struct {
     float outMin, outMax;
     float defClipmaxF;
     char name[48];
+    char tooltip[128];
     int id;
 } BParam;
 
@@ -275,6 +305,10 @@ struct AppState {
     RenderTexture2D* layerRTs;
     bool* texDirty;
     int texCount;
+    BrushTexture brushTex[MAX_BRUSH_TEX];
+    int brushTexCount;
+    int activeBrushTex;  // -1 = none
+    int editTexMode;     // 0 = canvas layers, 1 = edit texture
 };
 
 float PackedFloat_GetVal(PackedFloat* pf);
@@ -388,6 +422,10 @@ extern BParam bpCloneOpacity;
 extern BParam bpQuickHue;
 extern BParam bpQuickSat;
 extern BParam bpQuickLit;
+extern BParam bpTexScale;
+extern BParam bpTexFeather;
+extern BParam bpTexThresh;
+extern BParam bpTexBlendVal;
 
 extern const char* PenModeNames[PEN_MODE_COUNT];
 extern Texture2D g_blendModeIcon;
@@ -434,7 +472,16 @@ void SyncLayerTexture(AppState* state, int layer);
 
 // ── .re.png file format ─────────────────────────────────────────────
 bool SaveRePaint(const char* path, Canvas* canvas, AppState* state);
-bool LoadRePaint(const char* path, Canvas* canvas);
+bool LoadRePaint(const char* path, Canvas* canvas, AppState* state);
+
+void BrushTex_Init(AppState* state);
+int  BrushTex_Add(AppState* state, const char* name, int w, int h);
+void BrushTex_Delete(AppState* state, int idx);
+void BrushTex_SetActive(AppState* state, int idx);
+void BrushTex_SyncAll(AppState* state);
+Texture2D BrushTex_GetThumb(AppState* state, int idx);
+
+extern Texture2D g_activeBrushTex;
 
 // ── File operations (hooked from gizmo) ─────────────────────────────
 void App_FileNew(void);

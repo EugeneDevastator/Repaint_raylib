@@ -31,6 +31,16 @@ uniform float seed;
 uniform float preserveop;
 uniform float smudgeStrength;
 uniform vec2  smudgeOffsetUV;
+uniform sampler2D brushTex;
+uniform float   texBlendVal;
+uniform float   texScale;
+uniform vec2    texOffset;
+uniform float   texFeather;
+uniform float   texThresh;
+uniform int     texBlendMode;   // 0=Mask, 1=Thr, 2=Mul
+uniform int     texNoisemode;   // 0=Stencil, 1=Random, 2=Const
+uniform bool    useLumAsAlpha;
+uniform bool    texUseRGB;
 
 float hash2(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
@@ -132,11 +142,60 @@ void main() {
         alpha *= nsal;
     }
 
-    float finalAlpha = clamp(alpha, 0.0, 1.0) * opacity;
+    float finalAlpha = clamp(alpha, 0.0, 1.0);
     if (preserveop > 0.5) finalAlpha *= canvas.a;
+
+    // ── Texture modulation (0=Mask, 1=Thr, 2=Mul) ─────────────────
+    vec3 brushFinal = brushColor.rgb;
+    if (texBlendVal >= 0.0 && texBlendMode >= 0) {
+        vec2 stUV = (uv - rectBounds.xy) / rectBounds.zw;
+        // Noisemode: 0=Stencil (canvas-absolute UV), 1=Random, 2=Const (stamp-local)
+        if (texNoisemode == 0) {
+            stUV = uv;
+        } else if (texNoisemode == 1) {
+            stUV += texOffset;
+        }
+        stUV = stUV * texScale;
+        vec4 texel = texture(brushTex, stUV);
+
+        // RGB: use texture color or brush color only
+        if (texUseRGB) {
+            brushFinal = mix(texel.rgb, texel.rgb * brushColor.rgb, texBlendVal);
+        } else {
+            brushFinal = brushColor.rgb;
+        }
+
+        // Texture alpha source: average luminance or native alpha
+        float tex_a = useLumAsAlpha
+            ? (texel.r + texel.g + texel.b) * (1.0 / 3.0)
+            : texel.a;
+
+        // Blend mode determines how texture alpha gates the brush mask
+        if (texBlendMode == 0) {
+            // Mask: smooth alpha gate
+            finalAlpha *= tex_a;
+} else if (texBlendMode == 1) {
+    float cutTexA = (texThresh >= 0.0) ? tex_a : (1.0 - tex_a);
+    float t = abs(texThresh);
+    float blend = 1.0 - 2.0 * abs(t - 0.5);
+    float cut = mix(t, 1.0 - finalAlpha, blend);  // inverted finalAlpha
+    float edgeDist = cutTexA - cut;
+    if (texFeather <= 0.0) {
+        finalAlpha = (edgeDist > 0.0) ? 1.0 : 0.0;
+    } else {
+        finalAlpha = clamp(edgeDist / texFeather, 0.0, 1.0);
+    }
+}
+else {
+            // Multiply: no alpha gating from texture (full brush alpha)
+        }
+    }
+
+    // Apply opacity slider at the end so it never affects threshold or mask calculations
+    finalAlpha *= opacity;
+
     if (finalAlpha < 0.000000001) { finalColor = canvas; return; }
 
-    vec3 brushFinal = brushColor.rgb;
     if (smudgeStrength > 0.000001) {
         vec2 smudgeUV = clamp(uv - smudgeOffsetUV, 0.001, 0.999);
         vec4 smudgeSample = texture(texture0, smudgeUV);

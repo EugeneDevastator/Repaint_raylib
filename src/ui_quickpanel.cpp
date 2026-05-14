@@ -212,6 +212,8 @@ void QuickPanel_Draw(AppState* state) {
         ImGui::SetCursorScreenPos(ImVec2(colX, slY));
         ImGui::InvisibleButton("##sb", ImVec2(dCtrl, (int)dLen),
             ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle);
+        if (ImGui::IsItemHovered() && bps[i]->tooltip[0])
+            ImGui::SetTooltip("%s", bps[i]->tooltip);
         if (ImGui::IsItemActive()) {
             float t = (mp.y - slY) / (float)dLen;
             t = fminf(1.0f, fmaxf(0.0f, t));
@@ -242,5 +244,95 @@ void QuickPanel_Draw(AppState* state) {
         }
     }
 
-    ImGui::End();
-}
+     // ── Brush texture selection + params ──────────────────────────────
+     {
+         int texAreaY = iconY + dCtrl + 14;
+         int texCount = state->brushTexCount;
+
+         // ── Texture controls (3 columns within 1/5 viewport width each) ─────
+         BParam_SetValue(&bpTexScale, state->currentBrush.Realb.texScale);
+         BParam_SetValue(&bpTexFeather, state->currentBrush.Realb.texFeather);
+         BParam_SetValue(&bpTexThresh, state->currentBrush.Realb.texThresh);
+         BParam_SetValue(&bpTexBlendVal, state->currentBrush.Realb.texBlendVal);
+
+         float sectionWidth = vp.width / 5.0f;
+         float baseX = vp.x + sectionWidth; // start of column 2
+         int tbm = state->currentBrush.Realb.texBlendMode;
+         int tnm = state->currentBrush.Realb.texNoisemode;
+         float childHeight = 200.0f; // Fixed height for all columns
+
+         // Column 2: dropdowns and checkboxes
+         ImGui::SetCursorScreenPos(ImVec2(baseX, texAreaY));
+         if (ImGui::BeginChild("##texCol2", ImVec2(sectionWidth, childHeight), false)) {
+             ImGui::SetNextItemWidth(sectionWidth * 0.85f);
+             if (ImGui::Combo("Blend", &tbm, "Mask\0Thr\0Mul\0"))
+                 state->currentBrush.Realb.texBlendMode = tbm;
+             ImGui::SetNextItemWidth(sectionWidth * 0.85f);
+             if (ImGui::Combo("Sample", &tnm, "Stencil\0Random\0Const\0"))
+                 state->currentBrush.Realb.texNoisemode = tnm;
+             bool useLum = state->currentBrush.Realb.useTexLumAsAlpha;
+             ImGui::Checkbox("Lum as Alpha", &useLum);
+             state->currentBrush.Realb.useTexLumAsAlpha = useLum;
+             bool useRGB = state->currentBrush.Realb.texUseRGB;
+             ImGui::Checkbox("Use Tex RGB", &useRGB);
+             state->currentBrush.Realb.texUseRGB = useRGB;
+             ImGui::EndChild();
+         }
+
+         // Column 3: param sliders
+         ImGui::SetCursorScreenPos(ImVec2(baseX + sectionWidth, texAreaY));
+         if (ImGui::BeginChild("##texCol3", ImVec2(sectionWidth, childHeight), false)) {
+             DrawBParamSlider(&bpTexScale);
+             DrawBParamSlider(&bpTexFeather);
+             DrawBParamSlider(&bpTexThresh);
+             DrawBParamSlider(&bpTexBlendVal);
+             ImGui::EndChild();
+         }
+
+         // Sync brush state back from BParams
+         state->currentBrush.Realb.texScale = BParam_GetValue(&bpTexScale);
+         state->currentBrush.Realb.texFeather = BParam_GetValue(&bpTexFeather);
+         state->currentBrush.Realb.texThresh = BParam_GetValue(&bpTexThresh);
+         state->currentBrush.Realb.texBlendVal = BParam_GetValue(&bpTexBlendVal);
+
+         // Column 4: texture selection grid
+         float gridX = baseX + 2.0f * sectionWidth; // start of column 4
+         ImGui::SetCursorScreenPos(ImVec2(gridX, texAreaY));
+         if (ImGui::BeginChild("##texCol4", ImVec2(sectionWidth, childHeight), false)) {
+             int texCols = 4;
+             int texSz = 64;
+             int texGap = 6;
+
+             // "X" button: no texture used as brush pattern
+             ImGui::SetCursorScreenPos(ImVec2(0, 0)); // Relative to child window
+             ImGui::PushID("500");
+             bool isNone = (state->activeBrushTex < 0);
+             if (isNone) { ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(1,1,1,1)); ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.4f,0.4f,0.4f,1)); }
+             if (ImGui::Button("X", ImVec2(texSz, texSz)))
+                 BrushTex_SetActive(state, -1);
+             if (isNone) { ImGui::PopStyleColor(2); }
+             ImGui::PopID();
+
+             for (int ti = 0; ti < texCount && ti < texCols * 4; ti++) {
+                 int col = ti % texCols;
+                 int row = ti / texCols;
+                 int tx = col * (texSz + texGap);
+                 int ty = row * (texSz + texGap) + texSz + texGap;
+                 ImGui::SetCursorScreenPos(ImVec2(gridX + tx, texAreaY + ty));
+                 ImGui::PushID(501 + ti);
+                 Texture2D thumb = BrushTex_GetThumb(state, ti);
+                 bool isSel = (state->activeBrushTex == ti);
+                 if (isSel) ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(1,1,1,1));
+                 if (thumb.id > 0) {
+                     if (ImGui::ImageButton("##bt", (ImTextureID)(intptr_t)thumb.id, ImVec2(texSz, texSz)))
+                         BrushTex_SetActive(state, ti);
+                 }
+                 if (isSel) ImGui::PopStyleColor();
+                 ImGui::PopID();
+             }
+             ImGui::EndChild();
+         }
+     }
+
+     ImGui::End();
+ }

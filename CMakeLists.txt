@@ -68,6 +68,7 @@ set(SOURCES
     src/sock_platform.cpp
     src/input_filter.cpp
     src/brush_interpolator.cpp
+    src/brush_tex.cpp
     dialog/dialog.c
     ${imgui_SOURCE_DIR}/imgui.cpp
     ${imgui_SOURCE_DIR}/imgui_draw.cpp
