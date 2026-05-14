@@ -285,6 +285,64 @@ static void EnsurePresentShader(void) {
     if (!presentInited) TraceLog(LOG_WARNING, "present.fs failed to load");
 }
 
+/* ── GPU composite + dither → 8-bit Image (for file preview / snaps) ── */
+Image CompositeLayersWithDither(AppState* state) {
+    EnsureShader();
+    EnsurePresentShader();
+    int cw = state->canvas.width;
+    int ch = state->canvas.height;
+    if (cw < 1 || ch < 1) return {0};
+
+    RenderTexture2D a = Load16BitRT(cw, ch);
+    RenderTexture2D b = Load16BitRT(cw, ch);
+
+    RenderTexture2D* src = &a;
+    RenderTexture2D* dst = &b;
+
+    // Composite all visible layers using the same shader as viewport
+    BeginTextureMode(*src);
+    ClearBackground(BLANK);
+    for (int i = 0; i < state->canvas.layerCount; i++) {
+        if (!state->canvas.layerProps[i].visible) continue;
+        if (state->texCount <= i || state->layerRTs[i].id == 0) continue;
+
+        float alpha = state->canvas.layerProps[i].op;
+        int bmidx = state->canvas.layerProps[i].blendmode;
+
+        BeginTextureMode(*dst);
+        ClearBackground(BLANK);
+        if (shaderInited) {
+            rlSetBlendMode(RL_BLEND_CUSTOM);
+            rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+            BeginShaderMode(layerBlendShader);
+            SetShaderValueTexture(layerBlendShader, locLayerTex, state->layerRTs[i].texture);
+            SetShaderValue(layerBlendShader, locLayerAlpha, &alpha, SHADER_UNIFORM_FLOAT);
+            SetShaderValue(layerBlendShader, locBmIdx, &bmidx, SHADER_UNIFORM_INT);
+            DrawTextureRec(src->texture, Rectangle{0, 0, (float)cw, (float)-ch}, Vector2{0, 0}, WHITE);
+            EndShaderMode();
+        }
+        EndTextureMode();
+
+        RenderTexture2D* tmp = src; src = dst; dst = tmp;
+    }
+
+    // Apply present shader dither and read back as 8-bit
+    BeginTextureMode(*dst);
+    ClearBackground(BLANK);
+    if (presentInited) BeginShaderMode(presentShader);
+    DrawTextureRec(src->texture, Rectangle{0, 0, (float)cw, (float)-ch}, Vector2{0, 0}, WHITE);
+    if (presentInited) EndShaderMode();
+    EndTextureMode();
+
+    Image result = LoadImageFromTexture(dst->texture);
+    ImageFlipVertical(&result);
+    ImageFormat(&result, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+
+    UnloadRenderTexture(a);
+    UnloadRenderTexture(b);
+    return result;
+}
+
 void MergeDownLayer(AppState* state, int idx) {
     if (idx <= 0 || idx >= state->canvas.layerCount) return;
     if (!shaderInited) return;

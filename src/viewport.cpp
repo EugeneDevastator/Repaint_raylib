@@ -74,7 +74,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
     if (IsKeyDown(KEY_LEFT_ALT) && IsMouseButtonDown(MOUSE_LEFT_BUTTON) && vp->inBounds) {
         g_colorPicking = true;
         Vector2 cp = GetScreenToWorld2D(mousePos, state->camera);
-z        int cx = (int)cp.x;
+        int cx = (int)cp.x;
         int cy = (int)cp.y;
         Color picked = {0, 0, 0, 0};
         int gi = 0;

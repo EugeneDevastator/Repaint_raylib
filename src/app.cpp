@@ -89,6 +89,7 @@ void SyncImageFromRT(AppState* state, int layer) {
     if (state->layerRTs[layer].id == 0) return;
     Image cap = LoadImageFromTexture(state->layerRTs[layer].texture);
     ImageFlipVertical(&cap);
+    ImageFormat(&cap, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
     Image* dst = &state->canvas.layerImages[layer];
     UnloadImage(*dst);
     *dst = cap;
@@ -201,7 +202,7 @@ static void OnOpenResult(DialogResult r) {
 static void OnSaveResult(DialogResult r) {
     if (r.wasClosed && r.success && r.output[0]) {
         SyncAllImages(g_state);
-        if (SaveRePaint(r.output, &g_state->canvas)) {
+        if (SaveRePaint(r.output, &g_state->canvas, g_state)) {
             int len = (int)strlen(r.output);
             if (len < (int)sizeof(g_currentFilePath) - 1)
                 memcpy(g_currentFilePath, r.output, len + 1);
@@ -244,7 +245,7 @@ void App_FileOpen(void) {
 void App_FileSave(void) {
     if (g_currentFilePath[0]) {
         SyncAllImages(g_state);
-        SaveRePaint(g_currentFilePath, &g_state->canvas);
+        SaveRePaint(g_currentFilePath, &g_state->canvas, g_state);
     } else {
         App_FileSaveAs();
     }
@@ -272,7 +273,7 @@ void App_FileReload(void) {
     const char* fname = GetFileNameWithoutExt(g_currentFilePath);
     snprintf(backupPath, sizeof(backupPath), "%s/%s_backup_%08x%s",
              dir, fname, (hash / 65536) % 0xFFFFFFFFu, ext);
-    SaveRePaint(backupPath, &g_state->canvas);
+    SaveRePaint(backupPath, &g_state->canvas, g_state);
 
     // Reload from original
     if (LoadRePaint(g_currentFilePath, &g_state->canvas)) {
@@ -284,26 +285,8 @@ void App_FileReload(void) {
 }
 
 void App_FileSnap(void) {
-    /* flatten all visible layers and save to Snaps/ */
-    Image flat = GenImageColor(g_state->canvas.width, g_state->canvas.height, BLANK);
-    Color* dst = (Color*)flat.data;
-    for (int i = 0; i < g_state->canvas.layerCount; i++) {
-        if (!g_state->canvas.layerProps[i].visible) continue;
-        Color* src = (Color*)g_state->canvas.layerImages[i].data;
-        float alpha = g_state->canvas.layerProps[i].op;
-        int n = g_state->canvas.width * g_state->canvas.height;
-        for (int j = 0; j < n; j++) {
-            float sa = src[j].a / 255.0f * alpha;
-            float da = dst[j].a / 255.0f;
-            float outa = sa + da * (1.0f - sa);
-            if (outa > 0.0f) {
-                dst[j].r = (uint8_t)((src[j].r * sa + dst[j].r * da * (1.0f - sa)) / outa);
-                dst[j].g = (uint8_t)((src[j].g * sa + dst[j].g * da * (1.0f - sa)) / outa);
-                dst[j].b = (uint8_t)((src[j].b * sa + dst[j].b * da * (1.0f - sa)) / outa);
-                dst[j].a = (uint8_t)(outa * 255.0f);
-            }
-        }
-    }
+    /* GPU composite + dither → 8-bit snapshot */
+    Image flat = CompositeLayersWithDither(g_state);
 
     /* build path: Snaps/snap_YYYYMMDD_HHMMSS.png */
     time_t now = time(NULL);
@@ -313,9 +296,7 @@ void App_FileSnap(void) {
     snprintf(path, sizeof(path), "%sSnaps/snap_%04d%02d%02d_%02d%02d%02d.png",
              appDir,
              t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
-             t->tm_hour, t->tm_min, t->tm_sec);
-
-    Image_CompositeDithered(flat);
+              t->tm_hour, t->tm_min, t->tm_sec);
 
     ExportImage(flat, path);
     UnloadImage(flat);

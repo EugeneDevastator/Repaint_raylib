@@ -411,6 +411,7 @@ void BrushGizmo_DrawXOROverlay(AppState* state);
 extern bool layersDirty;
 
 void DrawViewport(AppState* state, Rectangle screenRect, Camera2D camera);
+Image CompositeLayersWithDither(AppState* state);
 void MergeDownLayer(AppState* state, int idx);
 void UnloadViewportRenderer(void);
 void ReloadViewportShader(void);
@@ -432,7 +433,7 @@ void SyncAllRTs(AppState* state);
 void SyncLayerTexture(AppState* state, int layer);
 
 // ── .re.png file format ─────────────────────────────────────────────
-bool SaveRePaint(const char* path, Canvas* canvas);
+bool SaveRePaint(const char* path, Canvas* canvas, AppState* state);
 bool LoadRePaint(const char* path, Canvas* canvas);
 
 // ── File operations (hooked from gizmo) ─────────────────────────────

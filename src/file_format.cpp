@@ -1,35 +1,11 @@
 #include "file_format.h"
+#include "repaint.h"
 #include <stdlib.h>
 #include <string.h>
 
 #define MAGIC      "REPAINT"
 #define MAGIC_LEN  8
 #define FILE_VER   1
-
-/* ── CPU composite: normal α-blend all visible layers ──────────────────── */
-
-static Image _flatten(Canvas* canvas) {
-    Image result = GenImageColor(canvas->width, canvas->height, BLANK);
-    Color* dst = (Color*)result.data;
-    for (int i = 0; i < canvas->layerCount; i++) {
-        if (!canvas->layerProps[i].visible) continue;
-        Color* src = (Color*)canvas->layerImages[i].data;
-        float alpha = canvas->layerProps[i].op;
-        int n = canvas->width * canvas->height;
-        for (int j = 0; j < n; j++) {
-            float sa = src[j].a / 255.0f * alpha;
-            float da = dst[j].a / 255.0f;
-            float outa = sa + da * (1.0f - sa);
-            if (outa > 0.0f) {
-                dst[j].r = (uint8_t)((src[j].r * sa + dst[j].r * da * (1.0f - sa)) / outa);
-                dst[j].g = (uint8_t)((src[j].g * sa + dst[j].g * da * (1.0f - sa)) / outa);
-                dst[j].b = (uint8_t)((src[j].b * sa + dst[j].b * da * (1.0f - sa)) / outa);
-                dst[j].a = (uint8_t)(outa * 255.0f);
-            }
-        }
-    }
-    return result;
-}
 
 /* ── Write helpers ─────────────────────────────────────────────────────── */
 
@@ -45,8 +21,6 @@ static void _wcpy(uint8_t** p, const void* src, size_t n) {
     memcpy(*p, src, n);
     *p += n;
 }
-
-/* ── Serialize sLayerProps to buffer ───────────────────────────────────── */
 
 static size_t _propsSize(sLayerProps* lp) {
     uint32_t nameLen = (uint32_t)strnlen(lp->layerName, sizeof(lp->layerName));
@@ -85,11 +59,11 @@ static void _readProps(const uint8_t** p, sLayerProps* lp) {
 
 /* ── Save ──────────────────────────────────────────────────────────────── */
 
-bool SaveRePaint(const char* path, Canvas* canvas) {
+bool SaveRePaint(const char* path, Canvas* canvas, AppState* state) {
     if (!path || !canvas || canvas->layerCount < 1) return false;
 
-    /* 1. Flatten composite */
-    Image flat = _flatten(canvas);
+    /* 1. GPU composite + dither → 8-bit preview */
+    Image flat = CompositeLayersWithDither(state);
     int compSize = 0;
     unsigned char* compPng = ExportImageToMemory(flat, ".png", &compSize);
     UnloadImage(flat);
@@ -119,11 +93,11 @@ bool SaveRePaint(const char* path, Canvas* canvas) {
             for (int j = 0; j <= i; j++) { free(blobs[j].propsData); if (blobs[j].pngData) MemFree(blobs[j].pngData); }
             free(blobs); MemFree(compPng); return false;
         }
-        totalExtra += blobs[i].propsSz + blobs[i].pngSz + 4 + 4; /* +size fields */
+        totalExtra += blobs[i].propsSz + blobs[i].pngSz + 4 + 4;
     }
 
     /* 3. Allocate final buffer */
-    size_t hdrSz = MAGIC_LEN + 4 + 4 + 4 + 4; /* magic + ver + w + h + lc */
+    size_t hdrSz = MAGIC_LEN + 4 + 4 + 4 + 4;
     size_t totalSz = compSize + hdrSz + totalExtra;
     uint8_t* buf = (uint8_t*)malloc(totalSz);
     if (!buf) {
@@ -146,10 +120,8 @@ bool SaveRePaint(const char* path, Canvas* canvas) {
         _wcpy(&p, blobs[i].pngData, blobs[i].pngSz);
     }
 
-    /* 4. Write to file */
     bool ok = SaveFileData(path, buf, (int)totalSz);
 
-    /* 5. Cleanup */
     for (int i = 0; i < lc; i++) { free(blobs[i].propsData); MemFree(blobs[i].pngData); }
     free(blobs);
     MemFree(compPng);
@@ -175,40 +147,28 @@ bool LoadRePaint(const char* path, Canvas* canvas) {
     unsigned char* fileData = LoadFileData(path, &fileSz);
     if (!fileData || fileSz < 32) { UnloadFileData(fileData); return false; }
 
-    /* Scan past composite PNG: find IEND marker */
     const uint8_t iendSig[8] = { 0, 0, 0, 0, 'I', 'E', 'N', 'D' };
     int offset = 0;
     int found = 0;
     for (; offset < fileSz - 8; offset++) {
-        if (memcmp(fileData + offset, iendSig, 8) == 0) {
-            found = 1;
-            break;
-        }
+        if (memcmp(fileData + offset, iendSig, 8) == 0) { found = 1; break; }
     }
     if (!found) { UnloadFileData(fileData); return false; }
-    offset += 12; /* skip IEND (8 + 4 CRC) */
+    offset += 12;
     if (offset + (int)MAGIC_LEN + 16 > fileSz) { UnloadFileData(fileData); return false; }
 
     const uint8_t* p = fileData + offset;
-
-    /* Verify magic */
     if (memcmp(p, MAGIC, MAGIC_LEN) != 0) { UnloadFileData(fileData); return false; }
     p += MAGIC_LEN;
 
-    /* Version */
-    uint32_t ver = _ru32(&p);
-    (void)ver;
-
-    /* Canvas dimensions */
+    uint32_t ver = _ru32(&p); (void)ver;
     uint32_t w = _ru32(&p);
     uint32_t h = _ru32(&p);
     if (w < 1 || w > 32768 || h < 1 || h > 32768) { UnloadFileData(fileData); return false; }
 
-    /* Layer count */
     uint32_t lc = _ru32(&p);
     if (lc < 1 || lc > 256) { UnloadFileData(fileData); return false; }
 
-    /* Destroy old canvas and init a fresh empty canvas */
     Canvas_Destroy(canvas);
     canvas->width = (int)w;
     canvas->height = (int)h;
@@ -217,35 +177,25 @@ bool LoadRePaint(const char* path, Canvas* canvas) {
     canvas->layerImages = NULL;
     canvas->layerProps = NULL;
 
-    /* Read each layer */
     for (uint32_t i = 0; i < lc; i++) {
         if ((int)(p - fileData) + 8 > fileSz) { Canvas_Destroy(canvas); UnloadFileData(fileData); return false; }
-
-        /* Properties */
         uint32_t propSz = _ru32(&p);
         if ((int)(p - fileData) + (int)propSz > fileSz) { Canvas_Destroy(canvas); UnloadFileData(fileData); return false; }
-
         Canvas_AddLayer(canvas);
         int layerIdx = canvas->layerCount - 1;
         const uint8_t* propStart = p;
         _readProps(&p, &canvas->layerProps[layerIdx]);
-        p = propStart + propSz; /* skip any extra padding from old buggy files */
+        p = propStart + propSz;
 
-        /* Layer image PNG */
         uint32_t pngSz = _ru32(&p);
         if ((int)(p - fileData) + (int)pngSz > fileSz) { Canvas_Destroy(canvas); UnloadFileData(fileData); return false; }
-
         Image layerImg = LoadImageFromMemory(".png", p, (int)pngSz);
         p += pngSz;
-
         if (layerImg.data == NULL) { Canvas_Destroy(canvas); UnloadFileData(fileData); return false; }
         UnloadImage(canvas->layerImages[layerIdx]);
         canvas->layerImages[layerIdx] = layerImg;
-
-        /* Ensure image matches canvas size (scale if needed) */
-        if (layerImg.width != (int)w || layerImg.height != (int)h) {
+        if (layerImg.width != (int)w || layerImg.height != (int)h)
             ImageResize(&canvas->layerImages[layerIdx], (int)w, (int)h);
-        }
     }
 
     UnloadFileData(fileData);
