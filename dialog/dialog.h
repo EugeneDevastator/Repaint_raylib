@@ -55,6 +55,11 @@ typedef struct {
     char _pathPreview[DIALOG_PATH_MAX];
     bool _confirmOverwrite;
     char _overwritePath[DIALOG_PATH_MAX];
+    int _sortColumn;   // 0=name, 1=date
+    int _sortDesc;     // 0=asc, 1=desc
+    char _filterBuf[256];
+    int _filterLen;
+    bool _filterActive;
 } DialogState;
 
 void DialogOpen_Init(DialogState* dlg, const char* title,

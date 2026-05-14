@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <time.h>
 
 #define ITEM_H      44
 #define TITLE_H     40
@@ -45,12 +46,23 @@ static void _trimSlash(char* p) {
     while (n > 0 && (p[n-1] == '/' || p[n-1] == '\\')) p[--n] = '\0';
 }
 
-static int _sort(const void* a, const void* b) {
+static int _sortCol = 0;   // set per-sort by loadDir
+static int _sortDesc = 0;
+
+static int _sortPath(const void* a, const void* b) {
     const char* pa = *(const char**)a;
     const char* pb = *(const char**)b;
     int da = DirectoryExists(pa), db = DirectoryExists(pb);
-    if (da != db) return db - da;
-    return strcmp(GetFileName(pa), GetFileName(pb));
+    if (da != db) return _sortDesc ? da - db : db - da;
+
+    int r;
+    if (_sortCol == 1) {
+        long ta = GetFileModTime(pa);
+        long tb = GetFileModTime(pb);
+        r = (ta > tb) - (ta < tb);
+    } else
+        r = strcmp(GetFileName(pa), GetFileName(pb));
+    return _sortDesc ? -r : r;
 }
 
 static bool _matchExt(const char* path, const char* filter) {
@@ -60,8 +72,15 @@ static bool _matchExt(const char* path, const char* filter) {
     return nl >= fl && strcmp(name + nl - fl, filter) == 0;
 }
 
+static bool _matchFilter(const char* path, const char* filter) {
+    if (!filter || !filter[0]) return true;
+    const char* name = GetFileName(path);
+    return strstr(name, filter) != NULL;
+}
+
 static bool _itemVisible(DialogState* d, int i) {
     if (DirectoryExists(d->_files.paths[i])) return false;
+    if (!_matchFilter(d->_files.paths[i], d->_filterBuf)) return false;
     if (d->type == 1) return _matchExt(d->_files.paths[i], d->_filter);
     return d->type == 2;
 }
@@ -86,8 +105,10 @@ static int _visCount(DialogState* d) {
 static void _loadDir(DialogState* d) {
     if (d->_files.paths) { UnloadDirectoryFiles(d->_files); d->_files.paths = NULL; }
     d->_files = LoadDirectoryFilesEx(d->_currentDir, "*.*", false);
+    _sortCol = d->_sortColumn;
+    _sortDesc = d->_sortDesc;
     if (d->_files.count > 1)
-        qsort(d->_files.paths, d->_files.count, sizeof(char*), _sort);
+        qsort(d->_files.paths, d->_files.count, sizeof(char*), _sortPath);
     d->_scrollOffset = d->_leftScrollOffset = 0;
     d->_selectedIndex = -1;
     snprintf(d->_pathPreview, DIALOG_PATH_MAX, "%s", d->_currentDir);
@@ -127,9 +148,9 @@ static void _initDir(DialogState* d) {
 
 /* ── Draw helpers ── */
 
-/* spacing=1 avoids glyph bleed; raylib default font needs 0 */
+/* spacing=2 for readability; raised from 0 for default font */
 static float _sp(Font f) {
-    return f.texture.id == GetFontDefault().texture.id ? 0.0f : 1.0f;
+    return 2.0f;
 }
 
 
@@ -279,18 +300,98 @@ static void _drawLeftPane(DialogState* d, Rectangle a) {
 
 /* ── Right pane: files only ── */
 
+static void _fmtDate(long ts_raw, char* out, int sz) {
+    time_t ts = (time_t)ts_raw;
+    if (ts <= 0) { snprintf(out, sz, "---"); return; }
+    struct tm* t = localtime(&ts);
+    if (t)
+        snprintf(out, sz, "%04d-%02d-%02d %02d:%02d",
+                 t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
+                 t->tm_hour, t->tm_min);
+    else
+        snprintf(out, sz, "---");
+}
+
 static void _drawRightPane(DialogState* d, Rectangle a) {
     Vector2 mp = GetMousePosition();
     bool md = IsMouseButtonDown(MOUSE_LEFT_BUTTON);
     bool pressed = md && !d->_prevMouseDown;
     d->_prevMouseDown = md;
 
+    /* ── Filter text field (same height as file entries) ── */
+    Rectangle fr = {a.x + 2, a.y + 2, a.width - SCROLL_W - 4, ITEM_H};
+    bool filterHov = CheckCollisionPointRec(mp, fr);
+    if (d->type == 1) d->_filterActive = true;  // open dialog: always capture
+    if (d->_filterActive && pressed && !filterHov && !d->_textActive) {
+        // clicking elsewhere keeps it active, but Escape or Tab deactivates
+        d->_filterActive = (d->type == 2);
+    }
+    if (d->_filterActive) {
+        int c;
+        while ((c = GetCharPressed()) > 0) {
+            if (c >= 32 && c < 127 && d->_filterLen < 255) {
+                d->_filterBuf[d->_filterLen++] = (char)c;
+                d->_filterBuf[d->_filterLen] = '\0';
+                d->_scrollOffset = 0;
+                d->_selectedIndex = -1;
+            }
+        }
+        if (IsKeyPressed(KEY_BACKSPACE) && d->_filterLen > 0) {
+            d->_filterBuf[--d->_filterLen] = '\0';
+            d->_scrollOffset = 0;
+            d->_selectedIndex = -1;
+        }
+        if (IsKeyPressed(KEY_ESCAPE)) { d->_filterActive = false; d->_filterBuf[0] = '\0'; d->_filterLen = 0; }
+    }
+    DrawRectangleRec(fr, _white);
+    DrawRectangleLinesEx(fr, 1, _titleBg);
+    int fty = (int)fr.y + ((int)fr.height - d->_fontSize) / 2;
+    if (d->_filterLen > 0)
+        _drawText(d->_font, d->_filterBuf, (int)fr.x + 4, fty, d->_fontSize, _text);
+    else
+        _drawText(d->_font, "filter...", (int)fr.x + 4, fty, d->_fontSize, _textDim);
+
+    /* ── Column headers ── */
+    int headY = (int)(a.y + fr.height + 4);
+    int nameW = (int)(a.width - SCROLL_W) * 3 / 5;
+    int dateW = (int)(a.width - SCROLL_W) - nameW;
+    Rectangle nameH = {a.x + 2, (float)headY, (float)nameW, ITEM_H};
+    Rectangle dateH = {a.x + 2 + nameW, (float)headY, (float)dateW, ITEM_H};
+
+    if (pressed && CheckCollisionPointRec(mp, nameH)) {
+        if (d->_sortColumn == 0) d->_sortDesc = !d->_sortDesc;
+        else { d->_sortColumn = 0; d->_sortDesc = 0; }
+        _loadDir(d); return;
+    }
+    if (pressed && CheckCollisionPointRec(mp, dateH)) {
+        if (d->_sortColumn == 1) d->_sortDesc = !d->_sortDesc;
+        else { d->_sortColumn = 1; d->_sortDesc = 0; }
+        _loadDir(d); return;
+    }
+
+    DrawRectangleRec(nameH, _hovBg);
+    DrawRectangleRec(dateH, _hovBg);
+    DrawLine((int)nameH.x, (int)(nameH.y + nameH.height), (int)(nameH.x + nameH.width) - 1, (int)(nameH.y + nameH.height), _border);
+    DrawLine((int)dateH.x, (int)(dateH.y + dateH.height), (int)(dateH.x + dateH.width) - 1, (int)(dateH.y + dateH.height), _border);
+    DrawLine((int)(nameH.x + nameH.width), (int)nameH.y, (int)(nameH.x + nameH.width), (int)(nameH.y + nameH.height), _border);
+
+    char nameLabel[48];
+    snprintf(nameLabel, sizeof(nameLabel), "Name%s", (d->_sortColumn == 0) ? (d->_sortDesc ? " \xe2\x96\xb4" : " \xe2\x96\xbe") : "");
+    _drawText(d->_font, nameLabel, (int)nameH.x + 4, (int)nameH.y + ((int)nameH.height - d->_fontSize) / 2, d->_fontSize, _text);
+
+    char dateLabel[48];
+    snprintf(dateLabel, sizeof(dateLabel), "Date%s", (d->_sortColumn == 1) ? (d->_sortDesc ? " \xe2\x96\xb4" : " \xe2\x96\xbe") : "");
+    _drawText(d->_font, dateLabel, (int)dateH.x + 4, (int)dateH.y + ((int)dateH.height - d->_fontSize) / 2, d->_fontSize, _text);
+
+    /* ── File list area ── */
+    int listY = (int)(headY + nameH.height + 2);
+    int listH = (int)(a.y + a.height - listY);
     int totalH = _visCount(d) * ITEM_H;
-    int viewH = (int)a.height;
+    int viewH = listH;
     int maxOff = totalH > viewH ? totalH - viewH : 0;
 
     float wheel = GetMouseWheelMove();
-    if (wheel && CheckCollisionPointRec(mp, a)) {
+    if (wheel && CheckCollisionPointRec(mp, (Rectangle){a.x, (float)listY, a.width - SCROLL_W, (float)listH})) {
         d->_scrollOffset -= (int)(wheel * ITEM_H * 3);
         if (d->_scrollOffset < 0) d->_scrollOffset = 0;
         if (d->_scrollOffset > maxOff) d->_scrollOffset = maxOff;
@@ -313,21 +414,28 @@ static void _drawRightPane(DialogState* d, Rectangle a) {
         }
     }
 
-    BeginScissorMode((int)a.x, (int)a.y, (int)a.width, viewH);
-    int y0 = (int)a.y - d->_scrollOffset;
+    BeginScissorMode((int)a.x, listY, (int)(a.width - SCROLL_W), listH);
+    int y0 = listY - d->_scrollOffset;
     int vi = 0;
 
     for (int i = 0; i < (int)d->_files.count; i++) {
         if (!_itemVisible(d, i)) continue;
         int y = y0 + vi * ITEM_H;
-        if (y + ITEM_H > (int)a.y && y < (int)(a.y + viewH)) {
+        if (y + ITEM_H > listY && y < listY + listH) {
             Rectangle ir = {a.x, (float)y, a.width - SCROLL_W, ITEM_H};
             bool hov = CheckCollisionPointRec(mp, ir);
             bool sel = (vi == d->_selectedIndex);
             if (sel) DrawRectangleRec(ir, _selBg);
             else if (hov) DrawRectangleRec(ir, _hovBg);
+
+            /* Name column */
+            char dateStr[48];
+            _fmtDate(GetFileModTime(d->_files.paths[i]), dateStr, sizeof(dateStr));
             _drawText(d->_font, GetFileName(d->_files.paths[i]),
-                      (int)a.x+6, y+(ITEM_H-d->_fontSize)/2, d->_fontSize, _text);
+                      (int)a.x + 6, y + (ITEM_H - d->_fontSize) / 2, d->_fontSize, _text);
+            _drawText(d->_font, dateStr,
+                      (int)(a.x + nameW + 2), y + (ITEM_H - d->_fontSize) / 2, d->_fontSize, _textDim);
+
             if (pressed && hov) {
                 double now = GetTime();
                 bool dbl = (now - d->_lastClickTime < DBLCK_TIME && d->_lastClickedIdx == vi);
@@ -351,7 +459,7 @@ static void _drawRightPane(DialogState* d, Rectangle a) {
     }
     EndScissorMode();
 
-    _scrollbar((int)(a.x + a.width - SCROLL_W), (int)a.y, viewH, totalH, viewH,
+    _scrollbar((int)(a.x + a.width - SCROLL_W), listY, viewH, totalH, viewH,
                &d->_scrollOffset, &d->_scrollGrabbed,
                &d->_scrollGrabY, &d->_scrollStartOff, pressed);
 }

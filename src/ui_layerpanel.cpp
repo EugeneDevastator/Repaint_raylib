@@ -18,8 +18,7 @@ static void CommitLayerOp(AppState* state, d_LAction* lact) {
             int insertAfter = lact->layer;
             Canvas_InsertLayer(&state->canvas, insertAfter);
             SyncAllRTs(state);
-            if (state->activeLayer >= insertAfter)
-                state->activeLayer++;
+            state->activeLayer = insertAfter;  // new layer becomes active
             break;
         }
         case laDel: {

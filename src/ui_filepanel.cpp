@@ -13,7 +13,7 @@ void FilePanel_Init(void) {
         sprintf(path, "resources/%s.png", names[i]);
         if (FileExists(path)) {
             Image img = LoadImage(path);
-            ImageResize(&img, 24, 24);
+            ImageResize(&img, 36, 36);
             fileBtnTex[i] = LoadTextureFromImage(img);
             UnloadImage(img);
         } else {
@@ -30,7 +30,7 @@ void FilePanel_Shutdown(void) {
 
 void FilePanel_Draw(AppState* state, Rectangle vp) {
     ImGui::SetNextWindowPos(ImVec2(vp.x + 8, vp.y + 8));
-    ImGui::SetNextWindowSize(ImVec2(FILE_BTN_N * 36 + (FILE_BTN_N - 1) * 4 + 16, 40));
+    ImGui::SetNextWindowSize(ImVec2(FILE_BTN_N * 48 + (FILE_BTN_N - 1) * 4 + 16, 52));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
     ImGui::Begin("##filepanel", NULL,
@@ -38,13 +38,13 @@ void FilePanel_Draw(AppState* state, Rectangle vp) {
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
         ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoFocusOnAppearing);
 
-    ImGui::SetCursorPos(ImVec2(4, 4));
+    ImGui::SetCursorPos(ImVec2(4, 6));
     for (int i = 0; i < FILE_BTN_N; i++) {
         ImGui::PushID(100 + i);
 
         ImTextureID tid = (fileBtnTex[i].id > 0) ? (ImTextureID)(intptr_t)fileBtnTex[i].id : 0;
         if (tid) {
-            if (ImGui::ImageButton("##fb", tid, ImVec2(24, 24))) {
+            if (ImGui::ImageButton("##fb", tid, ImVec2(36, 36))) {
                 if (i == 0) App_FileNew();
                 else if (i == 1) App_FileOpen();
                 else if (i == 2) App_FileSaveAs();
@@ -53,7 +53,7 @@ void FilePanel_Draw(AppState* state, Rectangle vp) {
                 else if (i == 5) App_FileSnap();
             }
         } else {
-            if (ImGui::Button(fileBtnLabels[i], ImVec2(36, 28))) {
+            if (ImGui::Button(fileBtnLabels[i], ImVec2(50, 40))) {
                 if (i == 0) App_FileNew();
                 else if (i == 1) App_FileOpen();
                 else if (i == 2) App_FileSaveAs();

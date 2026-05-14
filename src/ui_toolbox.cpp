@@ -15,7 +15,7 @@ void ToolBox_Init(void) {
         sprintf(path, "resources/%s.png", toolIconNames[i]);
         if (FileExists(path)) {
             Image img = LoadImage(path);
-            ImageResize(&img, 24, 24);
+            ImageResize(&img, 36, 36);
             toolIconTex[i] = LoadTextureFromImage(img);
             UnloadImage(img);
         } else {
@@ -31,12 +31,15 @@ void ToolBox_Shutdown(void) {
 }
 
 void ToolBox_Draw(AppState* state, Rectangle vp) {
-    // Icon index per tool: Br->0, Sm->1, Li->2, Er->-1(no icon), Di->3, Co->4
     static const int toolIconIdx[GIZMO_TOOL_N] = {0, 1, 2, -1, 3, 4};
-    int totalToolW = GIZMO_TOOL_N * 36 + (GIZMO_TOOL_N - 1) * 4;
+    int cols = 3, rows = 2;
+    int btnSz = 42;
+    int gap = 4;
+    int winW = cols * btnSz + (cols - 1) * gap + 12;
+    int winH = rows * btnSz + (rows - 1) * gap + 12;
 
-    ImGui::SetNextWindowPos(ImVec2(vp.x + vp.width - totalToolW - 8, vp.y + 8));
-    ImGui::SetNextWindowSize(ImVec2(totalToolW + 16, 40));
+    ImGui::SetNextWindowPos(ImVec2(vp.x + vp.width / 2 - winW / 2, vp.y + 8));
+    ImGui::SetNextWindowSize(ImVec2(winW, winH));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
     ImGui::Begin("##toolbox", NULL,
@@ -44,46 +47,38 @@ void ToolBox_Draw(AppState* state, Rectangle vp) {
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
         ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoFocusOnAppearing);
 
-    ImGui::SetCursorPos(ImVec2(4, 4));
     for (int i = 0; i < GIZMO_TOOL_N; i++) {
+        int col = i % cols, row = i / cols;
+        ImGui::SetCursorPos(ImVec2(4 + col * (btnSz + gap), 4 + row * (btnSz + gap)));
         ImGui::PushID(200 + i);
 
         int ii = toolIconIdx[i];
         bool hasIcon = (ii >= 0 && ii < TOOL_ICON_N && toolIconTex[ii].id > 0);
-        if (hasIcon) {
-            ImTextureID tid = (ImTextureID)(intptr_t)toolIconTex[ii].id;
-            if (ImGui::ImageButton("##ti", tid, ImVec2(28, 28))) {
-                if (i == 3) {
-                    if (state->mode == eBrush && state->currentBrush.Realb.col.a == 0) {
-                        state->mode = eBrush;
-                        state->currentBrush.Realb.col.a = 255;
-                    } else {
-                        state->mode = eBrush;
-                        state->currentBrush.Realb.col.a = 0;
-                    }
-                } else {
-                    state->mode = gizmoToolModes[i];
+        ImTextureID tid = hasIcon ? (ImTextureID)(intptr_t)toolIconTex[ii].id : 0;
+
+        auto handleClick = [&]() {
+            if (i == 3) {
+                if (state->mode == eBrush && state->currentBrush.Realb.col.a == 0) {
+                    state->mode = eBrush;
                     state->currentBrush.Realb.col.a = 255;
+                } else {
+                    state->mode = eBrush;
+                    state->currentBrush.Realb.col.a = 0;
                 }
+            } else {
+                state->mode = gizmoToolModes[i];
+                state->currentBrush.Realb.col.a = 255;
             }
+        };
+
+        if (tid) {
+            if (ImGui::ImageButton("##ti", tid, ImVec2(btnSz, btnSz)))
+                handleClick();
         } else {
-            if (ImGui::Button(gizmoToolLabels[i], ImVec2(36, 28))) {
-                if (i == 3) {
-                    if (state->mode == eBrush && state->currentBrush.Realb.col.a == 0) {
-                        state->mode = eBrush;
-                        state->currentBrush.Realb.col.a = 255;
-                    } else {
-                        state->mode = eBrush;
-                        state->currentBrush.Realb.col.a = 0;
-                    }
-                } else {
-                    state->mode = gizmoToolModes[i];
-                    state->currentBrush.Realb.col.a = 255;
-                }
-            }
+            if (ImGui::Button(gizmoToolLabels[i], ImVec2(btnSz, btnSz)))
+                handleClick();
         }
         ImGui::PopID();
-        if (i < GIZMO_TOOL_N - 1) ImGui::SameLine();
     }
 
     ImGui::End();
