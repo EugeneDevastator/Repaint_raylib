@@ -195,6 +195,7 @@ class BrushInterpolator {
 public:
     d_Brush segBrushFrom;          // brush at segment start (snapshot)
     Vector2 lastDabPos;            // last placed dab position (Qt chaining)
+    Vector2 prevInputPos;          // previous raw input position (for spacing measurement)
     Vector2 smudgeSrcPos;          // smudge source position
     float dabAccum;                // leftover for spacing
     bool inStroke;
