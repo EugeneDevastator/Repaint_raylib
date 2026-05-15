@@ -32,6 +32,7 @@ void DrawStamp(RenderTexture2D dstRT, AppState* state) {
     pb.Realb.resangle   = state->currentBrush.Realb.resangle;
     pb.Realb.seed       = 0;
 
+
     Texture2D savedTex = g_activeBrushTex;
     if (state->activeBrushTex >= 0 && state->activeBrushTex < state->brushTexCount)
         g_activeBrushTex = state->brushTex[state->activeBrushTex].rt.texture;

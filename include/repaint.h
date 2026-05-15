@@ -317,6 +317,7 @@ struct AppState {
     int brushTexCount;
     int activeBrushTex;  // -1 = none
     int editTexMode;     // 0 = canvas layers, 1 = edit texture
+    float initialAngle;  // base angle set by gizmo arrow (degrees)
 };
 
 float PackedFloat_GetVal(PackedFloat* pf);

@@ -1,46 +1,36 @@
 #version 330
 
-// ============================================================================
-// FULL BRUSH MASK SHADER
-// - Hardness (rad_in / rad_out ratio)
-// - Curvature (bubble/pinch)
-// - Aspect ratio (x2y)
-// - Rotation (resangle)
-// - Solidity noise scatter
-// - Multiple blend modes
-// ============================================================================
-
 in vec2 fragTexCoord;
 in vec4 fragColor;
+in vec2 localUV;
 out vec4 finalColor;
 
-uniform sampler2D texture0;
+uniform sampler2D texture0;       // canvas (brushTempRT)
+uniform sampler2D brushGeoUvTex;  // unit 1: stampRT — rg=UV, always alpha=1 inside quad
+uniform sampler2D brushTex;       // unit 2: user brush mask texture
 
-uniform vec4 rectBounds;
 uniform float radIn;
 uniform float radOut;
 uniform float opacity;
-uniform vec4 brushColor;
+uniform vec4  brushColor;
 uniform float crv;
-uniform float x2y;
-uniform float resangle;
 uniform float sol;
 uniform float sol2op;
-uniform int bmidx;
+uniform int   bmidx;
 uniform float seed;
 uniform float preserveop;
 uniform float smudgeStrength;
 uniform vec2  smudgeOffsetUV;
-uniform sampler2D brushTex;
-uniform float   texBlendVal;
-uniform float   texScale;
-uniform vec2    texOffset;
-uniform float   texFeather;
-uniform float   texThresh;
-uniform int     texBlendMode;   // 0=Mask, 1=Thr, 2=Mul
-uniform int     texNoisemode;   // 0=Stencil, 1=Random, 2=Const
-uniform bool    useLumAsAlpha;
-uniform bool    texUseRGB;
+
+uniform float texBlendVal;
+uniform float texScale;
+uniform vec2  texOffset;
+uniform float texFeather;
+uniform float texThresh;
+uniform int   texBlendMode;
+uniform int   texNoisemode;
+uniform bool  useLumAsAlpha;
+uniform bool  texUseRGB;
 
 float hash2(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
@@ -52,9 +42,7 @@ vec4 applyBlend(int mode, vec4 canvas, vec3 brushRGB, float brushA) {
     float outA;
 
     if (canvas.a <= 0.00000001) {
-        outRGB = brushRGB;
-        outA   = brushA;
-        return vec4(clamp(outRGB, 0.0, 1.0), clamp(outA, 0.0, 1.0));
+        return vec4(clamp(brushRGB, 0.0, 1.0), clamp(brushA, 0.0, 1.0));
     }
 
     if (mode == 0) {
@@ -98,41 +86,27 @@ void main() {
     vec2 uv = fragTexCoord;
     vec4 canvas = texture(texture0, uv);
 
-    vec2 rMin = rectBounds.xy;
-    vec2 rMax = rectBounds.xy + rectBounds.zw;
-
-    if (uv.x < rMin.x || uv.x > rMax.x || uv.y < rMin.y || uv.y > rMax.y) {
-        finalColor = canvas; return;
-    }
-
-    vec2 center   = (rMin + rMax) * 0.5;
-    vec2 halfSize = (rMax - rMin) * 0.5;
-    vec2 diff;
-    diff.x = (uv.x - center.x) / max(halfSize.x, 0.001);
-    diff.y = (uv.y - center.y) / max(halfSize.y, 0.001);
-    diff.x /= max(x2y, 0.01);
-
-    float angle = radians(resangle);
-    vec2 rdiff;
-    rdiff.x = diff.x * cos(angle) - diff.y * sin(angle);
-    rdiff.y = diff.x * sin(angle) + diff.y * cos(angle);
-
-    float dist = length(rdiff);
+    // Circle SDF in stamp space — localUV is [-1,1] relative to stamp center
+    // x2y squeeze is baked into stampRT, so localUV uses symmetric radii
+    float dist = length(localUV);
     if (dist > 1.0) { finalColor = canvas; return; }
 
-    float innerT = clamp(radIn / max(radOut, 0.001), 0.0, 1.0);
-    float alpha = 1.0;
-    if (dist > innerT) {
-        float edgeRange = 1.0 - innerT;
-        if (edgeRange > 0.001)
-            alpha = 1.0 - (dist - innerT) / edgeRange;
+    // Hardness falloff
+    float inner = radIn / max(radOut, 0.001);
+    float alpha;
+    if (dist <= inner) {
+        alpha = 1.0;
+    } else {
+        alpha = 1.0 - (dist - inner) / max(1.0 - inner, 0.000001);
     }
     alpha = clamp(alpha, 0.0, 1.0);
 
+    // Curvature
     float crvt = crv * 2.0 - 1.0;
     float curvePower = (crvt >= 0.0) ? mix(1.0, 3.0, crvt) : mix(1.0, 1.0/3.0, -crvt);
     alpha = clamp(pow(alpha, curvePower), 0.0, 1.0);
 
+    // Solidity noise
     if (!(sol >= 0.999 && sol2op <= 0.001)) {
         float noiseVal = hash2(uv * 1000.0 + floor(seed * 1000.0));
         float fsol2op  = clamp(1.0 - sol2op, 0.0, 1.0);
@@ -145,69 +119,48 @@ void main() {
     float finalAlpha = clamp(alpha, 0.0, 1.0);
     if (preserveop > 0.5) finalAlpha *= canvas.a;
 
-    // ── Texture modulation (0=Mask, 1=Thr, 2=Mul) ─────────────────
     vec3 brushFinal = brushColor.rgb;
-    if (texBlendVal >= 0.0 && texBlendMode >= 0) {
-        vec2 stUV = (uv - rectBounds.xy) / rectBounds.zw;
-        // Noisemode: 0=Stencil (canvas-absolute UV), 1=Random, 2=Const (stamp-local)
-        if (texNoisemode == 0) {
-            stUV = uv;
-        } else if (texNoisemode == 1) {
-            stUV += texOffset;
-        }
-        stUV = stUV * texScale;
-        vec4 texel = texture(brushTex, stUV);
 
-        // RGB: use texture color or brush color only
+    // Sample stampRT to get UV coords for brushTex
+    vec2 stUV = localUV * 0.5 + 0.5;
+    vec4 geoSample = texture(brushGeoUvTex, stUV);
+    vec2 brushTexUV = geoSample.rg; // UV baked by xform pass
+
+    // User brush mask texture
+    // User brush mask texture
+    if (texBlendVal >= 0.0 && texBlendMode >= 0) {
+        vec2 maskUV = brushTexUV - 0.5;          // center
+        if (texNoisemode == 1) maskUV += texOffset;
+        maskUV = maskUV / max(texScale, 0.001) + 0.5;  // scale from center
+        vec4 texel = texture(brushTex, maskUV);
+
         if (texUseRGB) {
             brushFinal = mix(texel.rgb, texel.rgb * brushColor.rgb, texBlendVal);
-        } else {
-            brushFinal = brushColor.rgb;
         }
 
-        // Texture alpha source: average luminance or native alpha
         float tex_a = useLumAsAlpha
             ? (texel.r + texel.g + texel.b) * (1.0 / 3.0)
             : texel.a;
 
-        // Blend mode determines how texture alpha gates the brush mask
         if (texBlendMode == 0) {
-            // Mask: smooth alpha gate
             finalAlpha *= tex_a;
-} else if (texBlendMode == 1) {
-    float tresh = 1.0-finalAlpha;
-    float treshBias = texThresh;
-
-    float tex_a_adj = (treshBias < 0.0) ? (1.0 - tex_a) : tex_a;
-    float bias = (0.5 - abs(treshBias)) * 2.0; // +1 at 0, 0 at 0.5, -1 at 1
-	// todo: add experimental branch - convert bias into power: 3 at 1;  1/3 at 0
-    float edgeDist;
-    if (true) {
-        // experimental: bias -> power (3 at bias=1, 1 at bias=0, 1/3 at bias=-1)
-        float power = mix(1.0,13.0, abs(bias));
-		if (bias >0)
-			power = 1/power;
-        float cut = tresh;
-        edgeDist = pow(tex_a_adj, power) - cut;
-    } else {
-        float cut = tresh - bias;
-        edgeDist = tex_a_adj - cut;
-    }
-    if (texFeather <= 0.0) {
-        finalAlpha = (edgeDist > 0.0) ? 1.0 : 0.0;
-    } else {
-        finalAlpha = clamp(edgeDist / texFeather, 0.0, 1.0);
-    }
-}
-
-else {
-            // Multiply: no alpha gating from texture (full brush alpha)
+        } else if (texBlendMode == 1) {
+            float tresh    = 1.0 - finalAlpha;
+            float treshBias = texThresh;
+            float tex_a_adj = (treshBias < 0.0) ? (1.0 - tex_a) : tex_a;
+            float bias = (0.5 - abs(treshBias)) * 2.0;
+            float power = mix(1.0, 13.0, abs(bias));
+            if (bias > 0.0) power = 1.0 / power;
+            float edgeDist = pow(tex_a_adj, power) - tresh;
+            if (texFeather <= 0.0) {
+                finalAlpha = (edgeDist > 0.0) ? 1.0 : 0.0;
+            } else {
+                finalAlpha = clamp(edgeDist / texFeather, 0.0, 1.0);
+            }
         }
     }
 
-    // Apply opacity slider at the end so it never affects threshold or mask calculations
     finalAlpha *= opacity;
-
     if (finalAlpha < 0.000000001) { finalColor = canvas; return; }
 
     if (smudgeStrength > 0.000001) {

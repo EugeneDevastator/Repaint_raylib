@@ -184,7 +184,7 @@ void UpdateUI(AppState* state) {
     state->currentBrush.Realb.rad_in   = state->currentBrush.Realb.rad_out * GetModVal(&bpHardness);
     state->currentBrush.Realb.crv      = GetModVal(&bpCurvature);
     state->currentBrush.Realb.opacity  = GetModVal(&bpOpacity);
-    state->currentBrush.Realb.resangle = GetModVal(&bpAngle);
+    state->currentBrush.Realb.resangle = fmodf(state->initialAngle + GetModVal(&bpAngle), 360.0f);
     state->currentBrush.Realb.x2y      = GetModVal(&bpScaleRel);
 
     state->currentBrush.Realb.cop = (state->mode == eSmudge)
@@ -401,12 +401,13 @@ void App_Init(AppState* state) {
     BParam_Init(&bpTexBlendVal, 33, "TexColorBlendStrength", 0.0f, 1.0f, 0.5f);
     strncpy(bpTexBlendVal.tooltip, "How much brush color tints the texture (0=texture only, 1=texture*brush)", sizeof(bpTexBlendVal.tooltip) - 1);
 
-    BParam_Init(&bpAngle, 40, "Angle", 0.0f, 360.0f, 0.0f);
-    strncpy(bpAngle.tooltip, "Brush stamp rotation angle in degrees", sizeof(bpAngle.tooltip) - 1);
+    BParam_Init(&bpAngle, 40, "Angle", 0.0f, 360.0f, 360.0f);
+    strncpy(bpAngle.tooltip, "Modulated offset from base angle (deg). Default 360=no offset. Pen mode = Direction rotates brush along stroke.", sizeof(bpAngle.tooltip) - 1);
     BParam_SetIcon(&bpAngle, "ctlang");
 
-    BParam_Init(&bpScaleRel, 41, "Proportion", 0.0f, 1.0f, 0.5f);
-    strncpy(bpScaleRel.tooltip, "Aspect ratio (0=flat, 0.5=circle, 1=tall)", sizeof(bpScaleRel.tooltip) - 1);
+    BParam_Init(&bpScaleRel, 41, "Proportion", 0.0f, 1.0f, 0.8f);
+    bpScaleRel.slider.clipmaxF = 0.8f;
+    strncpy(bpScaleRel.tooltip, "Aspect ratio (0.5=tall, 0.8=slight ellipse, 1.0=circle) — set <1.0 to see rotation", sizeof(bpScaleRel.tooltip) - 1);
     BParam_SetIcon(&bpScaleRel, "ctlscalerel");
 
     // Init global modulator defaults
@@ -446,12 +447,14 @@ void App_Init(AppState* state) {
 
     state->mode = eBrush;
 
+    state->initialAngle = 0.0f;
+
     state->currentBrush.Realb.rad_in = 1.0f;
     state->currentBrush.Realb.rad_out = 20.0f;
     state->currentBrush.Realb.opacity = 1.0f;
     state->currentBrush.Realb.resangle = 0.0f;
     state->currentBrush.Realb.crv = 0.0f;
-    state->currentBrush.Realb.x2y = 1.0f;
+    state->currentBrush.Realb.x2y = 0.8f;
     state->currentBrush.Realb.scale = 1.0f;
     state->currentBrush.Realb.cop = 0.0f;
     state->currentBrush.Realb.pwr = 0.0f;

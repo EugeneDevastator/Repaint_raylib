@@ -209,7 +209,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                 targetBr.rad_in   = targetBr.rad_out * hVal;
                 targetBr.crv      = GetModValFor(&bpCurvature,  g_modPars.Pars[bpCurvature.penMode]);
                 targetBr.opacity  = GetModValFor(&bpOpacity,    g_modPars.Pars[bpOpacity.penMode]);
-                targetBr.resangle = GetModValFor(&bpAngle,      g_modPars.Pars[bpAngle.penMode]);
+                targetBr.resangle = fmodf(state->initialAngle + GetModValFor(&bpAngle, g_modPars.Pars[bpAngle.penMode]), 360.0f);
                 targetBr.x2y      = GetModValFor(&bpScaleRel,   g_modPars.Pars[bpScaleRel.penMode]);
                 float spacingVal  = BParam_GetValue(&bpSpacing);
                 InputEvent dabs[128];
@@ -310,7 +310,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     targetBr.rad_in   = targetBr.rad_out * hVal;
                     targetBr.crv      = GetModValFor(&bpCurvature,  g_modPars.Pars[bpCurvature.penMode]);
                     targetBr.opacity  = GetModValFor(&bpOpacity,    g_modPars.Pars[bpOpacity.penMode]);
-                    targetBr.resangle = GetModValFor(&bpAngle,      g_modPars.Pars[bpAngle.penMode]);
+                    targetBr.resangle = fmodf(state->initialAngle + GetModValFor(&bpAngle, g_modPars.Pars[bpAngle.penMode]), 360.0f);
                     targetBr.x2y      = GetModValFor(&bpScaleRel,   g_modPars.Pars[bpScaleRel.penMode]);
                     float colH        = GetModValFor(&bpQuickHue,   g_modPars.Pars[bpQuickHue.penMode]);
                     float colS        = GetModValFor(&bpQuickSat,   g_modPars.Pars[bpQuickSat.penMode]);

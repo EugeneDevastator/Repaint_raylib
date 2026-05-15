@@ -92,19 +92,29 @@ void QuickPanel_Draw(AppState* state) {
     bool released = ImGui::IsMouseReleased(0);
 
     if (clicked && !ImGui::IsAnyItemHovered()) {
-        // Sector-based mode detection
-        bool inSector1 = (ang > d30 && ang < d30 * 5);       // size sector
-        bool inSector2 = (ang < d30 && ang > -(float)M_PI * 0.5f);  // hardness sector
-        bool inSector3 = !inSector1 && !inSector2;            // curve sector
+        // Arrow proximity check (takes priority over sector modes)
+        float arrowAng = state->initialAngle * (float)(M_PI * 2.0 / 360.0);
+        float angDiff = fabsf(ang - arrowAng);
+        if (angDiff > (float)M_PI) angDiff = (float)(2.0f * M_PI) - angDiff;
+        bool nearArrow = (angDiff < 20.0f * (float)M_PI / 180.0f);
 
-        if (dist <= GIZMO_FIXED_RADIUS_PX) {
-            // Inside fixed radius: hardness, curve, or size
-            if (inSector1) quickPanelMouseMode = 1;
-            else if (inSector2) quickPanelMouseMode = 2;
-            else quickPanelMouseMode = 3;
+        if (nearArrow) {
+            quickPanelMouseMode = 4;
         } else {
-            // Outside fixed radius: size in sector 1, otherwise rotation
-            quickPanelMouseMode = inSector1 ? 1 : 4;
+            // Sector-based mode detection
+            bool inSector1 = (ang > d30 && ang < d30 * 5);       // size sector
+            bool inSector2 = (ang < d30 && ang > -(float)M_PI * 0.5f);  // hardness sector
+            bool inSector3 = !inSector1 && !inSector2;            // curve sector
+
+            if (dist <= GIZMO_FIXED_RADIUS_PX) {
+                // Inside fixed radius: hardness, curve, or size
+                if (inSector1) quickPanelMouseMode = 1;
+                else if (inSector2) quickPanelMouseMode = 2;
+                else quickPanelMouseMode = 3;
+            } else {
+                // Outside fixed radius: size in sector 1, otherwise rotation
+                quickPanelMouseMode = inSector1 ? 1 : 4;
+            }
         }
     }
 
@@ -151,7 +161,7 @@ void QuickPanel_Draw(AppState* state) {
             float newAng = (ang + (float)M_PI) * 180.0f / (float)M_PI;
             if (absrad > 160.0f || rad < 20.0f)
                 newAng = roundf(newAng / 22.5f) * 22.5f;
-            state->currentBrush.Realb.resangle = newAng;
+            state->initialAngle = newAng;
         }
     }
 
