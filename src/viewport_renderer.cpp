@@ -24,11 +24,8 @@ RenderTexture2D Load16BitRT(int width, int height) {
     return target;
 }
 
-// ── Statics first so Image_CompositeDithered can see them ──
 static RenderTexture2D accumA = {0};
 static RenderTexture2D accumB = {0};
-static RenderTexture2D cleanComposite = {0};
-static RenderTexture2D stampedComposite = {0};
 static bool accumInited = false;
 static Texture2D checkerTex = {0};
 static bool checkerValid = false;
@@ -44,18 +41,18 @@ static Shader presentShader = {0};
 static bool presentInited = false;
 
 bool layersDirty = true;
-static bool stampDirty = true;
+
+bool GetPresentInited(void) { return presentInited; }
+Shader GetPresentShader(void) { return presentShader; }
 
 static void EnsurePresentShader(void);
 
-// ── Now safe to use EnsurePresentShader and presentShader ──
 Image Image_CompositeDithered(Image flat) {
     if (!flat.data || flat.format == PIXELFORMAT_UNCOMPRESSED_R8G8B8A8) return flat;
     EnsurePresentShader();
     if (!presentInited) return flat;
 
     int w = flat.width, h = flat.height;
-
     Texture2D flatTex = LoadTextureFromImage(flat);
     UnloadImage(flat);
 
@@ -66,14 +63,12 @@ Image Image_CompositeDithered(Image flat) {
     DrawTextureRec(flatTex, (Rectangle){0, 0, (float)w, (float)-h}, (Vector2){0, 0}, WHITE);
     EndShaderMode();
     EndTextureMode();
-
     UnloadTexture(flatTex);
 
     Image result = LoadImageFromTexture(out.texture);
     ImageFlipVertical(&result);
     ImageFormat(&result, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
     UnloadRenderTexture(out);
-
     return result;
 }
 
@@ -99,16 +94,10 @@ static void EnsureAccumulators(int w, int h) {
     if (accumInited) {
         UnloadRenderTexture(accumA);
         UnloadRenderTexture(accumB);
-        if (cleanComposite.id > 0) UnloadRenderTexture(cleanComposite);
     }
     accumA = Load16BitRT(w, h);
     accumB = Load16BitRT(w, h);
-    cleanComposite = Load16BitRT(w, h);
-    if (stampedComposite.id == 0 || stampedComposite.texture.width != (unsigned int)w || stampedComposite.texture.height != (unsigned int)h) {
-        if (stampedComposite.id > 0) UnloadRenderTexture(stampedComposite);
-        stampedComposite = Load16BitRT(w, h);
-        curCanvasW = w;
-    }
+    curCanvasW = w;
     curCanvasH = h;
     accumInited = true;
     finalAcc = NULL;
@@ -131,34 +120,11 @@ static void EnsureShader(void) {
     TraceLog(LOG_INFO, "Shader locs: layerTex=%d alpha=%d bm=%d", locLayerTex, locLayerAlpha, locBmIdx);
     shaderInited = true;
 }
-void DrawViewport(AppState* state, Rectangle screenRect, Camera2D camera) {
+
+RenderTexture2D* DocBlender_Composite(AppState* state) {
     int cw = state->canvas.width;
     int ch = state->canvas.height;
-    if (cw < 1 || ch < 1) return;
-
-    if (state->editTexMode && state->activeBrushTex >= 0 &&
-        state->activeBrushTex < state->brushTexCount &&
-        state->brushTex[state->activeBrushTex].rt.id > 0)
-    {
-        int tw = state->brushTex[state->activeBrushTex].w;
-        int th = state->brushTex[state->activeBrushTex].h;
-
-        float dstX = -camera.target.x * camera.zoom + camera.offset.x;
-        float dstY = -camera.target.y * camera.zoom + camera.offset.y;
-        float dstW = tw * camera.zoom;
-        float dstH = th * camera.zoom;
-        Rectangle dstRect = {dstX, dstY, dstW, dstH};
-
-        EnsureChecker(tw, th);
-        DrawTexturePro(checkerTex,
-            (Rectangle){0, 0, (float)tw, (float)th},
-            dstRect, Vector2{0,0}, 0.0f, WHITE);
-
-        Rectangle srcR = {0, 0, (float)tw, (float)-th};
-        DrawTexturePro(state->brushTex[state->activeBrushTex].rt.texture,
-            srcR, dstRect, Vector2{0, 0}, 0.0f, WHITE);
-        return;
-    }
+    if (cw < 1 || ch < 1) return NULL;
 
     EnsureAccumulators(cw, ch);
     EnsureChecker(cw, ch);
@@ -216,89 +182,10 @@ void DrawViewport(AppState* state, Rectangle screenRect, Camera2D camera) {
 
         finalAcc = src;
         layersDirty = false;
-
-        BeginTextureMode(cleanComposite);
-        ClearBackground(BLANK);
-        DrawTextureRec(finalAcc->texture,
-            Rectangle{0, 0, (float)cw, (float)-ch}, Vector2{0, 0}, WHITE);
-        EndTextureMode();
-        stampDirty = true;
     }
 
-    if (!accumInited || finalAcc == NULL) return;
-
-    extern bool quickPanelShow;
-    if (quickPanelShow && shaderInited) {
-        extern Viewport viewport;
-
-        static d_RealBrush prevBrush;
-        static int prevActiveTex = -1;
-        static bool prevValid = false;
-        d_RealBrush curBrush = state->currentBrush.Realb;
-        bool brushChanged = !prevValid ||
-            curBrush.rad_out != prevBrush.rad_out ||
-            curBrush.rad_in  != prevBrush.rad_in  ||
-            curBrush.crv     != prevBrush.crv     ||
-            curBrush.opacity != prevBrush.opacity ||
-            curBrush.bmidx   != prevBrush.bmidx   ||
-            curBrush.col.r   != prevBrush.col.r   ||
-            curBrush.col.g   != prevBrush.col.g   ||
-            curBrush.col.b   != prevBrush.col.b   ||
-            curBrush.texBlendVal  != prevBrush.texBlendVal  ||
-            curBrush.texScale     != prevBrush.texScale     ||
-            curBrush.texFeather   != prevBrush.texFeather   ||
-            curBrush.texThresh    != prevBrush.texThresh    ||
-            curBrush.texBlendMode != prevBrush.texBlendMode ||
-            curBrush.texNoisemode != prevBrush.texNoisemode ||
-            curBrush.useTexLumAsAlpha != prevBrush.useTexLumAsAlpha ||
-            curBrush.texUseRGB    != prevBrush.texUseRGB    ||
-            state->activeBrushTex != prevActiveTex;
-
-        if (stampDirty || brushChanged) {
-            prevBrush = curBrush;
-            prevActiveTex = state->activeBrushTex;
-            prevValid = true;
-            stampDirty = false;
-
-            BeginTextureMode(stampedComposite);
-            ClearBackground(BLANK);
-            DrawTextureRec(cleanComposite.texture,
-                Rectangle{0, 0, (float)cw, (float)-ch}, Vector2{0, 0}, WHITE);
-            EndTextureMode();
-
-            d_Brush sb;
-            memset(&sb, 0, sizeof(sb));
-            sb.Realb = curBrush;
-            sb.Realb.opacity = 1.0f;
-
-            Vector2 sc = {
-                viewport.bounds.x + viewport.bounds.width * 0.5f,
-                viewport.bounds.y + viewport.bounds.height * 0.5f
-            };
-            Vector2 cc = GetScreenToWorld2D(sc, camera);
-            BrushBlend_ApplyStamp(stampedComposite, &sb, cc.x, cc.y, cc.x, cc.y);
-        }
-
-        finalAcc = &stampedComposite;
-    }
-
-    int sw = (int)screenRect.width;
-    int sh = (int)screenRect.height;
-    if (sw < 1 || sh < 1) return;
-
-    float dstX = -camera.target.x * camera.zoom + camera.offset.x;
-    float dstY = -camera.target.y * camera.zoom + camera.offset.y;
-    float dstW = cw * camera.zoom;
-    float dstH = ch * camera.zoom;
-
-    Rectangle srcRect = {0, 0, (float)cw, (float)-ch};
-    Rectangle dstRect = {dstX, dstY, dstW, dstH};
-
-    if (presentInited) BeginShaderMode(presentShader);
-    DrawTexturePro(finalAcc->texture, srcRect, dstRect, Vector2{0, 0}, 0.0f, WHITE);
-    if (presentInited) EndShaderMode();
-
-    rlSetBlendMode(RL_BLEND_ALPHA);
+    if (!accumInited || finalAcc == NULL) return NULL;
+    return finalAcc;
 }
 
 void ReloadViewportShader(void) {
@@ -321,7 +208,6 @@ static void EnsurePresentShader(void) {
     if (!presentInited) TraceLog(LOG_WARNING, "present.fs failed to load");
 }
 
-/* ── GPU composite + dither → 8-bit Image (for file preview / snaps) ── */
 Image CompositeLayersWithDither(AppState* state) {
     EnsureShader();
     EnsurePresentShader();
@@ -442,8 +328,6 @@ void UnloadViewportRenderer(void) {
     if (accumInited) {
         UnloadRenderTexture(accumA);
         UnloadRenderTexture(accumB);
-        if (cleanComposite.id > 0) UnloadRenderTexture(cleanComposite);
-        if (stampedComposite.id > 0) UnloadRenderTexture(stampedComposite);
         accumInited = false;
     }
     if (checkerValid) {

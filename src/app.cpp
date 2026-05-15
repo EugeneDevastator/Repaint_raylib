@@ -515,7 +515,11 @@ void App_Draw(AppState* state) {
         viewport.strokeEnded = false;
     }
 
-    Viewport_Draw(&viewport, state);
+    // ── Draw viewport: composite layers → stamp preview → screen ──
+    ViewportHUD_Draw(state);
+
+    // Debug stamp overlays (after canvas, before gizmo + UI)
+    Viewport_DrawDebugOverlays(&viewport, state);
 
     // XOR overlay for gizmo lines (between canvas and ImGui content)
     if (quickPanelShow && g_showBrushPreview) {
@@ -635,6 +639,7 @@ void App_Close(AppState* state) {
 
     LeftPanel_Shutdown();
     UnloadViewportRenderer();
+    ViewportHUD_Shutdown();
     if (bpOpacity.iconLoaded) UnloadTexture(bpOpacity.iconTex);
     if (bpSize.iconLoaded) UnloadTexture(bpSize.iconTex);
     if (bpHardness.iconLoaded) UnloadTexture(bpHardness.iconTex);

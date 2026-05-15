@@ -397,8 +397,6 @@ extern Color g_colorPickGrid[9];
 #define GIZMO_CURVE_ANG_SPAN   120.0f
 
 // Gizmo sub-component init/shutdown (no ImGui types)
-void BrushPreview_Init(void);
-void BrushPreview_Shutdown(void);
 void FilePanel_Init(void);
 void FilePanel_Shutdown(void);
 void FilePanel_Draw(AppState* state, Rectangle vp);
@@ -439,7 +437,6 @@ void LeftPanel_Draw(AppState* state);
 
 struct ImDrawList; // forward decl — repaint.h avoids pulling in imgui.h
 struct ImVec2;
-void DrawBrushPreview(AppState* state, ImDrawList* dl, ImVec2 center, float size);
 void DrawBParamSlider(BParam* bp);
 void DrawSliderVertical(ImDrawList* dl, BParam* bp, int x, int y, int w, int h, float val, int colorMode);
 
@@ -447,10 +444,21 @@ void QuickPanel_Draw(AppState* state);
 void QuickPanel_Init(void);
 void QuickPanel_Shutdown(void);
 void BrushGizmo_DrawXOROverlay(AppState* state);
+void Viewport_DrawDebugOverlays(Viewport* vp, AppState* state);
 
+// Layer compositing — returns cached composited document texture
 extern bool layersDirty;
+RenderTexture2D* DocBlender_Composite(AppState* state);
+bool GetPresentInited(void);
+Shader GetPresentShader(void);
 
-void DrawViewport(AppState* state, Rectangle screenRect, Camera2D camera);
+// Brush stamp preview — single function, renders onto given RT
+void DrawStamp(RenderTexture2D dstRT, AppState* state);
+
+// Viewport HUD coordinator — doc + stamp + screen draw
+void ViewportHUD_Draw(AppState* state);
+void ViewportHUD_Shutdown(void);
+
 Image CompositeLayersWithDither(AppState* state);
 void MergeDownLayer(AppState* state, int idx);
 void UnloadViewportRenderer(void);
@@ -459,7 +467,6 @@ void ReloadViewportShader(void);
 void Viewport_Init(Viewport* vp, Rectangle bounds);
 void Viewport_SetBounds(Viewport* vp, Rectangle bounds);
 void Viewport_HandleInput(Viewport* vp, AppState* state);
-void Viewport_Draw(Viewport* vp, AppState* state);
 void App_Init(AppState* state);
 void App_Draw(AppState* state);
 void App_Close(AppState* state);

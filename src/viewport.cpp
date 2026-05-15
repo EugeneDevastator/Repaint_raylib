@@ -311,22 +311,15 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
     }
 }
 
-void Viewport_Draw(Viewport* vp, AppState* state) {
-    Rectangle bounds = vp->bounds;
-
-    DrawRectangleRec(bounds, Color{55, 55, 55, 255});
-
-    DrawViewport(state, bounds, state->camera);
-
+void Viewport_DrawDebugOverlays(Viewport* vp, AppState* state) {
+    if (!vp->debugShowStamps || vp->strokeLen <= 0) return;
     BeginMode2D(state->camera);
-    if (vp->debugShowStamps && vp->strokeLen > 0) {
-        float rad = state->currentBrush.Realb.rad_out;
-        for (int i = 0; i < vp->strokeLen; i++) {
-            DrawCircleLines(vp->strokePts[i].x, vp->strokePts[i].y, rad, YELLOW);
-            DrawRectangleLines(vp->strokePts[i].x - rad, vp->strokePts[i].y - rad, rad * 2, rad * 2, Color{255, 255, 0, 80});
-            DrawCircle(vp->strokePts[i].x, vp->strokePts[i].y, 2, RED);
-        }
-        DrawText("DEBUG: stamp positions (F1 toggle)", 10, 10, 14, YELLOW);
+    float rad = state->currentBrush.Realb.rad_out;
+    for (int i = 0; i < vp->strokeLen; i++) {
+        DrawCircleLines(vp->strokePts[i].x, vp->strokePts[i].y, rad, YELLOW);
+        DrawRectangleLines(vp->strokePts[i].x - rad, vp->strokePts[i].y - rad, rad * 2, rad * 2, Color{255, 255, 0, 80});
+        DrawCircle(vp->strokePts[i].x, vp->strokePts[i].y, 2, RED);
     }
+    DrawText("DEBUG: stamp positions (F1 toggle)", 10, 10, 14, YELLOW);
     EndMode2D();
 }

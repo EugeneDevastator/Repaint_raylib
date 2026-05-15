@@ -24,13 +24,11 @@ static bool g_quickPanelFirstOpen = true;
 static bool g_quickPanelTexLogged = false;
 
 void QuickPanel_Init(void) {
-    BrushPreview_Init();
     FilePanel_Init();
     ToolBox_Init();
 }
 
 void QuickPanel_Shutdown(void) {
-    BrushPreview_Shutdown();
     FilePanel_Shutdown();
     ToolBox_Shutdown();
 }
@@ -82,10 +80,6 @@ void QuickPanel_Draw(AppState* state) {
     float d30 = (float)(M_PI * 30.0 / 180.0);
 
     if (g_showBrushPreview) BrushGizmo_Draw(dl, org, gcx, gcy, state);
-
-    // ── Brush stamp preview (rendered at gizmo center) ────────────────
-    if (g_showStampPreview)
-        DrawBrushPreview(state, dl, org, drawRadOut * 2.0f);
 
     // ── Radial input handling (sector-based, no distance limit) ─────────
     ImVec2 mp = ImGui::GetMousePos();
