@@ -175,17 +175,31 @@ void main() {
             // Mask: smooth alpha gate
             finalAlpha *= tex_a;
 } else if (texBlendMode == 1) {
-    float cutTexA = (texThresh >= 0.0) ? tex_a : (1.0 - tex_a);
-    float t = abs(texThresh);
-    float blend = 1.0 - 2.0 * abs(t - 0.5);
-    float cut = mix(t, 1.0 - finalAlpha, blend);  // inverted finalAlpha
-    float edgeDist = cutTexA - cut;
+    float tresh = 1.0-finalAlpha;
+    float treshBias = texThresh;
+
+    float tex_a_adj = (treshBias < 0.0) ? (1.0 - tex_a) : tex_a;
+    float bias = (0.5 - abs(treshBias)) * 2.0; // +1 at 0, 0 at 0.5, -1 at 1
+	// todo: add experimental branch - convert bias into power: 3 at 1;  1/3 at 0
+    float edgeDist;
+    if (true) {
+        // experimental: bias -> power (3 at bias=1, 1 at bias=0, 1/3 at bias=-1)
+        float power = mix(1.0,13.0, abs(bias));
+		if (bias >0)
+			power = 1/power;
+        float cut = tresh;
+        edgeDist = pow(tex_a_adj, power) - cut;
+    } else {
+        float cut = tresh - bias;
+        edgeDist = tex_a_adj - cut;
+    }
     if (texFeather <= 0.0) {
         finalAlpha = (edgeDist > 0.0) ? 1.0 : 0.0;
     } else {
         finalAlpha = clamp(edgeDist / texFeather, 0.0, 1.0);
     }
 }
+
 else {
             // Multiply: no alpha gating from texture (full brush alpha)
         }
