@@ -23,6 +23,12 @@ void Viewport_Init(Viewport* vp, Rectangle bounds) {
     vp->endLayer = 0;
     vp->broker = NULL;
     vp->lineLastDabPos = Vector2{0, 0};
+    vp->prevSegPos = Vector2{0, 0};
+    vp->prevSegDir = Vector2{0, 0};
+    vp->prevSegLen = 0.0f;
+    vp->prevVel = 0.0f;
+    vp->initDir = 0.0f;
+    vp->initDirSet = false;
     // InputFilter and BrushInterpolator are default-constructed
 }
 
@@ -148,6 +154,13 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                 if (vp->inBounds && leftDown) {
                     vp->inputFilter.Reset();
                     vp->brushInterp.BeginStroke(state->currentBrush, tx, ty);
+
+                    vp->prevSegPos = Vector2{tx, ty};
+                    vp->prevSegDir = Vector2{0, 0};
+                    vp->prevSegLen = 0.0f;
+                    vp->prevVel = 0.0f;
+                    vp->initDirSet = false;
+
                     d_Brush tb; memset(&tb, 0, sizeof(tb));
                     tb.Realb = state->currentBrush.Realb;
                     tb.Realb.opacity = 1.0f;
@@ -157,12 +170,47 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             } else if (leftDown) {
                 double now = GetTime();
                 StrokePoint sp = vp->inputFilter.Feed(tx, ty, now);
+
+                // Compute modulators for this segment
+                float segDx = tx - vp->prevSegPos.x;
+                float segDy = ty - vp->prevSegPos.y;
+                float segLen = sqrtf(segDx * segDx + segDy * segDy);
+                float dirAng = AtanXY(segDx, segDy);
+
+                g_modPars.Pars[csVel] = sp.velocity;
+                g_modPars.Pars[csDir] = RngConv(dirAng, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
+
+                if (!vp->initDirSet && segLen > 0.5f) {
+                    vp->initDir = dirAng;
+                    vp->initDirSet = true;
+                }
+                g_modPars.Pars[csIdir] = RngConv(vp->initDir, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
+
+                if (vp->prevSegLen > 0.5f && segLen > 0.5f) {
+                    float dot = (vp->prevSegDir.x * segDx + vp->prevSegDir.y * segDy)
+                              / (vp->prevSegLen * segLen);
+                    g_modPars.Pars[csCrv] = RngConv(dot, 0.8f, 1.0f, 0.0f, 1.0f);
+                }
+
+                g_modPars.Pars[csAcc] = 1.0f - fabsf(sp.velocity - vp->prevVel);
+                g_modPars.Pars[csAcc] = RngConv(g_modPars.Pars[csAcc], 0.7f, 1.0f, 0.0f, 1.0f);
+
+                if (segLen > 0.001f)
+                    g_modPars.Pars[csHVdir] = fabsf(segDx / segLen);
+
+                vp->prevSegPos = Vector2{tx, ty};
+                vp->prevSegDir = Vector2{segDx, segDy};
+                vp->prevSegLen = segLen;
+                vp->prevVel = sp.velocity;
+
                 d_RealBrush targetBr = state->currentBrush.Realb;
-                targetBr.rad_out  = GetModValFor(&bpSize,      (bpSize.penMode == csVel)      ? sp.velocity : 1.0f);
-                float hVal        = GetModValFor(&bpHardness,  (bpHardness.penMode == csVel)  ? sp.velocity : 1.0f);
+                targetBr.rad_out  = GetModValFor(&bpSize,       g_modPars.Pars[bpSize.penMode]);
+                float hVal        = GetModValFor(&bpHardness,   g_modPars.Pars[bpHardness.penMode]);
                 targetBr.rad_in   = targetBr.rad_out * hVal;
-                targetBr.crv      = GetModValFor(&bpCurvature, (bpCurvature.penMode == csVel) ? sp.velocity : 1.0f);
-                targetBr.opacity  = GetModValFor(&bpOpacity,   (bpOpacity.penMode == csVel)   ? sp.velocity : 1.0f);
+                targetBr.crv      = GetModValFor(&bpCurvature,  g_modPars.Pars[bpCurvature.penMode]);
+                targetBr.opacity  = GetModValFor(&bpOpacity,    g_modPars.Pars[bpOpacity.penMode]);
+                targetBr.resangle = GetModValFor(&bpAngle,      g_modPars.Pars[bpAngle.penMode]);
+                targetBr.x2y      = GetModValFor(&bpScaleRel,   g_modPars.Pars[bpScaleRel.penMode]);
                 float spacingVal  = BParam_GetValue(&bpSpacing);
                 InputEvent dabs[128];
                 int n = vp->brushInterp.FeedStrokePoint(sp, targetBr, dabs, 128, spacingVal, state->mode);
@@ -192,7 +240,14 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     vp->inputFilter.Reset();
                     vp->brushInterp.BeginStroke(state->currentBrush, canvasPos.x, canvasPos.y);
 
-                    // First dab: use current brush directly (no interpolation)
+                    // Reset modulator tracking for new stroke
+                    vp->prevSegPos = canvasPos;
+                    vp->prevSegDir = Vector2{0, 0};
+                    vp->prevSegLen = 0.0f;
+                    vp->prevVel = 0.0f;
+                    vp->initDirSet = false;
+
+                    // First dab: use current brush directly (no modulation — no segment to measure)
                     if (vp->broker) {
                         d_RealBrush br = state->currentBrush.Realb;
                         InputEvent ev = {canvasPos.x, canvasPos.y, canvasPos.x, canvasPos.y, br};
@@ -202,31 +257,74 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     if (vp->strokeLen < MAX_STROKE_PTS)
                         vp->strokePts[vp->strokeLen++] = canvasPos;
                 } else {
-                    // Feed input through the pipeline
                     double now = GetTime();
                     StrokePoint sp = vp->inputFilter.Feed(canvasPos.x, canvasPos.y, now);
 
-                    // Build the target brush with velocity modulation from the stroke point
+                    // ── Compute all non-tablet modulator values for this segment ──
+                    float segDx = canvasPos.x - vp->prevSegPos.x;
+                    float segDy = canvasPos.y - vp->prevSegPos.y;
+                    float segLen = sqrtf(segDx * segDx + segDy * segDy);
+                    float dirAng = AtanXY(segDx, segDy);
+
+                    g_modPars.Pars[csVel] = sp.velocity;
+                    g_modPars.Pars[csDir] = RngConv(dirAng, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
+
+                    if (!vp->initDirSet && segLen > 0.5f) {
+                        vp->initDir = dirAng;
+                        vp->initDirSet = true;
+                    }
+                    g_modPars.Pars[csIdir] = RngConv(vp->initDir, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
+
+                    if (vp->prevSegLen > 0.5f && segLen > 0.5f) {
+                        float dot = (vp->prevSegDir.x * segDx + vp->prevSegDir.y * segDy)
+                                  / (vp->prevSegLen * segLen);
+                        g_modPars.Pars[csCrv] = RngConv(dot, 0.8f, 1.0f, 0.0f, 1.0f);
+                    }
+
+                    g_modPars.Pars[csAcc] = 1.0f - fabsf(sp.velocity - vp->prevVel);
+                    g_modPars.Pars[csAcc] = RngConv(g_modPars.Pars[csAcc], 0.7f, 1.0f, 0.0f, 1.0f);
+
+                    {   // csRelang: alignment between stroke dir and brush rotation
+                        float dir01 = g_modPars.Pars[csDir];
+                        float rot01 = state->currentBrush.Realb.resangle / 360.0f;
+                        float rel = fabsf(dir01 - rot01);
+                        if (rel > 0.5f) rel = 1.0f - rel;
+                        rel = rel * 2.0f;
+                        rel = 1.0f - fabsf(rel - 0.5f) * 2.0f;
+                        g_modPars.Pars[csRelang] = rel;
+                    }
+
+                    if (segLen > 0.001f)
+                        g_modPars.Pars[csHVdir] = fabsf(segDx / segLen);
+
+                    // Update tracking state
+                    vp->prevSegPos = canvasPos;
+                    vp->prevSegDir = Vector2{segDx, segDy};
+                    vp->prevSegLen = segLen;
+                    vp->prevVel = sp.velocity;
+
+                    // ── Build target brush using all modulators ──
                     d_RealBrush targetBr = state->currentBrush.Realb;
-                    float cpar = (state->currentBrush.Realb.rad_out > 0) ? sp.velocity : 0.0f;
-                    targetBr.rad_out  = GetModValFor(&bpSize,       (bpSize.penMode == csVel) ? sp.velocity : 1.0f);
-                    float hVal        = GetModValFor(&bpHardness,   (bpHardness.penMode == csVel) ? sp.velocity : 1.0f);
+                    targetBr.rad_out  = GetModValFor(&bpSize,       g_modPars.Pars[bpSize.penMode]);
+                    float hVal        = GetModValFor(&bpHardness,   g_modPars.Pars[bpHardness.penMode]);
                     targetBr.rad_in   = targetBr.rad_out * hVal;
-                    targetBr.crv      = GetModValFor(&bpCurvature,  (bpCurvature.penMode == csVel) ? sp.velocity : 1.0f);
-                    targetBr.opacity  = GetModValFor(&bpOpacity,    (bpOpacity.penMode == csVel) ? sp.velocity : 1.0f);
-                    float colH        = GetModValFor(&bpQuickHue,   (bpQuickHue.penMode == csVel) ? sp.velocity : 1.0f);
-                    float colS        = GetModValFor(&bpQuickSat,   (bpQuickSat.penMode == csVel) ? sp.velocity : 1.0f);
-                    float colL        = GetModValFor(&bpQuickLit,   (bpQuickLit.penMode == csVel) ? sp.velocity : 1.0f);
+                    targetBr.crv      = GetModValFor(&bpCurvature,  g_modPars.Pars[bpCurvature.penMode]);
+                    targetBr.opacity  = GetModValFor(&bpOpacity,    g_modPars.Pars[bpOpacity.penMode]);
+                    targetBr.resangle = GetModValFor(&bpAngle,      g_modPars.Pars[bpAngle.penMode]);
+                    targetBr.x2y      = GetModValFor(&bpScaleRel,   g_modPars.Pars[bpScaleRel.penMode]);
+                    float colH        = GetModValFor(&bpQuickHue,   g_modPars.Pars[bpQuickHue.penMode]);
+                    float colS        = GetModValFor(&bpQuickSat,   g_modPars.Pars[bpQuickSat.penMode]);
+                    float colL        = GetModValFor(&bpQuickLit,   g_modPars.Pars[bpQuickLit.penMode]);
                     targetBr.col      = HSLToRGB(colH, colS, colL);
                     if (state->mode == eSmudge)
-                        targetBr.cop = GetModValFor(&bpCloneOpacity, (bpCloneOpacity.penMode == csVel) ? sp.velocity : 1.0f);
+                        targetBr.cop = GetModValFor(&bpCloneOpacity, g_modPars.Pars[bpCloneOpacity.penMode]);
                     else
                         targetBr.cop = 0.0f;
 
                     // Feed through BrushInterpolator → dabs
                     float spacingVal = BParam_GetValue(&bpSpacing);
-                InputEvent dabs[128];
-                int n = vp->brushInterp.FeedStrokePoint(sp, targetBr, dabs, 128, spacingVal, state->mode);
+                    InputEvent dabs[128];
+                    int n = vp->brushInterp.FeedStrokePoint(sp, targetBr, dabs, 128, spacingVal, state->mode);
                     for (int i = 0; i < n; i++) {
                         if (vp->broker) vp->broker->on_input(dabs[i]);
                         if (vp->strokeLen < MAX_STROKE_PTS)

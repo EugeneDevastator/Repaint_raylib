@@ -294,6 +294,13 @@ typedef struct {
     InputFilter inputFilter;
     BrushInterpolator brushInterp;
     Vector2 lineLastDabPos;          // line tool dab chaining
+    // Modulator tracking state
+    Vector2 prevSegPos;
+    Vector2 prevSegDir;
+    float prevSegLen;
+    float prevVel;
+    float initDir;
+    bool initDirSet;
 } Viewport;
 
 struct AppState {
@@ -425,6 +432,10 @@ extern BParam bpTexScale;
 extern BParam bpTexFeather;
 extern BParam bpTexThresh;
 extern BParam bpTexBlendVal;
+extern BParam bpAngle;
+extern BParam bpScaleRel;
+
+extern d_StrokePars g_modPars;
 
 extern const char* PenModeNames[PEN_MODE_COUNT];
 extern Texture2D g_blendModeIcon;

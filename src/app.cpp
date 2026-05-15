@@ -29,6 +29,10 @@ BParam bpTexScale;
 BParam bpTexFeather;
 BParam bpTexThresh;
 BParam bpTexBlendVal;
+BParam bpAngle;
+BParam bpScaleRel;
+
+d_StrokePars g_modPars;
 
 Viewport viewport;
 
@@ -116,10 +120,9 @@ void SyncAllRTs(AppState* state) {
 
 float GetModVal(BParam* bp) {
     float cpar = 1.0f;
-    if (bp->penMode == csVel)
-        cpar = g_velocity;
-    else if (bp->penMode == csNone)
-        cpar = 1.0f;
+    int pm = bp->penMode;
+    if (pm >= 0 && pm < csSTOP)
+        cpar = g_modPars.Pars[pm];
     return GetModValFor(bp, cpar);
 }
 
@@ -132,17 +135,20 @@ float GetModValFor(BParam* bp, float cpar) {
 }
 
 void UpdateUI(AppState* state) {
-    // ── Track mouse velocity first (before brush reads g_velocity) ──
+    // ── Track mouse velocity (canvas-space) ──
     {
         static Vector2 lastVelPos = {0, 0};
         Vector2 mp = GetMousePosition();
-        float dxv = mp.x - lastVelPos.x;
-        float dyv = mp.y - lastVelPos.y;
+        float dz = state->camera.zoom;
+        float dxv = (mp.x - lastVelPos.x) / dz;
+        float dyv = (mp.y - lastVelPos.y) / dz;
         lastVelPos = mp;
         float distV = sqrtf(dxv * dxv + dyv * dyv);
-        float rawVel = fminf(distV / 50.0f, 1.0f);
+        float rawVel = fminf(distV / 20.0f, 1.0f);
         g_velocity = g_velocity * 0.7f + rawVel * 0.3f;
     }
+    // Refresh g_modPars for non-tablet modulators each frame
+    g_modPars.Pars[csVel] = g_velocity;
 
     Vector2 mousePos = GetMousePosition();
 
@@ -174,10 +180,12 @@ void UpdateUI(AppState* state) {
         }
     }
 
-    state->currentBrush.Realb.rad_out = GetModVal(&bpSize);
-    state->currentBrush.Realb.rad_in = state->currentBrush.Realb.rad_out * GetModVal(&bpHardness);
-    state->currentBrush.Realb.crv = GetModVal(&bpCurvature);
-    state->currentBrush.Realb.opacity = GetModVal(&bpOpacity);
+    state->currentBrush.Realb.rad_out  = GetModVal(&bpSize);
+    state->currentBrush.Realb.rad_in   = state->currentBrush.Realb.rad_out * GetModVal(&bpHardness);
+    state->currentBrush.Realb.crv      = GetModVal(&bpCurvature);
+    state->currentBrush.Realb.opacity  = GetModVal(&bpOpacity);
+    state->currentBrush.Realb.resangle = GetModVal(&bpAngle);
+    state->currentBrush.Realb.x2y      = GetModVal(&bpScaleRel);
 
     state->currentBrush.Realb.cop = (state->mode == eSmudge)
         ? GetModVal(&bpCloneOpacity) : 0.0f;
@@ -392,6 +400,32 @@ void App_Init(AppState* state) {
     strncpy(bpTexThresh.tooltip, "Threshold multiplier; negative inverts texture mask", sizeof(bpTexThresh.tooltip) - 1);
     BParam_Init(&bpTexBlendVal, 33, "TexColorBlendStrength", 0.0f, 1.0f, 0.5f);
     strncpy(bpTexBlendVal.tooltip, "How much brush color tints the texture (0=texture only, 1=texture*brush)", sizeof(bpTexBlendVal.tooltip) - 1);
+
+    BParam_Init(&bpAngle, 40, "Angle", 0.0f, 360.0f, 0.0f);
+    strncpy(bpAngle.tooltip, "Brush stamp rotation angle in degrees", sizeof(bpAngle.tooltip) - 1);
+    BParam_SetIcon(&bpAngle, "ctlang");
+
+    BParam_Init(&bpScaleRel, 41, "Proportion", 0.0f, 1.0f, 0.5f);
+    strncpy(bpScaleRel.tooltip, "Aspect ratio (0=flat, 0.5=circle, 1=tall)", sizeof(bpScaleRel.tooltip) - 1);
+    BParam_SetIcon(&bpScaleRel, "ctlscalerel");
+
+    // Init global modulator defaults
+    for (int i = 0; i < csSTOP; i++) g_modPars.Pars[i] = 1.0f;
+    g_modPars.Pars[csDir]    = 0.5f;
+    g_modPars.Pars[csIdir]   = 0.5f;
+    g_modPars.Pars[csCrv]    = 1.0f;
+    g_modPars.Pars[csAcc]    = 1.0f;
+    g_modPars.Pars[csLenpx]  = 1.0f;
+    g_modPars.Pars[csHVdir]  = 0.5f;
+    g_modPars.Pars[csRot]    = 0.5f;
+    g_modPars.Pars[csTilt]   = 0.5f;
+    g_modPars.Pars[csRelang] = 0.5f;
+    g_modPars.Pars[csHtilt]  = 0.5f;
+    g_modPars.Pars[csVtilt]  = 0.5f;
+    g_modPars.Pars[csXtilt]  = 0.5f;
+    g_modPars.Pars[csYtilt]  = 0.5f;
+    g_modPars.Pars[csPressure] = 1.0f;
+    g_modPars.Pars[csHVrot]  = 0.5f;
 
     state->canvas = Canvas_Create(800, 600, WHITE);
     state->activeLayer = 0;

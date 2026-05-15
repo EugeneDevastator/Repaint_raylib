@@ -61,8 +61,8 @@ void LeftPanel_Draw(AppState* state) {
     ImGui::Spacing();
 
     // BParam sliders
-    BParam* bps[] = {&bpSize, &bpHardness, &bpCurvature, &bpSpacing, &bpOpacity, &bpCloneOpacity, &bpScatter};
-    for (int i = 0; i < 7; i++)
+    BParam* bps[] = {&bpSize, &bpHardness, &bpCurvature, &bpSpacing, &bpOpacity, &bpAngle, &bpScaleRel, &bpCloneOpacity, &bpScatter};
+    for (int i = 0; i < 9; i++)
         DrawBParamSlider(bps[i]);
 
     ImGui::Spacing();

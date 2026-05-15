@@ -26,10 +26,10 @@ void DrawStamp(RenderTexture2D dstRT, AppState* state) {
     pb.Realb.opacity    = BParam_GetValue(&bpOpacity);
     pb.Realb.cop        = 0.0f;
     pb.Realb.bmidx      = state->currentBrush.Realb.bmidx;
-    pb.Realb.x2y        = 1.0f;
+    pb.Realb.x2y        = state->currentBrush.Realb.x2y;
     pb.Realb.sol        = 1.0f;
     pb.Realb.sol2op     = 0.0f;
-    pb.Realb.resangle   = 0.0f;
+    pb.Realb.resangle   = state->currentBrush.Realb.resangle;
     pb.Realb.seed       = 0;
 
     Texture2D savedTex = g_activeBrushTex;
