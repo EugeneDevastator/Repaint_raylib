@@ -297,6 +297,8 @@ void DrawViewport(AppState* state, Rectangle screenRect, Camera2D camera) {
     if (presentInited) BeginShaderMode(presentShader);
     DrawTexturePro(finalAcc->texture, srcRect, dstRect, Vector2{0, 0}, 0.0f, WHITE);
     if (presentInited) EndShaderMode();
+
+    rlSetBlendMode(RL_BLEND_ALPHA);
 }
 
 void ReloadViewportShader(void) {
@@ -367,6 +369,8 @@ Image CompositeLayersWithDither(AppState* state) {
     DrawTextureRec(src->texture, Rectangle{0, 0, (float)cw, (float)-ch}, Vector2{0, 0}, WHITE);
     if (presentInited) EndShaderMode();
     EndTextureMode();
+
+    rlSetBlendMode(RL_BLEND_ALPHA);
 
     Image result = LoadImageFromTexture(dst->texture);
     ImageFlipVertical(&result);
