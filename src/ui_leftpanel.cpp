@@ -9,16 +9,10 @@ extern bool panelResizing;
 extern int uiPanelWidth;
 extern BParam bpOpacity, bpSize, bpHardness, bpSpacing, bpCurvature, bpScatter, bpCloneOpacity;
 
-static RenderTexture2D stampPrev = {0};
-static bool stampPrevInited = false;
 Texture2D g_blendModeIcon = {0};
 bool g_blendIconLoaded = false;
 
 void LeftPanel_Init(void) {
-    if (!stampPrevInited) {
-        stampPrev = LoadRenderTexture(100, 100);
-        stampPrevInited = true;
-    }
     if (!g_blendIconLoaded) {
         if (FileExists("resources/ctlbm.png")) {
             Image img = LoadImage("resources/ctlbm.png");
@@ -31,10 +25,6 @@ void LeftPanel_Init(void) {
 }
 
 void LeftPanel_Shutdown(void) {
-    if (stampPrevInited && stampPrev.id > 0) {
-        UnloadRenderTexture(stampPrev);
-        stampPrevInited = false;
-    }
     if (g_blendIconLoaded) {
         UnloadTexture(g_blendModeIcon);
         g_blendIconLoaded = false;
@@ -69,50 +59,6 @@ void LeftPanel_Draw(AppState* state) {
     ImGui::Separator();
     ImGui::Text("Settings");
     ImGui::Spacing();
-
-    // Brush stamp preview
-    if (stampPrevInited && stampPrev.id > 0) {
-        BeginTextureMode(stampPrev);
-        ClearBackground(BLANK);
-        EndTextureMode();
-
-        // Use base slider values — never modulated
-        d_Brush pb;
-        memset(&pb, 0, sizeof(pb));
-        pb.Realb.rad_out  = fminf(BParam_GetValue(&bpSize), 45.0f);
-        pb.Realb.rad_in   = pb.Realb.rad_out * fminf(BParam_GetValue(&bpHardness), 1.0f);
-        pb.Realb.crv      = BParam_GetValue(&bpCurvature);
-        pb.Realb.texBlendVal  = state->currentBrush.Realb.texBlendVal;
-        pb.Realb.texScale     = state->currentBrush.Realb.texScale;
-        pb.Realb.texFeather   = state->currentBrush.Realb.texFeather;
-        pb.Realb.texThresh    = state->currentBrush.Realb.texThresh;
-        pb.Realb.useTexLumAsAlpha = state->currentBrush.Realb.useTexLumAsAlpha;
-        pb.Realb.texUseRGB    = state->currentBrush.Realb.texUseRGB;
-        pb.Realb.texBlendMode = state->currentBrush.Realb.texBlendMode;
-        pb.Realb.texNoisemode = state->currentBrush.Realb.texNoisemode;
-        pb.Realb.col      = WHITE;
-        pb.Realb.opacity  = 1.0f;
-        pb.Realb.cop      = 0.0f;
-        pb.Realb.bmidx    = state->currentBrush.Realb.bmidx;
-        pb.Realb.x2y      = 1.0f;
-        pb.Realb.sol      = 1.0f;
-        pb.Realb.sol2op   = 0.0f;
-        pb.Realb.resangle = 0.0f;
-        pb.Realb.seed     = 0;
-        Texture2D savedTex = g_activeBrushTex;
-        if (state->activeBrushTex >= 0 && state->activeBrushTex < state->brushTexCount)
-            g_activeBrushTex = state->brushTex[state->activeBrushTex].rt.texture;
-        else
-            g_activeBrushTex = Texture2D{0};
-        BrushBlend_ApplyStamp(stampPrev, &pb, 50, 50, 50, 50);
-        g_activeBrushTex = savedTex;
-
-        float cw = ImGui::GetContentRegionAvail().x;
-        float previewSize = fminf(cw, 100.0f);
-        ImGui::SetCursorPosX((cw - previewSize) * 0.5f);
-        ImGui::Image((ImTextureID)(intptr_t)stampPrev.texture.id,
-            ImVec2(previewSize, previewSize));
-    }
 
     // BParam sliders
     BParam* bps[] = {&bpSize, &bpHardness, &bpCurvature, &bpSpacing, &bpOpacity, &bpCloneOpacity, &bpScatter};

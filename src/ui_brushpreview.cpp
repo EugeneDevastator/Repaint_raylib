@@ -1,55 +1,68 @@
 #include "repaint.h"
 #include "imgui.h"
 
-static RenderTexture2D gizmoStamp = {0};
+static RenderTexture2D g_previewRT = {0};
 
 void BrushPreview_Init(void) {
-    if (gizmoStamp.id == 0) {
-        gizmoStamp = LoadRenderTexture(256, 256);
-        SetTextureFilter(gizmoStamp.texture, TEXTURE_FILTER_BILINEAR);
-        SetTextureWrap(gizmoStamp.texture, TEXTURE_WRAP_CLAMP);
+    if (g_previewRT.id == 0) {
+        g_previewRT = LoadRenderTexture(256, 256);
+        SetTextureFilter(g_previewRT.texture, TEXTURE_FILTER_BILINEAR);
+        SetTextureWrap(g_previewRT.texture, TEXTURE_WRAP_CLAMP);
     }
 }
 
 void BrushPreview_Shutdown(void) {
-    if (gizmoStamp.id > 0) {
-        UnloadRenderTexture(gizmoStamp);
-        gizmoStamp.id = 0;
+    if (g_previewRT.id > 0) {
+        UnloadRenderTexture(g_previewRT);
+        g_previewRT.id = 0;
     }
 }
 
-void BrushPreview_RenderStamp(AppState* state, float drawRadOut) {
-    if (gizmoStamp.id == 0 || drawRadOut <= 1.0f) return;
-    float scale = 128.0f / fmaxf(drawRadOut, 1.0f);
+void DrawBrushPreview(AppState* state, ImDrawList* dl, ImVec2 center, float size) {
+    if (g_previewRT.id == 0) return;
 
-    // Use base slider values — never modulated (velocity, pressure, etc.)
+    float brushSize = fminf(BParam_GetValue(&bpSize), 120.0f);
+    float scale = 128.0f / fmaxf(brushSize, 1.0f);
+
     d_Brush pb;
     memset(&pb, 0, sizeof(pb));
-    pb.Realb.rad_out  = 128.0f;
-    pb.Realb.rad_in   = BParam_GetValue(&bpSize) * BParam_GetValue(&bpHardness) * state->camera.zoom * scale;
+    pb.Realb.rad_out  = brushSize * scale;
+    pb.Realb.rad_in   = brushSize * fminf(BParam_GetValue(&bpHardness), 1.0f) * scale;
     pb.Realb.crv      = BParam_GetValue(&bpCurvature);
-    pb.Realb.opacity  = 1.0f;
+    pb.Realb.texBlendVal  = state->currentBrush.Realb.texBlendVal;
+    pb.Realb.texScale     = state->currentBrush.Realb.texScale;
+    pb.Realb.texFeather   = state->currentBrush.Realb.texFeather;
+    pb.Realb.texThresh    = state->currentBrush.Realb.texThresh;
+    pb.Realb.useTexLumAsAlpha = state->currentBrush.Realb.useTexLumAsAlpha;
+    pb.Realb.texUseRGB    = state->currentBrush.Realb.texUseRGB;
+    pb.Realb.texBlendMode = state->currentBrush.Realb.texBlendMode;
+    pb.Realb.texNoisemode = state->currentBrush.Realb.texNoisemode;
     pb.Realb.col      = HSLToRGB(colorHue, colorSat, colorLit);
-    pb.Realb.bmidx    = state->currentBrush.Realb.bmidx;
+    pb.Realb.opacity  = 1.0f;
     pb.Realb.cop      = 0.0f;
+    pb.Realb.bmidx    = state->currentBrush.Realb.bmidx;
     pb.Realb.x2y      = 1.0f;
     pb.Realb.sol      = 1.0f;
     pb.Realb.sol2op   = 0.0f;
     pb.Realb.resangle = 0.0f;
     pb.Realb.seed     = 0;
 
-    BeginTextureMode(gizmoStamp);
+    Texture2D savedTex = g_activeBrushTex;
+    if (state->activeBrushTex >= 0 && state->activeBrushTex < state->brushTexCount)
+        g_activeBrushTex = state->brushTex[state->activeBrushTex].rt.texture;
+    else
+        g_activeBrushTex = Texture2D{0};
+
+    BeginTextureMode(g_previewRT);
     ClearBackground(BLANK);
     EndTextureMode();
+    BrushBlend_ApplyStamp(g_previewRT, &pb, 128, 128, 128, 128);
+    g_activeBrushTex = savedTex;
 
-    BrushBlend_ApplyStamp(gizmoStamp, &pb, 128, 128, 128, 128);
-}
-
-void BrushPreview_DrawStamp(ImDrawList* dl, ImVec2 org, float drawRadOut) {
-    if (gizmoStamp.id == 0 || drawRadOut <= 1.0f) return;
-    dl->AddImage((ImTextureID)(intptr_t)gizmoStamp.texture.id,
-        ImVec2(org.x - drawRadOut, org.y - drawRadOut),
-        ImVec2(org.x + drawRadOut, org.y + drawRadOut),
+    float half = size * 0.5f;
+    dl->AddImage((ImTextureID)(intptr_t)g_previewRT.texture.id,
+        ImVec2(center.x - half, center.y - half),
+        ImVec2(center.x + half, center.y + half),
         ImVec2(0, 0), ImVec2(1, 1),
         IM_COL32(255, 255, 255, 255));
 }

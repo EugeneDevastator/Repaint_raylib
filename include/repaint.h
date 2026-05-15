@@ -438,6 +438,8 @@ void LeftPanel_Shutdown(void);
 void LeftPanel_Draw(AppState* state);
 
 struct ImDrawList; // forward decl — repaint.h avoids pulling in imgui.h
+struct ImVec2;
+void DrawBrushPreview(AppState* state, ImDrawList* dl, ImVec2 center, float size);
 void DrawBParamSlider(BParam* bp);
 void DrawSliderVertical(ImDrawList* dl, BParam* bp, int x, int y, int w, int h, float val, int colorMode);
 

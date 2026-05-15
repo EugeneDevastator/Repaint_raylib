@@ -6,6 +6,7 @@
 #include "imgui_internal.h"
 #include "dialog.h"
 #include "network_broker.h"
+#include "ui_leftpanel.h"
 #include <time.h>
 
 int uiPanelWidth = 250;
@@ -517,7 +518,7 @@ void App_Draw(AppState* state) {
     Viewport_Draw(&viewport, state);
 
     // XOR overlay for gizmo lines (between canvas and ImGui content)
-    if (quickPanelShow) {
+    if (quickPanelShow && g_showBrushPreview) {
         BrushGizmo_DrawXOROverlay(state);
     }
 

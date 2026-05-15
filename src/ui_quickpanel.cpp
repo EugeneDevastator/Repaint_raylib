@@ -4,7 +4,6 @@
 
 // Sub-component declarations (defined in their own files)
 void BrushGizmo_Draw(ImDrawList* dl, ImVec2 org, int gcx, int gcy, AppState*);
-void QuickInfo_Draw(ImDrawList*, int gcx, int gcy, int gizR, AppState*);
 void FilePanel_Draw(AppState* state, Rectangle vp);
 void ToolBox_Draw(AppState* state, Rectangle vp);
 
@@ -12,6 +11,17 @@ bool quickPanelShow = false;
 int quickPanelMouseMode = 0;
 bool g_colorPicking = false;
 Color g_colorPickGrid[9] = {};
+
+// Sub-component visibility toggles (controlled from left panel)
+bool g_showBrushPreview = true;   // gizmo ring + rotation arrow
+bool g_showStampPreview = true;   // brush stamp preview (quick panel overlay)
+bool g_showTextureGroup = true;   // texture controls (dropdowns, sliders, grid)
+bool g_showFilePanel = false;     // file operations panel (default off)
+bool g_showToolPanel = true;      // tool selection toolbox
+
+// Debug logging - first open flag
+static bool g_quickPanelFirstOpen = true;
+static bool g_quickPanelTexLogged = false;
 
 void QuickPanel_Init(void) {
     BrushPreview_Init();
@@ -28,6 +38,17 @@ void QuickPanel_Shutdown(void) {
 void QuickPanel_Draw(AppState* state) {
     if (!quickPanelShow) return;
 
+    // ── Debug logging on first open ──────────────────────────────
+    if (g_quickPanelFirstOpen) {
+        g_quickPanelFirstOpen = false;
+        TraceLog(LOG_INFO, "[QuickPanel] First open — logging state");
+        TraceLog(LOG_INFO, "[QuickPanel] brushTexCount=%d, activeBrushTex=%d, editTexMode=%d",
+            state->brushTexCount, state->activeBrushTex, state->editTexMode);
+        TraceLog(LOG_INFO, "[QuickPanel] g_showBrushPreview=%d g_showStampPreview=%d g_showTextureGroup=%d g_showFilePanel=%d g_showToolPanel=%d",
+            (int)g_showBrushPreview, (int)g_showStampPreview, (int)g_showTextureGroup,
+            (int)g_showFilePanel, (int)g_showToolPanel);
+    }
+
     Rectangle vp = viewport.bounds;
     int gcx = (int)(vp.x + vp.width * 0.5f);
     int gcy = (int)(vp.y + vp.height * 0.5f);
@@ -40,8 +61,8 @@ void QuickPanel_Draw(AppState* state) {
     if (drawRadIn > drawRadOut) drawRadIn = drawRadOut;
 
     // ── Separate panels (top-level windows, drawn before overlay) ────────
-    FilePanel_Draw(state, vp);
-    ToolBox_Draw(state, vp);
+    if (g_showFilePanel) FilePanel_Draw(state, vp);
+    if (g_showToolPanel) ToolBox_Draw(state, vp);
 
     // ── Transparent overlay for gizmo visuals + interactive controls ─────
     ImGui::SetNextWindowPos(ImVec2(vp.x, vp.y));
@@ -60,8 +81,11 @@ void QuickPanel_Draw(AppState* state) {
     int gizR = 200;
     float d30 = (float)(M_PI * 30.0 / 180.0);
 
-    BrushGizmo_Draw(dl, org, gcx, gcy, state);
-    QuickInfo_Draw(dl, gcx, gcy, gizR, state);
+    if (g_showBrushPreview) BrushGizmo_Draw(dl, org, gcx, gcy, state);
+
+    // ── Brush stamp preview (rendered at gizmo center) ────────────────
+    if (g_showStampPreview)
+        DrawBrushPreview(state, dl, org, drawRadOut * 2.0f);
 
     // ── Radial input handling (sector-based, no distance limit) ─────────
     ImVec2 mp = ImGui::GetMousePos();
@@ -245,8 +269,8 @@ void QuickPanel_Draw(AppState* state) {
     }
 
      // ── Brush texture selection + params ──────────────────────────────
-     {
-         int texAreaY = iconY + dCtrl + 14;
+     if (g_showTextureGroup) {
+          int texAreaY = iconY + dCtrl + 14;
          int texCount = state->brushTexCount;
 
          // ── Texture controls (3 columns within 1/5 viewport width each) ─────
@@ -295,42 +319,49 @@ void QuickPanel_Draw(AppState* state) {
          state->currentBrush.Realb.texThresh = BParam_GetValue(&bpTexThresh);
          state->currentBrush.Realb.texBlendVal = BParam_GetValue(&bpTexBlendVal);
 
-         // Column 4: texture selection grid
-         float gridX = baseX + 2.0f * sectionWidth; // start of column 4
-         ImGui::SetCursorScreenPos(ImVec2(gridX, texAreaY));
-         if (ImGui::BeginChild("##texCol4", ImVec2(sectionWidth, childHeight), false)) {
-             int texCols = 4;
-             int texSz = 64;
-             int texGap = 6;
+          // Column 4: texture selection grid
+          float gridX = baseX + 2.0f * sectionWidth; // start of column 4
+          ImGui::SetCursorScreenPos(ImVec2(gridX, texAreaY));
+          if (ImGui::BeginChild("##texCol4", ImVec2(sectionWidth, childHeight), false)) {
+              ImVec2 childOrigin = ImGui::GetCursorScreenPos();
+              int texCols = 4;
+              int texSz = 64;
+              int texGap = 6;
 
-             // "X" button: no texture used as brush pattern
-             ImGui::SetCursorScreenPos(ImVec2(0, 0)); // Relative to child window
-             ImGui::PushID("500");
-             bool isNone = (state->activeBrushTex < 0);
-             if (isNone) { ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(1,1,1,1)); ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.4f,0.4f,0.4f,1)); }
-             if (ImGui::Button("X", ImVec2(texSz, texSz)))
-                 BrushTex_SetActive(state, -1);
-             if (isNone) { ImGui::PopStyleColor(2); }
-             ImGui::PopID();
+              // "X" button: no texture used as brush pattern
+              ImGui::SetCursorScreenPos(ImVec2(childOrigin.x, childOrigin.y));
+              ImGui::PushID("500");
+              bool isNone = (state->activeBrushTex < 0);
+              if (isNone) { ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(1,1,1,1)); ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.4f,0.4f,0.4f,1)); }
+              if (ImGui::Button("X", ImVec2(texSz, texSz)))
+                  BrushTex_SetActive(state, -1);
+              if (isNone) { ImGui::PopStyleColor(2); }
+              ImGui::PopID();
 
-             for (int ti = 0; ti < texCount && ti < texCols * 4; ti++) {
-                 int col = ti % texCols;
-                 int row = ti / texCols;
-                 int tx = col * (texSz + texGap);
-                 int ty = row * (texSz + texGap) + texSz + texGap;
-                 ImGui::SetCursorScreenPos(ImVec2(gridX + tx, texAreaY + ty));
-                 ImGui::PushID(501 + ti);
-                 Texture2D thumb = BrushTex_GetThumb(state, ti);
-                 bool isSel = (state->activeBrushTex == ti);
-                 if (isSel) ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(1,1,1,1));
-                 if (thumb.id > 0) {
-                     if (ImGui::ImageButton("##bt", (ImTextureID)(intptr_t)thumb.id, ImVec2(texSz, texSz)))
-                         BrushTex_SetActive(state, ti);
-                 }
-                 if (isSel) ImGui::PopStyleColor();
-                 ImGui::PopID();
-             }
-             ImGui::EndChild();
+              for (int ti = 0; ti < texCount && ti < texCols * 4; ti++) {
+                  int col = ti % texCols;
+                  int row = ti / texCols;
+                  float tx = childOrigin.x + col * (texSz + texGap);
+                  float ty = childOrigin.y + row * (texSz + texGap) + texSz + texGap;
+                  ImGui::SetCursorScreenPos(ImVec2(tx, ty));
+                  ImGui::PushID(501 + ti);
+                  Texture2D thumb = BrushTex_GetThumb(state, ti);
+                  bool isSel = (state->activeBrushTex == ti);
+                  if (isSel) ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(1,1,1,1));
+                  if (thumb.id > 0) {
+                      if (!g_quickPanelTexLogged) {
+                          TraceLog(LOG_INFO, "[QuickPanel] Tex[%d] name='%s' thumb.id=%d rt.id=%d",
+                              ti, state->brushTex[ti].name,
+                              thumb.id, state->brushTex[ti].rt.id);
+                          g_quickPanelTexLogged = true;
+                      }
+                      if (ImGui::ImageButton("##bt", (ImTextureID)(intptr_t)thumb.id, ImVec2(texSz, texSz)))
+                          BrushTex_SetActive(state, ti);
+                  }
+                  if (isSel) ImGui::PopStyleColor();
+                  ImGui::PopID();
+              }
+              ImGui::EndChild();
          }
      }
 
