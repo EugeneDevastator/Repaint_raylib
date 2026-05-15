@@ -55,7 +55,6 @@ set(SOURCES
     src/ui_brushpreview.cpp
     src/ui_brushgizmo.cpp
     src/ui_sliders.cpp
-    src/ui_quickinfo.cpp
     src/ui_filepanel.cpp
     src/ui_toolbox.cpp
     src/ui_layerpanel.cpp

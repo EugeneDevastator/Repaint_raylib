@@ -124,6 +124,16 @@ void LeftPanel_Draw(AppState* state) {
     ImGui::Checkbox("Preserve Layer Alpha", (bool*)&preserve);
     state->currentBrush.Realb.preserveop = (uint8_t)preserve;
 
+    // ── Quick Panel sub-component toggles ────────────────────────────────
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Text("Quick Panel");
+    ImGui::Checkbox("Brush Preview", &g_showStampPreview);
+    ImGui::Checkbox("Gizmo", &g_showBrushPreview);
+    ImGui::Checkbox("Texture Group", &g_showTextureGroup);
+    ImGui::Checkbox("File Panel", &g_showFilePanel);
+    ImGui::Checkbox("Tool Panel", &g_showToolPanel);
+
     // Pipeline selector
     {
         const char* pipeNames[] = {"CFNSR", "RS"};

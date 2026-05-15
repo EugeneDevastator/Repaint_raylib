@@ -92,6 +92,7 @@ void BParam_SetIcon(BParam* bp, const char* filename) {
         bp->iconLoaded = bp->iconTex.id > 0;
         UnloadImage(img);
     } else {
+        bp->iconTex = Texture2D{0};   // <-- added
         bp->iconLoaded = false;
     }
 }
