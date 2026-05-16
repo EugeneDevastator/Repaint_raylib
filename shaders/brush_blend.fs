@@ -19,7 +19,7 @@ void main() {
     vec4 canvas  = texture(canvasTex, uv);
     vec4 geouv = texture(texture0, sampleUV);
 
-if(true){ // debug
+if(false){ // debug
 finalColor = geouv;
 finalColor.a=1;
 return;
@@ -29,6 +29,21 @@ return;
         finalColor = canvas;
         return;
     }
+//if we have texture we need some steps to properly get alpha
+// call it userTexA;
+// if use lum - then get it from lum
+// if not - then from tex.a
+
+// if tex treshold<1 then invert it : userTexA = 1-userTexA
+
+// if use texture as mask firstMask = userTexA, secondmask =1;
+// else firstmask = linear gradientfrom center to side. secondmask = userTexA
+// apply radIn and crv to first mask.
+
+// if trehsold mode - multiply both masks, and then apply abs(treshold and feather)
+// if mask mode - multiply masks.finalColor
+// if use tex mask - return first mask
+
 
     vec2 p = geouv.rg - 0.5;
     float dist = length(p);
