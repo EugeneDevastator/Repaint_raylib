@@ -164,7 +164,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     d_Brush tb; memset(&tb, 0, sizeof(tb));
                     tb.Realb = state->currentBrush.Realb;
                     tb.Realb.opacity = 1.0f;
-                    BrushBlend_ApplyStamp(bt->rt, &tb, tx, ty, tx, ty);
+                    BrushBlend_ApplyStamp(bt->rt, &tb, g_activeBrushTex, tx, ty, tx, ty);
                     vp->wasMouseDown = true;
                 }
             } else if (leftDown) {
@@ -217,7 +217,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                 d_Brush tb; memset(&tb, 0, sizeof(tb));
                 for (int i = 0; i < n; i++) {
                     tb.Realb = dabs[i].brush;
-                    BrushBlend_ApplyStamp(bt->rt, &tb, dabs[i].x, dabs[i].y, dabs[i].srcX, dabs[i].srcY);
+                    BrushBlend_ApplyStamp(bt->rt, &tb, g_activeBrushTex, dabs[i].x, dabs[i].y, dabs[i].srcX, dabs[i].srcY);
                 }
             }
             g_activeBrushTex = savedTex;

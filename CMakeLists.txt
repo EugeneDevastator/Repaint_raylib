@@ -52,7 +52,6 @@ set(SOURCES
     src/ui_controls.cpp
     src/ui_color.cpp
     src/ui_quickpanel.cpp
-    src/brush_stamp.cpp
     src/viewport_hud.cpp
     src/ui_brushgizmo.cpp
     src/ui_sliders.cpp

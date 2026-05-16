@@ -261,7 +261,7 @@ void NetworkBroker::poll(AppState* st) {
 
             RenderTexture2D rt = st->layerRTs[d->activeLayer];
             if (rt.id > 0) {
-                BrushBlend_ApplyStamp(rt, &brush, d->x, d->y, d->srcX, d->srcY);
+                BrushBlend_ApplyStamp(rt, &brush, g_activeBrushTex, d->x, d->y, d->srcX, d->srcY);
                 applied = true;
             }
         }
@@ -480,7 +480,7 @@ void NetworkBroker::EnqueueRemoteDab(const d_Action* act) {
     Vector2 pos2  = act->Stroke.pos2;
     RenderTexture2D rt = appState->layerRTs[layer];
     if (rt.id > 0)
-        BrushBlend_ApplyStamp(rt, &brush, pos1.x, pos1.y, pos2.x, pos2.y);
+        BrushBlend_ApplyStamp(rt, &brush, g_activeBrushTex, pos1.x, pos1.y, pos2.x, pos2.y);
 }
 
 /* ── Config ─────────────────────────────────────────────────────────────── */

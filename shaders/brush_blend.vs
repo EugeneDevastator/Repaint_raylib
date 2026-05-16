@@ -9,13 +9,11 @@ out vec4 fragColor;
 out vec2 localUV;
 
 uniform mat4 mvp;
-uniform vec2 stampCenter;
-uniform vec2 stampHalf;
+uniform vec4 rectBounds;
 
 void main() {
     fragTexCoord = vertexTexCoord;
     fragColor    = vertexColor;
-    vec2 ndc = (vertexTexCoord - stampCenter) / max(stampHalf, vec2(0.000001));
-    localUV = ndc;
+    localUV = (vertexTexCoord - rectBounds.xy) / max(rectBounds.zw, vec2(0.000001));
     gl_Position = mvp * vec4(vertexPosition, 1.0);
 }

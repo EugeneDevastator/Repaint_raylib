@@ -72,7 +72,7 @@ void LocalBroker::poll(AppState* state) {
 
             RenderTexture2D rt = state->layerRTs[d->activeLayer];
             if (rt.id > 0)
-                BrushBlend_ApplyStamp(rt, &brush, d->x, d->y, d->srcX, d->srcY);
+                BrushBlend_ApplyStamp(rt, &brush, g_activeBrushTex, d->x, d->y, d->srcX, d->srcY);
         }
 
         head = (head + 1) % CMD_CAPACITY;

@@ -361,7 +361,7 @@ void Painter_Shutdown(void);
 void BrushBlend_Init(void);
 void BrushBlend_Shutdown(void);
 void BrushBlend_ApplyStamp(RenderTexture2D dstRT, d_Brush* brush,
-    float stampX, float stampY, float srcX, float srcY);
+    Texture2D brushTex, float stampX, float stampY, float srcX, float srcY);
 
 void DualSlider_Init(DualSlider* slider);
 
@@ -464,9 +464,6 @@ extern bool layersDirty;
 RenderTexture2D* DocBlender_Composite(AppState* state);
 bool GetPresentInited(void);
 Shader GetPresentShader(void);
-
-// Brush stamp preview — single function, renders onto given RT
-void DrawStamp(RenderTexture2D dstRT, AppState* state);
 
 // Viewport HUD coordinator — doc + stamp + screen draw
 void ViewportHUD_Draw(AppState* state);

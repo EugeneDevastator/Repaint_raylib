@@ -92,8 +92,15 @@ void ViewportHUD_Draw(AppState* state) {
         DrawTextureRec(docBlendTex->texture, srcRect, Vector2{0, 0}, WHITE);
         EndTextureMode();
 
-        // Render brush stamp on top (uses BrushBlend_ApplyStamp internally)
-        DrawStamp(g_stampStage, state);
+        // Render brush stamp on top
+        {
+            Texture2D bt = {0};
+            if (state->activeBrushTex >= 0 && state->activeBrushTex < state->brushTexCount)
+                bt = state->brushTex[state->activeBrushTex].rt.texture;
+            BrushBlend_ApplyStamp(g_stampStage, &state->currentBrush, bt,
+                state->camera.target.x, state->camera.target.y,
+                state->camera.target.x, state->camera.target.y);
+        }
 
         // Draw stamped result to screen
         DrawTexturePro(g_stampStage.texture, srcRect, dstRect, Vector2{0, 0}, 0.0f, WHITE);
