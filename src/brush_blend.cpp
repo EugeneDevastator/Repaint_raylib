@@ -17,7 +17,7 @@ static int locCanvasTex = -1, locBrushTex = -1;
 static int locStampCenter = -1;
 static int locRadOut = -1;
 static int locCanvasSize = -1;
-
+static int locStampOffset = -1;
 static bool inited = false;
 
 static RenderTexture2D canvasCopyRT = {0};
@@ -70,7 +70,7 @@ void BrushBlend_Init(void) {
     locCanvasTex      = GetShaderLocation(brushBlendShader, "canvasTex");
     locBrushTex       = GetShaderLocation(brushBlendShader, "brushTex");
     locStampCenter    = GetShaderLocation(brushBlendShader, "stampCenter");
-// in BrushBlend_Init:
+    locStampOffset = GetShaderLocation(brushBlendShader, "stampOffset");
 locRadOut = GetShaderLocation(brushBlendShader, "radOut");
 
     // texture units: texture0=0 (geo), canvasTex=1, brushTex=2
@@ -213,12 +213,19 @@ void BrushBlend_ApplyStamp(
     SetShaderValue(brushBlendShader, locTexBlendMode,   &tbm,        SHADER_UNIFORM_INT);
     SetShaderValue(brushBlendShader, locTexNoisemode,   &tnm,        SHADER_UNIFORM_INT);
     SetShaderValue(brushBlendShader, locStampCenter,    sc,          SHADER_UNIFORM_VEC2);
+
+
     SetShaderValue(brushBlendShader, locRadOut, &radOut, SHADER_UNIFORM_FLOAT);
     // in ApplyStamp, before BeginTextureMode(dstRT):
     float csz[2] = { (float)W, (float)H };
     SetShaderValue(brushBlendShader, locCanvasSize, csz, SHADER_UNIFORM_VEC2);
     float x0 = stampX - bboxHalf;
     float y0 = stampY - bboxHalf;
+
+    float so[2] = { x0, y0 };
+    SetShaderValue(brushBlendShader, locStampOffset, so, SHADER_UNIFORM_VEC2);
+
+    // ------------- final blits
     BeginTextureMode(dstRT);
     rlSetBlendMode(RL_BLEND_CUSTOM);
     rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
