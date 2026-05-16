@@ -2,8 +2,15 @@
 #include "rlgl.h"
 #include <math.h>
 #include <string.h>
+#include <dirent.h>
 
 #define TEX_DIM 512
+
+static bool hasSuffix(const char* str, const char* suffix) {
+    size_t slen = strlen(str), suflen = strlen(suffix);
+    if (slen < suflen) return false;
+    return strcasecmp(str + slen - suflen, suffix) == 0;
+}
 
 void BrushTex_Init(AppState* state) {
     state->brushTexCount = 0;
@@ -12,26 +19,39 @@ void BrushTex_Init(AppState* state) {
     memset(state->brushTex, 0, sizeof(state->brushTex));
 
     const char* ad = GetApplicationDirectory();
-    const char* defaultFiles[] = {"noise.png", "perlin.png", "clouds.png", "dots.png"};
-    const char* defaultNames[] = {"Noise", "Perlin", "Clouds", "Dots"};
-    int numDefaults = sizeof(defaultFiles) / sizeof(defaultFiles[0]);
+    char noiseDir[1024];
+    snprintf(noiseDir, sizeof(noiseDir), "%sresources/Noise", ad);
 
-    for (int i = 0; i < numDefaults; i++) {
-        char path[512];
-        snprintf(path, sizeof(path), "%sresources/Noise/%s", ad, defaultFiles[i]);
-        Image img;
-        if (FileExists(path)) {
-            img = LoadImage(path);
+    DIR* d = opendir(noiseDir);
+    if (d) {
+        struct dirent* entry;
+        while ((entry = readdir(d)) != NULL) {
+            if (!hasSuffix(entry->d_name, ".png")) continue;
+
+            char texName[64];
+            size_t len = strlen(entry->d_name);
+            size_t stemLen = len - 4;
+            if (stemLen >= sizeof(texName)) stemLen = sizeof(texName) - 1;
+            memcpy(texName, entry->d_name, stemLen);
+            texName[stemLen] = '\0';
+
+            char path[1536];
+            snprintf(path, sizeof(path), "%s/%s", noiseDir, entry->d_name);
+
+            Image img = LoadImage(path);
             ImageResize(&img, TEX_DIM, TEX_DIM);
-        } else {
-            img = GenImageColor(TEX_DIM, TEX_DIM, MAGENTA);
+
+            int idx = BrushTex_Add(state, texName, img.width, img.height);
+            if (idx >= 0) {
+                BrushTexture* bt = &state->brushTex[idx];
+                UnloadImage(bt->cpuImage);
+                bt->cpuImage = img;
+                bt->dirty = true;
+            } else {
+                UnloadImage(img);
+            }
         }
-        int idx = BrushTex_Add(state, defaultNames[i], img.width, img.height);
-        BrushTexture* bt = &state->brushTex[idx];
-        UnloadImage(bt->cpuImage);
-        bt->cpuImage = img;
-        bt->builtIn = true;
-        bt->dirty = true;
+        closedir(d);
     }
 
     BrushTex_SyncAll(state);

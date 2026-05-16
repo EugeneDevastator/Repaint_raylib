@@ -12,6 +12,8 @@ uniform float radOut;
 uniform float opacity;
 uniform float x2y;
 uniform float resangle;
+uniform float useTex;
+uniform sampler2D brushTex;
 
 void main() {
     vec4 canvas = texture(texture0, fragTexCoord);
@@ -40,7 +42,13 @@ void main() {
         return;
     }
 
-    vec3 brushColor = vec3(0.5, 0.6, 0.8);
+    vec2 texUV = bp * 0.5 + 0.5;
+    vec3 brushColor;
+    if (useTex > 0.5) {
+        brushColor = texture(brushTex, texUV).rgb;
+    } else {
+        brushColor = vec3(texUV, 0.0);
+    }
     finalColor.rgb = brushColor.rgb * alpha + canvas.rgb * (1.0 - alpha);
     finalColor.a = alpha + canvas.a * (1.0 - alpha);
 }

@@ -6,6 +6,7 @@ static Shader brushBlendShader = {0};
 static int locRadIn = -1, locRadOut = -1, locOpacity = -1;
 static int locRectBounds = -1;
 static int locX2Y = -1, locResAngle = -1;
+static int locUseTex = -1, locBrushTex = -1;
 static bool brushBlendInited = false;
 
 Texture2D g_activeBrushTex = {0};
@@ -30,6 +31,13 @@ void BrushBlend_Init(void) {
     locX2Y        = GetShaderLocation(brushBlendShader, "x2y");
     locResAngle   = GetShaderLocation(brushBlendShader, "resangle");
     locRectBounds = GetShaderLocation(brushBlendShader, "rectBounds");
+    locUseTex     = GetShaderLocation(brushBlendShader, "useTex");
+    locBrushTex   = GetShaderLocation(brushBlendShader, "brushTex");
+
+    if (locBrushTex >= 0) {
+        int u = 1;
+        SetShaderValue(brushBlendShader, locBrushTex, &u, SHADER_UNIFORM_INT);
+    }
 
     brushBlendInited = true;
 }
@@ -49,7 +57,6 @@ void BrushBlend_ApplyStamp(
     float stampX, float stampY,
     float srcX,   float srcY
 ) {
-    (void)brushTex;
     (void)srcX;
     (void)srcY;
 
@@ -89,6 +96,9 @@ void BrushBlend_ApplyStamp(
     float resangleVal = (float)brush->Realb.resangle;
     SetShaderValue(brushBlendShader, locResAngle, &resangleVal, SHADER_UNIFORM_FLOAT);
 
+    float useTexVal = (brushTex.id > 0) ? 1.0f : 0.0f;
+    SetShaderValue(brushBlendShader, locUseTex, &useTexVal, SHADER_UNIFORM_FLOAT);
+
     float bounds[4] = {
         (stampX - radOut) / (float)canvasW,
         (float)(canvasH - (stampY + radOut)) / (float)canvasH,
@@ -103,10 +113,21 @@ void BrushBlend_ApplyStamp(
     rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
     BeginShaderMode(brushBlendShader);
 
+    if (brushTex.id > 0) {
+        rlActiveTextureSlot(1);
+        rlEnableTexture(brushTex.id);
+        rlActiveTextureSlot(0);
+    }
+
     DrawTextureRec(canvasCopyRT.texture,
         Rectangle{0, 0, (float)canvasW, (float)-canvasH},
         Vector2{0, 0}, WHITE);
 
+    if (brushTex.id > 0) {
+        rlActiveTextureSlot(1);
+        rlDisableTexture();
+    }
+    rlActiveTextureSlot(0);
     EndShaderMode();
     EndTextureMode();
 
