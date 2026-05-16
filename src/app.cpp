@@ -396,8 +396,10 @@ void App_Init(AppState* state) {
     strncpy(bpTexScale.tooltip, "Texture pattern scale multiplier", sizeof(bpTexScale.tooltip) - 1);
     BParam_Init(&bpTexFeather, 31, "Feather", 0.0f, 0.5f, 0.05f);
     strncpy(bpTexFeather.tooltip, "Softness of the threshold mask edge", sizeof(bpTexFeather.tooltip) - 1);
+    BParam_SetIcon(&bpTexFeather, "ctlfeather");
     BParam_Init(&bpTexThresh, 32, "Thresh Mul", -2.0f, 2.0f, 1.0f);
     strncpy(bpTexThresh.tooltip, "Threshold multiplier; negative inverts texture mask", sizeof(bpTexThresh.tooltip) - 1);
+    BParam_SetIcon(&bpTexThresh, "ctltresh");
     BParam_Init(&bpTexBlendVal, 33, "TexColorBlendStrength", 0.0f, 1.0f, 0.5f);
     strncpy(bpTexBlendVal.tooltip, "How much brush color tints the texture (0=texture only, 1=texture*brush)", sizeof(bpTexBlendVal.tooltip) - 1);
 

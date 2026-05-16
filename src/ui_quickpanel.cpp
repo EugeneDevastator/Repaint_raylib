@@ -285,25 +285,27 @@ void QuickPanel_Draw(AppState* state) {
 
          float sectionWidth = vp.width / 5.0f;
          float baseX = vp.x + sectionWidth; // start of column 2
-         int tbm = state->currentBrush.Realb.texBlendMode;
-         int tnm = state->currentBrush.Realb.texNoisemode;
          float childHeight = 200.0f; // Fixed height for all columns
 
-         // Column 2: dropdowns and checkboxes
+         // Column 2: maskmode / maskmix radio buttons
          ImGui::SetCursorScreenPos(ImVec2(baseX, texAreaY));
          if (ImGui::BeginChild("##texCol2", ImVec2(sectionWidth, childHeight), false)) {
-             ImGui::SetNextItemWidth(sectionWidth * 0.85f);
-             if (ImGui::Combo("Blend", &tbm, "Mask\0Thr\0Mul\0"))
-                 state->currentBrush.Realb.texBlendMode = tbm;
-             ImGui::SetNextItemWidth(sectionWidth * 0.85f);
-             if (ImGui::Combo("Sample", &tnm, "Stencil\0Random\0Const\0"))
-                 state->currentBrush.Realb.texNoisemode = tnm;
-             bool useLum = state->currentBrush.Realb.useTexLumAsAlpha;
-             ImGui::Checkbox("Lum as Alpha", &useLum);
-             state->currentBrush.Realb.useTexLumAsAlpha = useLum;
-             bool useRGB = state->currentBrush.Realb.texUseRGB;
-             ImGui::Checkbox("Use Tex RGB", &useRGB);
-             state->currentBrush.Realb.texUseRGB = useRGB;
+             int mm = state->currentBrush.Realb.useTexLumAsAlpha ? 1 : 0;
+             ImGui::Text("Mask Mode");
+             if (ImGui::RadioButton("lum is alpha", &mm, 1))
+                 state->currentBrush.Realb.useTexLumAsAlpha = true;
+             if (ImGui::RadioButton("tex.a is alpha", &mm, 0))
+                 state->currentBrush.Realb.useTexLumAsAlpha = false;
+
+             ImGui::Spacing();
+             int mx = state->currentBrush.Realb.texBlendMode;
+             ImGui::Text("Mask Mix");
+             if (ImGui::RadioButton("multiply", &mx, 0))
+                 state->currentBrush.Realb.texBlendMode = 0;
+             if (ImGui::RadioButton("threshold", &mx, 1))
+                 state->currentBrush.Realb.texBlendMode = 1;
+             if (ImGui::RadioButton("use tex mask", &mx, 2))
+                 state->currentBrush.Realb.texBlendMode = 2;
              ImGui::EndChild();
          }
 

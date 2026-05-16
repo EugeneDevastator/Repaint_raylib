@@ -7,6 +7,8 @@ static int locRadIn = -1, locRadOut = -1, locOpacity = -1;
 static int locRectBounds = -1;
 static int locX2Y = -1, locResAngle = -1;
 static int locUseTex = -1, locUserMaskTex = -1;
+static int locMaskMode = -1, locMaskMix = -1;
+static int locTexScale = -1, locTexFeather = -1;
 static bool brushBlendInited = false;
 
 Texture2D g_activeBrushTex = {0};
@@ -33,8 +35,13 @@ void BrushBlend_Init(void) {
     locRectBounds = GetShaderLocation(brushBlendShader, "rectBounds");
     locUseTex      = GetShaderLocation(brushBlendShader, "useTex");
     locUserMaskTex = GetShaderLocation(brushBlendShader, "userMaskTex");
+    locMaskMode    = GetShaderLocation(brushBlendShader, "maskMode");
+    locMaskMix     = GetShaderLocation(brushBlendShader, "maskMix");
+    locTexScale    = GetShaderLocation(brushBlendShader, "texScale");
+    locTexFeather  = GetShaderLocation(brushBlendShader, "texFeather");
 
-    printf("BrushBlend: locUseTex=%d locUserMaskTex=%d\n", locUseTex, locUserMaskTex);
+    printf("BrushBlend: locUseTex=%d locUserMaskTex=%d locMaskMode=%d locMaskMix=%d locTexScale=%d locTexFeather=%d\n",
+        locUseTex, locUserMaskTex, locMaskMode, locMaskMix, locTexScale, locTexFeather);
 
     brushBlendInited = true;
 }
@@ -95,7 +102,15 @@ void BrushBlend_ApplyStamp(
 
     float useTexVal = (brushTex.id > 0) ? 1.0f : 0.0f;
     SetShaderValue(brushBlendShader, locUseTex, &useTexVal, SHADER_UNIFORM_FLOAT);
-    printf("BrushBlend: texId=%u useTex=%.1f\n", brushTex.id, useTexVal);
+
+    float maskModeVal = brush->Realb.useTexLumAsAlpha ? 1.0f : 0.0f;
+    float maskMixVal  = (float)brush->Realb.texBlendMode;
+    float texScaleVal = brush->Realb.texScale;
+    float texFeatherVal = brush->Realb.texFeather;
+    SetShaderValue(brushBlendShader, locMaskMode,   &maskModeVal,   SHADER_UNIFORM_FLOAT);
+    SetShaderValue(brushBlendShader, locMaskMix,    &maskMixVal,    SHADER_UNIFORM_FLOAT);
+    SetShaderValue(brushBlendShader, locTexScale,   &texScaleVal,   SHADER_UNIFORM_FLOAT);
+    SetShaderValue(brushBlendShader, locTexFeather, &texFeatherVal, SHADER_UNIFORM_FLOAT);
 
     float bounds[4] = {
         (stampX - radOut) / (float)canvasW,
