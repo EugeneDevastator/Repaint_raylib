@@ -50,6 +50,7 @@ d_RealBrush Stroke_BlendBrushes(d_RealBrush from, d_RealBrush to, float k) {
     bbr.texThresh    = from.texThresh;
     bbr.useTexLumAsAlpha = from.useTexLumAsAlpha;
     bbr.texUseRGB    = from.texUseRGB;
+    bbr.texColorMode = from.texColorMode;
 
     return bbr;
 }

@@ -125,6 +125,7 @@ typedef struct {
     float texThresh;
     bool useTexLumAsAlpha;
     bool texUseRGB;
+    int texColorMode;   // 0 = use brush RGB, 1 = use texture RGB, 2 = multiply
     Color col;
 } d_RealBrush;
 
@@ -231,7 +232,7 @@ struct LocalBroker : ICommandBroker {
         float texThresh;
         bool useTexLumAsAlpha;
         bool texUseRGB;
-        int texBlendMode, texNoisemode;
+        int texBlendMode, texNoisemode, texColorMode;
         Color color;
         int bmidx;
         uint16_t seed;

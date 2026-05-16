@@ -34,7 +34,7 @@ struct QueuedNetDab {
     float    texThresh;
     bool     useTexLumAsAlpha;
     bool     texUseRGB;
-    int      texBlendMode, texNoisemode;
+    int      texBlendMode, texNoisemode, texColorMode;
     Color    color;
     int      bmidx;
     uint16_t seed;

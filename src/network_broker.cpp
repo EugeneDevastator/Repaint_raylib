@@ -221,6 +221,7 @@ void NetworkBroker::on_input(const InputEvent& e) {
     localQueue[localTail].texUseRGB    = e.brush.texUseRGB;
     localQueue[localTail].texBlendMode = e.brush.texBlendMode;
     localQueue[localTail].texNoisemode = e.brush.texNoisemode;
+    localQueue[localTail].texColorMode = e.brush.texColorMode;
     localQueue[localTail].bmidx       = (int)e.brush.bmidx;
     localQueue[localTail].seed        = e.brush.seed;
     localQueue[localTail].activeLayer = layer;
@@ -255,6 +256,7 @@ void NetworkBroker::poll(AppState* st) {
             brush.Realb.texUseRGB    = d->texUseRGB;
             brush.Realb.texBlendMode = d->texBlendMode;
             brush.Realb.texNoisemode = d->texNoisemode;
+            brush.Realb.texColorMode = d->texColorMode;
             brush.Realb.bmidx    = (uint8_t)d->bmidx;
             brush.Realb.seed     = d->seed;
             brush.Realb.col      = d->color;

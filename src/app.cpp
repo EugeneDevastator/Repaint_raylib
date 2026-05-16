@@ -475,6 +475,7 @@ void App_Init(AppState* state) {
     state->currentBrush.Realb.texBlendVal = 1.0f;
     state->currentBrush.Realb.texBlendMode = 0;
     state->currentBrush.Realb.texNoisemode = 2;
+    state->currentBrush.Realb.texColorMode = 1;
     state->currentBrush.Realb.col = BLACK;
 
     colorHue = 0.35f;

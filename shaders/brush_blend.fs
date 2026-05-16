@@ -19,6 +19,8 @@ uniform float maskMix;
 uniform float texScale;
 uniform float texFeather;
 uniform float curve;
+uniform float texColorMode;
+uniform vec3 brushRGB;
 
 void main() {
     vec4 canvas = texture(texture0, fragTexCoord);
@@ -40,7 +42,6 @@ void main() {
     vec3 brushColor;
 
     if (useTex > 0.5) {
-        // discard fragments outside the transformed quad
         if (any(lessThan(texUV, vec2(0.0))) || any(greaterThan(texUV, vec2(1.0)))) {
             finalColor = canvas;
             return;
@@ -53,15 +54,20 @@ void main() {
         else
             maskAlpha = texColor.a;
         maskAlpha = clamp(maskAlpha, 0.0, 1.0);
-        brushColor = texColor.rgb;
+
+        if (texColorMode < 0.5)
+            brushColor = brushRGB;
+        else if (texColorMode > 1.5)
+            brushColor = brushRGB * texColor.rgb;
+        else
+            brushColor = texColor.rgb;
 
         if (maskMix > 1.5) {
-            // use tex mask: mask feeds into inner radius + curve
             if (any(lessThan(localUV, vec2(0.0))) || any(greaterThan(localUV, vec2(1.0)))) {
                 finalColor = canvas;
                 return;
             }
-            brushAlpha = 1.0 - smoothstep(inner, 1.0, maskAlpha);
+            brushAlpha = smoothstep(inner, 1.0, maskAlpha);
         } else {
             if (dist > 1.0) { finalColor = canvas; return; }
             brushAlpha = 1.0 - smoothstep(inner, 1.0, dist);
@@ -81,7 +87,7 @@ void main() {
         brushColor = vec3(texUV, 0.0);
     }
 
-    brushAlpha = pow(brushAlpha, 1.0 / (curve * 3.0 + 1.0));
+    brushAlpha = pow(brushAlpha, curve * 3.0 + 1.0);
     float finalAlpha = clamp(brushAlpha, 0.0, 1.0) * opacity;
     if (finalAlpha < 0.0001) { finalColor = canvas; return; }
 

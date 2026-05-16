@@ -285,7 +285,7 @@ void QuickPanel_Draw(AppState* state) {
 
          float sectionWidth = vp.width / 5.0f;
          float baseX = vp.x + sectionWidth; // start of column 2
-         float childHeight = 200.0f; // Fixed height for all columns
+         float childHeight = 350.0f;
 
          // Column 2: maskmode / maskmix radio buttons
          ImGui::SetCursorScreenPos(ImVec2(baseX, texAreaY));
@@ -306,6 +306,16 @@ void QuickPanel_Draw(AppState* state) {
                  state->currentBrush.Realb.texBlendMode = 1;
              if (ImGui::RadioButton("use tex mask", &mx, 2))
                  state->currentBrush.Realb.texBlendMode = 2;
+
+             ImGui::Spacing();
+             int cm = state->currentBrush.Realb.texColorMode;
+             ImGui::Text("Color");
+             if (ImGui::RadioButton("brush RGB", &cm, 0))
+                 state->currentBrush.Realb.texColorMode = 0;
+             if (ImGui::RadioButton("texture RGB", &cm, 1))
+                 state->currentBrush.Realb.texColorMode = 1;
+             if (ImGui::RadioButton("mul brush*tex", &cm, 2))
+                 state->currentBrush.Realb.texColorMode = 2;
              ImGui::EndChild();
          }
 
