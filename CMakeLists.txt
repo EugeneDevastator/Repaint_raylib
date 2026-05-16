@@ -107,9 +107,7 @@ endif()
 # ── resource copies (configure-time + post-build) ───────────────────────────
 # Force-copy always by removing destination dir first, then re-copying
 set(RESOURCE_SHADER_FILES
-    "${CMAKE_SOURCE_DIR}/shaders/brush_gen.vs"
-    "${CMAKE_SOURCE_DIR}/shaders/brush_blend.fs"
-    "${CMAKE_SOURCE_DIR}/shaders/layer_blend.fs")
+    "${CMAKE_SOURCE_DIR}/shaders/*")
 
 add_custom_target(copy_shaders ALL
     COMMAND ${CMAKE_COMMAND} -E remove_directory "${CMAKE_BINARY_DIR}/shaders"

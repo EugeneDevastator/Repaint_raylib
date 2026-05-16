@@ -5,8 +5,8 @@
 #include <math.h>
 
 void BrushGizmo_Draw(ImDrawList* dl, ImVec2 org, int gcx, int gcy, AppState* state) {
-    float rang = state->initialAngle * (float)(M_PI * 2.0 / 360.0);
-    float arrLen = GIZMO_FIXED_RADIUS_PX + 30.0f;
+    float rang = state->currentBrush.Realb.resangle * (float)(M_PI * 2.0 / 360.0);
+    int arrLen = 180;
     ImVec2 arrTip(gcx + arrLen * cosf(rang), gcy + arrLen * sinf(rang));
     dl->AddLine(org, arrTip, IM_COL32(200, 40, 40, 255), 3);
     float ah = (float)(M_PI * 0.2);

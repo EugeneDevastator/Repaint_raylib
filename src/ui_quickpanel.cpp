@@ -285,11 +285,10 @@ void QuickPanel_Draw(AppState* state) {
 
          float sectionWidth = vp.width / 5.0f;
          float baseX = vp.x + sectionWidth; // start of column 2
-         float childHeight = 350.0f;
 
-         // Column 2: maskmode / maskmix radio buttons
+         // Column 2: alpha controls (maskmode / maskmix)
          ImGui::SetCursorScreenPos(ImVec2(baseX, texAreaY));
-         if (ImGui::BeginChild("##texCol2", ImVec2(sectionWidth, childHeight), false)) {
+         if (ImGui::BeginChild("##texCol2", ImVec2(sectionWidth, 0), false)) {
              int mm = state->currentBrush.Realb.useTexLumAsAlpha ? 1 : 0;
              ImGui::Text("Mask Mode");
              if (ImGui::RadioButton("lum is alpha", &mm, 1))
@@ -306,8 +305,12 @@ void QuickPanel_Draw(AppState* state) {
                  state->currentBrush.Realb.texBlendMode = 1;
              if (ImGui::RadioButton("use tex mask", &mx, 2))
                  state->currentBrush.Realb.texBlendMode = 2;
+             ImGui::EndChild();
+         }
 
-             ImGui::Spacing();
+         // Column 3: RGB controls + param sliders
+         ImGui::SetCursorScreenPos(ImVec2(baseX + sectionWidth, texAreaY));
+         if (ImGui::BeginChild("##texCol3", ImVec2(sectionWidth, 0), false)) {
              int cm = state->currentBrush.Realb.texColorMode;
              ImGui::Text("Color");
              if (ImGui::RadioButton("brush RGB", &cm, 0))
@@ -316,12 +319,9 @@ void QuickPanel_Draw(AppState* state) {
                  state->currentBrush.Realb.texColorMode = 1;
              if (ImGui::RadioButton("mul brush*tex", &cm, 2))
                  state->currentBrush.Realb.texColorMode = 2;
-             ImGui::EndChild();
-         }
 
-         // Column 3: param sliders
-         ImGui::SetCursorScreenPos(ImVec2(baseX + sectionWidth, texAreaY));
-         if (ImGui::BeginChild("##texCol3", ImVec2(sectionWidth, childHeight), false)) {
+             ImGui::Spacing();
+             ImGui::Separator();
              DrawBParamSlider(&bpTexScale);
              DrawBParamSlider(&bpTexFeather);
              DrawBParamSlider(&bpTexThresh);
@@ -338,7 +338,7 @@ void QuickPanel_Draw(AppState* state) {
           // Column 4: texture selection grid
           float gridX = baseX + 2.0f * sectionWidth; // start of column 4
           ImGui::SetCursorScreenPos(ImVec2(gridX, texAreaY));
-          if (ImGui::BeginChild("##texCol4", ImVec2(sectionWidth, childHeight), false)) {
+          if (ImGui::BeginChild("##texCol4", ImVec2(sectionWidth, 0), false)) {
               ImVec2 childOrigin = ImGui::GetCursorScreenPos();
               int texCols = 4;
               int texSz = 64;

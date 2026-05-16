@@ -81,13 +81,13 @@ void LeftPanel_Draw(AppState* state) {
     ImGui::Checkbox("Tool Panel", &g_showToolPanel);
 
     // Pipeline selector
-    {
-        const char* pipeNames[] = {"CFNSR", "RS"};
-        int pipe = (int)state->currentBrush.Realb.pipeID;
-        ImGui::SetNextItemWidth(-1);
-        if (ImGui::Combo("##pipeline", &pipe, pipeNames, 2))
-            state->currentBrush.Realb.pipeID = (uint8_t)pipe;
-    }
+  //  {
+  //      const char* pipeNames[] = {"CFNSR", "RS"};
+  //      int pipe = (int)state->currentBrush.Realb.pipeID;
+  //      ImGui::SetNextItemWidth(-1);
+  //      if (ImGui::Combo("##pipeline", &pipe, pipeNames, 2))
+  //          state->currentBrush.Realb.pipeID = (uint8_t)pipe;
+  //  }
 
     // Reload shaders button at bottom
     {

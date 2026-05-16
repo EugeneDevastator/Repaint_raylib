@@ -2,61 +2,69 @@
 #include "rlgl.h"
 
 static Shader brushBlendShader = {0};
+static Shader brushGeoShader   = {0};
 
-static int locRadIn = -1, locRadOut = -1, locOpacity = -1;
-static int locRectBounds = -1;
-static int locX2Y = -1, locResAngle = -1;
-static int locUseTex = -1, locUserMaskTex = -1;
-static int locMaskMode = -1, locMaskMix = -1;
-static int locTexScale = -1, locTexFeather = -1;
-static int locCurve = -1;
-static int locTexColorMode = -1, locBrushRGB = -1;
-static bool brushBlendInited = false;
+static int locUAngle  = -1, locUSquish = -1, locUSize = -1;
+static int locOpacity = -1, locRadIn   = -1;
+static int locUseTex  = -1, locBrushRGB = -1, locCurve = -1;
+static int locCanvasTex = -1, locBrushTex = -1;
 
-Texture2D g_activeBrushTex = {0};
+static bool inited = false;
 
 static RenderTexture2D canvasCopyRT = {0};
 static int canvasCopyW = 0, canvasCopyH = 0;
 
+static RenderTexture2D geoUV_RT = {0};
+static int geoUVSize = 0;
+
+static Texture2D whiteTex = {0};
+
+Texture2D g_activeBrushTex = {0};
+
 void BrushBlend_Init(void) {
-    if (brushBlendInited) return;
+    if (inited) return;
 
     const char* ad = GetApplicationDirectory();
-    char vsPath[512], fsPath[512];
+    char vs[512], fs[512];
 
-    snprintf(vsPath, sizeof(vsPath), "%sshaders/brush_blend.vs", ad);
-    snprintf(fsPath, sizeof(fsPath), "%sshaders/brush_blend.fs", ad);
-    brushBlendShader = LoadShader(vsPath, fsPath);
-    if (brushBlendShader.id == 0) { printf("BRUSH BLEND SHADER FAILED\n"); return; }
+    snprintf(vs, sizeof(vs), "%sshaders/brush_geo.vs",   ad);
+    snprintf(fs, sizeof(fs), "%sshaders/brush_geo.fs",   ad);
+    brushGeoShader = LoadShader(vs, fs);
 
-    locRadIn      = GetShaderLocation(brushBlendShader, "radIn");
-    locRadOut     = GetShaderLocation(brushBlendShader, "radOut");
-    locOpacity    = GetShaderLocation(brushBlendShader, "opacity");
-    locX2Y        = GetShaderLocation(brushBlendShader, "x2y");
-    locResAngle   = GetShaderLocation(brushBlendShader, "resangle");
-    locRectBounds = GetShaderLocation(brushBlendShader, "rectBounds");
-    locUseTex      = GetShaderLocation(brushBlendShader, "useTex");
-    locUserMaskTex = GetShaderLocation(brushBlendShader, "userMaskTex");
-    locMaskMode    = GetShaderLocation(brushBlendShader, "maskMode");
-    locMaskMix     = GetShaderLocation(brushBlendShader, "maskMix");
-    locTexScale    = GetShaderLocation(brushBlendShader, "texScale");
-    locTexFeather  = GetShaderLocation(brushBlendShader, "texFeather");
-    locCurve       = GetShaderLocation(brushBlendShader, "curve");
-    locTexColorMode = GetShaderLocation(brushBlendShader, "texColorMode");
-    locBrushRGB    = GetShaderLocation(brushBlendShader, "brushRGB");
+    locUAngle  = GetShaderLocation(brushGeoShader, "uAngle");
+    locUSquish = GetShaderLocation(brushGeoShader, "uSquish");
+    locUSize   = GetShaderLocation(brushGeoShader, "uSize");
 
-    printf("BrushBlend: locUseTex=%d locUserMaskTex=%d locMaskMode=%d locMaskMix=%d locTexScale=%d locTexFeather=%d locCurve=%d locTexColorMode=%d locBrushRGB=%d\n",
-        locUseTex, locUserMaskTex, locMaskMode, locMaskMix, locTexScale, locTexFeather, locCurve, locTexColorMode, locBrushRGB);
+    snprintf(vs, sizeof(vs), "%sshaders/brush_blend.vs", ad);
+    snprintf(fs, sizeof(fs), "%sshaders/brush_blend.fs", ad);
+    brushBlendShader = LoadShader(vs, fs);
 
-    brushBlendInited = true;
+    locOpacity   = GetShaderLocation(brushBlendShader, "opacity");
+    locRadIn     = GetShaderLocation(brushBlendShader, "radIn");
+    locUseTex    = GetShaderLocation(brushBlendShader, "useTex");
+    locBrushRGB  = GetShaderLocation(brushBlendShader, "brushRGB");
+    locCurve     = GetShaderLocation(brushBlendShader, "curve");
+    locCanvasTex = GetShaderLocation(brushBlendShader, "canvasTex");
+    locBrushTex  = GetShaderLocation(brushBlendShader, "brushTex");
+
+    Image img = GenImageColor(1, 1, WHITE);
+    whiteTex = LoadTextureFromImage(img);
+    UnloadImage(img);
+
+    inited = true;
 }
 
 void BrushBlend_Shutdown(void) {
-    if (!brushBlendInited) return;
+    if (!inited) return;
     UnloadShader(brushBlendShader);
+    UnloadShader(brushGeoShader);
     if (canvasCopyRT.id > 0) UnloadRenderTexture(canvasCopyRT);
-    canvasCopyRT = RenderTexture2D{0};
-    brushBlendInited = false;
+    if (geoUV_RT.id > 0)     UnloadRenderTexture(geoUV_RT);
+    if (whiteTex.id > 0)     UnloadTexture(whiteTex);
+    canvasCopyRT = (RenderTexture2D){0};
+    geoUV_RT     = (RenderTexture2D){0};
+    whiteTex     = (Texture2D){0};
+    inited = false;
 }
 
 void BrushBlend_ApplyStamp(
@@ -66,91 +74,90 @@ void BrushBlend_ApplyStamp(
     float stampX, float stampY,
     float srcX,   float srcY
 ) {
-    (void)srcX;
-    (void)srcY;
+    (void)srcX; (void)srcY;
+    if (!inited || dstRT.id == 0) return;
 
-    if (!brushBlendInited) return;
-    if (dstRT.id == 0) return;
+    int W = dstRT.texture.width;
+    int H = dstRT.texture.height;
 
-    int canvasW = dstRT.texture.width;
-    int canvasH = dstRT.texture.height;
+    float radOut = fmaxf(brush->Realb.rad_out, 0.5f);
+    float radIn  = fmaxf(0.0f, fminf(1.0f, brush->Realb.rad_in));
 
-    float radOut = brush->Realb.rad_out;
-    if (radOut < 0.5f) radOut = 0.5f;
-
-    // ── Pass 1: Copy canvas ─────────────────────────────────────────
-    if (canvasCopyRT.id == 0 || canvasCopyW != canvasW || canvasCopyH != canvasH) {
+    // Pass 0: copy canvas
+    if (canvasCopyRT.id == 0 || canvasCopyW != W || canvasCopyH != H) {
         if (canvasCopyRT.id > 0) UnloadRenderTexture(canvasCopyRT);
-        canvasCopyRT = Load16BitRT(canvasW, canvasH);
-        canvasCopyW  = canvasW;
-        canvasCopyH  = canvasH;
+        canvasCopyRT = Load16BitRT(W, H);
+        canvasCopyW  = W;
+        canvasCopyH  = H;
     }
-
+    BeginTextureMode(canvasCopyRT);
     rlSetBlendMode(RL_BLEND_CUSTOM);
     rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
-    BeginTextureMode(canvasCopyRT);
     DrawTextureRec(dstRT.texture,
-        Rectangle{0, 0, (float)canvasW, (float)-canvasH},
-        Vector2{0, 0}, WHITE);
+        (Rectangle){0, 0, (float)W, (float)-H},
+        (Vector2){0, 0}, WHITE);
     EndTextureMode();
 
-    // ── Uniforms ────────────────────────────────────────────────────
-    SetShaderValue(brushBlendShader, locRadIn,     &brush->Realb.rad_in,  SHADER_UNIFORM_FLOAT);
-    SetShaderValue(brushBlendShader, locRadOut,    &radOut,               SHADER_UNIFORM_FLOAT);
-    SetShaderValue(brushBlendShader, locOpacity,   &brush->Realb.opacity, SHADER_UNIFORM_FLOAT);
+    // Pass 1: geo UV into square RT sized to stamp
+    int sz = (int)(radOut * 2.0f);
+    if (sz < 32) sz = 32;
+    if (geoUV_RT.id == 0 || geoUVSize != sz) {
+        if (geoUV_RT.id > 0) UnloadRenderTexture(geoUV_RT);
+        geoUV_RT  = LoadRenderTexture(sz, sz);
+        geoUVSize = sz;
+    }
 
-    float x2yVal = fmaxf((float)brush->Realb.x2y, 0.01f);
-    SetShaderValue(brushBlendShader, locX2Y, &x2yVal, SHADER_UNIFORM_FLOAT);
+    float angleRad = (float)brush->Realb.resangle * (float)(M_PI / 180.0);
+    float squish   = fmaxf((float)brush->Realb.x2y, 0.01f);
+    float size     = radOut / (float)(sz / 2);   // normalise to [0..1] range
 
-    float resangleVal = (float)brush->Realb.resangle;
-    SetShaderValue(brushBlendShader, locResAngle, &resangleVal, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(brushGeoShader, locUAngle,  &angleRad, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(brushGeoShader, locUSquish, &squish,   SHADER_UNIFORM_FLOAT);
+    SetShaderValue(brushGeoShader, locUSize,   &size,     SHADER_UNIFORM_FLOAT);
 
-    float useTexVal = (brushTex.id > 0) ? 1.0f : 0.0f;
-    SetShaderValue(brushBlendShader, locUseTex, &useTexVal, SHADER_UNIFORM_FLOAT);
+    BeginTextureMode(geoUV_RT);
+    ClearBackground((Color){0, 0, 0, 0});
+    BeginShaderMode(brushGeoShader);
+    DrawTexturePro(whiteTex,
+        (Rectangle){0, 0, 1, 1},
+        (Rectangle){0, 0, (float)sz, -(float)sz},
+        (Vector2){0, 0}, 0.0f, WHITE);
+    EndShaderMode();
+    EndTextureMode();
 
-    float maskModeVal = brush->Realb.useTexLumAsAlpha ? 1.0f : 0.0f;
-    float maskMixVal  = (float)brush->Realb.texBlendMode;
-    float texScaleVal = brush->Realb.texScale;
-    float texFeatherVal = brush->Realb.texFeather;
-    SetShaderValue(brushBlendShader, locMaskMode,   &maskModeVal,   SHADER_UNIFORM_FLOAT);
-    SetShaderValue(brushBlendShader, locMaskMix,    &maskMixVal,    SHADER_UNIFORM_FLOAT);
-    SetShaderValue(brushBlendShader, locTexScale,   &texScaleVal,   SHADER_UNIFORM_FLOAT);
-    SetShaderValue(brushBlendShader, locTexFeather, &texFeatherVal, SHADER_UNIFORM_FLOAT);
-
-    float curveVal = fmaxf(0.0f, fminf(1.0f, (float)brush->Realb.crv));
-    SetShaderValue(brushBlendShader, locCurve, &curveVal, SHADER_UNIFORM_FLOAT);
-
-    float texColorModeVal = (float)brush->Realb.texColorMode;
-    SetShaderValue(brushBlendShader, locTexColorMode, &texColorModeVal, SHADER_UNIFORM_FLOAT);
-
+    // Pass 2: blend onto dstRT
+    float opacity    = fmaxf(0.0f, fminf(1.0f, (float)brush->Realb.opacity));
+    float curve      = fmaxf(0.0f, fminf(1.0f, (float)brush->Realb.crv));
+    float useTexVal  = (brushTex.id > 0) ? 1.0f : 0.0f;
     float brushRGB[3] = {
-        (float)brush->Realb.col.r / 255.0f,
-        (float)brush->Realb.col.g / 255.0f,
-        (float)brush->Realb.col.b / 255.0f
+        brush->Realb.col.r / 255.0f,
+        brush->Realb.col.g / 255.0f,
+        brush->Realb.col.b / 255.0f
     };
-    SetShaderValue(brushBlendShader, locBrushRGB, brushRGB, SHADER_UNIFORM_VEC3);
 
-    float bounds[4] = {
-        (stampX - radOut) / (float)canvasW,
-        (float)(canvasH - (stampY + radOut)) / (float)canvasH,
-        (radOut * 2.0f) / (float)canvasW,
-        (radOut * 2.0f) / (float)canvasH
-    };
-    SetShaderValue(brushBlendShader, locRectBounds, bounds, SHADER_UNIFORM_VEC4);
+    SetShaderValue(brushBlendShader, locOpacity,  &opacity,   SHADER_UNIFORM_FLOAT);
+    SetShaderValue(brushBlendShader, locRadIn,    &radIn,     SHADER_UNIFORM_FLOAT);
+    SetShaderValue(brushBlendShader, locUseTex,   &useTexVal, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(brushBlendShader, locCurve,    &curve,     SHADER_UNIFORM_FLOAT);
+    SetShaderValue(brushBlendShader, locBrushRGB, brushRGB,   SHADER_UNIFORM_VEC3);
 
-    // ── Pass 2: Blend onto dstRT ────────────────────────────────────
+    if (locCanvasTex >= 0)
+        SetShaderValueTexture(brushBlendShader, locCanvasTex, canvasCopyRT.texture);
+    if (brushTex.id > 0 && locBrushTex >= 0)
+        SetShaderValueTexture(brushBlendShader, locBrushTex, brushTex);
+
     BeginTextureMode(dstRT);
     rlSetBlendMode(RL_BLEND_CUSTOM);
     rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
     BeginShaderMode(brushBlendShader);
 
-    if (brushTex.id > 0 && locUserMaskTex >= 0) {
-        SetShaderValueTexture(brushBlendShader, locUserMaskTex, brushTex);
-    }
-
-    DrawTextureRec(canvasCopyRT.texture,
-        Rectangle{0, 0, (float)canvasW, (float)-canvasH},
-        Vector2{0, 0}, WHITE);
+    // draw geo UV quad at stamp position on canvas
+    float x0 = stampX - radOut;
+    float y0 = stampY - radOut;
+    DrawTexturePro(geoUV_RT.texture,
+        (Rectangle){0, 0, (float)sz, (float)-sz},
+        (Rectangle){x0, y0, radOut * 2.0f, radOut * 2.0f},
+        (Vector2){0, 0}, 0.0f, WHITE);
 
     EndShaderMode();
     EndTextureMode();
