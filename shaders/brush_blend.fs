@@ -13,7 +13,7 @@ uniform float opacity;
 uniform float x2y;
 uniform float resangle;
 uniform float useTex;
-uniform sampler2D brushTex;
+uniform sampler2D userMaskTex;
 
 void main() {
     vec4 canvas = texture(texture0, fragTexCoord);
@@ -45,7 +45,7 @@ void main() {
     vec2 texUV = bp * 0.5 + 0.5;
     vec3 brushColor;
     if (useTex > 0.5) {
-        brushColor = texture(brushTex, texUV).rgb;
+        brushColor = texture(userMaskTex, texUV).rgb;
     } else {
         brushColor = vec3(texUV, 0.0);
     }
