@@ -169,7 +169,7 @@ void BrushBlend_ApplyStamp(
     float smudge     = brush->Realb.cop;
     float offsetUV[2] = {
         (stampX - srcX) / (float)W,
-        -(stampY - srcY) / (float)H
+        -(stampY - srcY) / (float)H   // same sign as canvasFragUV (GL-flipped already)
     };
     float col[4] = {
         brush->Realb.col.r / 255.0f,

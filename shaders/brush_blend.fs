@@ -171,12 +171,18 @@ void main() {
     if (finalAlpha < 0.000000001) { finalColor = canvas; return; }
 
     if (smudgeStrength > 0.000001) {
-        vec2 smudgeUV    = clamp(uv - smudgeOffsetUV, 0.001, 0.999);
+        // canvasFragUV is canvas-space UV of current fragment
+        // smudgeOffsetUV = (stampX-srcX)/W, -(stampY-srcY)/H  (dst minus src)
+        // so src canvas UV = canvasFragUV - smudgeOffsetUV
+
+        vec2 smudgeUV = clamp(canvasFragUV - smudgeOffsetUV, 0.001, 0.999);
+		smudgeUV.y*=-1;
         vec4 smudgeSample = texture(canvasTex, smudgeUV);
         float ca = smudgeSample.a;
         brushFinal = smudgeSample.rgb * smudgeStrength
                    + brushColor.rgb * (1.0 - smudgeStrength) * ca;
     }
+
 
     finalColor = applyBlend(bmidx, canvas, brushFinal, finalAlpha);
 }
