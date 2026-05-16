@@ -19,6 +19,12 @@ void main() {
     vec4 canvas  = texture(canvasTex, uv);
     vec4 geouv = texture(texture0, sampleUV);
 
+if(true){ // debug
+finalColor = geouv;
+finalColor.a=1;
+return;
+}
+
     if (geouv.a < 0.01) {
         finalColor = canvas;
         return;

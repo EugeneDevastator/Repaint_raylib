@@ -66,7 +66,6 @@ void BrushBlend_Shutdown(void) {
     whiteTex     = (Texture2D){0};
     inited = false;
 }
-
 void BrushBlend_ApplyStamp(
     RenderTexture2D dstRT,
     d_Brush* brush,
@@ -98,18 +97,21 @@ void BrushBlend_ApplyStamp(
         (Vector2){0, 0}, WHITE);
     EndTextureMode();
 
-    // Pass 1: geo UV into square RT sized to stamp
-    int sz = (int)(radOut * 2.0f);
+    // Pass 1: geo UV
+    float angleRad = (float)brush->Realb.resangle * (float)(M_PI / 180.0);
+    float squish   = fmaxf((float)brush->Realb.x2y, 0.01f);
+
+    float bboxHalf = radOut * 1.41421356f;
+    int sz = (int)ceilf(bboxHalf * 2.0f);
     if (sz < 32) sz = 32;
+
     if (geoUV_RT.id == 0 || geoUVSize != sz) {
         if (geoUV_RT.id > 0) UnloadRenderTexture(geoUV_RT);
         geoUV_RT  = LoadRenderTexture(sz, sz);
         geoUVSize = sz;
     }
 
-    float angleRad = (float)brush->Realb.resangle * (float)(M_PI / 180.0);
-    float squish   = fmaxf((float)brush->Realb.x2y, 0.01f);
-    float size     = radOut / (float)(sz / 2);   // normalise to [0..1] range
+    float size = radOut / bboxHalf; // = 1/sqrt(2), constant but keep it explicit
 
     SetShaderValue(brushGeoShader, locUAngle,  &angleRad, SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushGeoShader, locUSquish, &squish,   SHADER_UNIFORM_FLOAT);
@@ -151,12 +153,11 @@ void BrushBlend_ApplyStamp(
     rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
     BeginShaderMode(brushBlendShader);
 
-    // draw geo UV quad at stamp position on canvas
-    float x0 = stampX - radOut;
-    float y0 = stampY - radOut;
+    float x0 = stampX - bboxHalf;
+    float y0 = stampY - bboxHalf;
     DrawTexturePro(geoUV_RT.texture,
         (Rectangle){0, 0, (float)sz, (float)-sz},
-        (Rectangle){x0, y0, radOut * 2.0f, radOut * 2.0f},
+        (Rectangle){x0, y0, bboxHalf * 2.0f, bboxHalf * 2.0f},
         (Vector2){0, 0}, 0.0f, WHITE);
 
     EndShaderMode();
