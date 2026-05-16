@@ -77,18 +77,23 @@ vec4 applyBlend(int mode, vec4 canvas, vec3 brushRGB, float brushA) {
 
     return vec4(clamp(outRGB, 0.0, 1.0), clamp(outA, 0.0, 1.0));
 }
+uniform vec2  canvasSize;   // canvas W, H in pixels
 
 void main() {
     vec2 uv      = fragTexCoord;
     vec2 sampleUV = vec2(uv.x, 1.0 - uv.y);
 
-    vec4 canvas = texture(canvasTex, uv);
     vec4 geouv  = texture(texture0, sampleUV);
 
     if (geouv.a < 0.01) {
-        finalColor = canvas;
+        // need canvas UV from gl_FragCoord
+        vec2 canvasUV = gl_FragCoord.xy / canvasSize;
+        finalColor = texture(canvasTex, canvasUV);
         return;
     }
+
+    vec2 canvasUV = gl_FragCoord.xy / canvasSize;
+    vec4 canvas   = texture(canvasTex, canvasUV);
 
     // geo UV: [0,1] brush-local, center=0.5
     // dist in brush space: 0=center, 0.5=edge (radOut)

@@ -16,7 +16,7 @@ static int locTexBlendMode = -1, locTexNoisemode = -1;
 static int locCanvasTex = -1, locBrushTex = -1;
 static int locStampCenter = -1;
 static int locRadOut = -1;
-
+static int locCanvasSize = -1;
 
 static bool inited = false;
 
@@ -46,7 +46,7 @@ void BrushBlend_Init(void) {
     snprintf(vs, sizeof(vs), "%sshaders/brush_blend.vs", ad);
     snprintf(fs, sizeof(fs), "%sshaders/brush_blend.fs", ad);
     brushBlendShader = LoadShader(vs, fs);
-
+    locCanvasSize = GetShaderLocation(brushBlendShader, "canvasSize");
     locOpacity        = GetShaderLocation(brushBlendShader, "opacity");
     locRadIn          = GetShaderLocation(brushBlendShader, "radIn");
     locBrushColor     = GetShaderLocation(brushBlendShader, "brushColor");
@@ -123,9 +123,12 @@ void BrushBlend_ApplyStamp(
     BeginTextureMode(canvasCopyRT);
     rlSetBlendMode(RL_BLEND_CUSTOM);
     rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
-    DrawTextureRec(dstRT.texture,
-        (Rectangle){0, 0, (float)W, (float)-H},
-        (Vector2){0, 0}, WHITE);
+    ClearBackground((Color){0,0,0,0});
+    DrawTexturePro(
+        dstRT.texture,
+        (Rectangle){0, 0, (float)W, (float)H},
+        (Rectangle){0, 0, (float)W, (float)H},
+        (Vector2){0, 0}, 0.0f, WHITE);
     EndTextureMode();
 
     // Pass 1: geo UV
@@ -211,31 +214,35 @@ void BrushBlend_ApplyStamp(
     SetShaderValue(brushBlendShader, locTexNoisemode,   &tnm,        SHADER_UNIFORM_INT);
     SetShaderValue(brushBlendShader, locStampCenter,    sc,          SHADER_UNIFORM_VEC2);
     SetShaderValue(brushBlendShader, locRadOut, &radOut, SHADER_UNIFORM_FLOAT);
-
+    // in ApplyStamp, before BeginTextureMode(dstRT):
+    float csz[2] = { (float)W, (float)H };
+    SetShaderValue(brushBlendShader, locCanvasSize, csz, SHADER_UNIFORM_VEC2);
+    float x0 = stampX - bboxHalf;
+    float y0 = stampY - bboxHalf;
     BeginTextureMode(dstRT);
     rlSetBlendMode(RL_BLEND_CUSTOM);
     rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
-    BeginShaderMode(brushBlendShader);
 
+    // bind canvas copy to slot 1, brush tex to slot 2 BEFORE shader mode
     rlActiveTextureSlot(1);
     rlEnableTexture(canvasCopyRT.texture.id);
-    if (brushTex.id > 0) {
-        rlActiveTextureSlot(2);
-        rlEnableTexture(brushTex.id);
-    }
+    rlActiveTextureSlot(2);
+    rlEnableTexture(brushTex.id > 0 ? brushTex.id : whiteTex.id);
+    rlActiveTextureSlot(0);
 
-    float x0 = stampX - bboxHalf;
-    float y0 = stampY - bboxHalf;
+    BeginShaderMode(brushBlendShader);
+
     DrawTexturePro(geoUV_RT.texture,
         (Rectangle){0, 0, (float)sz, (float)-sz},
         (Rectangle){x0, y0, bboxHalf * 2.0f, bboxHalf * 2.0f},
         (Vector2){0, 0}, 0.0f, WHITE);
 
+    EndShaderMode();
+
     rlActiveTextureSlot(1); rlDisableTexture();
-    if (brushTex.id > 0) { rlActiveTextureSlot(2); rlDisableTexture(); }
+    rlActiveTextureSlot(2); rlDisableTexture();
     rlActiveTextureSlot(0);
 
-    EndShaderMode();
     EndTextureMode();
 
     rlSetBlendMode(RL_BLEND_ALPHA);
