@@ -9,6 +9,7 @@ static int locX2Y = -1, locResAngle = -1;
 static int locUseTex = -1, locUserMaskTex = -1;
 static int locMaskMode = -1, locMaskMix = -1;
 static int locTexScale = -1, locTexFeather = -1;
+static int locCurve = -1;
 static bool brushBlendInited = false;
 
 Texture2D g_activeBrushTex = {0};
@@ -39,9 +40,10 @@ void BrushBlend_Init(void) {
     locMaskMix     = GetShaderLocation(brushBlendShader, "maskMix");
     locTexScale    = GetShaderLocation(brushBlendShader, "texScale");
     locTexFeather  = GetShaderLocation(brushBlendShader, "texFeather");
+    locCurve       = GetShaderLocation(brushBlendShader, "curve");
 
-    printf("BrushBlend: locUseTex=%d locUserMaskTex=%d locMaskMode=%d locMaskMix=%d locTexScale=%d locTexFeather=%d\n",
-        locUseTex, locUserMaskTex, locMaskMode, locMaskMix, locTexScale, locTexFeather);
+    printf("BrushBlend: locUseTex=%d locUserMaskTex=%d locMaskMode=%d locMaskMix=%d locTexScale=%d locTexFeather=%d locCurve=%d\n",
+        locUseTex, locUserMaskTex, locMaskMode, locMaskMix, locTexScale, locTexFeather, locCurve);
 
     brushBlendInited = true;
 }
@@ -111,6 +113,9 @@ void BrushBlend_ApplyStamp(
     SetShaderValue(brushBlendShader, locMaskMix,    &maskMixVal,    SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locTexScale,   &texScaleVal,   SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locTexFeather, &texFeatherVal, SHADER_UNIFORM_FLOAT);
+
+    float curveVal = fmaxf(0.0f, fminf(1.0f, (float)brush->Realb.crv));
+    SetShaderValue(brushBlendShader, locCurve, &curveVal, SHADER_UNIFORM_FLOAT);
 
     float bounds[4] = {
         (stampX - radOut) / (float)canvasW,
