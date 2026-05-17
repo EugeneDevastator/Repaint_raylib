@@ -11,7 +11,7 @@ static int locBmidx = -1, locPreserveOp = -1;
 static int locSmudgeStrength = -1, locSmudgeOffsetUV = -1;
 static int locTexBlendVal = -1, locTexScale = -1, locTexOffset = -1;
 static int locTexFeather = -1, locTexThresh = -1;
-static int locUseLumAsAlpha = -1, locTexUseRGB = -1;
+static int locUseLumAsAlpha = -1, locTexColorMode = -1;
 static int locTexBlendMode = -1, locTexNoisemode = -1;
 static int locCanvasTex = -1, locBrushTex = -1;
 static int locStampCenter = -1;
@@ -64,7 +64,7 @@ void BrushBlend_Init(void) {
     locTexFeather     = GetShaderLocation(brushBlendShader, "texFeather");
     locTexThresh      = GetShaderLocation(brushBlendShader, "texThresh");
     locUseLumAsAlpha  = GetShaderLocation(brushBlendShader, "useLumAsAlpha");
-    locTexUseRGB      = GetShaderLocation(brushBlendShader, "texUseRGB");
+    locTexColorMode   = GetShaderLocation(brushBlendShader, "texColorMode");
     locTexBlendMode   = GetShaderLocation(brushBlendShader, "texBlendMode");
     locTexNoisemode   = GetShaderLocation(brushBlendShader, "texNoisemode");
     locCanvasTex      = GetShaderLocation(brushBlendShader, "canvasTex");
@@ -187,7 +187,7 @@ void BrushBlend_ApplyStamp(
         texOff[1] = ((float)rand()/(float)RAND_MAX - 0.5f) * 0.3f;
     }
     int useLum = brush->Realb.useTexLumAsAlpha ? 1 : 0;
-    int useRGB = brush->Realb.texUseRGB        ? 1 : 0;
+    int cm = (int)brush->Realb.texColorMode;
     int tbm    = (int)brush->Realb.texBlendMode;
     int tnm    = (int)brush->Realb.texNoisemode;
     float sc[2] = { stampX / (float)W, (float)(H - stampY) / (float)H };
@@ -209,7 +209,7 @@ void BrushBlend_ApplyStamp(
     SetShaderValue(brushBlendShader, locTexFeather,     &tf,         SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locTexThresh,      &tt,         SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locUseLumAsAlpha,  &useLum,     SHADER_UNIFORM_INT);
-    SetShaderValue(brushBlendShader, locTexUseRGB,      &useRGB,     SHADER_UNIFORM_INT);
+    SetShaderValue(brushBlendShader, locTexColorMode,   &cm,         SHADER_UNIFORM_INT);
     SetShaderValue(brushBlendShader, locTexBlendMode,   &tbm,        SHADER_UNIFORM_INT);
     SetShaderValue(brushBlendShader, locTexNoisemode,   &tnm,        SHADER_UNIFORM_INT);
     SetShaderValue(brushBlendShader, locStampCenter,    sc,          SHADER_UNIFORM_VEC2);

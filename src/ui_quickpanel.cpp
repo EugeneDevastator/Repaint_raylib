@@ -296,16 +296,24 @@ void QuickPanel_Draw(AppState* state) {
              if (ImGui::RadioButton("tex.a is alpha", &mm, 0))
                  state->currentBrush.Realb.useTexLumAsAlpha = false;
 
-             ImGui::Spacing();
-             int mx = state->currentBrush.Realb.texBlendMode;
-             ImGui::Text("Mask Mix");
-             if (ImGui::RadioButton("multiply", &mx, 0))
-                 state->currentBrush.Realb.texBlendMode = 0;
-             if (ImGui::RadioButton("threshold", &mx, 1))
-                 state->currentBrush.Realb.texBlendMode = 1;
-             if (ImGui::RadioButton("use tex mask", &mx, 2))
-                 state->currentBrush.Realb.texBlendMode = 2;
-             ImGui::EndChild();
+         ImGui::Spacing();
+         int mx = state->currentBrush.Realb.texBlendMode;
+         ImGui::Text("Mask Mix");
+         if (ImGui::RadioButton("multiply", &mx, 0))
+             state->currentBrush.Realb.texBlendMode = 0;
+         if (ImGui::RadioButton("threshold", &mx, 1))
+             state->currentBrush.Realb.texBlendMode = 1;
+         if (ImGui::RadioButton("use tex mask", &mx, 2))
+             state->currentBrush.Realb.texBlendMode = 2;
+
+         ImGui::Spacing();
+         ImGui::Separator();
+         int tnm = state->currentBrush.Realb.texNoisemode;
+         ImGui::Text("Sample Mode");
+         ImGui::SetNextItemWidth(sectionWidth * 0.85f);
+         if (ImGui::Combo("##noise", &tnm, "Stencil\0Random\0Const\0"))
+             state->currentBrush.Realb.texNoisemode = tnm;
+         ImGui::EndChild();
          }
 
          // Column 3: RGB controls + param sliders

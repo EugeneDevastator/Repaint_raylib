@@ -24,7 +24,7 @@ uniform float texThresh;
 uniform int   texBlendMode;   // 0=Mask, 1=Thr, 2=Mul
 uniform int   texNoisemode;   // 0=Stencil, 1=Random, 2=Const
 uniform bool  useLumAsAlpha;
-uniform bool  texUseRGB;
+uniform int   texColorMode;   // 0=brush RGB, 1=texture RGB, 2=multiply
 uniform int   bmidx;
 uniform vec4  brushColor;
 uniform float radOut;
@@ -137,10 +137,12 @@ void main() {
         stUV = stUV * texScale;
         vec4 texel = texture(brushTex, stUV);
 
-        if (texUseRGB) {
-            brushFinal = mix(texel.rgb, texel.rgb * brushColor.rgb, texBlendVal);
-        } else {
+        if (texColorMode == 0) {
             brushFinal = brushColor.rgb;
+        } else if (texColorMode == 1) {
+            brushFinal = texel.rgb;
+        } else {
+            brushFinal = texel.rgb * brushColor.rgb;
         }
 
         float tex_a = useLumAsAlpha

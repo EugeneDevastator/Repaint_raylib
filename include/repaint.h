@@ -9,8 +9,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define SCREEN_WIDTH 1280
-#define SCREEN_HEIGHT 720
+#define SCREEN_WIDTH 1600
+#define SCREEN_HEIGHT 900
 #define RIGHT_PANEL_WIDTH 200
 #define RIGHT_PANEL_X (SCREEN_WIDTH - RIGHT_PANEL_WIDTH)
 
