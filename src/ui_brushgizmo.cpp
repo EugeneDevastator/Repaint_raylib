@@ -126,17 +126,19 @@ void XORgizmo_HandleInput(AppState* state) {
     ImVec2 mp = ImGui::GetMousePos();
     float dx = mp.x - gcx, dy = mp.y - gcy;
     float dist = sqrtf(dx * dx + dy * dy);
-    float ang = AtanXY(dx, dy);
-    bool down = ImGui::IsMouseDown(0);
-    bool clicked = ImGui::IsMouseClicked(0);
+    float ang  = AtanXY(dx, dy);
+    bool down     = ImGui::IsMouseDown(0);
+    bool clicked  = ImGui::IsMouseClicked(0);
     bool released = ImGui::IsMouseReleased(0);
 
     if (clicked && !ImGui::IsAnyItemHovered()) {
-        float arrowAng = state->initialAngle * (float)(M_PI * 2.0 / 360.0);
-        float angDiff = fabsf(ang - arrowAng);
-        if (angDiff > (float)M_PI) angDiff = (float)(2.0f * M_PI) - angDiff;
+        // Arrow priority: perpendicular distance to arrow line
+        float arrowAng = state->currentBrush.Realb.resangle * (float)(M_PI * 2.0 / 360.0);
+        float perpDist = fabsf(dx * sinf(arrowAng) - dy * cosf(arrowAng));
+        float along    = dx * cosf(arrowAng) + dy * sinf(arrowAng);
+        bool arrowHit  = (perpDist <= ARROW_DETECT_PX) && (along >= ARROW_MIN_RADIUS);
 
-        if (angDiff < 20.0f * (float)M_PI / 180.0f) {
+        if (arrowHit) {
             quickPanelMouseMode = 4;
         } else {
             bool inSector1 = (ang > d30 && ang < d30 * 5);
@@ -153,7 +155,7 @@ void XORgizmo_HandleInput(AppState* state) {
     }
 
     if (quickPanelMouseMode > 0 && down) {
-        float rad = dist / state->camera.zoom;
+        float rad    = dist / state->camera.zoom;
         float absrad = dist;
         int curMode = 0;
         if (ang > d30 && ang < d30 * 5) curMode = 1;
@@ -166,7 +168,7 @@ void XORgizmo_HandleInput(AppState* state) {
             if (curMode != 1) rad = roundf(rad / 10.0f) * 10.0f;
             float newRad = fmaxf(1.0f, rad);
             state->currentBrush.Realb.rad_out = newRad;
-            state->currentBrush.Realb.rad_in = newRad * rel;
+            state->currentBrush.Realb.rad_in  = newRad * rel;
             BParam_SetValue(&bpSize, newRad);
             float h = (state->currentBrush.Realb.rad_out > 0)
                 ? (state->currentBrush.Realb.rad_in / state->currentBrush.Realb.rad_out) : 0;
@@ -186,9 +188,11 @@ void XORgizmo_HandleInput(AppState* state) {
             BParam_SetValue(&bpCurvature, 1.0f - h);
         }
         if (quickPanelMouseMode == 4) {
-            float newAng = (ang + (float)M_PI) * 180.0f / (float)M_PI;
-            if (absrad > ARROW_SNAP_RADIUS || rad < ARROW_MIN_RADIUS)
+            float newAng = atan2f(dy, dx) * 180.0f / (float)M_PI;
+            if (newAng < 0) newAng += 360.0f;
+            if (absrad < ARROW_SNAP_RADIUS)
                 newAng = roundf(newAng / 22.5f) * 22.5f;
+            state->currentBrush.Realb.resangle = newAng;
             state->initialAngle = newAng;
         }
     }
