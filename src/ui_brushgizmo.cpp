@@ -59,16 +59,16 @@ void XORgizmo_Draw(AppState* state) {
 
     // Reference arc for radout sector
     float refR = GIZMO_FIXED_RADIUS_PX + 3.0f;
-    DrawRing(ctr, refR - 1.5f, refR + 1.5f,
-             -GIZMO_RADOUT_START, -GIZMO_RADOUT_START - GIZMO_RADOUT_ANG_SPAN, 0, WHITE);
-
+    //DrawRing(ctr, refR - 1.5f, refR + 1.5f,
+    //         -GIZMO_RADOUT_START, -GIZMO_RADOUT_START - GIZMO_RADOUT_ANG_SPAN, 0, WHITE);
+    float lineThick = 1.0f;
     // Hardness reference arc — RESTORED original
     float hardStart = -GIZMO_HARD_ANG_START;
     float hardEnd   = hardStart - GIZMO_HARD_ANG_SPAN;
     float curveStart = -(GIZMO_HARD_ANG_START + GIZMO_HARD_ANG_SPAN);
     float curveEnd   = curveStart - GIZMO_CURVE_ANG_SPAN;
-    DrawRing(ctr, refR - 1.5f, refR + 1.5f, hardEnd,  hardStart,  0, WHITE);
-    DrawRing(ctr, refR - 1.5f, refR + 1.5f, curveEnd, curveStart, 0, WHITE);
+    DrawRing(ctr, refR - lineThick, refR + lineThick, hardEnd,  hardStart,  0, WHITE);
+    DrawRing(ctr, refR - lineThick, refR + lineThick, curveEnd, curveStart, 0, WHITE);
 
     // Hardness value arc — RESTORED original
     float hRatio = fminf(baseHard, 1.0f);
