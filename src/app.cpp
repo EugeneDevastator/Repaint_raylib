@@ -6,6 +6,7 @@
 #include "imgui_internal.h"
 #include "dialog.h"
 #include "network_broker.h"
+#include "test_broker.h"
 #include "ui_leftpanel.h"
 #include <time.h>
 
@@ -247,6 +248,7 @@ void App_Init(AppState* state) {
     QuickPanel_Init();
 
     networkBroker.appState = state;
+    g_testBroker.appState = state;
 
     // load persistent config
     networkBroker.LoadConfig("repaint.ini");
@@ -262,7 +264,7 @@ void App_Init(AppState* state) {
         (float)SCREEN_HEIGHT
     };
     Viewport_Init(&viewport, viewportBounds);
-    viewport.broker = &networkBroker;
+    viewport.broker = g_useTestBroker ? (ICommandBroker*)&g_testBroker : (ICommandBroker*)&networkBroker;
 
     state->camera = Camera2D{};
     state->camera.target = Vector2{(float)state->canvas.width * 0.5f, (float)state->canvas.height * 0.5f};

@@ -70,6 +70,13 @@ void LeftPanel_Draw(AppState* state) {
     ImGui::Checkbox("Preserve Layer Alpha", (bool*)&preserve);
     state->currentBrush.Realb.preserveop = (uint8_t)preserve;
 
+    // ── Test broker ─────────────────────────────────────────────────────
+    extern bool g_useTestBroker;
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Text("Debug");
+    ImGui::Checkbox("Test Broker (+200px X)", &g_useTestBroker);
+
     // ── Quick Panel sub-component toggles ────────────────────────────────
     ImGui::Spacing();
     ImGui::Separator();

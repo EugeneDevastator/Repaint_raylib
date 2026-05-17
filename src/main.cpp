@@ -1,4 +1,6 @@
 #include "repaint.h"
+#include "test_broker.h"
+#include "network_broker.h"
 #include <pthread.h>
 
 typedef struct GLFWwindow GLFWwindow;
@@ -45,6 +47,9 @@ int main() {
     while (!WindowShouldClose()) {
         if (!App_IsDialogActive()) {
             UpdateUI(&state);
+            viewport.broker = g_useTestBroker
+                ? (ICommandBroker*)&g_testBroker
+                : (ICommandBroker*)&networkBroker;
             Viewport_HandleInput(&viewport, &state);
         }
         App_Draw(&state);

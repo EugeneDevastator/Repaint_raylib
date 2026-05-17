@@ -1,4 +1,5 @@
 #include "network_broker.h"
+#include "serialize.h"
 #include "sock_platform.h"
 #include "app_config.h"
 #include "imgui.h"

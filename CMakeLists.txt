@@ -45,7 +45,7 @@ set(SOURCES
     src/layermanager.cpp
     src/repaint_core.cpp
     src/repaint_painter.cpp
-    src/repaint_drawmodel.cpp
+    src/serialize.cpp
     src/brush_blend.cpp
     src/viewport.cpp
     src/viewport_renderer.cpp
@@ -71,6 +71,7 @@ set(SOURCES
     src/brush_interpolator.cpp
     src/brush_tex.cpp
     src/usertextures.cpp
+    src/test_broker.cpp
     dialog/dialog.c
     ${imgui_SOURCE_DIR}/imgui.cpp
     ${imgui_SOURCE_DIR}/imgui_draw.cpp

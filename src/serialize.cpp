@@ -1,9 +1,6 @@
-#include "repaint.h"
+#include "serialize.h"
 #include <stdlib.h>
 #include <string.h>
-
-// Binary serialization for network/API data exchange
-// Mirrors the Qt original's Serialize/DeSerialize methods on d_Action, d_Section, etc.
 
 size_t Stroke_Serialize(d_Stroke* st, uint8_t* buf, size_t cap) {
     size_t off = 0;
@@ -67,7 +64,6 @@ bool Action_Deserialize(d_Action* act, uint8_t* buf, size_t len) {
     if (off + 1 > len) return false;
     act->ToolID = buf[off++];
 
-    // Brush: we need to know Packed+Real size
     if (off + sizeof(d_PackedBrush) + sizeof(d_RealBrush) > len) return false;
     Brush_Deserialize(&act->Brush, buf + off, len - off);
     off += sizeof(d_PackedBrush) + sizeof(d_RealBrush);
@@ -215,7 +211,6 @@ size_t LayerProps_Serialize(sLayerProps* lp, uint8_t* buf, size_t cap) {
     memcpy(buf + off, &lp->op, sizeof(float)); off += sizeof(float);
     buf[off++] = lp->visible ? 1 : 0;
     memcpy(buf + off, &lp->blendmode, sizeof(int)); off += sizeof(int);
-    // actually write as uint8_t to be transport-safe
     off -= sizeof(int);
     int bm = lp->blendmode;
     buf[off++] = (uint8_t)bm;
