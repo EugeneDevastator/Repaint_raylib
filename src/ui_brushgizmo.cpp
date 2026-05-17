@@ -4,10 +4,6 @@
 #include "imgui.h"
 #include <math.h>
 
-#define ARROW_DRAW_RADIUS   180.0f
-#define ARROW_ARM_LENGTH    10.0f
-#define ARROW_SNAP_RADIUS   60.0f
-#define ARROW_MIN_RADIUS    30.0f
 // ── Gizmo sector arc configuration ─────────────────────────────────────
 // All angles in degrees, counter-clockwise in math coords (right=0°, up=90°)
 // Hardness arc starts at HARD_ANG_START and spans HARD_ANG_SPAN CCW.
@@ -21,6 +17,14 @@
 #define GIZMO_HARD_ANG_START   150.0f
 #define GIZMO_HARD_ANG_SPAN    120.0f
 #define GIZMO_CURVE_ANG_SPAN   120.0f
+#define ARROW_DRAW_RADIUS   200.0f
+#define ARROW_ARM_LENGTH    15.0f
+#define ARROW_SNAP_RADIUS   60.0f
+#define ARROW_MIN_RADIUS    30.0f
+#define ARROW_DETECT_PX     5.0f
+
+#define GIZMO_FIXED_RADIUS_PX  180.0f
+
 void XORgizmo_Draw(AppState* state) {
     if (!quickPanelShow || !g_showBrushPreview) return;
 
@@ -29,7 +33,12 @@ void XORgizmo_Draw(AppState* state) {
     int gcy = (int)(vp.y + vp.height * 0.5f);
     float d30 = (float)(M_PI * 30.0 / 180.0);
 
-    // ── All visual drawing: XOR overlay + arrow ────────────────────
+    float baseSz   = BParam_GetValue(&bpSize);
+    float baseHard = BParam_GetValue(&bpHardness);
+    float baseCrv  = BParam_GetValue(&bpCurvature);
+    Vector2 ctr = {(float)gcx, (float)gcy};
+
+    // ── XOR overlay ────────────────────────────────────────────────
     rlDrawRenderBatchActive();
     glEnable(GL_COLOR_LOGIC_OP);
     glLogicOp(GL_XOR);
@@ -42,59 +51,59 @@ void XORgizmo_Draw(AppState* state) {
                    3.0f, WHITE);
     }
 
-    // Brush size ring
-    float baseSz  = BParam_GetValue(&bpSize);
-    float baseHard = BParam_GetValue(&bpHardness);
-    float baseCrv  = BParam_GetValue(&bpCurvature);
-    Vector2 ctr = {(float)gcx, (float)gcy};
+    // Brush size ring — now arc only in RADOUT sector
     float drawRadOut = baseSz * state->camera.zoom;
     if (drawRadOut > 2.0f)
-        DrawRing(ctr, drawRadOut - 1.5f, drawRadOut + 1.5f, 0, 360, 0, WHITE);
+        DrawRing(ctr, drawRadOut - 1.5f, drawRadOut + 1.5f,
+                 -GIZMO_RADOUT_START, -GIZMO_RADOUT_START - GIZMO_RADOUT_ANG_SPAN, 0, WHITE);
 
-    // Sector reference arcs
-    float hardStart  = -GIZMO_HARD_ANG_START;
-    float hardEnd    = hardStart - GIZMO_HARD_ANG_SPAN;
+    // Reference arc for radout sector
+    float refR = GIZMO_FIXED_RADIUS_PX + 3.0f;
+    DrawRing(ctr, refR - 1.5f, refR + 1.5f,
+             -GIZMO_RADOUT_START, -GIZMO_RADOUT_START - GIZMO_RADOUT_ANG_SPAN, 0, WHITE);
+
+    // Hardness reference arc — RESTORED original
+    float hardStart = -GIZMO_HARD_ANG_START;
+    float hardEnd   = hardStart - GIZMO_HARD_ANG_SPAN;
     float curveStart = -(GIZMO_HARD_ANG_START + GIZMO_HARD_ANG_SPAN);
     float curveEnd   = curveStart - GIZMO_CURVE_ANG_SPAN;
-
-    float refR = GIZMO_FIXED_RADIUS_PX + 3.0f;
     DrawRing(ctr, refR - 1.5f, refR + 1.5f, hardEnd,  hardStart,  0, WHITE);
     DrawRing(ctr, refR - 1.5f, refR + 1.5f, curveEnd, curveStart, 0, WHITE);
 
-    // Hardness value arc
+    // Hardness value arc — RESTORED original
     float hRatio = fminf(baseHard, 1.0f);
     float hardMv = GIZMO_FIXED_RADIUS_PX * hRatio;
     if (hardMv > 2.0f)
         DrawRing(ctr, hardMv - 1.5f, hardMv + 1.5f, hardEnd, hardStart, 0, WHITE);
 
-    // Curve value arc
+    // Curve value arc — RESTORED original
     float curvRatio = fminf(fmaxf(1.0f - baseCrv, 0.0f), 1.0f);
     float curveMv = GIZMO_FIXED_RADIUS_PX * curvRatio;
     if (curveMv > 2.0f)
         DrawRing(ctr, curveMv - 1.5f, curveMv + 1.5f, curveEnd, curveStart, 0, WHITE);
 
-    // Direction arrow (raylib XOR, same as everything else)
+    rlDrawRenderBatchActive();
+    glDisable(GL_COLOR_LOGIC_OP);
+
+    // ── Arrow: RED, outside XOR ─────────────────────────────────────
     {
         float rang = state->currentBrush.Realb.resangle * (float)(M_PI * 2.0 / 360.0);
         float ax = gcx + ARROW_DRAW_RADIUS * cosf(rang);
         float ay = gcy + ARROW_DRAW_RADIUS * sinf(rang);
-        DrawLineEx(Vector2{(float)gcx, (float)gcy}, Vector2{ax, ay}, 3.0f, WHITE);
-        float ah = (float)(M_PI * 0.2);
+        float ah  = (float)(M_PI * 0.2);
         float arm = ARROW_ARM_LENGTH;
+        DrawLineEx(Vector2{(float)gcx, (float)gcy}, Vector2{ax, ay}, 3.0f, RED);
         DrawLineEx(Vector2{ax, ay},
             Vector2{ax + arm * cosf(rang - (float)M_PI + ah), ay + arm * sinf(rang - (float)M_PI + ah)},
-            3.0f, WHITE);
+            3.0f, RED);
         DrawLineEx(Vector2{ax, ay},
             Vector2{ax + arm * cosf(rang - (float)M_PI - ah), ay + arm * sinf(rang - (float)M_PI - ah)},
-            3.0f, WHITE);
-        DrawCircle(gcx, gcy, 3, WHITE);
+            3.0f, RED);
+        DrawCircle(gcx, gcy, 3, RED);
         DrawCircle(gcx, gcy, 2, BLACK);
     }
 
-    rlDrawRenderBatchActive();
-    glDisable(GL_COLOR_LOGIC_OP);
-
-    // ── ImGui window: input capture only (no visual draws) ─────────
+    // ── ImGui input capture ─────────────────────────────────────────
     ImGui::SetNextWindowPos(ImVec2(vp.x, vp.y));
     ImGui::SetNextWindowSize(ImVec2(vp.width, vp.height));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
@@ -109,17 +118,19 @@ void XORgizmo_Draw(AppState* state) {
     ImVec2 mp = ImGui::GetMousePos();
     float dx = mp.x - gcx, dy = mp.y - gcy;
     float dist = sqrtf(dx * dx + dy * dy);
-    float ang = AtanXY(dx, dy);
-    bool down = ImGui::IsMouseDown(0);
-    bool clicked = ImGui::IsMouseClicked(0);
+    float ang  = AtanXY(dx, dy);
+    bool down     = ImGui::IsMouseDown(0);
+    bool clicked  = ImGui::IsMouseClicked(0);
     bool released = ImGui::IsMouseReleased(0);
 
     if (clicked && !ImGui::IsAnyItemHovered()) {
-        float arrowAng = state->initialAngle * (float)(M_PI * 2.0 / 360.0);
-        float angDiff = fabsf(ang - arrowAng);
-        if (angDiff > (float)M_PI) angDiff = (float)(2.0f * M_PI) - angDiff;
+        // Arrow gets priority — check it first
+        float arrowAng = state->currentBrush.Realb.resangle * (float)(M_PI * 2.0 / 360.0);
+        float perpDist = fabsf(dx * sinf(arrowAng) - dy * cosf(arrowAng));
+        float along    = dx * cosf(arrowAng) + dy * sinf(arrowAng);
+        bool arrowHit  = (perpDist <= ARROW_DETECT_PX) && (along >= ARROW_MIN_RADIUS);
 
-        if (angDiff < 20.0f * (float)M_PI / 180.0f) {
+        if (arrowHit) {
             quickPanelMouseMode = 4;
         } else {
             bool inSector1 = (ang > d30 && ang < d30 * 5);
@@ -136,7 +147,7 @@ void XORgizmo_Draw(AppState* state) {
     }
 
     if (quickPanelMouseMode > 0 && down) {
-        float rad = dist / state->camera.zoom;
+        float rad    = dist / state->camera.zoom;
         float absrad = dist;
         int curMode = 0;
         if (ang > d30 && ang < d30 * 5) curMode = 1;
@@ -149,7 +160,7 @@ void XORgizmo_Draw(AppState* state) {
             if (curMode != 1) rad = roundf(rad / 10.0f) * 10.0f;
             float newRad = fmaxf(1.0f, rad);
             state->currentBrush.Realb.rad_out = newRad;
-            state->currentBrush.Realb.rad_in = newRad * rel;
+            state->currentBrush.Realb.rad_in  = newRad * rel;
             BParam_SetValue(&bpSize, newRad);
             float h = (state->currentBrush.Realb.rad_out > 0)
                 ? (state->currentBrush.Realb.rad_in / state->currentBrush.Realb.rad_out) : 0;
@@ -169,9 +180,11 @@ void XORgizmo_Draw(AppState* state) {
             BParam_SetValue(&bpCurvature, 1.0f - h);
         }
         if (quickPanelMouseMode == 4) {
-            float newAng = (ang + (float)M_PI) * 180.0f / (float)M_PI;
-            if (absrad > ARROW_SNAP_RADIUS || rad < ARROW_MIN_RADIUS)
+            float newAng = atan2f(dy, dx) * 180.0f / (float)M_PI;
+            if (newAng < 0) newAng += 360.0f;
+            if (absrad < ARROW_SNAP_RADIUS)
                 newAng = roundf(newAng / 22.5f) * 22.5f;
+            state->currentBrush.Realb.resangle = newAng;
             state->initialAngle = newAng;
         }
     }
