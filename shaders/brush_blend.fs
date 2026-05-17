@@ -159,7 +159,8 @@ void main() {
         firstMask  = userTexA * alpha;
         secondMask = 1.0;
     } else if (texBlendMode == 2) {
-        firstMask  = applyRadialFalloff(userTexA);
+        firstMask  = applyThreshold(userTexA, abs(texThresh), texFeather);
+        firstMask  = applyRadialFalloff(firstMask);
         secondMask = 1;
     } else {
         // Threshold
