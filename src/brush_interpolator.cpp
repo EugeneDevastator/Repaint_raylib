@@ -67,8 +67,10 @@ int BrushInterpolator::FeedStrokePoint(
 
         Vector2 pos = {from.x + d * x2r, from.y + d * y2r};
 
-        // Brush interpolation along the segment
-        float k = fminf(d / fmaxf(stdist, 0.001f), 1.0f);
+        // Brush interpolation: remap k so first dab starts at segBrushFrom (k=0)
+        // and last dab reaches targetBrush (k=1), regardless of firstDist offset
+        float dabbable = fmaxf(stdist - firstDist, 0.001f);
+        float k = fminf((d - firstDist) / dabbable, 1.0f);
         d_RealBrush ib = Stroke_BlendBrushes(segBrushFrom.Realb, targetBrush, k);
 
         InputEvent& ev = out[count];

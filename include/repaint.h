@@ -186,9 +186,10 @@ public:
     struct RawPt { float x, y; double t; };
     RawPt ring[RING_SIZE];
     int head, tail;
+    float smoothedVel;
 
-    InputFilter() : head(0), tail(0) { memset(ring, 0, sizeof(ring)); }
-    void Reset() { head = tail = 0; }
+    InputFilter() : head(0), tail(0), smoothedVel(0.0f) { memset(ring, 0, sizeof(ring)); }
+    void Reset() { head = tail = 0; smoothedVel = 0.0f; }
     StrokePoint Feed(float x, float y, double time);
 };
 

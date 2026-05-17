@@ -230,6 +230,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             if (state->mode == eBrush || state->mode == eSmudge) {
                 if (!vp->wasMouseDown) {
                     vp->inputFilter.Reset();
+                    vp->inputFilter.Feed(canvasPos.x, canvasPos.y, GetTime());
                     vp->brushInterp.BeginStroke(state->currentBrush, canvasPos.x, canvasPos.y);
 
                     // Reset modulator tracking for new stroke
