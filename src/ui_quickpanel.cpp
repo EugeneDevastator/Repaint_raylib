@@ -17,7 +17,7 @@ Color g_colorPickGrid[9] = {};
 bool g_showBrushPreview = true;   // gizmo ring + rotation arrow
 bool g_showStampPreview = true;   // brush stamp preview (quick panel overlay)
 bool g_showTextureGroup = true;   // texture controls (dropdowns, sliders, grid)
-bool g_showFilePanel = false;     // file operations panel (default off)
+bool g_showFilePanel = true;     // file operations panel
 bool g_showToolPanel = true;      // tool selection toolbox
 
 // Debug logging - first open flag
