@@ -224,6 +224,7 @@ void NetworkBroker::on_input(const InputEvent& e) {
     localQueue[localTail].texColorMode = e.brush.texColorMode;
     localQueue[localTail].bmidx       = (int)e.brush.bmidx;
     localQueue[localTail].seed        = e.brush.seed;
+    localQueue[localTail].preserveop  = e.brush.preserveop;
     localQueue[localTail].activeLayer = layer;
     localQueue[localTail].targetRT    = appState->layerRTs[layer];
 
@@ -257,9 +258,10 @@ void NetworkBroker::poll(AppState* st) {
             brush.Realb.texBlendMode = d->texBlendMode;
             brush.Realb.texNoisemode = d->texNoisemode;
             brush.Realb.texColorMode = d->texColorMode;
-            brush.Realb.bmidx    = (uint8_t)d->bmidx;
-            brush.Realb.seed     = d->seed;
-            brush.Realb.col      = d->color;
+            brush.Realb.bmidx      = (uint8_t)d->bmidx;
+            brush.Realb.seed       = d->seed;
+            brush.Realb.col        = d->color;
+            brush.Realb.preserveop = d->preserveop;
 
             RenderTexture2D rt = st->layerRTs[d->activeLayer];
             if (rt.id > 0) {

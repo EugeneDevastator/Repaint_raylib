@@ -204,7 +204,8 @@ void main() {
         brushFinal = smudgeSample.rgb * smudgeStrength
                    + brushColor.rgb * (1.0 - smudgeStrength) * ca;
     }
-    if (preserveop > 0.5) finalAlpha = canvas.a;
+
 
     finalColor = applyBlend(bmidx, canvas, brushFinal, finalAlpha);
+        if (preserveop > 0.5) finalColor.a = canvas.a;
 }

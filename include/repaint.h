@@ -237,6 +237,7 @@ struct LocalBroker : ICommandBroker {
         int bmidx;
         uint16_t seed;
         int activeLayer;
+        uint8_t preserveop;
     };
 
     QueuedDab queue[CMD_CAPACITY];

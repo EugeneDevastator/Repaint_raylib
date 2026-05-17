@@ -39,6 +39,7 @@ struct QueuedNetDab {
     int      bmidx;
     uint16_t seed;
     int      activeLayer;
+    uint8_t  preserveop;
 };
 
 struct NetworkBroker : ICommandBroker {

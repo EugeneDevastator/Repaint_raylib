@@ -38,6 +38,7 @@ void LocalBroker::on_input(const InputEvent& e) {
     queue[tail].texColorMode = e.brush.texColorMode;
     queue[tail].bmidx      = (int)e.brush.bmidx;
     queue[tail].seed       = e.brush.seed;
+    queue[tail].preserveop = e.brush.preserveop;
     queue[tail].activeLayer = layer;
     queue[tail].targetRT   = appState->layerRTs[layer];
 
@@ -68,9 +69,10 @@ void LocalBroker::poll(AppState* state) {
             brush.Realb.texBlendMode = d->texBlendMode;
             brush.Realb.texNoisemode = d->texNoisemode;
             brush.Realb.texColorMode = d->texColorMode;
-            brush.Realb.bmidx    = (uint8_t)d->bmidx;
-            brush.Realb.seed     = d->seed;
-            brush.Realb.col      = d->color;
+            brush.Realb.bmidx      = (uint8_t)d->bmidx;
+            brush.Realb.seed       = d->seed;
+            brush.Realb.col        = d->color;
+            brush.Realb.preserveop = d->preserveop;
 
             RenderTexture2D rt = state->layerRTs[d->activeLayer];
             if (rt.id > 0)
