@@ -243,6 +243,7 @@ void App_Init(AppState* state) {
     BrushBlend_Init();
     LoadPenIcons();
     BrushTex_Init(state);
+    UserTexture_Init();
     QuickPanel_Init();
 
     networkBroker.appState = state;
@@ -364,12 +365,7 @@ void App_Draw(AppState* state) {
     if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyPressed(KEY_N))
         networkBroker.showUI = !networkBroker.showUI;
 
-    // Set active brush texture for the shader before processing dabs
-    if (state->activeBrushTex >= 0 && state->activeBrushTex < state->brushTexCount) {
-        g_activeBrushTex = state->brushTex[state->activeBrushTex].rt.texture;
-    } else {
-        g_activeBrushTex = Texture2D{0};
-    }
+    UserTexture_Update(state);
 
     if (viewport.broker) viewport.broker->poll(state);
     if (viewport.strokeEnded) {
@@ -514,5 +510,6 @@ void App_Close(AppState* state) {
     UIStyle::Shutdown();
     Painter_Shutdown();
     BrushBlend_Shutdown();
+    UserTexture_Shutdown();
     CloseWindow();
 }

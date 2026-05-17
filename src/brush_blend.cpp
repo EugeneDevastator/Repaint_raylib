@@ -28,7 +28,6 @@ static int geoUVSize = 0;
 
 static Texture2D whiteTex = {0};
 
-Texture2D g_activeBrushTex = {0};
 
 void BrushBlend_Init(void) {
     if (inited) return;

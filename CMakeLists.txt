@@ -70,6 +70,7 @@ set(SOURCES
     src/input_filter.cpp
     src/brush_interpolator.cpp
     src/brush_tex.cpp
+    src/usertextures.cpp
     dialog/dialog.c
     ${imgui_SOURCE_DIR}/imgui.cpp
     ${imgui_SOURCE_DIR}/imgui_draw.cpp

@@ -503,6 +503,11 @@ void BrushTex_SyncAll(AppState* state);
 Texture2D BrushTex_GetThumb(AppState* state, int idx);
 
 extern Texture2D g_activeBrushTex;
+extern Texture2D g_defaultBrushTex;
+
+void UserTexture_Init(void);
+void UserTexture_Shutdown(void);
+void UserTexture_Update(AppState* state);
 
 // ── File operations (hooked from gizmo) ─────────────────────────────
 void App_FileNew(void);

@@ -141,7 +141,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             float ty = (mousePos.y - dstY) / dstH * bt->h;
 
             Texture2D savedTex = g_activeBrushTex;
-            g_activeBrushTex = Texture2D{0};
+            g_activeBrushTex = g_defaultBrushTex;
             if (!vp->wasMouseDown) {
                 if (vp->inBounds && leftDown) {
                     vp->inputFilter.Reset();
