@@ -29,6 +29,7 @@ void Viewport_SetBounds(Viewport* vp, Rectangle bounds) {
 }
 
 void Viewport_HandleInput(Viewport* vp, AppState* state) {
+    static InputEvent dabs[1024];
     if (IsKeyPressed(KEY_F1)) vp->debugShowStamps = !vp->debugShowStamps;
 
     // Quick panel open — block ALL viewport interactions
@@ -204,8 +205,8 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                 targetBr.resangle = fmodf(state->initialAngle + GetModValFor(&bpAngle, g_modPars.Pars[bpAngle.penMode]), 360.0f);
                 targetBr.x2y      = GetModValFor(&bpScaleRel,   g_modPars.Pars[bpScaleRel.penMode]);
                 float spacingVal  = BParam_GetValue(&bpSpacing);
-                InputEvent dabs[128];
-                int n = vp->brushInterp.FeedStrokePoint(sp, targetBr, dabs, 128, spacingVal, state->mode);
+                float spacing = fmaxf(state->currentBrush.Realb.rad_out * spacingVal * spacingVal, 1.0f);
+                int n = vp->brushInterp.FeedStrokePoint(sp, targetBr, dabs, 1024, spacing, state->mode);
                 d_Brush tb; memset(&tb, 0, sizeof(tb));
                 for (int i = 0; i < n; i++) {
                     tb.Realb = dabs[i].brush;
@@ -316,8 +317,8 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
 
                     // Feed through BrushInterpolator → dabs
                     float spacingVal = BParam_GetValue(&bpSpacing);
-                    InputEvent dabs[128];
-                    int n = vp->brushInterp.FeedStrokePoint(sp, targetBr, dabs, 128, spacingVal, state->mode);
+                    float spacing = fmaxf(state->currentBrush.Realb.rad_out * spacingVal * spacingVal, 1.0f);
+                    int n = vp->brushInterp.FeedStrokePoint(sp, targetBr, dabs, 1024, spacing, state->mode);
                     for (int i = 0; i < n; i++) {
                         if (vp->broker) vp->broker->on_input(dabs[i]);
                         if (vp->strokeLen < MAX_STROKE_PTS)

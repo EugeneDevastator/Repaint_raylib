@@ -30,7 +30,7 @@ void BrushInterpolator::EndStroke() {
 int BrushInterpolator::FeedStrokePoint(
     const StrokePoint& pt, const d_RealBrush& targetBrush,
     InputEvent* out, int maxOut,
-    float spacingVal, int toolMode)
+    float spacing, int toolMode)
 {
     if (!inStroke || maxOut <= 0) return 0;
 
@@ -40,8 +40,10 @@ int BrushInterpolator::FeedStrokePoint(
     float stdist = Dist2D(from, to);
     if (stdist < 0.001f) return 0;
 
-    // Qt: SpacingCtl^2 * rad_out * ScaleCtl * RadCtl, using current brush radius
-    float spacing = fmaxf(targetBrush.rad_out * spacingVal * spacingVal, 1.0f);
+    // Qt formula?: SpacingCtl^2 * rad_out * ScaleCtl * RadCtl, using current brush radius
+    // Spacing is pre-computed from the base (unmodulated) brush radius
+    // to avoid gaps when velocity-modulated rad_out is small
+    spacing = fmaxf(spacing, 1.0f);
 
     float dx = to.x - from.x;
     float dy = to.y - from.y;

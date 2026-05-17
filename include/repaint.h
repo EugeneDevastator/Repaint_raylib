@@ -207,7 +207,7 @@ public:
     void EndStroke();
     int FeedStrokePoint(const StrokePoint& pt, const d_RealBrush& targetBrush,
                         InputEvent* out, int maxOut,
-                        float spacingVal, int toolMode);
+                        float spacing, int toolMode);
 };
 
 struct AppState;
