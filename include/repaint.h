@@ -387,6 +387,7 @@ extern bool quickPanelShow;
 extern int quickPanelMouseMode;
 extern bool g_colorPicking;
 extern Color g_colorPickGrid[9];
+extern bool g_showBrushPreview;
 
 // ── QuickPanel layout constants ────────────────────────────────────────
 #define QP_SLIDER_W 28
@@ -459,7 +460,7 @@ void QuickPanel_DrawGizmo(AppState* state);
 void QuickPanel_DrawUI(AppState* state);
 void QuickPanel_Init(void);
 void QuickPanel_Shutdown(void);
-void BrushGizmo_DrawXOROverlay(AppState* state);
+void XORgizmo_Draw(AppState* state);
 void Viewport_DrawDebugOverlays(Viewport* vp, AppState* state);
 
 // Layer compositing — returns cached composited document texture

@@ -379,11 +379,6 @@ void App_Draw(AppState* state) {
     // Debug stamp overlays (after canvas, before gizmo + UI)
     Viewport_DrawDebugOverlays(&viewport, state);
 
-    // XOR overlay for gizmo lines (between canvas and ImGui content)
-    if (quickPanelShow && g_showBrushPreview) {
-        BrushGizmo_DrawXOROverlay(state);
-    }
-
     rlImGuiBegin();
 
     QuickPanel_DrawGizmo(state);
