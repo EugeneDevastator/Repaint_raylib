@@ -182,8 +182,9 @@ RenderTexture2D* DocBlender_Composite(AppState* state) {
 
         finalAcc = src;
         layersDirty = false;
-    }
 
+    }
+    rlSetBlendMode(RL_BLEND_ALPHA);
     if (!accumInited || finalAcc == NULL) return NULL;
     return finalAcc;
 }
