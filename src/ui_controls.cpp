@@ -73,8 +73,6 @@ void BParam_Init(BParam* bp, int id, const char* name, float outMin, float outMa
     bp->iconTex = Texture2D{0};
     bp->iconLoaded = false;
     bp->penMode = csNone;
-    bp->penEdit = false;
-    bp->penPending = false;
     bp->outMin = outMin;
     bp->outMax = outMax;
     bp->id = id;

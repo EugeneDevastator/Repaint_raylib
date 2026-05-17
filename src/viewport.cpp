@@ -3,14 +3,6 @@
 
 extern bool quickPanelShow;
 
-void SyncLayerTexture(AppState* state, int layer) {
-    if (layer < 0 || layer >= state->texCount) return;
-    if (state->layerRTs[layer].id == 0) return;
-    SyncImageFromRT(state, layer);
-    if (state->layerTextures[layer].id > 0) UnloadTexture(state->layerTextures[layer]);
-    state->layerTextures[layer] = LoadTextureFromImage(state->canvas.layerImages[layer]);
-}
-
 void Viewport_Init(Viewport* vp, Rectangle bounds) {
     vp->bounds = bounds;
     vp->strokeLen = 0;

@@ -1,0 +1,135 @@
+#include "repaint.h"
+#include "raylib.h"
+
+BParam bpOpacity;
+BParam bpSize;
+BParam bpHardness;
+BParam bpSpacing;
+BParam bpCurvature;
+BParam bpScatter;
+BParam bpCloneOpacity;
+BParam bpQuickHue;
+BParam bpQuickSat;
+BParam bpQuickLit;
+BParam bpTexScale;
+BParam bpTexFeather;
+BParam bpTexThresh;
+BParam bpTexBlendVal;
+BParam bpAngle;
+BParam bpScaleRel;
+
+float g_velocity = 0.0f;
+d_StrokePars g_modPars;
+
+float GetModVal(BParam* bp) {
+    float cpar = 1.0f;
+    int pm = bp->penMode;
+    if (pm >= 0 && pm < csSTOP)
+        cpar = g_modPars.Pars[pm];
+    return GetModValFor(bp, cpar);
+}
+
+float GetModValFor(BParam* bp, float cpar) {
+    float rng = bp->slider.clipmaxF - bp->slider.clipminF;
+    float respar = cpar * rng + bp->slider.clipminF;
+    float randm = (((float)rand() / (float)RAND_MAX) - 0.5f) * 2.0f * bp->slider.jitter;
+    float res = fminf(fmaxf(respar + randm, 0.0f), 1.0f);
+    return res * (bp->outMax - bp->outMin) + bp->outMin;
+}
+
+void Modulators_Init(void) {
+    BParam_Init(&bpOpacity, 0, "Opacity", 0.0f, 1.0f, 1.0f);
+    strncpy(bpOpacity.tooltip, "Overall opacity of the brush stroke", sizeof(bpOpacity.tooltip) - 1);
+    BParam_SetIcon(&bpOpacity, "ctlop");
+
+    BParam_Init(&bpSize, 1, "Size", 1.0f, 4096.0f, 128.0f);
+    strncpy(bpSize.tooltip, "Outer radius of the brush tip in pixels", sizeof(bpSize.tooltip) - 1);
+    BParam_SetIcon(&bpSize, "ctlrad");
+
+    BParam_Init(&bpHardness, 2, "Hardness", 0.0f, 1.0f, 0.5f);
+    strncpy(bpHardness.tooltip, "Transition sharpness from brush center to edge", sizeof(bpHardness.tooltip) - 1);
+    bpHardness.slider.clipmaxF = 0.5f;
+    BParam_SetIcon(&bpHardness, "ctlrrel");
+
+    BParam_Init(&bpSpacing, 3, "Spacing", 0.05f, 2.0f, 0.3f);
+    strncpy(bpSpacing.tooltip, "Distance between successive dabs as fraction of brush diameter", sizeof(bpSpacing.tooltip) - 1);
+    BParam_SetIcon(&bpSpacing, "ctlspc");
+
+    BParam_Init(&bpCurvature, 4, "Curve", 0.0f, 1.0f, 0.0f);
+    strncpy(bpCurvature.tooltip, "Bias toward center (low) or edge (high) of the brush mask", sizeof(bpCurvature.tooltip) - 1);
+    BParam_SetIcon(&bpCurvature, "ctlcrv");
+
+    BParam_Init(&bpScatter, 5, "Scatter", 0.0f, 5.0f, 0.0f);
+    strncpy(bpScatter.tooltip, "Random jitter of dab position perpendicular to stroke direction", sizeof(bpScatter.tooltip) - 1);
+    BParam_SetIcon(&bpScatter, "ctlspcjit");
+
+    BParam_Init(&bpCloneOpacity, 6, "Clone", 0.7f, 1.0f, 1.0f);
+    strncpy(bpCloneOpacity.tooltip, "Smudge/clone source opacity", sizeof(bpCloneOpacity.tooltip) - 1);
+    BParam_SetIcon(&bpCloneOpacity, "ctlcop");
+
+    BParam_Init(&bpQuickHue, 10, "Hue", 0.0f, 1.0f, 0.35f);
+    strncpy(bpQuickHue.tooltip, "Color hue (0=red, 0.33=green, 0.66=blue)", sizeof(bpQuickHue.tooltip) - 1);
+    bpQuickHue.slider.clipmaxF = 0.35f;
+    BParam_SetIcon(&bpQuickHue, "ctlhue");
+
+    BParam_Init(&bpQuickSat, 11, "Sat", 0.0f, 1.0f, 1.0f);
+    strncpy(bpQuickSat.tooltip, "Color saturation (0=gray, 1=full)", sizeof(bpQuickSat.tooltip) - 1);
+    bpQuickSat.slider.clipmaxF = 1.0f;
+    BParam_SetIcon(&bpQuickSat, "ctlsat");
+
+    BParam_Init(&bpQuickLit, 12, "Lit", 0.0f, 1.0f, 0.5f);
+    strncpy(bpQuickLit.tooltip, "Color lightness (0=dark, 1=light)", sizeof(bpQuickLit.tooltip) - 1);
+    bpQuickLit.slider.clipmaxF = 0.5f;
+    BParam_SetIcon(&bpQuickLit, "ctllit");
+
+    BParam_Init(&bpTexScale, 30, "Scale", 0.1f, 5.0f, 1.0f);
+    strncpy(bpTexScale.tooltip, "Texture pattern scale multiplier", sizeof(bpTexScale.tooltip) - 1);
+
+    BParam_Init(&bpTexFeather, 31, "Feather", 0.0f, 0.5f, 0.05f);
+    strncpy(bpTexFeather.tooltip, "Softness of the threshold mask edge", sizeof(bpTexFeather.tooltip) - 1);
+    BParam_SetIcon(&bpTexFeather, "ctlfeather");
+
+    BParam_Init(&bpTexThresh, 32, "Thresh Mul", -2.0f, 2.0f, 1.0f);
+    strncpy(bpTexThresh.tooltip, "Threshold multiplier; negative inverts texture mask", sizeof(bpTexThresh.tooltip) - 1);
+    BParam_SetIcon(&bpTexThresh, "ctltresh");
+
+    BParam_Init(&bpTexBlendVal, 33, "TexColorBlendStrength", 0.0f, 1.0f, 0.5f);
+    strncpy(bpTexBlendVal.tooltip, "How much brush color tints the texture (0=texture only, 1=texture*brush)", sizeof(bpTexBlendVal.tooltip) - 1);
+
+    BParam_Init(&bpAngle, 40, "Angle", 0.0f, 360.0f, 360.0f);
+    strncpy(bpAngle.tooltip, "Modulated offset from base angle (deg). Default 360=no offset. Pen mode = Direction rotates brush along stroke.", sizeof(bpAngle.tooltip) - 1);
+    BParam_SetIcon(&bpAngle, "ctlang");
+
+    BParam_Init(&bpScaleRel, 41, "Proportion", 0.0f, 1.0f, 0.8f);
+    bpScaleRel.slider.clipmaxF = 0.8f;
+    strncpy(bpScaleRel.tooltip, "Aspect ratio (0.5=tall, 0.8=slight ellipse, 1.0=circle) — set <1.0 to see rotation", sizeof(bpScaleRel.tooltip) - 1);
+    BParam_SetIcon(&bpScaleRel, "ctlscalerel");
+
+    // Init global modulator defaults
+    for (int i = 0; i < csSTOP; i++) g_modPars.Pars[i] = 1.0f;
+    g_modPars.Pars[csDir]    = 0.5f;
+    g_modPars.Pars[csIdir]   = 0.5f;
+    g_modPars.Pars[csCrv]    = 1.0f;
+    g_modPars.Pars[csAcc]    = 1.0f;
+    g_modPars.Pars[csLenpx]  = 1.0f;
+    g_modPars.Pars[csHVdir]  = 0.5f;
+    g_modPars.Pars[csRot]    = 0.5f;
+    g_modPars.Pars[csTilt]   = 0.5f;
+    g_modPars.Pars[csRelang] = 0.5f;
+    g_modPars.Pars[csHtilt]  = 0.5f;
+    g_modPars.Pars[csVtilt]  = 0.5f;
+    g_modPars.Pars[csXtilt]  = 0.5f;
+    g_modPars.Pars[csYtilt]  = 0.5f;
+    g_modPars.Pars[csPressure] = 1.0f;
+    g_modPars.Pars[csHVrot]  = 0.5f;
+}
+
+void Modulators_Shutdown(void) {
+    if (bpOpacity.iconLoaded) UnloadTexture(bpOpacity.iconTex);
+    if (bpSize.iconLoaded) UnloadTexture(bpSize.iconTex);
+    if (bpHardness.iconLoaded) UnloadTexture(bpHardness.iconTex);
+    if (bpSpacing.iconLoaded) UnloadTexture(bpSpacing.iconTex);
+    if (bpCurvature.iconLoaded) UnloadTexture(bpCurvature.iconTex);
+    if (bpScatter.iconLoaded) UnloadTexture(bpScatter.iconTex);
+    if (bpCloneOpacity.iconLoaded) UnloadTexture(bpCloneOpacity.iconTex);
+}

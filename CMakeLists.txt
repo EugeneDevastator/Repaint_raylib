@@ -41,6 +41,8 @@ FetchContent_MakeAvailable(rlimgui)
 set(SOURCES
     src/main.cpp
     src/app.cpp
+    src/modulators.cpp
+    src/layermanager.cpp
     src/repaint_core.cpp
     src/repaint_painter.cpp
     src/repaint_drawmodel.cpp

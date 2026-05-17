@@ -269,8 +269,6 @@ typedef struct {
     Texture2D iconTex;
     bool iconLoaded;
     int penMode;
-    bool penEdit;
-    bool penPending;
     float outMin, outMax;
     float defClipmaxF;
     char name[48];
@@ -438,6 +436,9 @@ extern BParam bpAngle;
 extern BParam bpScaleRel;
 
 extern d_StrokePars g_modPars;
+
+void Modulators_Init(void);
+void Modulators_Shutdown(void);
 
 extern const char* PenModeNames[PEN_MODE_COUNT];
 extern Texture2D g_blendModeIcon;
