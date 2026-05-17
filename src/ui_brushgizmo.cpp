@@ -8,7 +8,19 @@
 #define ARROW_ARM_LENGTH    10.0f
 #define ARROW_SNAP_RADIUS   60.0f
 #define ARROW_MIN_RADIUS    30.0f
+// ── Gizmo sector arc configuration ─────────────────────────────────────
+// All angles in degrees, counter-clockwise in math coords (right=0°, up=90°)
+// Hardness arc starts at HARD_ANG_START and spans HARD_ANG_SPAN CCW.
+// Curve arc starts where hardness ends and spans CURVE_ANG_SPAN CCW.
 
+#define GIZMO_FIXED_RADIUS_PX  180.0f
+
+#define GIZMO_RADOUT_START   30.0f
+#define GIZMO_RADOUT_ANG_SPAN    120.0f
+
+#define GIZMO_HARD_ANG_START   150.0f
+#define GIZMO_HARD_ANG_SPAN    120.0f
+#define GIZMO_CURVE_ANG_SPAN   120.0f
 void XORgizmo_Draw(AppState* state) {
     if (!quickPanelShow || !g_showBrushPreview) return;
 

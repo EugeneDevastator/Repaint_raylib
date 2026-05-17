@@ -396,14 +396,7 @@ extern bool g_showBrushPreview;
 #define QP_CTRL_SZ 28
 #define QP_SPACING 4
 
-// ── Gizmo sector arc configuration ─────────────────────────────────────
-// All angles in degrees, counter-clockwise in math coords (right=0°, up=90°)
-// Hardness arc starts at HARD_ANG_START and spans HARD_ANG_SPAN CCW.
-// Curve arc starts where hardness ends and spans CURVE_ANG_SPAN CCW.
-#define GIZMO_FIXED_RADIUS_PX  180.0f
-#define GIZMO_HARD_ANG_START   150.0f
-#define GIZMO_HARD_ANG_SPAN    120.0f
-#define GIZMO_CURVE_ANG_SPAN   120.0f
+
 
 // Gizmo sub-component init/shutdown (no ImGui types)
 void FilePanel_Init(void);
