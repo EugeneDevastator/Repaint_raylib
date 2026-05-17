@@ -36,6 +36,16 @@ in vec2 canvasFragUV;
 float hash2(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
 }
+// Returns hard or soft threshold cut based on texFeather
+// combined: input mask value [0..1]
+// cut: abs(texThresh), threshold level
+// texFeather: softness of edge (0 = hard cut)
+float applyThreshold(float combined, float cut, float texFeather) {
+    float edgeDist = combined - cut;
+    if (texFeather <= 0.0)
+        return (edgeDist > 0.0) ? 1.0 : 0.0;
+    return clamp(edgeDist / max(texFeather, 0.0001), 0.0, 1.0);
+}
 
 vec4 applyBlend(int mode, vec4 canvas, vec3 brushRGB, float brushA) {
     vec3 brushPremul = brushRGB * brushA;
@@ -117,12 +127,18 @@ void main() {
     // --- texture sampling ---
     vec4 texel = vec4(1.0);
     if (texBlendMode >= 0) {
+        // Default: stamp-local UV (brush space 0..1), same every stamp = CONST
         vec2 stUV = geouv.rg;
+
         if (texNoisemode == 0) {
-            stUV = uv;
+            // STENCIL (0): canvas-absolute UV, texture locked to canvas world space
+            stUV = canvasFragUV;
         } else if (texNoisemode == 1) {
-            stUV += texOffset;
+            // RANDOM (1): stamp-local + per-stamp random offset via texOffset
+            stUV = geouv.rg + texOffset;
         }
+        // CONST (2): stUV = geouv.rg, no offset, identical every stamp
+
         stUV = stUV * texScale;
         texel = texture(brushTex, stUV);
     }
@@ -158,13 +174,7 @@ void main() {
     }
     else if (texBlendMode == 1) {
         float combined = firstMask * secondMask;
-        float cut      = abs(texThresh);
-        float edgeDist = combined - cut;
-        if (texFeather <= 0.0) {
-            finalAlpha = (edgeDist > 0.0) ? 1.0 : 0.0;
-        } else {
-            finalAlpha = clamp(edgeDist / max(texFeather, 0.0001), 0.0, 1.0);
-        }
+        finalAlpha = applyThreshold(combined, abs(texThresh), texFeather);
     } else {
         finalAlpha = firstMask * secondMask;
     }
