@@ -1,5 +1,5 @@
 #version 330
-
+//brush geo fs
 in vec2 fragTexCoord;
 out vec4 finalColor;
 

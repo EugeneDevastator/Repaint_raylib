@@ -1,5 +1,5 @@
 #version 330
-
+//brush blend vs
 in vec3 vertexPosition;
 in vec2 vertexTexCoord;
 out vec2 fragTexCoord;
