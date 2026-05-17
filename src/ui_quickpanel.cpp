@@ -133,8 +133,6 @@ void QuickPanel_Draw(AppState* state) {
             float newRad = fmaxf(1.0f, rad);
             state->currentBrush.Realb.rad_out = newRad;
             state->currentBrush.Realb.rad_in = newRad * rel;
-            if (state->currentBrush.Realb.rad_in > newRad * 0.98f)
-                state->currentBrush.Realb.rad_in = newRad * 0.98f;
             BParam_SetValue(&bpSize, newRad);
             float h = (state->currentBrush.Realb.rad_out > 0)
                 ? (state->currentBrush.Realb.rad_in / state->currentBrush.Realb.rad_out) : 0;
@@ -146,8 +144,6 @@ void QuickPanel_Draw(AppState* state) {
             if (curMode != 2) h = 0.0f;
             if (h < 0.05f) h = 0.0f;
             state->currentBrush.Realb.rad_in = h * state->currentBrush.Realb.rad_out;
-            if (state->currentBrush.Realb.rad_in > state->currentBrush.Realb.rad_out * 0.98f)
-                state->currentBrush.Realb.rad_in = state->currentBrush.Realb.rad_out * 0.98f;
             BParam_SetValue(&bpHardness, h);
         }
         if (quickPanelMouseMode == 3) {
