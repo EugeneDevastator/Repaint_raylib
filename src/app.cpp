@@ -386,11 +386,17 @@ void App_Draw(AppState* state) {
 
     rlImGuiBegin();
 
+    QuickPanel_DrawGizmo(state);
+
+    rlSetBlendMode(RL_BLEND_ALPHA);
     if (g_panelsVisible)
         networkBroker.DrawConnectionUI();
-    QuickPanel_Draw(state);
+    rlSetBlendMode(RL_BLEND_ALPHA);
+    QuickPanel_DrawUI(state);
     if (g_panelsVisible) {
+        rlSetBlendMode(RL_BLEND_ALPHA);
         LeftPanel_Draw(state);
+        rlSetBlendMode(RL_BLEND_ALPHA);
         LayerPanel_Draw(state);
     }
 

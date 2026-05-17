@@ -1,4 +1,5 @@
 #include "repaint.h"
+#include "rlgl.h"
 #include "imgui.h"
 #include <math.h>
 
@@ -33,41 +34,24 @@ void QuickPanel_Shutdown(void) {
     ToolBox_Shutdown();
 }
 
-void QuickPanel_Draw(AppState* state) {
+void QuickPanel_DrawGizmo(AppState* state) {
     if (!quickPanelShow) return;
-
-    // ── Debug logging on first open ──────────────────────────────
-    if (g_quickPanelFirstOpen) {
-        g_quickPanelFirstOpen = false;
-        TraceLog(LOG_INFO, "[QuickPanel] First open — logging state");
-        TraceLog(LOG_INFO, "[QuickPanel] brushTexCount=%d, activeBrushTex=%d, editTexMode=%d",
-            state->brushTexCount, state->activeBrushTex, state->editTexMode);
-        TraceLog(LOG_INFO, "[QuickPanel] g_showBrushPreview=%d g_showStampPreview=%d g_showTextureGroup=%d g_showFilePanel=%d g_showToolPanel=%d",
-            (int)g_showBrushPreview, (int)g_showStampPreview, (int)g_showTextureGroup,
-            (int)g_showFilePanel, (int)g_showToolPanel);
-    }
 
     Rectangle vp = viewport.bounds;
     int gcx = (int)(vp.x + vp.width * 0.5f);
     int gcy = (int)(vp.y + vp.height * 0.5f);
 
-    // Use base slider values (not velocity-modulated) for gizmo display
     float baseRadOut = BParam_GetValue(&bpSize);
     float baseHard   = BParam_GetValue(&bpHardness);
     float drawRadOut = baseRadOut * state->camera.zoom;
     float drawRadIn  = baseRadOut * baseHard * state->camera.zoom;
     if (drawRadIn > drawRadOut) drawRadIn = drawRadOut;
 
-    // ── Separate panels (top-level windows, drawn before overlay) ────────
-    if (g_showFilePanel) FilePanel_Draw(state, vp);
-    if (g_showToolPanel) ToolBox_Draw(state, vp);
-
-    // ── Transparent overlay for gizmo visuals + interactive controls ─────
     ImGui::SetNextWindowPos(ImVec2(vp.x, vp.y));
     ImGui::SetNextWindowSize(ImVec2(vp.width, vp.height));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-    ImGui::Begin("##quickpanel", NULL,
+    ImGui::Begin("##qpgizmo", NULL,
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
         ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoFocusOnAppearing |
@@ -81,7 +65,6 @@ void QuickPanel_Draw(AppState* state) {
 
     if (g_showBrushPreview) BrushGizmo_Draw(dl, org, gcx, gcy, state);
 
-    // ── Radial input handling (sector-based, no distance limit) ─────────
     ImVec2 mp = ImGui::GetMousePos();
     float dx = mp.x - gcx, dy = mp.y - gcy;
     float dist = sqrtf(dx * dx + dy * dy);
@@ -92,7 +75,6 @@ void QuickPanel_Draw(AppState* state) {
     bool released = ImGui::IsMouseReleased(0);
 
     if (clicked && !ImGui::IsAnyItemHovered()) {
-        // Arrow proximity check (takes priority over sector modes)
         float arrowAng = state->initialAngle * (float)(M_PI * 2.0 / 360.0);
         float angDiff = fabsf(ang - arrowAng);
         if (angDiff > (float)M_PI) angDiff = (float)(2.0f * M_PI) - angDiff;
@@ -101,18 +83,15 @@ void QuickPanel_Draw(AppState* state) {
         if (nearArrow) {
             quickPanelMouseMode = 4;
         } else {
-            // Sector-based mode detection
-            bool inSector1 = (ang > d30 && ang < d30 * 5);       // size sector
-            bool inSector2 = (ang < d30 && ang > -(float)M_PI * 0.5f);  // hardness sector
-            bool inSector3 = !inSector1 && !inSector2;            // curve sector
+            bool inSector1 = (ang > d30 && ang < d30 * 5);
+            bool inSector2 = (ang < d30 && ang > -(float)M_PI * 0.5f);
+            bool inSector3 = !inSector1 && !inSector2;
 
             if (dist <= GIZMO_FIXED_RADIUS_PX) {
-                // Inside fixed radius: hardness, curve, or size
                 if (inSector1) quickPanelMouseMode = 1;
                 else if (inSector2) quickPanelMouseMode = 2;
                 else quickPanelMouseMode = 3;
             } else {
-                // Outside fixed radius: size in sector 1, otherwise rotation
                 quickPanelMouseMode = inSector1 ? 1 : 4;
             }
         }
@@ -139,7 +118,6 @@ void QuickPanel_Draw(AppState* state) {
             BParam_SetValue(&bpHardness, h);
         }
         if (quickPanelMouseMode == 2) {
-            // Hardness: captured inside radius, but tracks continuously once active
             float h = fminf(absrad / GIZMO_FIXED_RADIUS_PX, 1.0f);
             if (curMode != 2) h = 0.0f;
             if (h < 0.05f) h = 0.0f;
@@ -147,7 +125,6 @@ void QuickPanel_Draw(AppState* state) {
             BParam_SetValue(&bpHardness, h);
         }
         if (quickPanelMouseMode == 3) {
-            // Curve: captured inside radius, but tracks continuously once active
             float h = fminf(absrad / GIZMO_FIXED_RADIUS_PX, 1.0f);
             if (curMode != 3) h = 0.0f;
             state->currentBrush.Realb.crv = 1.0f - h;
@@ -162,12 +139,39 @@ void QuickPanel_Draw(AppState* state) {
     }
 
     if (released) quickPanelMouseMode = 0;
+    ImGui::End();
+}
 
-    // ── Slider columns (dynamic sizes proportional to viewport) ────────
+void QuickPanel_DrawUI(AppState* state) {
+    if (!quickPanelShow) return;
+
+    Rectangle vp = viewport.bounds;
+    int gcx = (int)(vp.x + vp.width * 0.5f);
+    int gcy = (int)(vp.y + vp.height * 0.5f);
+
+    rlSetBlendMode(RL_BLEND_ALPHA);
+    if (g_showFilePanel) FilePanel_Draw(state, vp);
+    rlSetBlendMode(RL_BLEND_ALPHA);
+    if (g_showToolPanel) ToolBox_Draw(state, vp);
+
+    ImGui::SetNextWindowPos(ImVec2(vp.x, vp.y));
+    ImGui::SetNextWindowSize(ImVec2(vp.width, vp.height));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+    rlSetBlendMode(RL_BLEND_ALPHA);
+    ImGui::Begin("##qpui", NULL,
+        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
+        ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoFocusOnAppearing |
+        ImGuiWindowFlags_NoBackground);
+    ImGui::PopStyleVar(2);
+
+    ImDrawList* dl = ImGui::GetWindowDrawList();
     int sw = GetScreenWidth();
     int sh = GetScreenHeight();
-    float dThick = fmaxf(20.0f, fminf(sw / 12.0f, 48.0f));   // 1/12 screen width
-    float dLen   = fmaxf(100.0f, fminf(sh / 3.0f, 400.0f));  // 1/3 screen height
+    int gizR = 200;
+    float dThick = fmaxf(20.0f, fminf(sw / 12.0f, 48.0f));
+    float dLen   = fmaxf(100.0f, fminf(sh / 3.0f, 400.0f));
     int dCtrl    = (int)dThick;
     int dGap     = fmaxf(4, dCtrl / 3);
     int dSpacing = fmaxf(2, dCtrl / 6);
@@ -183,6 +187,8 @@ void QuickPanel_Draw(AppState* state) {
     const char* labels[6] = {"Op", "Sp", "Sc", "H", "S", "L"};
     int colorModes[6] = {-1, -1, -1, 0, 1, 2};
 
+    ImVec2 mp = ImGui::GetMousePos();
+    rlSetBlendMode(RL_BLEND_ALPHA);
     for (int i = 0; i < 6; i++) {
         int colX = (i < 3)
             ? sliderLeftX + i * (dCtrl + dGap)
@@ -191,7 +197,6 @@ void QuickPanel_Draw(AppState* state) {
 
         dl->AddText(ImVec2(colX + dCtrl / 2 - 6, penBtnY - 14), IM_COL32(211, 211, 211, 230), labels[i]);
 
-        // Pen mode button
         ImGui::SetCursorScreenPos(ImVec2(colX, penBtnY));
         Texture2D pt = GetPenModeIcon(bp->penMode);
         ImTextureID penTid = (pt.id > 0) ? (ImTextureID)(intptr_t)pt.id : 0;
@@ -214,6 +219,7 @@ void QuickPanel_Draw(AppState* state) {
         ImGui::PopStyleColor(3);
         ImGui::PopStyleVar();
 
+        rlSetBlendMode(RL_BLEND_ALPHA);
         if (ImGui::BeginPopup(pname, ImGuiWindowFlags_NoScrollbar)) {
             for (int p = 0; p < PEN_MODE_COUNT; p++) {
                 Texture2D itex = GetPenModeIcon(p);
@@ -228,12 +234,11 @@ void QuickPanel_Draw(AppState* state) {
         }
         ImGui::PopID();
 
-        // Slider body
         DrawSliderVertical(dl, bp, colX, slY, dCtrl, (int)dLen, bp->slider.clipmaxF, colorModes[i]);
 
-        // Invisible button — per-item activation via ImGui button flags
         ImGui::PushID(400 + i);
         ImGui::SetCursorScreenPos(ImVec2(colX, slY));
+        rlSetBlendMode(RL_BLEND_ALPHA);
         ImGui::InvisibleButton("##sb", ImVec2(dCtrl, (int)dLen),
             ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle);
         if (ImGui::IsItemHovered() && bps[i]->tooltip[0])
@@ -251,7 +256,6 @@ void QuickPanel_Draw(AppState* state) {
         }
         ImGui::PopID();
 
-        // Icon at bottom
         if (bp->iconLoaded) {
             ImTextureID iconTid = (ImTextureID)(intptr_t)bp->iconTex.id;
             if (iconTid) {
@@ -268,21 +272,19 @@ void QuickPanel_Draw(AppState* state) {
         }
     }
 
-     // ── Brush texture selection + params ──────────────────────────────
      if (g_showTextureGroup) {
           int texAreaY = iconY + dCtrl + 14;
          int texCount = state->brushTexCount;
 
-         // ── Texture controls (3 columns within 1/5 viewport width each) ─────
          BParam_SetValue(&bpTexScale, state->currentBrush.Realb.texScale);
          BParam_SetValue(&bpTexFeather, state->currentBrush.Realb.texFeather);
          BParam_SetValue(&bpTexThresh, state->currentBrush.Realb.texThresh);
          BParam_SetValue(&bpTexBlendVal, state->currentBrush.Realb.texBlendVal);
 
          float sectionWidth = vp.width / 5.0f;
-         float baseX = vp.x + sectionWidth; // start of column 2
+         float baseX = vp.x + sectionWidth;
 
-         // Column 2: alpha controls (maskmode / maskmix)
+         rlSetBlendMode(RL_BLEND_ALPHA);
          ImGui::SetCursorScreenPos(ImVec2(baseX, texAreaY));
          if (ImGui::BeginChild("##texCol2", ImVec2(sectionWidth, 0), false)) {
              int mm = state->currentBrush.Realb.useTexLumAsAlpha ? 1 : 0;
@@ -293,6 +295,7 @@ void QuickPanel_Draw(AppState* state) {
                  state->currentBrush.Realb.useTexLumAsAlpha = false;
 
          ImGui::Spacing();
+         rlSetBlendMode(RL_BLEND_ALPHA);
          int mx = state->currentBrush.Realb.texBlendMode;
          ImGui::Text("Mask Mix");
          if (ImGui::RadioButton("multiply", &mx, 0))
@@ -304,6 +307,7 @@ void QuickPanel_Draw(AppState* state) {
 
          ImGui::Spacing();
          ImGui::Separator();
+         rlSetBlendMode(RL_BLEND_ALPHA);
          int tnm = state->currentBrush.Realb.texNoisemode;
          ImGui::Text("Sample Mode");
          ImGui::SetNextItemWidth(sectionWidth * 0.85f);
@@ -312,7 +316,7 @@ void QuickPanel_Draw(AppState* state) {
          ImGui::EndChild();
          }
 
-         // Column 3: RGB controls + param sliders
+         rlSetBlendMode(RL_BLEND_ALPHA);
          ImGui::SetCursorScreenPos(ImVec2(baseX + sectionWidth, texAreaY));
          if (ImGui::BeginChild("##texCol3", ImVec2(sectionWidth, 0), false)) {
              int cm = state->currentBrush.Realb.texColorMode;
@@ -326,21 +330,24 @@ void QuickPanel_Draw(AppState* state) {
 
              ImGui::Spacing();
              ImGui::Separator();
+             rlSetBlendMode(RL_BLEND_ALPHA);
              DrawBParamSlider(&bpTexScale);
+             rlSetBlendMode(RL_BLEND_ALPHA);
              DrawBParamSlider(&bpTexFeather);
+             rlSetBlendMode(RL_BLEND_ALPHA);
              DrawBParamSlider(&bpTexThresh);
+             rlSetBlendMode(RL_BLEND_ALPHA);
              DrawBParamSlider(&bpTexBlendVal);
              ImGui::EndChild();
          }
 
-         // Sync brush state back from BParams
          state->currentBrush.Realb.texScale = BParam_GetValue(&bpTexScale);
          state->currentBrush.Realb.texFeather = BParam_GetValue(&bpTexFeather);
          state->currentBrush.Realb.texThresh = BParam_GetValue(&bpTexThresh);
          state->currentBrush.Realb.texBlendVal = BParam_GetValue(&bpTexBlendVal);
 
-          // Column 4: texture selection grid
-          float gridX = baseX + 2.0f * sectionWidth; // start of column 4
+          rlSetBlendMode(RL_BLEND_ALPHA);
+          float gridX = baseX + 2.0f * sectionWidth;
           ImGui::SetCursorScreenPos(ImVec2(gridX, texAreaY));
           if (ImGui::BeginChild("##texCol4", ImVec2(sectionWidth, 0), false)) {
               ImVec2 childOrigin = ImGui::GetCursorScreenPos();
@@ -348,7 +355,6 @@ void QuickPanel_Draw(AppState* state) {
               int texSz = 64;
               int texGap = 6;
 
-              // "X" button: no texture used as brush pattern
               ImGui::SetCursorScreenPos(ImVec2(childOrigin.x, childOrigin.y));
               ImGui::PushID("500");
               bool isNone = (state->activeBrushTex < 0);
@@ -358,6 +364,7 @@ void QuickPanel_Draw(AppState* state) {
               if (isNone) { ImGui::PopStyleColor(2); }
               ImGui::PopID();
 
+              rlSetBlendMode(RL_BLEND_ALPHA);
               for (int ti = 0; ti < texCount && ti < texCols * 4; ti++) {
                   int col = ti % texCols;
                   int row = ti / texCols;

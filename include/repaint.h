@@ -455,7 +455,8 @@ struct ImVec2;
 void DrawBParamSlider(BParam* bp);
 void DrawSliderVertical(ImDrawList* dl, BParam* bp, int x, int y, int w, int h, float val, int colorMode);
 
-void QuickPanel_Draw(AppState* state);
+void QuickPanel_DrawGizmo(AppState* state);
+void QuickPanel_DrawUI(AppState* state);
 void QuickPanel_Init(void);
 void QuickPanel_Shutdown(void);
 void BrushGizmo_DrawXOROverlay(AppState* state);
