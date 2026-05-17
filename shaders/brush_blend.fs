@@ -3,13 +3,13 @@
 in vec2 fragTexCoord;
 out vec4 finalColor;
 
-uniform sampler2D texture0;   // geo UV RT
-uniform sampler2D canvasTex;  // canvas copy
-uniform sampler2D brushTex;   // user brush texture
+uniform sampler2D texture0;
+uniform sampler2D canvasTex;
+uniform sampler2D brushTex;
 
 uniform float opacity;
 uniform float radIn;
-uniform float curve;        // crv [0..1]
+uniform float curve;
 uniform float sol;
 uniform float sol2op;
 uniform float seed;
@@ -21,15 +21,17 @@ uniform float texScale;
 uniform vec2  texOffset;
 uniform float texFeather;
 uniform float texThresh;
-uniform int   texBlendMode;   // 0=Mask, 1=Thr, 2=Mul
-uniform int   texNoisemode;   // 0=Stencil, 1=Random, 2=Const
+uniform int   texBlendMode;
+uniform int   texNoisemode;
 uniform bool  useLumAsAlpha;
-uniform int   texColorMode;   // 0=brush RGB, 1=texture RGB, 2=multiply
+uniform int   texColorMode;
 uniform int   bmidx;
 uniform vec4  brushColor;
 uniform float radOut;
-// canvas-space UV of this stamp's center (for noise hash)
 uniform vec2  stampCenter;
+uniform vec2  canvasSize;
+
+in vec2 canvasFragUV;
 
 float hash2(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
@@ -77,10 +79,21 @@ vec4 applyBlend(int mode, vec4 canvas, vec3 brushRGB, float brushA) {
 
     return vec4(clamp(outRGB, 0.0, 1.0), clamp(outA, 0.0, 1.0));
 }
-uniform vec2  canvasSize;   // canvas W, H in pixels
 
-in vec2 canvasFragUV;
-// remove: uniform vec2 canvasSize; (keep it only in vs, or keep both)
+float applyRadialFalloff(float d) {
+    float innerT = clamp(radIn / max(radOut, 0.001), 0.0, 1.0);
+    float a = 1.0;
+    if (d > innerT) {
+        float edgeRange = 1.0 - innerT;
+        if (edgeRange > 0.001)
+            a = 1.0 - (d - innerT) / edgeRange;
+    }
+    a = clamp(a, 0.0, 1.0);
+    float crvt      = curve * 2.0 - 1.0;
+    float curvePower = (crvt >= 0.0) ? mix(1.0, 3.0, crvt) : mix(1.0, 1.0/3.0, -crvt);
+    return clamp(pow(a, curvePower), 0.0, 1.0);
+}
+
 void main() {
     vec2 uv       = fragTexCoord;
     vec2 sampleUV = vec2(uv.x, 1.0 - uv.y);
@@ -95,26 +108,15 @@ void main() {
         return;
     }
 
-    vec2 p     = geouv.rg - 0.5;
+    vec2  p    = geouv.rg - 0.5;
     float dist = length(p);
     float d    = dist * 2.0;
 
-    float innerT = clamp(radIn / max(radOut, 0.001), 0.0, 1.0);
-    float alpha  = 1.0;
-    if (d > innerT) {
-        float edgeRange = 1.0 - innerT;
-        if (edgeRange > 0.001)
-            alpha = 1.0 - (d - innerT) / edgeRange;
-    }
-    alpha = clamp(alpha, 0.0, 1.0);
-
-    float crvt      = curve * 2.0 - 1.0;
-    float curvePower = (crvt >= 0.0) ? mix(1.0, 3.0, crvt) : mix(1.0, 1.0/3.0, -crvt);
-    alpha = clamp(pow(alpha, curvePower), 0.0, 1.0);
+    float alpha = applyRadialFalloff(d);
 
     // --- texture sampling ---
     vec4 texel = vec4(1.0);
-    if (texBlendVal >= 0.0 && texBlendMode >= 0) {
+    if (texBlendMode >= 0) {
         vec2 stUV = geouv.rg;
         if (texNoisemode == 0) {
             stUV = uv;
@@ -130,7 +132,6 @@ void main() {
         ? (texel.r + texel.g + texel.b) * (1.0 / 3.0)
         : texel.a;
 
-    // invert if negative threshold
     if (texThresh < 0.0)
         userTexA = 1.0 - userTexA;
 
@@ -139,24 +140,23 @@ void main() {
     float secondMask;
 
     if (texBlendMode == 0) {
-        // Mask: tex shapes the radial
-        firstMask  = userTexA;
+        firstMask  = userTexA * alpha;
         secondMask = 1.0;
-        firstMask *= alpha;
     } else if (texBlendMode == 2) {
-        // Mul: texture IS the mask, radial ignored
-        firstMask  = userTexA;
-        secondMask = 1.0;
+        firstMask  = applyRadialFalloff(userTexA);
+        secondMask = 1;
     } else {
-        // Threshold: radial is first, tex is second
+        // Threshold
         firstMask  = alpha;
         secondMask = userTexA;
     }
 
-    // --- combine masks by mode ---
+    // --- combine first and second ---
     float finalAlpha;
-
-    if (texBlendMode == 1) {
+    if (texBlendMode == 2) {
+        finalAlpha = firstMask;
+    }
+    else if (texBlendMode == 1) {
         float combined = firstMask * secondMask;
         float cut      = abs(texThresh);
         float edgeDist = combined - cut;
@@ -166,12 +166,11 @@ void main() {
             finalAlpha = clamp(edgeDist / max(texFeather, 0.0001), 0.0, 1.0);
         }
     } else {
-        // Mask (0) and Mul (2): straight multiply
         finalAlpha = firstMask * secondMask;
     }
 
     finalAlpha = clamp(finalAlpha, 0.0, 1.0);
-    if (preserveop > 0.5) finalAlpha *= canvas.a;
+
 
     // --- brush color ---
     vec3 brushFinal;
@@ -194,7 +193,7 @@ void main() {
         brushFinal = smudgeSample.rgb * smudgeStrength
                    + brushColor.rgb * (1.0 - smudgeStrength) * ca;
     }
+    if (preserveop > 0.5) finalAlpha = canvas.a;
 
     finalColor = applyBlend(bmidx, canvas, brushFinal, finalAlpha);
 }
-
