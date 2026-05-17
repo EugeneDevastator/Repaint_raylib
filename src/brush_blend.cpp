@@ -24,8 +24,8 @@ static bool inited = false;
 static RenderTexture2D canvasCopyRT = {0};
 static int canvasCopyW = 0, canvasCopyH = 0;
 
-static RenderTexture2D geoUV_RT = {0};
-static int geoUVSize = 0;   // currently allocated atlas side (power of two)
+#define GEO_POOL_COUNT 64   // slots: 32, 64, 96, ... 2048
+static RenderTexture2D geoPool[GEO_POOL_COUNT] = {0};
 
 static Texture2D whiteTex = {0};
 
@@ -35,8 +35,18 @@ static inline int next_pow2_min32(int v) {
     return r;
 }
 
+static inline int next_mult32(int v) {
+    if (v <= 32) return 32;
+    return ((v + 31) / 32) * 32;
+}
+
 static inline float clampf(float v, float lo, float hi) {
     return v < lo ? lo : (v > hi ? hi : v);
+}
+
+// returns index 0..63 for bucket sizes 32..2048
+static inline int pool_index(int bucket) {
+    return (bucket / 32) - 1;
 }
 
 void BrushBlend_Init(void) {
@@ -97,13 +107,16 @@ void BrushBlend_Shutdown(void) {
     UnloadShader(brushBlendShader);
     UnloadShader(brushGeoShader);
     if (canvasCopyRT.id > 0) UnloadRenderTexture(canvasCopyRT);
-    if (geoUV_RT.id > 0)     UnloadRenderTexture(geoUV_RT);
-    if (whiteTex.id > 0)     UnloadTexture(whiteTex);
+    for (int i = 0; i < GEO_POOL_COUNT; i++) {
+        if (geoPool[i].id > 0) {
+            UnloadRenderTexture(geoPool[i]);
+            geoPool[i] = (RenderTexture2D){0};
+        }
+    }
+    if (whiteTex.id > 0) UnloadTexture(whiteTex);
     canvasCopyRT = (RenderTexture2D){0};
-    geoUV_RT     = (RenderTexture2D){0};
     whiteTex     = (Texture2D){0};
     canvasCopyW = canvasCopyH = 0;
-    geoUVSize   = 0;
     inited = false;
 }
 
@@ -124,7 +137,7 @@ void BrushBlend_ApplyStamp(
     float angleRad = (float)brush->Realb.resangle * (float)(M_PI / 180.0);
     float squish   = fmaxf((float)brush->Realb.x2y, 0.01f);
 
-    // -------- Pass 0: full canvas copy (canvas dimensions change rarely; full copy keeps shader UVs simple)
+    // -------- Pass 0: full canvas copy
     if (canvasCopyRT.id == 0 || canvasCopyW != W || canvasCopyH != H) {
         if (canvasCopyRT.id > 0) UnloadRenderTexture(canvasCopyRT);
         canvasCopyRT = Load16BitRT(W, H);
@@ -142,22 +155,20 @@ void BrushBlend_ApplyStamp(
         (Vector2){0, 0}, 0.0f, WHITE);
     EndTextureMode();
 
-    // -------- Pass 1: geo UV  (BUCKETED, GROW-ONLY cache)
+    // -------- Pass 1: geo UV (pool, lazy alloc, never freed until shutdown)
     float bboxHalf = radOut * 1.41421356f;
     int sz = (int)ceilf(bboxHalf * 2.0f);
     if (sz < 32) sz = 32;
-    int bucket = next_pow2_min32(sz);
+    int bucket = next_mult32(sz);
+    if (bucket > 2048) bucket = 2048;
 
-    if (geoUV_RT.id == 0 || geoUVSize < bucket) {
-        if (geoUV_RT.id > 0) UnloadRenderTexture(geoUV_RT);
-        geoUV_RT  = LoadRenderTexture(bucket, bucket);
-        geoUVSize = bucket;
+    int pidx = pool_index(bucket);
+    if (geoPool[pidx].id == 0) {
+        geoPool[pidx] = LoadRenderTexture(bucket, bucket);
     }
+    RenderTexture2D* geoRT = &geoPool[pidx];
 
-    // Render the geo into the FULL bucket size so the entire cached atlas is the active stamp.
-    // Slightly wasted fill on small brushes vs. bucket, but no reallocations during size scrubbing.
-    int drawSz = geoUVSize;
-    // recompute size factor against drawSz so the ellipse still matches radOut in canvas pixels
+    int drawSz = bucket;
     float drawBboxHalf = (float)drawSz * 0.5f;
     float size = radOut / drawBboxHalf;
 
@@ -165,7 +176,7 @@ void BrushBlend_ApplyStamp(
     SetShaderValue(brushGeoShader, locUSquish, &squish,   SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushGeoShader, locUSize,   &size,     SHADER_UNIFORM_FLOAT);
 
-    BeginTextureMode(geoUV_RT);
+    BeginTextureMode(*geoRT);
     ClearBackground((Color){0, 0, 0, 0});
     BeginShaderMode(brushGeoShader);
     DrawTexturePro(whiteTex,
@@ -231,14 +242,10 @@ void BrushBlend_ApplyStamp(
     SetShaderValue(brushBlendShader, locTexBlendMode,   &tbm,        SHADER_UNIFORM_INT);
     SetShaderValue(brushBlendShader, locTexNoisemode,   &tnm,        SHADER_UNIFORM_INT);
     SetShaderValue(brushBlendShader, locStampCenter,    sc,          SHADER_UNIFORM_VEC2);
-    SetShaderValue(brushBlendShader, locRadOut,         &radOut,     SHADER_UNIFORM_FLOAT);
 
     float csz[2] = { (float)W, (float)H };
     SetShaderValue(brushBlendShader, locCanvasSize, csz, SHADER_UNIFORM_VEC2);
 
-    // Final stamp bbox in canvas pixels must match the size we actually rendered the geo at
-    // (drawSz x drawSz), otherwise the bbox in canvas space and the UV atlas disagree and
-    // the shader's canvasFragUV will be off.
     float stampSizePx = (float)drawSz;
     float x0 = stampX - stampSizePx * 0.5f;
     float y0 = stampY - stampSizePx * 0.5f;
@@ -246,9 +253,6 @@ void BrushBlend_ApplyStamp(
     float so[2] = { x0, y0 };
     SetShaderValue(brushBlendShader, locStampOffset, so, SHADER_UNIFORM_VEC2);
 
-    // radOut passed to vs is used only to compute bboxSize = radOut*sqrt(2)*2.
-    // We override that by passing an "effective radOut" so bboxSize == drawSz.
-    // bboxSize = radOut_eff * 1.41421356 * 2  =>  radOut_eff = drawSz / (2*sqrt(2))
     float radOutEff = stampSizePx / (2.0f * 1.41421356f);
     SetShaderValue(brushBlendShader, locRadOut, &radOutEff, SHADER_UNIFORM_FLOAT);
 
@@ -265,7 +269,7 @@ void BrushBlend_ApplyStamp(
 
     BeginShaderMode(brushBlendShader);
 
-    DrawTexturePro(geoUV_RT.texture,
+    DrawTexturePro(geoRT->texture,
         (Rectangle){0, 0, (float)drawSz, (float)-drawSz},
         (Rectangle){x0, y0, stampSizePx, stampSizePx},
         (Vector2){0, 0}, 0.0f, WHITE);
