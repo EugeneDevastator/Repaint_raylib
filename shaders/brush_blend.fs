@@ -203,23 +203,26 @@ float cloneOpacity = smudgeStrength;
         vec4 smudgeSample = texture(canvasTex, smudgeUV);
         float smudgeA = smudgeSample.a;
 
+// gracefully handle transparent layers to not mix with blacks.
         vec3 smudgeRGB;
         if (smudgeA < 0.0000001)
             smudgeRGB = canvas.rgb;
          else
             smudgeRGB = smudgeSample.rgb;
 
-        brushFinal = smudgeRGB * smudgeStrength
-                   + brushColor.rgb * (1.0 - smudgeStrength) * smudgeA;
+        vec4 smudgeCol = vec4(smudgeRGB, 1);
 
-       // Alpha: treat as plain channel, lerp smudge alpha into canvas alpha weighted by brush mask
+        brushFinal = applyBlend(bmidx, smudgeCol, brushFinal, (1.0 - smudgeStrength)*(1.0 - smudgeStrength)).rgb;
+        finalColor = applyBlend(bmidx, canvas, brushFinal, finalAlpha);
+
+       // Alpha: treat canvas A as plain channel, lerp smudge alpha into canvas alpha weighted by brush mask
        float blendedA = mix(canvas.a, smudgeA, finalAlpha);
 
-       finalColor = applyBlend(bmidx, canvas, brushFinal, finalAlpha);
            if (preserveop > 0.5)
             finalColor.a = canvas.a;
            else
             finalColor.a = blendedA;
+
         return;
     }
 
