@@ -196,15 +196,32 @@ void main() {
     finalAlpha *= opacity;
     if (finalAlpha < 0.000000001) { finalColor = canvas; return; }
 
-    if (smudgeStrength > 0.000001) {
+float cloneOpacity = smudgeStrength;
+    if (cloneOpacity > 0.000001) {
         vec2 smudgeUV = clamp(canvasFragUV - smudgeOffsetUV, 0.001, 0.999);
         smudgeUV.y *= -1;
         vec4 smudgeSample = texture(canvasTex, smudgeUV);
-        float ca = smudgeSample.a;
-        brushFinal = smudgeSample.rgb * smudgeStrength
-                   + brushColor.rgb * (1.0 - smudgeStrength) * ca;
-    }
+        float smudgeA = smudgeSample.a;
 
+        vec3 smudgeRGB;
+        if (smudgeA < 0.0000001)
+            smudgeRGB = canvas.rgb;
+         else
+            smudgeRGB = smudgeSample.rgb;
+
+        brushFinal = smudgeRGB * smudgeStrength
+                   + brushColor.rgb * (1.0 - smudgeStrength) * smudgeA;
+
+       // Alpha: treat as plain channel, lerp smudge alpha into canvas alpha weighted by brush mask
+       float blendedA = mix(canvas.a, smudgeA, finalAlpha);
+
+       finalColor = applyBlend(bmidx, canvas, brushFinal, finalAlpha);
+           if (preserveop > 0.5)
+            finalColor.a = canvas.a;
+           else
+            finalColor.a = blendedA;
+        return;
+    }
 
     finalColor = applyBlend(bmidx, canvas, brushFinal, finalAlpha);
         if (preserveop > 0.5) finalColor.a = canvas.a;
