@@ -3,8 +3,6 @@
 #include "imgui.h"
 #include <math.h>
 
-// Sub-component declaration (defined in ui_brushgizmo.cpp)
-void XORgizmo_Draw(AppState*);
 void FilePanel_Draw(AppState* state, Rectangle vp);
 void ToolBox_Draw(AppState* state, Rectangle vp);
 
@@ -32,10 +30,6 @@ void QuickPanel_Init(void) {
 void QuickPanel_Shutdown(void) {
     FilePanel_Shutdown();
     ToolBox_Shutdown();
-}
-
-void QuickPanel_DrawGizmo(AppState* state) {
-    XORgizmo_Draw(state);
 }
 
 void QuickPanel_DrawUI(AppState* state) {

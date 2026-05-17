@@ -376,12 +376,13 @@ void App_Draw(AppState* state) {
     // ── Draw viewport: composite layers → stamp preview → screen ──
     ViewportHUD_Draw(state);
 
-    // Debug stamp overlays (after canvas, before gizmo + UI)
+    // Debug stamp overlays (after canvas, before UI)
     Viewport_DrawDebugOverlays(&viewport, state);
 
-    rlImGuiBegin();
+    // Gizmo visual drawn early (raylib XOR, before ImGui)
+    XORgizmo_DrawVisual(state);
 
-    QuickPanel_DrawGizmo(state);
+    rlImGuiBegin();
 
     rlSetBlendMode(RL_BLEND_ALPHA);
     if (g_panelsVisible)
@@ -394,6 +395,9 @@ void App_Draw(AppState* state) {
         rlSetBlendMode(RL_BLEND_ALPHA);
         LayerPanel_Draw(state);
     }
+
+    // Gizmo input handled last — after UI consumed its own clicks
+    XORgizmo_HandleInput(state);
 
     // ── Color picker 3×3 magnifier ──────────────────────────────────
     if (g_colorPicking) {
