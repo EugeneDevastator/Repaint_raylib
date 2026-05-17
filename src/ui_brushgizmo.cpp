@@ -9,21 +9,6 @@
 #define ARROW_SNAP_RADIUS   60.0f
 #define ARROW_MIN_RADIUS    30.0f
 
-static void DrawArrow(ImDrawList* dl, ImVec2 org, int gcx, int gcy, AppState* state) {
-    float rang = state->currentBrush.Realb.resangle * (float)(M_PI * 2.0 / 360.0);
-    ImVec2 arrTip(gcx + ARROW_DRAW_RADIUS * cosf(rang), gcy + ARROW_DRAW_RADIUS * sinf(rang));
-    dl->AddLine(org, arrTip, IM_COL32(200, 40, 40, 255), 3);
-
-    float ah = (float)(M_PI * 0.2);
-    float arm = ARROW_ARM_LENGTH;
-    ImVec2 a1(arrTip.x + arm * cosf(rang - (float)M_PI + ah), arrTip.y + arm * sinf(rang - (float)M_PI + ah));
-    ImVec2 a2(arrTip.x + arm * cosf(rang - (float)M_PI - ah), arrTip.y + arm * sinf(rang - (float)M_PI - ah));
-    dl->AddLine(arrTip, a1, IM_COL32(200, 40, 40, 255), 3);
-    dl->AddLine(arrTip, a2, IM_COL32(200, 40, 40, 255), 3);
-    dl->AddCircleFilled(org, 3, IM_COL32_BLACK);
-    dl->AddCircleFilled(org, 2, IM_COL32_WHITE);
-}
-
 void XORgizmo_Draw(AppState* state) {
     if (!quickPanelShow || !g_showBrushPreview) return;
 
@@ -32,11 +17,12 @@ void XORgizmo_Draw(AppState* state) {
     int gcy = (int)(vp.y + vp.height * 0.5f);
     float d30 = (float)(M_PI * 30.0 / 180.0);
 
-    // ── XOR overlay (raylib, before ImGui window) ──────────────────
+    // ── All visual drawing: XOR overlay + arrow ────────────────────
     rlDrawRenderBatchActive();
     glEnable(GL_COLOR_LOGIC_OP);
     glLogicOp(GL_XOR);
 
+    // Sector divider lines
     for (int gi = 1; gi <= 5; gi += 2) {
         float a = -d30 * (2 * gi - 1);
         DrawLineEx(Vector2{(float)gcx, (float)gcy},
@@ -44,15 +30,16 @@ void XORgizmo_Draw(AppState* state) {
                    3.0f, WHITE);
     }
 
-    float baseRadOut = BParam_GetValue(&bpSize);
-    float baseHard   = BParam_GetValue(&bpHardness);
-    float baseCrv    = BParam_GetValue(&bpCurvature);
+    // Brush size ring
+    float baseSz  = BParam_GetValue(&bpSize);
+    float baseHard = BParam_GetValue(&bpHardness);
+    float baseCrv  = BParam_GetValue(&bpCurvature);
     Vector2 ctr = {(float)gcx, (float)gcy};
-    float drawRadOut = baseRadOut * state->camera.zoom;
-
+    float drawRadOut = baseSz * state->camera.zoom;
     if (drawRadOut > 2.0f)
         DrawRing(ctr, drawRadOut - 1.5f, drawRadOut + 1.5f, 0, 360, 0, WHITE);
 
+    // Sector reference arcs
     float hardStart  = -GIZMO_HARD_ANG_START;
     float hardEnd    = hardStart - GIZMO_HARD_ANG_SPAN;
     float curveStart = -(GIZMO_HARD_ANG_START + GIZMO_HARD_ANG_SPAN);
@@ -62,20 +49,40 @@ void XORgizmo_Draw(AppState* state) {
     DrawRing(ctr, refR - 1.5f, refR + 1.5f, hardEnd,  hardStart,  0, WHITE);
     DrawRing(ctr, refR - 1.5f, refR + 1.5f, curveEnd, curveStart, 0, WHITE);
 
+    // Hardness value arc
     float hRatio = fminf(baseHard, 1.0f);
     float hardMv = GIZMO_FIXED_RADIUS_PX * hRatio;
     if (hardMv > 2.0f)
         DrawRing(ctr, hardMv - 1.5f, hardMv + 1.5f, hardEnd, hardStart, 0, WHITE);
 
+    // Curve value arc
     float curvRatio = fminf(fmaxf(1.0f - baseCrv, 0.0f), 1.0f);
     float curveMv = GIZMO_FIXED_RADIUS_PX * curvRatio;
     if (curveMv > 2.0f)
         DrawRing(ctr, curveMv - 1.5f, curveMv + 1.5f, curveEnd, curveStart, 0, WHITE);
 
+    // Direction arrow (raylib XOR, same as everything else)
+    {
+        float rang = state->currentBrush.Realb.resangle * (float)(M_PI * 2.0 / 360.0);
+        float ax = gcx + ARROW_DRAW_RADIUS * cosf(rang);
+        float ay = gcy + ARROW_DRAW_RADIUS * sinf(rang);
+        DrawLineEx(Vector2{(float)gcx, (float)gcy}, Vector2{ax, ay}, 3.0f, WHITE);
+        float ah = (float)(M_PI * 0.2);
+        float arm = ARROW_ARM_LENGTH;
+        DrawLineEx(Vector2{ax, ay},
+            Vector2{ax + arm * cosf(rang - (float)M_PI + ah), ay + arm * sinf(rang - (float)M_PI + ah)},
+            3.0f, WHITE);
+        DrawLineEx(Vector2{ax, ay},
+            Vector2{ax + arm * cosf(rang - (float)M_PI - ah), ay + arm * sinf(rang - (float)M_PI - ah)},
+            3.0f, WHITE);
+        DrawCircle(gcx, gcy, 3, WHITE);
+        DrawCircle(gcx, gcy, 2, BLACK);
+    }
+
     rlDrawRenderBatchActive();
     glDisable(GL_COLOR_LOGIC_OP);
 
-    // ── ImGui overlay window (arrow + radial input) ───────────────
+    // ── ImGui window: input capture only (no visual draws) ─────────
     ImGui::SetNextWindowPos(ImVec2(vp.x, vp.y));
     ImGui::SetNextWindowSize(ImVec2(vp.width, vp.height));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
@@ -86,9 +93,6 @@ void XORgizmo_Draw(AppState* state) {
         ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoFocusOnAppearing |
         ImGuiWindowFlags_NoBackground);
     ImGui::PopStyleVar(2);
-
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    DrawArrow(dl, ImVec2((float)gcx, (float)gcy), gcx, gcy, state);
 
     ImVec2 mp = ImGui::GetMousePos();
     float dx = mp.x - gcx, dy = mp.y - gcy;
