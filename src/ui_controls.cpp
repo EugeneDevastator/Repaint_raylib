@@ -14,14 +14,12 @@ const char* PenModeNames[PEN_MODE_COUNT] = {
 };
 
 void DualSlider_Init(DualSlider* slider) {
-    slider->clipminF = 0.0f;
-    slider->clipmaxF = 1.0f;
-    slider->jitter = 0.0f;
     slider->DsRange = 0.25f;
     slider->ActivePick = -1;
     slider->orient = 0;
     slider->Soff = 2;
     slider->sliderrad = 2;
+    slider->colorMode = -1;
     slider->gradStart = Color{0, 0, 0, 255};
     slider->gradEnd = Color{255, 255, 255, 255};
     slider->shade = Color{144, 144, 144, 255};
@@ -30,9 +28,6 @@ void DualSlider_Init(DualSlider* slider) {
     slider->showValue = true;
     slider->noGradient = false;
     slider->label[0] = '\0';
-    slider->prevDown[0] = false;
-    slider->prevDown[1] = false;
-    slider->prevDown[2] = false;
 }
 
 
@@ -68,7 +63,11 @@ void BParam_Init(BParam* bp, int id, const char* name, float outMin, float outMa
     DualSlider_Init(&bp->slider);
     bp->defClipmaxF = (outMax > outMin) ? (outDef - outMin) / (outMax - outMin) : 1.0f;
     bp->defClipmaxF = fmaxf(0.0f, fminf(1.0f, bp->defClipmaxF));
-    bp->slider.clipmaxF = bp->defClipmaxF;
+    bp->user.clipminF = 0.0f;
+    bp->user.clipmaxF = bp->defClipmaxF;
+    bp->user.jitter = 0.0f;
+    bp->run.clipminF = 0.0f;
+    bp->run.clipmaxF = bp->defClipmaxF;
     bp->slider.showValue = false;
     bp->iconTex = Texture2D{0};
     bp->iconLoaded = false;
@@ -97,16 +96,21 @@ void BParam_SetIcon(BParam* bp, const char* filename) {
 
 float BParam_GetValue(BParam* bp) {
     float range = bp->outMax - bp->outMin;
-    return bp->slider.clipmaxF * range + bp->outMin;
+    return bp->user.clipmaxF * range + bp->outMin;
 }
 
 void BParam_SetValue(BParam* bp, float val) {
     float range = bp->outMax - bp->outMin;
     if (range > 0.0001f)
-        bp->slider.clipmaxF = (val - bp->outMin) / range;
+        bp->user.clipmaxF = (val - bp->outMin) / range;
     else
-        bp->slider.clipmaxF = 1.0f;
-    bp->slider.clipmaxF = fmaxf(0.0f, fminf(1.0f, bp->slider.clipmaxF));
+        bp->user.clipmaxF = 1.0f;
+    bp->user.clipmaxF = fmaxf(0.0f, fminf(1.0f, bp->user.clipmaxF));
+}
+
+void BParam_SnapRunState(BParam* bp) {
+    bp->run.clipminF = bp->user.clipminF;
+    bp->run.clipmaxF = bp->user.clipmaxF;
 }
 
 

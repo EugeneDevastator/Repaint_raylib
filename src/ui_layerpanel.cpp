@@ -70,28 +70,28 @@ void LayerPanel_Draw(AppState* state) {
 
     float aw = ImGui::GetContentRegionAvail().x;
     float bw = (aw - 9.0f) / 4.0f;
-    if (ImGui::Button("+Add", ImVec2(bw, 28))) {
+    if (ImGui::Button("+Add", ImVec2(bw, 36))) {
         d_LAction lact = {};
         lact.ActID = laAdd;
         lact.layer = (int16_t)(state->activeLayer + 1);
         CommitLayerOp(state, &lact);
     }
     ImGui::SameLine();
-    if (ImGui::Button("Dup", ImVec2(bw, 28)) && layerCount < 64) {
+    if (ImGui::Button("Dup", ImVec2(bw, 36)) && layerCount < 64) {
         d_LAction lact = {};
         lact.ActID = laDup;
         lact.layer = (int16_t)state->activeLayer;
         CommitLayerOp(state, &lact);
     }
     ImGui::SameLine();
-    if (ImGui::Button("Drop", ImVec2(bw, 28)) && state->activeLayer > 0) {
+    if (ImGui::Button("Drop", ImVec2(bw, 36)) && state->activeLayer > 0) {
         d_LAction lact = {};
         lact.ActID = laDrop;
         lact.layer = (int16_t)state->activeLayer;
         CommitLayerOp(state, &lact);
     }
     ImGui::SameLine();
-    if (ImGui::Button("Del", ImVec2(bw, 28)) && layerCount > 1) {
+    if (ImGui::Button("Del", ImVec2(bw, 36)) && layerCount > 1) {
         d_LAction lact = {};
         lact.ActID = laDel;
         lact.layer = (int16_t)state->activeLayer;

@@ -3,6 +3,58 @@
 
 extern bool quickPanelShow;
 
+/* ── Per-dab jitter: adds random offset to each dab in the array ────────
+ *   Uses one rand() per dab, scaled by each BParam's jitter setting.
+ *   Base brush was computed without jitter so the interpolation is preserved.
+ *   For color, the dab's interpolated RGB is converted to HSL, jittered,
+ *   then converted back, so per-dab jitter is on top of the segment's
+ *   interpolated base.
+ */
+static void PerDabJitter(InputEvent* dabs, int n) {
+    for (int i = 0; i < n; i++) {
+        float dr = ((float)rand() / (float)RAND_MAX) * 2.0f - 1.0f;
+        d_RealBrush& b = dabs[i].brush;
+
+        { float d = dr * 2.0f * bpSize.user.jitter * (bpSize.outMax - bpSize.outMin);
+          b.rad_out += d; b.rad_out = fmaxf(bpSize.outMin, fminf(bpSize.outMax, b.rad_out)); }
+
+        { float h = b.rad_in / fmaxf(b.rad_out, 0.001f);
+          float d = dr * 2.0f * bpHardness.user.jitter * (bpHardness.outMax - bpHardness.outMin);
+          h += d; h = fmaxf(0.0f, fminf(1.0f, h)); b.rad_in = b.rad_out * h; }
+
+        { float d = dr * 2.0f * bpCurvature.user.jitter * (bpCurvature.outMax - bpCurvature.outMin);
+          b.crv += d; b.crv = fmaxf(0.0f, fminf(1.0f, b.crv)); }
+
+        { float d = dr * 2.0f * bpOpacity.user.jitter * (bpOpacity.outMax - bpOpacity.outMin);
+          b.opacity += d; b.opacity = fmaxf(0.0f, fminf(1.0f, b.opacity)); }
+
+        { float d = dr * 2.0f * bpScaleRel.user.jitter * (bpScaleRel.outMax - bpScaleRel.outMin);
+          b.x2y += d; b.x2y = fmaxf(0.0f, fminf(1.0f, b.x2y)); }
+
+        { float h, s, l; RGBToHSL(b.col, h, s, l);
+          h += dr * 2.0f * bpQuickHue.user.jitter * (bpQuickHue.outMax - bpQuickHue.outMin);
+          s += dr * 2.0f * bpQuickSat.user.jitter * (bpQuickSat.outMax - bpQuickSat.outMin);
+          l += dr * 2.0f * bpQuickLit.user.jitter * (bpQuickLit.outMax - bpQuickLit.outMin);
+          h = fmodf(h, 1.0f); if (h < 0) h += 1.0f;
+          s = fmaxf(0.0f, fminf(1.0f, s)); l = fmaxf(0.0f, fminf(1.0f, l));
+          b.col = HSLToRGB(h, s, l); }
+
+        { float d = dr * 2.0f * bpCloneOpacity.user.jitter * (bpCloneOpacity.outMax - bpCloneOpacity.outMin);
+          b.cop += d; b.cop = fmaxf(0.0f, fminf(1.0f, b.cop)); }
+    }
+}
+
+/* ── Compute base modulated value without jitter — maps cpar through the
+ *    clip range and output range, but with the random term fixed to zero. */
+static inline float BaseModVal(const BParam& bp, float cpar) {
+    float rng = bp.run.clipmaxF - bp.run.clipminF;
+    float base = cpar * rng + bp.run.clipminF;
+    base = fminf(fmaxf(base, 0.0f), 1.0f);
+    return base * (bp.outMax - bp.outMin) + bp.outMin;
+}
+
+extern bool quickPanelShow;
+
 void Viewport_Init(Viewport* vp, Rectangle bounds) {
     vp->bounds = bounds;
     vp->strokeLen = 0;
@@ -112,9 +164,9 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             if (colorHue < 0.0f) colorHue += 1.0f; else if (colorHue > 1.0f) colorHue -= 1.0f;
             colorSat += (tS - colorSat) * spd;
             colorLit += (tL - colorLit) * spd;
-            bpQuickHue.slider.clipmaxF = colorHue;
-            bpQuickSat.slider.clipmaxF = colorSat;
-            bpQuickLit.slider.clipmaxF = colorLit;
+            bpQuickHue.user.clipmaxF = colorHue;
+            bpQuickSat.user.clipmaxF = colorSat;
+            bpQuickLit.user.clipmaxF = colorLit;
         }
     } else {
         g_colorPicking = false;
@@ -145,6 +197,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             g_activeBrushTex = g_defaultBrushTex;
             if (!vp->wasMouseDown) {
                 if (vp->inBounds && leftDown) {
+                    Modulators_SnapRunState();
                     vp->inputFilter.Reset();
                     vp->brushInterp.BeginStroke(state->currentBrush, tx, ty);
 
@@ -197,16 +250,17 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                 vp->prevVel = sp.velocity;
 
                 d_RealBrush targetBr = state->currentBrush.Realb;
-                targetBr.rad_out  = GetModValFor(&bpSize,       g_modPars.Pars[bpSize.penMode]);
-                float hVal        = GetModValFor(&bpHardness,   g_modPars.Pars[bpHardness.penMode]);
+                targetBr.rad_out  = BaseModVal(bpSize,       g_modPars.Pars[bpSize.penMode]);
+                float hVal        = BaseModVal(bpHardness,   g_modPars.Pars[bpHardness.penMode]);
                 targetBr.rad_in   = targetBr.rad_out * hVal;
-                targetBr.crv      = GetModValFor(&bpCurvature,  g_modPars.Pars[bpCurvature.penMode]);
-                targetBr.opacity  = GetModValFor(&bpOpacity,    g_modPars.Pars[bpOpacity.penMode]);
-                targetBr.resangle = fmodf(state->initialAngle + GetModValFor(&bpAngle, g_modPars.Pars[bpAngle.penMode]), 360.0f);
-                targetBr.x2y      = GetModValFor(&bpScaleRel,   g_modPars.Pars[bpScaleRel.penMode]);
+                targetBr.crv      = BaseModVal(bpCurvature,  g_modPars.Pars[bpCurvature.penMode]);
+                targetBr.opacity  = BaseModVal(bpOpacity,    g_modPars.Pars[bpOpacity.penMode]);
+                targetBr.resangle = fmodf(state->initialAngle + BaseModVal(bpAngle, g_modPars.Pars[bpAngle.penMode]), 360.0f);
+                targetBr.x2y      = BaseModVal(bpScaleRel,   g_modPars.Pars[bpScaleRel.penMode]);
                 float spacingVal  = BParam_GetValue(&bpSpacing);
                 float spacing = fmaxf(state->currentBrush.Realb.rad_out * spacingVal * spacingVal, 1.0f);
                 int n = vp->brushInterp.FeedStrokePoint(sp, targetBr, dabs, 1024, spacing, state->mode);
+                PerDabJitter(dabs, n);
                 d_Brush tb; memset(&tb, 0, sizeof(tb));
                 for (int i = 0; i < n; i++) {
                     tb.Realb = dabs[i].brush;
@@ -230,6 +284,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         if (active >= 0 && active < state->texCount && state->layerRTs[active].id > 0) {
             if (state->mode == eBrush || state->mode == eSmudge) {
                 if (!vp->wasMouseDown) {
+                    Modulators_SnapRunState();
                     vp->inputFilter.Reset();
                     vp->inputFilter.Feed(canvasPos.x, canvasPos.y, GetTime());
                     vp->brushInterp.BeginStroke(state->currentBrush, canvasPos.x, canvasPos.y);
@@ -297,28 +352,27 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     vp->prevSegLen = segLen;
                     vp->prevVel = sp.velocity;
 
-                    // ── Build target brush using all modulators ──
+                    // ── Build target brush (no jitter) using all modulators ──
                     d_RealBrush targetBr = state->currentBrush.Realb;
-                    targetBr.rad_out  = GetModValFor(&bpSize,       g_modPars.Pars[bpSize.penMode]);
-                    float hVal        = GetModValFor(&bpHardness,   g_modPars.Pars[bpHardness.penMode]);
+                    targetBr.rad_out  = BaseModVal(bpSize,       g_modPars.Pars[bpSize.penMode]);
+                    float hVal        = BaseModVal(bpHardness,   g_modPars.Pars[bpHardness.penMode]);
                     targetBr.rad_in   = targetBr.rad_out * hVal;
-                    targetBr.crv      = GetModValFor(&bpCurvature,  g_modPars.Pars[bpCurvature.penMode]);
-                    targetBr.opacity  = GetModValFor(&bpOpacity,    g_modPars.Pars[bpOpacity.penMode]);
-                    targetBr.resangle = fmodf(state->initialAngle + GetModValFor(&bpAngle, g_modPars.Pars[bpAngle.penMode]), 360.0f);
-                    targetBr.x2y      = GetModValFor(&bpScaleRel,   g_modPars.Pars[bpScaleRel.penMode]);
-                    float colH        = GetModValFor(&bpQuickHue,   g_modPars.Pars[bpQuickHue.penMode]);
-                    float colS        = GetModValFor(&bpQuickSat,   g_modPars.Pars[bpQuickSat.penMode]);
-                    float colL        = GetModValFor(&bpQuickLit,   g_modPars.Pars[bpQuickLit.penMode]);
-                    targetBr.col      = HSLToRGB(colH, colS, colL);
-                    if (state->mode == eSmudge)
-                        targetBr.cop = GetModValFor(&bpCloneOpacity, g_modPars.Pars[bpCloneOpacity.penMode]);
-                    else
-                        targetBr.cop = 0.0f;
+                    targetBr.crv      = BaseModVal(bpCurvature,  g_modPars.Pars[bpCurvature.penMode]);
+                    targetBr.opacity  = BaseModVal(bpOpacity,    g_modPars.Pars[bpOpacity.penMode]);
+                    targetBr.resangle = fmodf(state->initialAngle + BaseModVal(bpAngle, g_modPars.Pars[bpAngle.penMode]), 360.0f);
+                    targetBr.x2y      = BaseModVal(bpScaleRel,   g_modPars.Pars[bpScaleRel.penMode]);
+                    targetBr.col      = HSLToRGB(
+                        BaseModVal(bpQuickHue,   g_modPars.Pars[bpQuickHue.penMode]),
+                        BaseModVal(bpQuickSat,   g_modPars.Pars[bpQuickSat.penMode]),
+                        BaseModVal(bpQuickLit,   g_modPars.Pars[bpQuickLit.penMode]));
+                    targetBr.cop = (state->mode == eSmudge)
+                        ? BaseModVal(bpCloneOpacity, g_modPars.Pars[bpCloneOpacity.penMode]) : 0.0f;
 
                     // Feed through BrushInterpolator → dabs
                     float spacingVal = BParam_GetValue(&bpSpacing);
                     float spacing = fmaxf(state->currentBrush.Realb.rad_out * spacingVal * spacingVal, 1.0f);
                     int n = vp->brushInterp.FeedStrokePoint(sp, targetBr, dabs, 1024, spacing, state->mode);
+                    PerDabJitter(dabs, n);
                     for (int i = 0; i < n; i++) {
                         if (vp->broker) vp->broker->on_input(dabs[i]);
                         if (vp->strokeLen < MAX_STROKE_PTS)

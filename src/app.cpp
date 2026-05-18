@@ -91,9 +91,14 @@ void UpdateUI(AppState* state) {
     state->currentBrush.Realb.cop = (state->mode == eSmudge)
         ? GetModVal(&bpCloneOpacity) : 0.0f;
 
-    colorHue = bpQuickHue.slider.clipmaxF;
-    colorSat = bpQuickSat.slider.clipmaxF;
-    colorLit = bpQuickLit.slider.clipmaxF;
+    state->currentBrush.Realb.texScale   = GetModVal(&bpTexScale);
+    state->currentBrush.Realb.texFeather = GetModVal(&bpTexFeather);
+    state->currentBrush.Realb.texThresh  = GetModVal(&bpTexThresh);
+    state->currentBrush.Realb.texBlendVal = GetModVal(&bpTexBlendVal);
+
+    colorHue = bpQuickHue.user.clipmaxF;
+    colorSat = bpQuickSat.user.clipmaxF;
+    colorLit = bpQuickLit.user.clipmaxF;
     // Apply pen mode modulation to color channels for the brush
     float colH = GetModVal(&bpQuickHue);
     float colS = GetModVal(&bpQuickSat);

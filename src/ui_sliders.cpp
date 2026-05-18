@@ -117,105 +117,119 @@ static void DrawSliderCore(ImDrawList* dl, int x, int y, int length, int thickne
     drawGrabber(clipmaxF, IM_COL32(255, 255, 255, 255), IM_COL32(200, 200, 200, 255), IM_COL32(80, 80, 80, 255));
 }
 
-/* ── DrawBParamSlider (horizontal — full widget) ──────────────────────── */
+/* ── PenMode popup helper (shared by both orientations) ────────────────── */
 
-void DrawBParamSlider(BParam* bp) {
-    float ctrlH = 28.0f;
-    float spacing = 4.0f;
-    int orient = 0;
+static void PenModePopup(BParam* bp, const char* popupName) {
+    if (ImGui::BeginPopup(popupName, ImGuiWindowFlags_NoScrollbar)) {
+        for (int p = 0; p < PEN_MODE_COUNT; p++) {
+            Texture2D itex = GetPenModeIcon(p);
+            if (itex.id > 0) {
+                ImGui::Image((ImTextureID)(intptr_t)itex.id, ImVec2(16, 16));
+                ImGui::SameLine();
+            }
+            if (ImGui::Selectable(PenModeNames[p], bp->penMode == p))
+                bp->penMode = p;
+        }
+        ImGui::EndPopup();
+    }
+}
 
-    ImGui::PushID(bp->id);
+/* ── PenMode icon button (shared by both orientations) ─────────────────── */
 
-    // ── Icon ──────────────────────────────────────────────────────────
-    if (bp->iconLoaded)
-        ImGui::Image((ImTextureID)(intptr_t)bp->iconTex.id, ImVec2(ctrlH, ctrlH));
-    else
-        ImGui::Dummy(ImVec2(ctrlH, ctrlH));
+static void PenModeButton(BParam* bp, float btnW, float btnH, const char* popupName) {
+    Texture2D pt = GetPenModeIcon(bp->penMode);
+    ImTextureID penTid = (pt.id > 0) ? (ImTextureID)(intptr_t)pt.id : 0;
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.85f, 0.85f, 0.85f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.75f, 0.75f, 0.75f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.65f, 0.65f, 0.65f, 1.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+    if (penTid) {
+        if (ImGui::ImageButton("##pm", penTid, ImVec2(btnW, btnH)))
+            ImGui::OpenPopup(popupName);
+    } else {
+        if (ImGui::Button("...", ImVec2(btnW, btnH)))
+            ImGui::OpenPopup(popupName);
+    }
+    ImGui::PopStyleColor(3);
+    ImGui::PopStyleVar();
+}
 
-    ImGui::SameLine(0, spacing);
-
-    // ── Slider (expanding) ────────────────────────────────────────────
-    float avail = ImGui::GetContentRegionAvail().x;
-    float btnW = ctrlH;
-    float sliderW = avail - btnW - spacing;
-    if (sliderW < 10.0f) sliderW = 10.0f;
-
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    ImVec2 pos = ImGui::GetCursorScreenPos();
-
-    DrawSliderCore(dl, (int)pos.x, (int)pos.y, (int)sliderW, (int)ctrlH,
-        orient,
-        bp->slider.clipminF, bp->slider.clipmaxF, bp->slider.jitter,
-        bp->slider.gradStart, bp->slider.gradEnd, -1, bp);
-
-    ImRect bb(pos, ImVec2(pos.x + sliderW, pos.y + ctrlH));
-
-    // ── Slider mouse interaction (local per-button tracking via ImGui item state) ─
-    ImGui::InvisibleButton("##sl", bb.GetSize(),
+/* ── Slider interaction helper — draws 3 separate InvisibleButtons ───────
+ *   Left→clipmaxF, Right→clipminF, Middle→jitter (never cross-talk).
+ */
+static void SliderInteraction(const ImRect& bb, int orient, BParam* bp) {
+    ImGui::SetCursorScreenPos(bb.Min);
+    ImGui::InvisibleButton("##sb", bb.GetSize(),
         ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle);
     if (ImGui::IsItemActive()) {
-        float mx = (ImGui::GetMousePos().x - bb.Min.x) / (bb.Max.x - bb.Min.x);
-        mx = fminf(fmaxf(mx, 0.0f), 1.0f);
+        float v;
+        if (orient == 0)
+            v = (ImGui::GetMousePos().x - bb.Min.x) / (bb.Max.x - bb.Min.x);
+        else
+            v = 1.0f - (ImGui::GetMousePos().y - bb.Min.y) / (bb.Max.y - bb.Min.y);
+        v = fminf(fmaxf(v, 0.0f), 1.0f);
         if (ImGui::IsMouseDown(0))
-            bp->slider.clipmaxF = mx;
+            bp->user.clipmaxF = v;
         else if (ImGui::IsMouseDown(1))
-            bp->slider.clipminF = mx;
+            bp->user.clipminF = v;
         else if (ImGui::IsMouseDown(2))
-            bp->slider.jitter = mx;
+            bp->user.jitter = v;
     }
-
     if (ImGui::IsItemHovered() && bp->tooltip[0])
         ImGui::SetTooltip("%s", bp->tooltip);
+    ImGui::SetCursorScreenPos(ImVec2(bb.Max.x, bb.Min.y));
+}
 
-    ImGui::SameLine(0, spacing);
+/* ── DrawSlider — horizontal full widget ─────────────────────────────────
+ *   orient=0: [icon] [==slider==] [penMode▼]
+ *   orient=1: slider bar only (caller positions cursor for pixel-perfect layout).
+ *            Pass thick (bar width) and len (bar height) for orient=1.
+ *   3 separate InvisibleButtons guarantee left→clipmaxF, right→clipminF,
+ *   middle→jitter never cross-talk.
+ */
 
-    // ── Pen mode button (right of slider) ─────────────────────────────
-    {
-        Texture2D pt = GetPenModeIcon(bp->penMode);
-        ImTextureID penTid = (pt.id > 0) ? (ImTextureID)(intptr_t)pt.id : 0;
+void DrawSlider(BParam* bp, int orient, float thick, float len) {
+    ImGui::PushID(bp->id);
 
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.85f, 0.85f, 0.85f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.75f, 0.75f, 0.75f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.65f, 0.65f, 0.65f, 1.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+    if (orient == 0) {
+        float ctrlH = 28.0f, spacing = 4.0f;
 
-        char pname[32];
-        snprintf(pname, sizeof(pname), "penpop_%d", bp->id);
+        if (bp->iconLoaded)
+            ImGui::Image((ImTextureID)(intptr_t)bp->iconTex.id, ImVec2(ctrlH, ctrlH));
+        else
+            ImGui::Dummy(ImVec2(ctrlH, ctrlH));
+        ImGui::SameLine(0, spacing);
 
-        if (penTid) {
-            if (ImGui::ImageButton("##pm", penTid, ImVec2(btnW, ctrlH)))
-                ImGui::OpenPopup(pname);
-        } else {
-            if (ImGui::Button("...", ImVec2(btnW, ctrlH)))
-                ImGui::OpenPopup(pname);
-        }
-        ImGui::PopStyleColor(3);
-        ImGui::PopStyleVar();
+        float avail = ImGui::GetContentRegionAvail().x;
+        float btnW = ctrlH;
+        float sliderW = avail > btnW + spacing + 10.0f ? avail - btnW - spacing : 10.0f;
 
-        if (ImGui::BeginPopup(pname)) {
-            for (int p = 0; p < PEN_MODE_COUNT; p++) {
-                Texture2D itex = GetPenModeIcon(p);
-                if (itex.id > 0) {
-                    ImGui::Image((ImTextureID)(intptr_t)itex.id, ImVec2(16, 16));
-                    ImGui::SameLine();
-                }
-                if (ImGui::Selectable(PenModeNames[p], bp->penMode == p))
-                    bp->penMode = p;
-            }
-            ImGui::EndPopup();
-        }
+        ImVec2 sPos = ImGui::GetCursorScreenPos();
+        ImRect sBB(sPos, ImVec2(sPos.x + sliderW, sPos.y + ctrlH));
+
+        DrawSliderCore(ImGui::GetWindowDrawList(), (int)sPos.x, (int)sPos.y, (int)sliderW, (int)ctrlH, 0,
+            bp->user.clipminF, bp->user.clipmaxF, bp->user.jitter,
+            bp->slider.gradStart, bp->slider.gradEnd, bp->slider.colorMode, bp);
+        SliderInteraction(sBB, 0, bp);
+
+        ImGui::SameLine(0, spacing);
+        char pname[32]; snprintf(pname, sizeof(pname), "hpen_%d", bp->id);
+        PenModeButton(bp, btnW, ctrlH, pname);
+        PenModePopup(bp, pname);
+
+    } else {
+        // orient=1 — slider bar only, caller positions cursor
+        float sw = thick > 0 ? thick : fminf(ImGui::GetContentRegionAvail().x, 40.0f);
+        float sh = len  > 0 ? len  : 60.0f;
+
+        ImVec2 sPos = ImGui::GetCursorScreenPos();
+        ImRect sBB(sPos, ImVec2(sPos.x + sw, sPos.y + sh));
+
+        DrawSliderCore(ImGui::GetWindowDrawList(), (int)sPos.x, (int)sPos.y, (int)sh, (int)sw, 1,
+            bp->user.clipminF, bp->user.clipmaxF, bp->user.jitter,
+            bp->slider.gradStart, bp->slider.gradEnd, bp->slider.colorMode, bp);
+        SliderInteraction(sBB, 1, bp);
     }
 
     ImGui::PopID();
-}
-
-/* ── DrawSliderVertical (vertical slider for quick panel) ────────────── */
-
-void DrawSliderVertical(ImDrawList* dl, BParam* bp, int x, int y, int w, int h,
-    float val, int colorMode)
-{
-    // For orient=1: length = h (vertical extent), thickness = w (horizontal extent)
-    DrawSliderCore(dl, x, y, h, w, 1,
-        bp->slider.clipminF, bp->slider.clipmaxF, bp->slider.jitter,
-        bp->slider.gradStart, bp->slider.gradEnd, colorMode, bp);
 }

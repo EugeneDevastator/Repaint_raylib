@@ -21,20 +21,27 @@ BParam bpScaleRel;
 float g_velocity = 0.0f;
 d_StrokePars g_modPars;
 
+static float ApplyBP(float clipminF, float clipmaxF, float jitter,
+                    float cpar, float outMin, float outMax) {
+    float rng = clipmaxF - clipminF;
+    float respar = cpar * rng + clipminF;
+    float randm = (((float)rand() / (float)RAND_MAX) - 0.5f) * 2.0f * jitter;
+    float res = fminf(fmaxf(respar + randm, 0.0f), 1.0f);
+    return res * (outMax - outMin) + outMin;
+}
+
 float GetModVal(BParam* bp) {
     float cpar = 1.0f;
     int pm = bp->penMode;
     if (pm >= 0 && pm < csSTOP)
         cpar = g_modPars.Pars[pm];
-    return GetModValFor(bp, cpar);
+    return ApplyBP(bp->user.clipminF, bp->user.clipmaxF, bp->user.jitter,
+                   cpar, bp->outMin, bp->outMax);
 }
 
 float GetModValFor(BParam* bp, float cpar) {
-    float rng = bp->slider.clipmaxF - bp->slider.clipminF;
-    float respar = cpar * rng + bp->slider.clipminF;
-    float randm = (((float)rand() / (float)RAND_MAX) - 0.5f) * 2.0f * bp->slider.jitter;
-    float res = fminf(fmaxf(respar + randm, 0.0f), 1.0f);
-    return res * (bp->outMax - bp->outMin) + bp->outMin;
+    return ApplyBP(bp->run.clipminF, bp->run.clipmaxF, bp->user.jitter,
+                   cpar, bp->outMin, bp->outMax);
 }
 
 void Modulators_Init(void) {
@@ -48,7 +55,7 @@ void Modulators_Init(void) {
 
     BParam_Init(&bpHardness, 2, "Hardness", 0.0f, 1.0f, 0.5f);
     strncpy(bpHardness.tooltip, "Transition sharpness from brush center to edge", sizeof(bpHardness.tooltip) - 1);
-    bpHardness.slider.clipmaxF = 0.5f;
+    bpHardness.user.clipmaxF = 0.5f;
     BParam_SetIcon(&bpHardness, "ctlrrel");
 
     BParam_Init(&bpSpacing, 3, "Spacing", 0.05f, 2.0f, 0.3f);
@@ -69,17 +76,20 @@ void Modulators_Init(void) {
 
     BParam_Init(&bpQuickHue, 10, "Hue", 0.0f, 1.0f, 0.35f);
     strncpy(bpQuickHue.tooltip, "Color hue (0=red, 0.33=green, 0.66=blue)", sizeof(bpQuickHue.tooltip) - 1);
-    bpQuickHue.slider.clipmaxF = 0.35f;
+    bpQuickHue.user.clipmaxF = 0.35f;
+    bpQuickHue.slider.colorMode = 0;
     BParam_SetIcon(&bpQuickHue, "ctlhue");
 
     BParam_Init(&bpQuickSat, 11, "Sat", 0.0f, 1.0f, 1.0f);
     strncpy(bpQuickSat.tooltip, "Color saturation (0=gray, 1=full)", sizeof(bpQuickSat.tooltip) - 1);
-    bpQuickSat.slider.clipmaxF = 1.0f;
+    bpQuickSat.user.clipmaxF = 1.0f;
+    bpQuickSat.slider.colorMode = 1;
     BParam_SetIcon(&bpQuickSat, "ctlsat");
 
     BParam_Init(&bpQuickLit, 12, "Lit", 0.0f, 1.0f, 0.5f);
     strncpy(bpQuickLit.tooltip, "Color lightness (0=dark, 1=light)", sizeof(bpQuickLit.tooltip) - 1);
-    bpQuickLit.slider.clipmaxF = 0.5f;
+    bpQuickLit.user.clipmaxF = 0.5f;
+    bpQuickLit.slider.colorMode = 2;
     BParam_SetIcon(&bpQuickLit, "ctllit");
 
     BParam_Init(&bpTexScale, 30, "Scale", 0.1f, 5.0f, 1.0f);
@@ -101,7 +111,7 @@ void Modulators_Init(void) {
     BParam_SetIcon(&bpAngle, "ctlang");
 
     BParam_Init(&bpScaleRel, 41, "Proportion", 0.0f, 1.0f, 0.8f);
-    bpScaleRel.slider.clipmaxF = 0.8f;
+    bpScaleRel.user.clipmaxF = 0.8f;
     strncpy(bpScaleRel.tooltip, "Aspect ratio (0.5=tall, 0.8=slight ellipse, 1.0=circle) — set <1.0 to see rotation", sizeof(bpScaleRel.tooltip) - 1);
     BParam_SetIcon(&bpScaleRel, "ctlscalerel");
 
@@ -122,6 +132,21 @@ void Modulators_Init(void) {
     g_modPars.Pars[csYtilt]  = 0.5f;
     g_modPars.Pars[csPressure] = 1.0f;
     g_modPars.Pars[csHVrot]  = 0.5f;
+}
+
+void Modulators_SnapRunState(void) {
+    BParam_SnapRunState(&bpOpacity);
+    BParam_SnapRunState(&bpSize);
+    BParam_SnapRunState(&bpHardness);
+    BParam_SnapRunState(&bpSpacing);
+    BParam_SnapRunState(&bpCurvature);
+    BParam_SnapRunState(&bpScatter);
+    BParam_SnapRunState(&bpCloneOpacity);
+    BParam_SnapRunState(&bpQuickHue);
+    BParam_SnapRunState(&bpQuickSat);
+    BParam_SnapRunState(&bpQuickLit);
+    BParam_SnapRunState(&bpAngle);
+    BParam_SnapRunState(&bpScaleRel);
 }
 
 void Modulators_Shutdown(void) {

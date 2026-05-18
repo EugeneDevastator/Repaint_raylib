@@ -75,9 +75,8 @@ void QuickPanel_DrawUI(AppState* state) {
 
     BParam* bps[6] = {&bpOpacity, &bpSpacing, &bpScatter, &bpQuickHue, &bpQuickSat, &bpQuickLit};
     const char* labels[6] = {"Op", "Sp", "Sc", "H", "S", "L"};
-    int colorModes[6] = {-1, -1, -1, 0, 1, 2};
 
-    ImVec2 mp = ImGui::GetMousePos();
+
     rlSetBlendMode(RL_BLEND_ALPHA);
     for (int i = 0; i < 6; i++) {
         int colX = (i < 3)
@@ -124,27 +123,9 @@ void QuickPanel_DrawUI(AppState* state) {
         }
         ImGui::PopID();
 
-        DrawSliderVertical(dl, bp, colX, slY, dCtrl, (int)dLen, bp->slider.clipmaxF, colorModes[i]);
-
-        ImGui::PushID(400 + i);
-        ImGui::SetCursorScreenPos(ImVec2(colX, slY));
         rlSetBlendMode(RL_BLEND_ALPHA);
-        ImGui::InvisibleButton("##sb", ImVec2(dCtrl, (int)dLen),
-            ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle);
-        if (ImGui::IsItemHovered() && bps[i]->tooltip[0])
-            ImGui::SetTooltip("%s", bps[i]->tooltip);
-        if (ImGui::IsItemActive()) {
-            float t = (mp.y - slY) / (float)dLen;
-            t = fminf(1.0f, fmaxf(0.0f, t));
-            t = 1.0f - t;
-            if (ImGui::IsMouseDown(0))
-                bps[i]->slider.clipmaxF = t;
-            else if (ImGui::IsMouseDown(1))
-                bps[i]->slider.clipminF = t;
-            else if (ImGui::IsMouseDown(2))
-                bps[i]->slider.jitter = t;
-        }
-        ImGui::PopID();
+        ImGui::SetCursorScreenPos(ImVec2(colX, slY));
+        DrawSlider(bp, 1, (float)dCtrl, (float)dLen);
 
         if (bp->iconLoaded) {
             ImTextureID iconTid = (ImTextureID)(intptr_t)bp->iconTex.id;
@@ -165,11 +146,6 @@ void QuickPanel_DrawUI(AppState* state) {
      if (g_showTextureGroup) {
           int texAreaY = iconY + dCtrl + 14;
          int texCount = state->brushTexCount;
-
-         BParam_SetValue(&bpTexScale, state->currentBrush.Realb.texScale);
-         BParam_SetValue(&bpTexFeather, state->currentBrush.Realb.texFeather);
-         BParam_SetValue(&bpTexThresh, state->currentBrush.Realb.texThresh);
-         BParam_SetValue(&bpTexBlendVal, state->currentBrush.Realb.texBlendVal);
 
          float sectionWidth = vp.width / 5.0f;
          float baseX = vp.x + sectionWidth;
@@ -221,20 +197,15 @@ void QuickPanel_DrawUI(AppState* state) {
              ImGui::Spacing();
              ImGui::Separator();
              rlSetBlendMode(RL_BLEND_ALPHA);
-             DrawBParamSlider(&bpTexScale);
-             rlSetBlendMode(RL_BLEND_ALPHA);
-             DrawBParamSlider(&bpTexFeather);
-             rlSetBlendMode(RL_BLEND_ALPHA);
-             DrawBParamSlider(&bpTexThresh);
-             rlSetBlendMode(RL_BLEND_ALPHA);
-             DrawBParamSlider(&bpTexBlendVal);
+              DrawSlider(&bpTexScale, 0);
+              rlSetBlendMode(RL_BLEND_ALPHA);
+              DrawSlider(&bpTexFeather, 0);
+              rlSetBlendMode(RL_BLEND_ALPHA);
+              DrawSlider(&bpTexThresh, 0);
+              rlSetBlendMode(RL_BLEND_ALPHA);
+              DrawSlider(&bpTexBlendVal, 0);
              ImGui::EndChild();
          }
-
-         state->currentBrush.Realb.texScale = BParam_GetValue(&bpTexScale);
-         state->currentBrush.Realb.texFeather = BParam_GetValue(&bpTexFeather);
-         state->currentBrush.Realb.texThresh = BParam_GetValue(&bpTexThresh);
-         state->currentBrush.Realb.texBlendVal = BParam_GetValue(&bpTexBlendVal);
 
           rlSetBlendMode(RL_BLEND_ALPHA);
           float gridX = baseX + 2.0f * sectionWidth;

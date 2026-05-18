@@ -252,18 +252,25 @@ struct LocalBroker : ICommandBroker {
 };
 
 typedef struct {
+    float clipminF, clipmaxF, jitter;
+} BPuserstate;
+
+typedef struct {
+    float clipminF, clipmaxF;
+} BPrunstate;
+
+typedef struct {
     Rectangle rect;
     Rectangle activeRect;
-    float clipminF, clipmaxF, jitter;
     float DsRange;
     int ActivePick;
     int orient;
     int sliderrad, Soff;
+    int colorMode;  // -1 = gradStart→gradEnd gradient, 0 = hue, 1 = sat, 2 = lit
     Color gradStart, gradEnd;
     Color shade, hlite, midtone;
     bool showValue, noGradient;
     char label[48];
-    bool prevDown[3];
 } DualSlider;
 
 typedef struct {
@@ -276,6 +283,8 @@ typedef struct {
     char name[48];
     char tooltip[128];
     int id;
+    BPuserstate user;
+    BPrunstate run;
 } BParam;
 
 
@@ -360,6 +369,7 @@ void UnloadPenIcons(void);
 Texture2D GetPenModeIcon(int mode);
 float BParam_GetValue(BParam* bp);
 void BParam_SetValue(BParam* bp, float val);
+void BParam_SnapRunState(BParam* bp);
 
 Color HSLToRGB(float h, float s, float l);
 void RGBToHSL(Color c, float& h, float& s, float& l);
@@ -422,6 +432,7 @@ extern d_StrokePars g_modPars;
 
 void Modulators_Init(void);
 void Modulators_Shutdown(void);
+void Modulators_SnapRunState(void);
 
 extern const char* PenModeNames[PEN_MODE_COUNT];
 extern Texture2D g_blendModeIcon;
@@ -435,8 +446,7 @@ void LeftPanel_Draw(AppState* state);
 
 struct ImDrawList; // forward decl — repaint.h avoids pulling in imgui.h
 struct ImVec2;
-void DrawBParamSlider(BParam* bp);
-void DrawSliderVertical(ImDrawList* dl, BParam* bp, int x, int y, int w, int h, float val, int colorMode);
+void DrawSlider(BParam* bp, int orient, float thick = 0, float len = 0);
 
 void QuickPanel_DrawUI(AppState* state);
 void QuickPanel_Init(void);

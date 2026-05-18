@@ -63,7 +63,7 @@ void LeftPanel_Draw(AppState* state) {
     // BParam sliders
     BParam* bps[] = {&bpSize, &bpHardness, &bpCurvature, &bpSpacing, &bpOpacity, &bpAngle, &bpScaleRel, &bpCloneOpacity, &bpScatter};
     for (int i = 0; i < 9; i++)
-        DrawBParamSlider(bps[i]);
+        DrawSlider(bps[i], 0);
 
     ImGui::Spacing();
     int preserve = state->currentBrush.Realb.preserveop;
