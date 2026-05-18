@@ -427,6 +427,7 @@ extern BParam bpTexThresh;
 extern BParam bpTexBlendVal;
 extern BParam bpAngle;
 extern BParam bpScaleRel;
+extern BParam bpSizeMul;
 
 extern d_StrokePars g_modPars;
 

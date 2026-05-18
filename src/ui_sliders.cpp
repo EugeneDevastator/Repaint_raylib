@@ -71,7 +71,10 @@ static void DrawSliderCore(ImDrawList* dl, int x, int y, int length, int thickne
     if (bp) {
         float disp = BParam_GetValue(bp);
         char txt[32];
-        if (bp->outMax - bp->outMin >= 1.0f)
+        if (bp == &bpSizeMul) {
+            float remap = disp / 128.0f - 1.0f;
+            snprintf(txt, sizeof(txt), "%.2f", remap);
+        } else if (bp->outMax - bp->outMin >= 1.0f)
             snprintf(txt, sizeof(txt), "%.1f", disp);
         else
             snprintf(txt, sizeof(txt), "%.2f", disp);

@@ -92,12 +92,19 @@ void ViewportHUD_Draw(AppState* state) {
         DrawTextureRec(docBlendTex->texture, srcRect, Vector2{0, 0}, WHITE);
         EndTextureMode();
 
-        // Render brush stamp on top
+        // Render brush stamp on top (final radius × random jitter)
         {
             Texture2D bt = {0};
             if (state->activeBrushTex >= 0 && state->activeBrushTex < state->brushTexCount)
                 bt = state->brushTex[state->activeBrushTex].rt.texture;
-            BrushBlend_ApplyStamp(g_stampStage, &state->currentBrush, bt,
+            d_Brush pb = state->currentBrush;
+            float dr = ((float)rand() / (float)RAND_MAX) * 2.0f - 1.0f;
+            float raw = BParam_GetValue(&bpSizeMul) + dr * 2.0f * bpSizeMul.user.jitter * (bpSizeMul.outMax - bpSizeMul.outMin);
+            raw = fmaxf(bpSizeMul.outMin, fminf(bpSizeMul.outMax, raw));
+            float f = powf(16.0f, raw / 128.0f - 1.0f);
+            pb.Realb.rad_out *= f;
+            pb.Realb.rad_in *= f;
+            BrushBlend_ApplyStamp(g_stampStage, &pb, bt,
                 state->camera.target.x, state->camera.target.y,
                 state->camera.target.x, state->camera.target.y);
         }

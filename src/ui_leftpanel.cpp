@@ -7,7 +7,7 @@
 extern bool layersDirty;
 extern bool panelResizing;
 extern int uiPanelWidth;
-extern BParam bpOpacity, bpSize, bpHardness, bpSpacing, bpCurvature, bpScatter, bpCloneOpacity;
+extern BParam bpOpacity, bpSize, bpHardness, bpSpacing, bpCurvature, bpScatter, bpCloneOpacity, bpSizeMul;
 
 Texture2D g_blendModeIcon = {0};
 bool g_blendIconLoaded = false;
@@ -61,8 +61,8 @@ void LeftPanel_Draw(AppState* state) {
     ImGui::Spacing();
 
     // BParam sliders
-    BParam* bps[] = {&bpSize, &bpHardness, &bpCurvature, &bpSpacing, &bpOpacity, &bpAngle, &bpScaleRel, &bpCloneOpacity, &bpScatter};
-    for (int i = 0; i < 9; i++)
+    BParam* bps[] = {&bpSize, &bpSizeMul, &bpHardness, &bpCurvature, &bpSpacing, &bpOpacity, &bpAngle, &bpScaleRel, &bpCloneOpacity, &bpScatter};
+    for (int i = 0; i < 10; i++)
         DrawSlider(bps[i], 0);
 
     ImGui::Spacing();

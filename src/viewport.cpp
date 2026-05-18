@@ -41,6 +41,11 @@ static void PerDabJitter(InputEvent* dabs, int n) {
 
         { float d = dr * 2.0f * bpCloneOpacity.user.jitter * (bpCloneOpacity.outMax - bpCloneOpacity.outMin);
           b.cop += d; b.cop = fmaxf(0.0f, fminf(1.0f, b.cop)); }
+
+        { float raw = BParam_GetValue(&bpSizeMul) + dr * 2.0f * bpSizeMul.user.jitter * (bpSizeMul.outMax - bpSizeMul.outMin);
+          raw = fmaxf(bpSizeMul.outMin, fminf(bpSizeMul.outMax, raw));
+          float f = powf(16.0f, raw / 128.0f - 1.0f);
+          b.rad_out *= f; b.rad_in *= f; }
     }
 }
 
@@ -209,6 +214,8 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
 
                     d_Brush tb; memset(&tb, 0, sizeof(tb));
                     tb.Realb = state->currentBrush.Realb;
+                    { float smf = powf(16.0f, BParam_GetValue(&bpSizeMul) / 128.0f - 1.0f);
+                      tb.Realb.rad_out *= smf; tb.Realb.rad_in *= smf; }
                     tb.Realb.opacity = 1.0f;
                     BrushBlend_ApplyStamp(bt->rt, &tb, g_activeBrushTex, tx, ty, tx, ty);
                     vp->wasMouseDown = true;
@@ -249,6 +256,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                 vp->prevSegLen = segLen;
                 vp->prevVel = sp.velocity;
 
+                float sizeMulFactor = powf(16.0f, BParam_GetValue(&bpSizeMul) / 128.0f - 1.0f);
                 d_RealBrush targetBr = state->currentBrush.Realb;
                 targetBr.rad_out  = BaseModVal(bpSize,       g_modPars.Pars[bpSize.penMode]);
                 float hVal        = BaseModVal(bpHardness,   g_modPars.Pars[bpHardness.penMode]);
@@ -258,7 +266,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                 targetBr.resangle = fmodf(state->initialAngle + BaseModVal(bpAngle, g_modPars.Pars[bpAngle.penMode]), 360.0f);
                 targetBr.x2y      = BaseModVal(bpScaleRel,   g_modPars.Pars[bpScaleRel.penMode]);
                 float spacingVal  = BParam_GetValue(&bpSpacing);
-                float spacing = fmaxf(state->currentBrush.Realb.rad_out * spacingVal * spacingVal, 1.0f);
+                float spacing = fmaxf(state->currentBrush.Realb.rad_out * sizeMulFactor * spacingVal * spacingVal, 1.0f);
                 int n = vp->brushInterp.FeedStrokePoint(sp, targetBr, dabs, 1024, spacing, state->mode);
                 PerDabJitter(dabs, n);
                 d_Brush tb; memset(&tb, 0, sizeof(tb));
@@ -299,6 +307,8 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     // First dab: use current brush directly (no modulation — no segment to measure)
                     if (vp->broker) {
                         d_RealBrush br = state->currentBrush.Realb;
+                        { float smf = powf(16.0f, BParam_GetValue(&bpSizeMul) / 128.0f - 1.0f);
+                          br.rad_out *= smf; br.rad_in *= smf; }
                         InputEvent ev = {canvasPos.x, canvasPos.y, canvasPos.x, canvasPos.y, br};
                         vp->broker->on_input(ev);
                     }
@@ -353,6 +363,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     vp->prevVel = sp.velocity;
 
                     // ── Build target brush (no jitter) using all modulators ──
+                    float sizeMulFactor = powf(16.0f, BParam_GetValue(&bpSizeMul) / 128.0f - 1.0f);
                     d_RealBrush targetBr = state->currentBrush.Realb;
                     targetBr.rad_out  = BaseModVal(bpSize,       g_modPars.Pars[bpSize.penMode]);
                     float hVal        = BaseModVal(bpHardness,   g_modPars.Pars[bpHardness.penMode]);
@@ -370,7 +381,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
 
                     // Feed through BrushInterpolator → dabs
                     float spacingVal = BParam_GetValue(&bpSpacing);
-                    float spacing = fmaxf(state->currentBrush.Realb.rad_out * spacingVal * spacingVal, 1.0f);
+                    float spacing = fmaxf(state->currentBrush.Realb.rad_out * sizeMulFactor * spacingVal * spacingVal, 1.0f);
                     int n = vp->brushInterp.FeedStrokePoint(sp, targetBr, dabs, 1024, spacing, state->mode);
                     PerDabJitter(dabs, n);
                     for (int i = 0; i < n; i++) {
@@ -386,8 +397,10 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                 if (spacing < 2.0f) spacing = 2.0f;
                 if (!vp->wasMouseDown) {
                     if (vp->broker) {
-                        InputEvent ev = {canvasPos.x, canvasPos.y, canvasPos.x, canvasPos.y,
-                            state->currentBrush.Realb};
+                        d_RealBrush br = state->currentBrush.Realb;
+                        { float smf = powf(16.0f, BParam_GetValue(&bpSizeMul) / 128.0f - 1.0f);
+                          br.rad_out *= smf; br.rad_in *= smf; }
+                        InputEvent ev = {canvasPos.x, canvasPos.y, canvasPos.x, canvasPos.y, br};
                         vp->broker->on_input(ev);
                     }
                     vp->wasMouseDown = true;
