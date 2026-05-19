@@ -171,7 +171,21 @@ void BrushBlend_ApplyStamp(
 
     int pidx = pool_index(bucket);
     if (geoPool[pidx].id == 0) {
-        geoPool[pidx] = LoadRenderTexture(bucket, bucket);
+        // 16-bit float RG — preserves sub-pixel UV precision
+        unsigned int fboId = rlLoadFramebuffer();
+        rlEnableFramebuffer(fboId);
+        unsigned int texId = rlLoadTexture(NULL, bucket, bucket, RL_PIXELFORMAT_UNCOMPRESSED_R16G16B16A16, 1);
+        rlFramebufferAttach(fboId, texId, RL_ATTACHMENT_COLOR_CHANNEL0, RL_ATTACHMENT_TEXTURE2D, 0);
+        rlDisableFramebuffer();
+
+        RenderTexture2D rt = {0};
+        rt.id              = fboId;
+        rt.texture.id      = texId;
+        rt.texture.width   = bucket;
+        rt.texture.height  = bucket;
+        rt.texture.format  = RL_PIXELFORMAT_UNCOMPRESSED_R16G16B16A16;
+        rt.texture.mipmaps = 1;
+        geoPool[pidx]      = rt;
     }
     RenderTexture2D* geoRT = &geoPool[pidx];
 
