@@ -1,9 +1,30 @@
-=== batch 1
+=== batch 1 ===
 1. draw entire segment in brush preview - starting from center to the right. - should use spacing and all other values
 2. add tool power slider - chec qt implementation for it, and forward to shader.
-3. 
+3. use project icon from qt project
+4. add two erase modes:
+- erase - just erases alpha
+- erase - color, same tihng but still tries to apply color to semitransparent regions, using gamma based formula.
+5. flip gradients in vertical sliders.
+6. when brush radius becomes smaller than 1px - clamp it to 1 px and reduce its opacity instead. - check qt implementation for small brush sizes.
+7.
+8. add button with small window which will reflect recent changes, so that ai can write changes into txt file near exe file, and user can view them in app.	
+9. for layer - add few sliders similar to opacity -
+to regulate layer treshold and feather as well.
+by default feather is max, so it will work like usual, regarldess of treshold value.
+										
+== do user test here ==
+== batch 2
+implement perspective distortion slider - which should modify how geouv quad is rendered. for now let it always rotate along y, before rotating in-plane.
+== batch 3 ==
+.better interpolation - add spline interpolation to segments, that can be defined few parameters so that we can easier transfer segments over network (dont implement network part yet). this means we cant show stroke right away and need few segments - thats ok.
+. add few configuration tresholds that will define
+b. when angle is considered hard and should break segment smoothing.
 
-=== batch 2
+
+=== tablet batch ===
 . implement tablet - wintab for windows, libinput on linux. Windows: GetPointerPenInfo (zero deps, built into OS). 
 . implement pressure tablet mode for sliders - port and update parameter application architecture
+. make it so that tablet implementation never touches raylib - check how network is decoupled and do it same way.
+
 . ===

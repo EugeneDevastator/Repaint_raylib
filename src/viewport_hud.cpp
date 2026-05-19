@@ -92,21 +92,47 @@ void ViewportHUD_Draw(AppState* state) {
         DrawTextureRec(docBlendTex->texture, srcRect, Vector2{0, 0}, WHITE);
         EndTextureMode();
 
-        // Render brush stamp on top (final radius × random jitter)
+        // Render brush stamp on top — segment preview matching real spacing formula
         {
             Texture2D bt = {0};
             if (state->activeBrushTex >= 0 && state->activeBrushTex < state->brushTexCount)
                 bt = state->brushTex[state->activeBrushTex].rt.texture;
             d_Brush pb = state->currentBrush;
-            float dr = ((float)rand() / (float)RAND_MAX) * 2.0f - 1.0f;
-            float raw = BParam_GetValue(&bpSizeMul) + dr * 2.0f * bpSizeMul.user.jitter * (bpSizeMul.outMax - bpSizeMul.outMin);
-            raw = fmaxf(bpSizeMul.outMin, fminf(bpSizeMul.outMax, raw));
-            float f = powf(16.0f, raw / 128.0f - 1.0f);
-            pb.Realb.rad_out *= f;
-            pb.Realb.rad_in *= f;
-            BrushBlend_ApplyStamp(g_stampStage, &pb, bt,
-                state->camera.target.x, state->camera.target.y,
-                state->camera.target.x, state->camera.target.y);
+
+            float cx = state->camera.target.x;
+            float cy = state->camera.target.y;
+
+            float spacingVal = GetModVal(&bpSpacing);
+            float sizeMulFactor = powf(16.0f, BParam_GetValue(&bpSizeMul) / 128.0f - 1.0f);
+            float effectiveRadOut = pb.Realb.rad_out * sizeMulFactor;
+            float spacing = fmaxf(effectiveRadOut * spacingVal * spacingVal, 1.0f);
+
+            float maxSegLen = 200.0f;
+            float segLen = fminf(effectiveRadOut * 8.0f, maxSegLen);
+            if (segLen < spacing) segLen = spacing;
+
+            int numDabs = (int)(segLen / spacing) + 1;
+            if (numDabs < 2) numDabs = 2;
+
+            for (int i = 0; i < numDabs; i++) {
+                float dx = cx + (float)i * spacing;
+                float dy = cy;
+
+                float dr = ((float)rand() / (float)RAND_MAX) * 2.0f - 1.0f;
+                float raw = BParam_GetValue(&bpSizeMul) + dr * 2.0f * bpSizeMul.user.jitter * (bpSizeMul.outMax - bpSizeMul.outMin);
+                raw = fmaxf(bpSizeMul.outMin, fminf(bpSizeMul.outMax, raw));
+                float jitterMul = powf(16.0f, raw / 128.0f - 1.0f);
+
+                d_Brush dab = pb;
+                dab.Realb.rad_out = effectiveRadOut * jitterMul;
+                dab.Realb.rad_in = pb.Realb.rad_in * jitterMul;
+
+                float scatterVal = GetModVal(&bpScatter);
+                float scatterOffset = scatterVal * dab.Realb.rad_out * 0.5f;
+                float sy = dy + (((float)rand() / (float)RAND_MAX) * 2.0f - 1.0f) * scatterOffset;
+
+                BrushBlend_ApplyStamp(g_stampStage, &dab, bt, dx, sy, dx, sy);
+            }
         }
 
         // Draw stamped result to screen

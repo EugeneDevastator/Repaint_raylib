@@ -18,6 +18,7 @@ BParam bpTexBlendVal;
 BParam bpAngle;
 BParam bpScaleRel;
 BParam bpSizeMul;
+BParam bpPower;
 
 float g_velocity = 0.0f;
 d_StrokePars g_modPars;
@@ -118,6 +119,9 @@ void Modulators_Init(void) {
 
     BParam_Init(&bpSizeMul, 42, "SizeMul", 0.0f, 256.0f, 128.0f);
     strncpy(bpSizeMul.tooltip, "Size multiplier: 0=÷16, 128=×1, 256=×16", sizeof(bpSizeMul.tooltip) - 1);
+
+    BParam_Init(&bpPower, 43, "Power", 0.0f, 1.0f, 0.0f);
+    strncpy(bpPower.tooltip, "Displacement power for the Disp tool (0=no displacement, 1=max)", sizeof(bpPower.tooltip) - 1);
 
     // Init global modulator defaults
     for (int i = 0; i < csSTOP; i++) g_modPars.Pars[i] = 1.0f;

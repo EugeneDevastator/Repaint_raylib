@@ -34,6 +34,8 @@ static bool shaderInited = false;
 static int locLayerTex = -1;
 static int locLayerAlpha = -1;
 static int locBmIdx = -1;
+static int locLayerThreshold = -1;
+static int locLayerFeather = -1;
 static int curCanvasW = 0;
 static int curCanvasH = 0;
 static RenderTexture2D* finalAcc = NULL;
@@ -117,7 +119,9 @@ static void EnsureShader(void) {
     locLayerTex   = GetShaderLocation(layerBlendShader, "layerTex");
     locLayerAlpha = GetShaderLocation(layerBlendShader, "layerAlpha");
     locBmIdx      = GetShaderLocation(layerBlendShader, "bmidx");
-    TraceLog(LOG_INFO, "Shader locs: layerTex=%d alpha=%d bm=%d", locLayerTex, locLayerAlpha, locBmIdx);
+    locLayerThreshold = GetShaderLocation(layerBlendShader, "layerThreshold");
+    locLayerFeather   = GetShaderLocation(layerBlendShader, "layerFeather");
+    TraceLog(LOG_INFO, "Shader locs: layerTex=%d alpha=%d bm=%d thresh=%d feather=%d", locLayerTex, locLayerAlpha, locBmIdx, locLayerThreshold, locLayerFeather);
     shaderInited = true;
 }
 
@@ -146,6 +150,8 @@ RenderTexture2D* DocBlender_Composite(AppState* state) {
 
             float alpha = state->canvas.layerProps[i].op;
             int bmidx = state->canvas.layerProps[i].blendmode;
+            float threshold = state->canvas.layerProps[i].threshold;
+            float feather = state->canvas.layerProps[i].feather;
 
             BeginTextureMode(*dst);
             ClearBackground(BLANK);
@@ -158,6 +164,8 @@ RenderTexture2D* DocBlender_Composite(AppState* state) {
                 SetShaderValueTexture(layerBlendShader, locLayerTex, state->layerRTs[i].texture);
                 SetShaderValue(layerBlendShader, locLayerAlpha, &alpha, SHADER_UNIFORM_FLOAT);
                 SetShaderValue(layerBlendShader, locBmIdx, &bmidx, SHADER_UNIFORM_INT);
+                SetShaderValue(layerBlendShader, locLayerThreshold, &threshold, SHADER_UNIFORM_FLOAT);
+                SetShaderValue(layerBlendShader, locLayerFeather, &feather, SHADER_UNIFORM_FLOAT);
 
                 DrawTextureRec(src->texture,
                     Rectangle{0, 0, (float)cw, (float)-ch},
@@ -231,6 +239,8 @@ Image CompositeLayersWithDither(AppState* state) {
 
         float alpha = state->canvas.layerProps[i].op;
         int bmidx = state->canvas.layerProps[i].blendmode;
+        float threshold = state->canvas.layerProps[i].threshold;
+        float feather = state->canvas.layerProps[i].feather;
 
         BeginTextureMode(*dst);
         ClearBackground(BLANK);
@@ -241,6 +251,8 @@ Image CompositeLayersWithDither(AppState* state) {
             SetShaderValueTexture(layerBlendShader, locLayerTex, state->layerRTs[i].texture);
             SetShaderValue(layerBlendShader, locLayerAlpha, &alpha, SHADER_UNIFORM_FLOAT);
             SetShaderValue(layerBlendShader, locBmIdx, &bmidx, SHADER_UNIFORM_INT);
+            SetShaderValue(layerBlendShader, locLayerThreshold, &threshold, SHADER_UNIFORM_FLOAT);
+            SetShaderValue(layerBlendShader, locLayerFeather, &feather, SHADER_UNIFORM_FLOAT);
             DrawTextureRec(src->texture, Rectangle{0, 0, (float)cw, (float)-ch}, Vector2{0, 0}, WHITE);
             EndShaderMode();
         }
@@ -288,11 +300,15 @@ void MergeDownLayer(AppState* state, int idx) {
 
     float alpha = state->canvas.layerProps[idx].op;
     int bmidx = state->canvas.layerProps[idx].blendmode;
+    float threshold = state->canvas.layerProps[idx].threshold;
+    float feather = state->canvas.layerProps[idx].feather;
     BeginTextureMode(tempRT);
     BeginShaderMode(layerBlendShader);
     SetShaderValueTexture(layerBlendShader, locLayerTex, state->layerRTs[idx].texture);
     SetShaderValue(layerBlendShader, locLayerAlpha, &alpha, SHADER_UNIFORM_FLOAT);
     SetShaderValue(layerBlendShader, locBmIdx, &bmidx, SHADER_UNIFORM_INT);
+    SetShaderValue(layerBlendShader, locLayerThreshold, &threshold, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(layerBlendShader, locLayerFeather, &feather, SHADER_UNIFORM_FLOAT);
     DrawTextureRec(state->layerRTs[idx - 1].texture,
         Rectangle{0, 0, (float)cw, (float)-ch}, Vector2{0, 0}, WHITE);
     EndShaderMode();

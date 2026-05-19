@@ -58,27 +58,51 @@ void ToolBox_Draw(AppState* state, Rectangle vp) {
 
         auto handleClick = [&]() {
             if (i == 3) {
-                if (state->mode == eBrush && state->currentBrush.Realb.col.a == 0) {
-                    state->mode = eBrush;
-                    state->currentBrush.Realb.col.a = 255;
+                state->mode = eBrush;
+                if (state->eraseMode == eEraseNone) {
+                    state->eraseMode = eEraseAlpha;
                 } else {
-                    state->mode = eBrush;
-                    state->currentBrush.Realb.col.a = 0;
+                    ImGui::OpenPopup("##eraseModePopup");
                 }
             } else {
                 state->mode = gizmoToolModes[i];
+                state->eraseMode = eEraseNone;
                 state->currentBrush.Realb.col.a = 255;
             }
         };
 
         if (tid) {
+            bool isActive = (i == 3 && state->eraseMode != eEraseNone);
+            if (isActive) {
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.9f, 0.3f, 0.3f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 0.4f, 0.4f, 1.0f));
+            }
             if (ImGui::ImageButton("##ti", tid, ImVec2(btnSz, btnSz)))
                 handleClick();
+            if (isActive) ImGui::PopStyleColor(2);
         } else {
             if (ImGui::Button(gizmoToolLabels[i], ImVec2(btnSz, btnSz)))
                 handleClick();
         }
+
         ImGui::PopID();
+    }
+
+    if (ImGui::BeginPopup("##eraseModePopup", ImGuiWindowFlags_NoScrollbar)) {
+        static const char* eraseNames[] = {"Alpha Erase", "Color Erase"};
+        static const int eraseModes[] = {eEraseAlpha, eEraseColor};
+        for (int i = 0; i < 2; i++) {
+            if (ImGui::Selectable(eraseNames[i], state->eraseMode == eraseModes[i])) {
+                state->eraseMode = eraseModes[i];
+                state->mode = eBrush;
+            }
+        }
+        if (ImGui::Selectable("Disable Erase", state->eraseMode == eEraseNone)) {
+            state->eraseMode = eEraseNone;
+            state->mode = eBrush;
+            state->currentBrush.Realb.col.a = 255;
+        }
+        ImGui::EndPopup();
     }
 
     ImGui::End();

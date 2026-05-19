@@ -16,7 +16,7 @@ static void DrawSliderCore(ImDrawList* dl, int x, int y, int length, int thickne
     if (colorMode >= 0) {
         for (int k = 0; k < length; k++) {
             float t = (orient == 0) ? (float)k / fmaxf(length-1,1)
-                                    : (float)(length-1-k) / fmaxf(length-1,1);
+                                    : (float)k / fmaxf(length-1,1);
             Color c;
             if (colorMode == 0) c = HSLToRGB(t, 1.0f, 0.5f);
             else if (colorMode == 1) c = HSLToRGB(colorHue, t, colorLit);
@@ -36,10 +36,10 @@ static void DrawSliderCore(ImDrawList* dl, int x, int y, int length, int thickne
                 IM_COL32(gradStart.r, gradStart.g, gradStart.b, 255));
         } else {
             dl->AddRectFilledMultiColor(ImVec2(x, y), ImVec2(x + thickness, y + length),
-                IM_COL32(gradStart.r, gradStart.g, gradStart.b, 255),
-                IM_COL32(gradStart.r, gradStart.g, gradStart.b, 255),
                 IM_COL32(gradEnd.r, gradEnd.g, gradEnd.b, 255),
-                IM_COL32(gradEnd.r, gradEnd.g, gradEnd.b, 255));
+                IM_COL32(gradEnd.r, gradEnd.g, gradEnd.b, 255),
+                IM_COL32(gradStart.r, gradStart.g, gradStart.b, 255),
+                IM_COL32(gradStart.r, gradStart.g, gradStart.b, 255));
         }
     }
 

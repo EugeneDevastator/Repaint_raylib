@@ -7,6 +7,8 @@ uniform sampler2D texture0;
 uniform sampler2D layerTex;
 uniform float layerAlpha;
 uniform int bmidx;
+uniform float layerThreshold;
+uniform float layerFeather;
 
 vec4 applyBlend(int mode, vec4 underLayer, vec3 layerRGB, float layerA) {
     vec3 layerPremul = layerRGB * layerA;
@@ -60,6 +62,14 @@ void main() {
     vec4 underLayer = texture(texture0, fragTexCoord);
     vec4 thisLayer  = texture(layerTex, fragTexCoord);
     float layerA    = thisLayer.a * layerAlpha;
+
+    // Apply threshold and feather
+    if (layerThreshold > 0.0 || layerFeather < 1.0) {
+        float t = layerThreshold;
+        float f = max(layerFeather, 0.001);
+        float edgeDist = layerA - t;
+        layerA = clamp(edgeDist / f, 0.0, 1.0);
+    }
 
     if (layerA < 0.001) { finalColor = underLayer; return; }
 

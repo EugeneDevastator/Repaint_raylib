@@ -30,6 +30,8 @@ uniform vec4  brushColor;
 uniform float radOut;
 uniform vec2  stampCenter;
 uniform vec2  canvasSize;
+uniform float pwr;
+uniform int   eraseMode;
 
 in vec2 canvasFragUV;
 
@@ -82,6 +84,32 @@ vec4 applyBlend(int mode, vec4 canvas, vec3 brushRGB, float brushA) {
     } else if (mode == 7) {
         outRGB = min(canvas.rgb, brushPremul);
         outA   = min(canvas.a, brushA);
+    } else if (mode == 8) {
+        outRGB = brushPremul + canvas.rgb * (1.0 - brushA);
+        outA   = brushA + canvas.a * (1.0 - brushA);
+    } else if (mode == 9) {
+        outRGB = brushPremul + canvas.rgb * (1.0 - brushA);
+        outA   = brushA + canvas.a * (1.0 - brushA);
+    } else if (mode == 10) {
+        outRGB = brushPremul + canvas.rgb * (1.0 - brushA);
+        outA   = brushA + canvas.a * (1.0 - brushA);
+    } else if (mode == 11) {
+        outRGB = mix(canvas.rgb, vec3(1.0) - canvas.rgb, brushA);
+        outA   = canvas.a;
+    } else if (mode == 12) {
+        outRGB = abs(canvas.rgb - brushRGB);
+        outA   = canvas.a;
+    } else if (mode == 13) {
+        outRGB = canvas.rgb + brushRGB - 2.0 * canvas.rgb * brushRGB;
+        outA   = canvas.a;
+    } else if (mode == 14) {
+        outRGB = canvas.rgb;
+        outA   = canvas.a * (1.0 - brushA);
+    } else if (mode == 15) {
+        float gamma = 2.2;
+        float eraseMask = pow(canvas.a, gamma) * brushA;
+        outRGB = mix(canvas.rgb, brushRGB, eraseMask);
+        outA   = canvas.a * (1.0 - brushA * 0.5);
     } else {
         outRGB = brushPremul + canvas.rgb * (1.0 - brushA);
         outA   = brushA + canvas.a * (1.0 - brushA);
@@ -195,6 +223,22 @@ void main() {
 
     finalAlpha *= opacity;
     if (finalAlpha < 0.000000001) { finalColor = canvas; return; }
+
+    // ── Erase modes ─────────────────────────────────────────────────
+    if (eraseMode == 1) {
+        // Alpha erase: reduce canvas alpha by brush alpha
+        float newA = canvas.a * (1.0 - finalAlpha);
+        finalColor = vec4(canvas.rgb, newA);
+        return;
+    } else if (eraseMode == 2) {
+        // Color erase: apply color to semi-transparent regions using gamma formula
+        float gamma = 2.2;
+        float mask = pow(canvas.a, gamma) * finalAlpha;
+        vec3 erasedRGB = mix(canvas.rgb, brushFinal, mask);
+        float erasedA = canvas.a * (1.0 - finalAlpha * 0.5);
+        finalColor = vec4(erasedRGB, erasedA);
+        return;
+    }
 
 float cloneOpacity = smudgeStrength;
     if (cloneOpacity > 0.000001) {

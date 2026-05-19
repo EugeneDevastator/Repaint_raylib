@@ -32,8 +32,14 @@ typedef enum {
 } eTools;
 
 typedef enum {
+    eEraseNone, eEraseAlpha, eEraseColor
+} eEraseMode;
+
+typedef enum {
     bmNormal, bmPlus, bmDodge, bmScreen, bmLighten, bmBurn,
-    bmMult, bmDarken, bmOvr, bmHlight, bmSlight, bmXor, bmDiff, bmExc, bmSTOP
+    bmMult, bmDarken, bmOvr, bmHlight, bmSlight, bmXor, bmDiff, bmExc,
+    bmEraseAlpha, bmEraseColor,
+    bmSTOP
 } bmBlends;
 
 typedef enum {
@@ -84,6 +90,8 @@ typedef struct {
     uint8_t presop;
     bool droppedup, droppeddown, locked;
     uint8_t realidx;
+    float threshold;
+    float feather;
     char layerName[256];
 } sLayerProps;
 
@@ -126,6 +134,7 @@ typedef struct {
     bool useTexLumAsAlpha;
     bool texUseRGB;
     int texColorMode;   // 0 = use brush RGB, 1 = use texture RGB, 2 = multiply
+    int eraseMode;      // 0 = none, 1 = alpha erase, 2 = color erase
     Color col;
 } d_RealBrush;
 
@@ -319,6 +328,7 @@ struct AppState {
     int activeLayer;
     Camera2D camera;
     int mode;
+    int eraseMode;
     Texture2D* layerTextures;
     RenderTexture2D* layerRTs;
     bool* texDirty;
@@ -349,6 +359,8 @@ void Canvas_DeleteLayer(Canvas* canvas, int index);
 void Canvas_SetLayerOpacity(Canvas* canvas, int layer, float op);
 void Canvas_SetLayerBlendMode(Canvas* canvas, int layer, int bm);
 void Canvas_SetLayerVisible(Canvas* canvas, int layer, bool visible);
+void Canvas_SetLayerThreshold(Canvas* canvas, int layer, float threshold);
+void Canvas_SetLayerFeather(Canvas* canvas, int layer, float feather);
 void Canvas_MoveLayer(Canvas* canvas, int from, int to);
 void Canvas_DuplicateLayer(Canvas* canvas, int idx);
 
@@ -428,6 +440,7 @@ extern BParam bpTexBlendVal;
 extern BParam bpAngle;
 extern BParam bpScaleRel;
 extern BParam bpSizeMul;
+extern BParam bpPower;
 
 extern d_StrokePars g_modPars;
 
@@ -444,6 +457,10 @@ void LayerPanel_Draw(AppState* state);
 void LeftPanel_Init(void);
 void LeftPanel_Shutdown(void);
 void LeftPanel_Draw(AppState* state);
+
+void Changelog_Init(void);
+void Changelog_Toggle(void);
+void Changelog_Draw(void);
 
 struct ImDrawList; // forward decl — repaint.h avoids pulling in imgui.h
 struct ImVec2;

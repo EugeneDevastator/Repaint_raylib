@@ -61,6 +61,7 @@ set(SOURCES
     src/ui_toolbox.cpp
     src/ui_layerpanel.cpp
     src/ui_leftpanel.cpp
+    src/ui_changelog.cpp
     src/ui_style.cpp
     src/stroke.cpp
     src/file_format.cpp
@@ -81,6 +82,10 @@ set(SOURCES
 )
 
 add_executable(repaint ${SOURCES})
+
+if(WIN32)
+    target_sources(repaint PRIVATE resources/icon.rc)
+endif()
 
 target_include_directories(repaint PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -141,6 +146,9 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/resources")
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${CMAKE_SOURCE_DIR}/resources"
             "$<TARGET_FILE_DIR:repaint>/resources"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/CHANGELOG.txt"
+            "$<TARGET_FILE_DIR:repaint>/CHANGELOG.txt"
         DEPENDS ${RESOURCE_FILES}
         COMMENT "Force-copying resources to build/bin dirs")
 endif()

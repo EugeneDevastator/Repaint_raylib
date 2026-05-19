@@ -7,7 +7,7 @@
 extern bool layersDirty;
 extern bool panelResizing;
 extern int uiPanelWidth;
-extern BParam bpOpacity, bpSize, bpHardness, bpSpacing, bpCurvature, bpScatter, bpCloneOpacity, bpSizeMul;
+extern BParam bpOpacity, bpSize, bpHardness, bpSpacing, bpCurvature, bpScatter, bpCloneOpacity, bpSizeMul, bpPower;
 
 Texture2D g_blendModeIcon = {0};
 bool g_blendIconLoaded = false;
@@ -43,16 +43,17 @@ void LeftPanel_Draw(AppState* state) {
         static const char* blendNames[] = {
             "Normal","Add","Dodge","Screen","Lighten","Burn",
             "Multiply","Darken","Overlay","Highlight","Shadowlight",
-            "Xor","Diff","Exclusion"
+            "Xor","Diff","Exclusion","Erase Alpha","Erase Color"
         };
         int blend = (int)state->currentBrush.Realb.bmidx;
+        if (blend < 0 || blend >= 16) blend = 0;
         if (g_blendIconLoaded)
             ImGui::Image((ImTextureID)(intptr_t)g_blendModeIcon.id, ImVec2(24, 24));
         else
             ImGui::Dummy(ImVec2(24, 24));
         ImGui::SameLine();
         ImGui::SetNextItemWidth(-1);
-        if (ImGui::Combo("##brushBlend", &blend, blendNames, 14, 14))
+        if (ImGui::Combo("##brushBlend", &blend, blendNames, 16, 16))
             state->currentBrush.Realb.bmidx = (uint8_t)blend;
     }
 
@@ -61,8 +62,8 @@ void LeftPanel_Draw(AppState* state) {
     ImGui::Spacing();
 
     // BParam sliders
-    BParam* bps[] = {&bpSize, &bpSizeMul, &bpHardness, &bpCurvature, &bpSpacing, &bpOpacity, &bpAngle, &bpScaleRel, &bpCloneOpacity, &bpScatter};
-    for (int i = 0; i < 10; i++)
+    BParam* bps[] = {&bpSize, &bpSizeMul, &bpHardness, &bpCurvature, &bpSpacing, &bpOpacity, &bpAngle, &bpScaleRel, &bpCloneOpacity, &bpScatter, &bpPower};
+    for (int i = 0; i < 11; i++)
         DrawSlider(bps[i], 0);
 
     ImGui::Spacing();
@@ -106,6 +107,10 @@ void LeftPanel_Draw(AppState* state) {
             BrushBlend_Shutdown();
             BrushBlend_Init();
             ReloadViewportShader();
+        }
+
+        if (ImGui::Button("Changelog", ImVec2(-1, 0))) {
+            Changelog_Toggle();
         }
     }
 

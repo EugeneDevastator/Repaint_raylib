@@ -95,6 +95,8 @@ void UpdateUI(AppState* state) {
     state->currentBrush.Realb.texFeather = GetModVal(&bpTexFeather);
     state->currentBrush.Realb.texThresh  = GetModVal(&bpTexThresh);
     state->currentBrush.Realb.texBlendVal = GetModVal(&bpTexBlendVal);
+    state->currentBrush.Realb.pwr        = GetModVal(&bpPower);
+    state->currentBrush.Realb.eraseMode  = state->eraseMode;
 
     colorHue = bpQuickHue.user.clipmaxF;
     colorSat = bpQuickSat.user.clipmaxF;
@@ -241,6 +243,14 @@ void App_Init(AppState* state) {
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "RePaint");
     MaximizeWindow();
 
+    if (FileExists("resources/icon.png")) {
+        Image icon = LoadImage("resources/icon.png");
+        if (icon.data) {
+            SetWindowIcon(icon);
+            UnloadImage(icon);
+        }
+    }
+
     UIStyle::Init();
     LeftPanel_Init();
     SetTargetFPS(60);
@@ -259,6 +269,7 @@ void App_Init(AppState* state) {
     networkBroker.LoadConfig("repaint.ini");
 
     Modulators_Init();
+    Changelog_Init();
 
     state->canvas = Canvas_Create(800, 600, WHITE);
     state->activeLayer = 0;
@@ -278,6 +289,7 @@ void App_Init(AppState* state) {
     state->camera.zoom = 1.0f;
 
     state->mode = eBrush;
+    state->eraseMode = eEraseNone;
 
     state->initialAngle = 0.0f;
 
@@ -402,6 +414,8 @@ void App_Draw(AppState* state) {
         rlSetBlendMode(RL_BLEND_ALPHA);
         LayerPanel_Draw(state);
     }
+    rlSetBlendMode(RL_BLEND_ALPHA);
+    Changelog_Draw();
 
     // Gizmo input handled last — after UI consumed its own clicks
     XORgizmo_HandleInput(state);

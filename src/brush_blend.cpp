@@ -19,6 +19,8 @@ static int locStampCenter = -1;
 static int locRadOut = -1;
 static int locCanvasSize = -1;
 static int locStampOffset = -1;
+static int locPwr = -1;
+static int locEraseMode = -1;
 static bool inited = false;
 
 static RenderTexture2D canvasCopyRT = {0};
@@ -91,6 +93,8 @@ void BrushBlend_Init(void) {
     locStampCenter    = GetShaderLocation(brushBlendShader, "stampCenter");
     locStampOffset    = GetShaderLocation(brushBlendShader, "stampOffset");
     locRadOut         = GetShaderLocation(brushBlendShader, "radOut");
+    locPwr            = GetShaderLocation(brushBlendShader, "pwr");
+    locEraseMode      = GetShaderLocation(brushBlendShader, "eraseMode");
 
     if (locCanvasTex >= 0) { int u = 1; SetShaderValue(brushBlendShader, locCanvasTex, &u, SHADER_UNIFORM_INT); }
     if (locBrushTex  >= 0) { int u = 2; SetShaderValue(brushBlendShader, locBrushTex,  &u, SHADER_UNIFORM_INT); }
@@ -156,7 +160,10 @@ void BrushBlend_ApplyStamp(
     EndTextureMode();
 
     // -------- Pass 1: geo UV (pool, lazy alloc, never freed until shutdown)
-    float bboxHalf = radOut * 1.41421356f;
+    float radOutForGeo = brush->Realb.rad_out;
+    if (radOutForGeo < 1.0f) radOutForGeo = 1.0f;
+
+    float bboxHalf = radOutForGeo * 1.41421356f;
     int sz = (int)ceilf(bboxHalf * 2.0f);
     if (sz < 32) sz = 32;
     int bucket = next_mult32(sz);
@@ -170,7 +177,7 @@ void BrushBlend_ApplyStamp(
 
     int drawSz = bucket;
     float drawBboxHalf = (float)drawSz * 0.5f;
-    float size = radOut / drawBboxHalf;
+    float size = radOutForGeo / drawBboxHalf;
 
     SetShaderValue(brushGeoShader, locUAngle,  &angleRad, SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushGeoShader, locUSquish, &squish,   SHADER_UNIFORM_FLOAT);
@@ -246,7 +253,23 @@ void BrushBlend_ApplyStamp(
     float csz[2] = { (float)W, (float)H };
     SetShaderValue(brushBlendShader, locCanvasSize, csz, SHADER_UNIFORM_VEC2);
 
+    float actualRadOut = brush->Realb.rad_out;
     float stampSizePx = (float)drawSz;
+
+    if (actualRadOut < 1.0f && actualRadOut > 0.0f) {
+        float minRadForBucket = 1.0f;
+        float minBboxHalf = minRadForBucket * 1.41421356f;
+        int minSz = (int)ceilf(minBboxHalf * 2.0f);
+        if (minSz < 32) minSz = 32;
+        int minBucket = next_mult32(minSz);
+        float ratio = actualRadOut / minRadForBucket;
+        stampSizePx = (float)minBucket * ratio;
+        if (stampSizePx < 1.0f) stampSizePx = 1.0f;
+
+        float adjustedOpacity = brush->Realb.opacity * actualRadOut;
+        SetShaderValue(brushBlendShader, locOpacity, &adjustedOpacity, SHADER_UNIFORM_FLOAT);
+    }
+
     float x0 = stampX - stampSizePx * 0.5f;
     float y0 = stampY - stampSizePx * 0.5f;
 
@@ -255,6 +278,12 @@ void BrushBlend_ApplyStamp(
 
     float radOutEff = stampSizePx / (2.0f * 1.41421356f);
     SetShaderValue(brushBlendShader, locRadOut, &radOutEff, SHADER_UNIFORM_FLOAT);
+
+    float pwr = brush->Realb.pwr;
+    SetShaderValue(brushBlendShader, locPwr, &pwr, SHADER_UNIFORM_FLOAT);
+
+    int eraseMode = brush->Realb.eraseMode;
+    SetShaderValue(brushBlendShader, locEraseMode, &eraseMode, SHADER_UNIFORM_INT);
 
     // ------------- final blit
     BeginTextureMode(dstRT);

@@ -148,6 +148,26 @@ void LayerPanel_Draw(AppState* state) {
     ImGui::Spacing();
 
     {
+        float thresh = state->canvas.layerProps[state->activeLayer].threshold;
+        ImGui::SetNextItemWidth(-1);
+        if (ImGui::SliderFloat("##thresh", &thresh, 0.0f, 1.0f, "Threshold %.2f")) {
+            Canvas_SetLayerThreshold(&state->canvas, state->activeLayer, thresh);
+            layersDirty = true;
+        }
+    }
+
+    {
+        float feather = state->canvas.layerProps[state->activeLayer].feather;
+        ImGui::SetNextItemWidth(-1);
+        if (ImGui::SliderFloat("##feather", &feather, 0.0f, 1.0f, "Feather %.2f")) {
+            Canvas_SetLayerFeather(&state->canvas, state->activeLayer, feather);
+            layersDirty = true;
+        }
+    }
+
+    ImGui::Spacing();
+
+    {
         char idxBuf[64];
         snprintf(idxBuf, sizeof(idxBuf), "Layer %d / %d", state->activeLayer + 1, layerCount);
         ImGui::Text("%s", idxBuf);

@@ -143,6 +143,8 @@ void Canvas_InsertLayer(Canvas* canvas, int idx) {
     canvas->layerProps[idx].blendmode = bmNormal;
     canvas->layerProps[idx].presop = 0;
     canvas->layerProps[idx].locked = false;
+    canvas->layerProps[idx].threshold = 0.0f;
+    canvas->layerProps[idx].feather = 1.0f;
     canvas->layerProps[idx].layerName[0] = '\0';
 }
 
@@ -191,6 +193,14 @@ void Canvas_MoveLayer(Canvas* canvas, int from, int to) {
 
 void Canvas_SetLayerVisible(Canvas* canvas, int layer, bool visible) {
     if (layer >= 0 && layer < canvas->layerCount) canvas->layerProps[layer].visible = visible;
+}
+
+void Canvas_SetLayerThreshold(Canvas* canvas, int layer, float threshold) {
+    if (layer >= 0 && layer < canvas->layerCount) canvas->layerProps[layer].threshold = threshold;
+}
+
+void Canvas_SetLayerFeather(Canvas* canvas, int layer, float feather) {
+    if (layer >= 0 && layer < canvas->layerCount) canvas->layerProps[layer].feather = feather;
 }
 
 void Canvas_DuplicateLayer(Canvas* canvas, int idx) {
