@@ -119,7 +119,8 @@ vec4 applyBlend(int mode, vec4 canvas, vec3 brushRGB, float brushA) {
 }
 
 float applyRadialFalloff(float d) {
-    float innerT = clamp(radIn / max(radOut, 0.001), 0.0, 1.0);
+    if (d<0.0000000001) return 0.0;
+    float innerT = clamp(radIn, 0.0, 1.0); // already normalized [0..1]
     float a = 1.0;
     if (d > innerT) {
         float edgeRange = 1.0 - innerT;
@@ -131,6 +132,7 @@ float applyRadialFalloff(float d) {
     float curvePower = (crvt >= 0.0) ? mix(1.0, 3.0, crvt) : mix(1.0, 1.0/3.0, -crvt);
     return clamp(pow(a, curvePower), 0.0, 1.0);
 }
+
 
 void main() {
     vec2 uv       = fragTexCoord;
