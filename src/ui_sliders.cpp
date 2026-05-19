@@ -16,7 +16,7 @@ static void DrawSliderCore(ImDrawList* dl, int x, int y, int length, int thickne
     if (colorMode >= 0) {
         for (int k = 0; k < length; k++) {
             float t = (orient == 0) ? (float)k / fmaxf(length-1,1)
-                                    : (float)k / fmaxf(length-1,1);
+                                    : (float)(length-1-k) / fmaxf(length-1,1);
             Color c;
             if (colorMode == 0) c = HSLToRGB(t, 1.0f, 0.5f);
             else if (colorMode == 1) c = HSLToRGB(colorHue, t, colorLit);
