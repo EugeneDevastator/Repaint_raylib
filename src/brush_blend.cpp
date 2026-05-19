@@ -243,7 +243,7 @@ void BrushBlend_ApplyStamp(
     float sc[2] = { stampX / (float)W, (float)(H - stampY) / (float)H };
 
     SetShaderValue(brushBlendShader, locOpacity,        &opacity,    SHADER_UNIFORM_FLOAT);
-    float radIn_normalized = clampf(radIn / fmaxf(radOut, 0.001f), 0.0f, 1.0f);
+    float radIn_normalized = clampf(radIn / fmaxf( brush->Realb.rad_out, 0.001f), 0.0f, 0.99f);
     SetShaderValue(brushBlendShader, locRadIn, &radIn_normalized, SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locBrushColor,     col,         SHADER_UNIFORM_VEC4);
     SetShaderValue(brushBlendShader, locCurve,          &curve,      SHADER_UNIFORM_FLOAT);
