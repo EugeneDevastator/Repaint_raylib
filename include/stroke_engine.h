@@ -4,9 +4,8 @@
 #include "repaint.h"
 
 // Configuration constants
-const float STROKE_ANGLE_BREAK_THRESHOLD = 30.0f;
-const int   STROKE_MAX_SPLINE_POINTS = 4;
-const int   STROKE_SPLINE_SUBDIVS = 8;
+const int   STROKE_SPLINE_POINTS = 4;     // Catmull-Rom needs 4 control points
+const int   STROKE_SPLINE_SUBDIVS = 8;    // subdivisions between control points
 
 // ── SegmentResult ──
 struct SegmentResult {

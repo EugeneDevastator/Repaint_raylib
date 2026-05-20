@@ -118,6 +118,10 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
     bool leftDown = IsMouseButtonDown(MOUSE_LEFT_BUTTON);
     int active = state->activeLayer;
 
+    // Record input positions for debug (during active stroke)
+    if ((vp->wasMouseDown || leftDown) && vp->inputLen < MAX_STROKE_PTS)
+        vp->inputPts[vp->inputLen++] = canvasPos;
+
     // ── Texture editing mode ──────────────────────────────────────────
     if (state->editTexMode && state->activeBrushTex >= 0 &&
         state->activeBrushTex < state->brushTexCount)
@@ -138,6 +142,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             if (!vp->wasMouseDown) {
                 if (vp->inBounds && leftDown) {
                     Modulators_SnapRunState();
+                    vp->inputLen = 0;
                     StrokeEngine_BeginStroke(&vp->strokeEng, &state->currentBrush, tx, ty);
                     vp->inputFilter.Reset();
                     vp->inputFilter.Feed(tx, ty, GetTime());
@@ -173,6 +178,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             if (state->mode == eBrush || state->mode == eSmudge) {
                 if (!vp->wasMouseDown) {
                     Modulators_SnapRunState();
+                    vp->inputLen = 0;
                     StrokeEngine_BeginStroke(&vp->strokeEng, &state->currentBrush,
                                              canvasPos.x, canvasPos.y);
                     vp->inputFilter.Reset();
@@ -275,14 +281,12 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
 }
 
 void Viewport_DrawDebugOverlays(Viewport* vp, AppState* state) {
-    if (!vp->debugShowStamps || vp->strokeLen <= 0) return;
+    if (!vp->debugShowStamps) return;
     BeginMode2D(state->camera);
-    float rad = state->currentBrush.Realb.rad_out;
-    for (int i = 0; i < vp->strokeLen; i++) {
-        DrawCircleLines(vp->strokePts[i].x, vp->strokePts[i].y, rad, YELLOW);
-        DrawRectangleLines(vp->strokePts[i].x - rad, vp->strokePts[i].y - rad, rad * 2, rad * 2, Color{255, 255, 0, 80});
-        DrawCircle(vp->strokePts[i].x, vp->strokePts[i].y, 2, RED);
-    }
-    DrawText("DEBUG: stamp positions (F1 toggle)", 10, 10, 14, YELLOW);
+
+    for (int i = 0; i < vp->inputLen && i < MAX_STROKE_PTS; i++)
+        DrawCircle(vp->inputPts[i].x, vp->inputPts[i].y, 3, BLUE);
+
+    DrawText("DEBUG: input pos (F1 toggle)", 10, 10, 14, BLUE);
     EndMode2D();
 }

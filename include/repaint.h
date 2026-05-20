@@ -309,7 +309,9 @@ typedef struct {
 typedef struct {
     Rectangle bounds;
     Vector2 strokePts[MAX_STROKE_PTS];
+    Vector2 inputPts[MAX_STROKE_PTS];
     int strokeLen;
+    int inputLen;
     bool wasMouseDown;
     bool debugShowStamps;
     bool rightMouseDown;

@@ -188,6 +188,8 @@ void BrushBlend_ApplyStamp(
         rt.texture.height  = bucket;
         rt.texture.format  = RL_PIXELFORMAT_UNCOMPRESSED_R16G16B16A16;
         rt.texture.mipmaps = 1;
+        SetTextureFilter(rt.texture, TEXTURE_FILTER_BILINEAR);
+        SetTextureWrap(rt.texture, TEXTURE_WRAP_CLAMP);
         geoPool[pidx]      = rt;
     }
     RenderTexture2D* geoRT = &geoPool[pidx];

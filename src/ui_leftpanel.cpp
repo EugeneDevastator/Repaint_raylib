@@ -33,7 +33,7 @@ void LeftPanel_Shutdown(void) {
 
 void LeftPanel_Draw(AppState* state) {
     ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2((float)uiPanelWidth, (float)SCREEN_HEIGHT), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2((float)uiPanelWidth, (float)GetScreenHeight()), ImGuiCond_Always);
     ImGui::Begin("Tools", NULL,
         ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
@@ -105,11 +105,12 @@ void LeftPanel_Draw(AppState* state) {
         ImVec2 wSize = ImGui::GetWindowSize();
         float handleX = wMin.x + wSize.x;
         ImU32 col = panelResizing ? IM_COL32(80, 120, 200, 255) : IM_COL32(160, 160, 160, 255);
-        dl->AddRectFilled(ImVec2(handleX - 3, wMin.y), ImVec2(handleX + 4, wMin.y + SCREEN_HEIGHT), col);
+        float sh = (float)GetScreenHeight();
+        dl->AddRectFilled(ImVec2(handleX - 3, wMin.y), ImVec2(handleX + 4, wMin.y + sh), col);
 
         // Invisible button for resize interaction
         ImGui::SetCursorScreenPos(ImVec2(handleX - 3, wMin.y));
-        ImGui::InvisibleButton("##resize", ImVec2(7, SCREEN_HEIGHT));
+        ImGui::InvisibleButton("##resize", ImVec2(7, sh));
         if (ImGui::IsItemHovered() || ImGui::IsItemActive())
             ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
         if (ImGui::IsItemActive()) {
@@ -117,7 +118,7 @@ void LeftPanel_Draw(AppState* state) {
             float mx = ImGui::GetMousePos().x;
             uiPanelWidth = (int)fmaxf(120.0f, fminf(mx, (float)(SCREEN_WIDTH - RIGHT_PANEL_WIDTH - 100)));
             Rectangle vb = {(float)uiPanelWidth, 0,
-                (float)(SCREEN_WIDTH - uiPanelWidth - RIGHT_PANEL_WIDTH), (float)SCREEN_HEIGHT};
+                (float)(GetScreenWidth() - uiPanelWidth - RIGHT_PANEL_WIDTH), (float)GetScreenHeight()};
             Viewport_SetBounds(&viewport, vb);
         } else {
             panelResizing = false;

@@ -342,7 +342,7 @@ int StrokeEngine_FeedPoint(StrokeEngine* se, const StrokePoint& sp,
 
     Vector2 pos = {sp.x, sp.y};
 
-    if (se->splineCount < 4) {
+    if (se->splineCount < STROKE_SPLINE_POINTS) {
         se->splinePts[se->splineCount++] = pos;
     } else {
         se->splinePts[0] = se->splinePts[1];
@@ -351,38 +351,35 @@ int StrokeEngine_FeedPoint(StrokeEngine* se, const StrokePoint& sp,
         se->splinePts[3] = pos;
     }
 
-    if (!se->strokeSmoothing || se->splineCount < 4) {
+    if (!se->strokeSmoothing || se->splineCount < STROKE_SPLINE_POINTS) {
         return FeedOnePointLinear(se, pos, sp.velocity, baseBrush, initialAngle, toolMode, outDabs, maxDabs);
     }
 
-    Vector2 prevDir = {se->splinePts[1].x - se->splinePts[0].x, se->splinePts[1].y - se->splinePts[0].y};
-    Vector2 nextDir = {se->splinePts[2].x - se->splinePts[1].x, se->splinePts[2].y - se->splinePts[1].y};
-    float prevLen = sqrtf(prevDir.x * prevDir.x + prevDir.y * prevDir.y);
-    float nextLen = sqrtf(nextDir.x * nextDir.x + nextDir.y * nextDir.y);
-    bool sharpBend = false;
-    if (prevLen > 0.5f && nextLen > 0.5f) {
-        float dot = (prevDir.x * nextDir.x + prevDir.y * nextDir.y) / (prevLen * nextLen);
-        float angleDeg = acosf(fmaxf(-1.0f, fminf(1.0f, dot))) * 180.0f / 3.14159265f;
-        if (angleDeg > STROKE_ANGLE_BREAK_THRESHOLD) sharpBend = true;
-    }
-
-    if (sharpBend) {
-        se->splinePts[0] = se->splinePts[1];
-        se->splinePts[1] = se->splinePts[2];
-        se->splinePts[2] = pos;
-        se->splineCount = 3;
-        return FeedOnePointLinear(se, pos, sp.velocity, baseBrush, initialAngle, toolMode, outDabs, maxDabs);
-    }
-
+    // Spline mode: walk midpoints, accumulate distance, feed segment when length >= spacing
+    float splineSpacing = fmaxf(BParam_GetValue(&bpSize) * 
+        powf(16.0f, BParam_GetValue(&bpSizeMul) / 128.0f - 1.0f) * 2.0f * BParam_GetValue(&bpSpacing), 1.0f);
     int totalDabs = 0;
     float vel = sp.velocity;
+    Vector2 accStart = se->lastDabPos;
+    float accDist = 0.0f;
+
     for (int s = 0; s < STROKE_SPLINE_SUBDIVS; s++) {
         float tMid = ((float)s + 0.5f) / (float)STROKE_SPLINE_SUBDIVS;
-        Vector2 mid = CatmullRom(se->splinePts[0], se->splinePts[1], se->splinePts[2], se->splinePts[3], tMid);
-        int rem = maxDabs - totalDabs;
-        if (rem <= 0) break;
-        totalDabs += FeedOnePointLinear(se, mid, vel, baseBrush, initialAngle, toolMode,
-                                        outDabs + totalDabs, rem);
+        Vector2 mid = CatmullRom(se->splinePts[1], se->splinePts[2],
+                                  se->splinePts[3], se->splinePts[3], tMid);
+
+        float dSeg = Dist2D(accStart, mid);
+        accDist += dSeg;
+        accStart = mid;
+
+        if (accDist >= splineSpacing) {
+            int rem = maxDabs - totalDabs;
+            if (rem <= 0) break;
+            totalDabs += FeedOnePointLinear(se, mid, vel, baseBrush, initialAngle, toolMode,
+                                            outDabs + totalDabs, rem);
+            accDist = 0.0f;
+            accStart = se->lastDabPos;
+        }
     }
     return totalDabs;
 }
