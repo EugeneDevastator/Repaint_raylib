@@ -1,18 +1,11 @@
-=== batch 1 ===
-. make hue slider background also react to Sat Bright changes
-.refactor radIn slider value to scale together with radout multiplier (is on left panel)
-so all final calculations become: radoutEnd = radout*scale; radinEnd=radin*scale, shaders' radin = radinEnd / radoutEnd
-.implement perspective distortion slider - which should modify how geouv quad is rendered. for now let it always rotate along y, before rotating in-plane.
+=== batch bugfix ===
 . double chekc what happens with brush when radius is 1 or less -it still draws with 2pixel diameter, but we should end up with 1 px diameter, then fade opacity if brush is even smaller.
-. remove debug toggles from left panel, that toggle parts of quickpanel
-and related functionallity too, - no need for debug togling them, they must always be visible
-. update stroke preview behavior - it must only update once we change parameters, and throttle it to update at 10 fps, it slows down app drawing every frame. - also - make it diagonal going to upper right corner.
-== user test here ==
-== batch 2 ==
-.better interpolation - add spline interpolation to segments, that can be defined few parameters so that we can easier transfer segments over network (dont implement network part yet). this means we cant show stroke right away and need few segments - thats ok.
-. add few configuration tresholds that will define
-. when angle is considered hard and should break segment smoothing
-. add toggle on the left panel to toggle stroke smoothing
+.better interpolation - add spline interpolation to segments, that can be defined few parameters that will be fed into segment engine. This means we cant show stroke right away and need few segments - thats ok. for the brush preview - use some parameters for smooth curved segment.
+. add few configuration tresholds (as consts for now) that will define
+- when angle is considered hard and should break segment smoothing
+- add toggle on the left panel to toggle stroke smoothing
+
+
 === tablet batch ===
 . implement tablet - wintab for windows, libinput on linux. Windows: GetPointerPenInfo (zero deps, built into OS). 
 . implement pressure tablet mode for sliders - port and update parameter application architecture

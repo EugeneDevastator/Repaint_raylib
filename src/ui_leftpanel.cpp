@@ -38,25 +38,6 @@ void LeftPanel_Draw(AppState* state) {
         ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
 
-    // Brush type
-    {
-        static const char* blendNames[] = {
-            "Normal","Add","Dodge","Screen","Lighten","Burn",
-            "Multiply","Darken","Overlay","Highlight","Shadowlight",
-            "Xor","Diff","Exclusion","Erase Alpha","Erase Color"
-        };
-        int blend = (int)state->currentBrush.Realb.bmidx;
-        if (blend < 0 || blend >= 16) blend = 0;
-        if (g_blendIconLoaded)
-            ImGui::Image((ImTextureID)(intptr_t)g_blendModeIcon.id, ImVec2(24, 24));
-        else
-            ImGui::Dummy(ImVec2(24, 24));
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(-1);
-        if (ImGui::Combo("##brushBlend", &blend, blendNames, 16, 16))
-            state->currentBrush.Realb.bmidx = (uint8_t)blend;
-    }
-
     ImGui::Separator();
     ImGui::Text("Settings");
     ImGui::Spacing();
@@ -67,55 +48,54 @@ void LeftPanel_Draw(AppState* state) {
         DrawSlider(bps[i], 0);
 
     ImGui::Spacing();
+
+    // Blend mode
+    {
+        static const char* blendNames[] = {
+            "Normal","Add","Dodge","Screen","Lighten","Burn",
+            "Multiply","Darken","Overlay","Highlight","Shadowlight",
+            "Xor","Diff","Exclusion","Erase Alpha","Erase Color"
+        };
+        int blend = (int)state->currentBrush.Realb.bmidx;
+        if (blend < 0 || blend >= 16) blend = 0;
+        DrawRadioGroup("Blend Mode", &blend, blendNames, 16);
+        state->currentBrush.Realb.bmidx = (uint8_t)blend;
+    }
+
+    ImGui::Spacing();
     int preserve = state->currentBrush.Realb.preserveop;
     ImGui::Checkbox("Preserve Layer Alpha", (bool*)&preserve);
     state->currentBrush.Realb.preserveop = (uint8_t)preserve;
 
-    // ── Test broker ─────────────────────────────────────────────────────
-    extern bool g_useTestBroker;
-    ImGui::Spacing();
+    extern bool g_strokeSmoothing;
+    ImGui::Checkbox("Stroke Smoothing", &g_strokeSmoothing);
+
     ImGui::Separator();
     ImGui::Text("Debug");
+    ImGui::Spacing();
+
+    // ── Test broker ──
+    extern bool g_useTestBroker;
     ImGui::Checkbox("Test Broker (+200px X)", &g_useTestBroker);
 
-    // Pipeline selector
-  //  {
-  //      const char* pipeNames[] = {"CFNSR", "RS"};
-  //      int pipe = (int)state->currentBrush.Realb.pipeID;
-  //      ImGui::SetNextItemWidth(-1);
-  //      if (ImGui::Combo("##pipeline", &pipe, pipeNames, 2))
-  //          state->currentBrush.Realb.pipeID = (uint8_t)pipe;
-  //  }
-
-    // Reload shaders button at bottom
+    // Zoom and mode info
     {
-        float windowH = ImGui::GetWindowHeight();
-        float itemH = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.y;
-        ImGui::SetCursorPosY(windowH - itemH * 3 - ImGui::GetStyle().FramePadding.y * 2);
-
-        if (ImGui::Button("Reload Shaders", ImVec2(-1, 0))) {
-            BrushBlend_Shutdown();
-            BrushBlend_Init();
-            ReloadViewportShader();
-        }
-
-        if (ImGui::Button("Changelog", ImVec2(-1, 0))) {
-            Changelog_Toggle();
-        }
-    }
-
-    // Zoom and mode info at bottom
-    {
-        float windowH = ImGui::GetWindowHeight();
-        float itemH = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.y;
-        ImGui::SetCursorPosY(windowH - itemH * 2);
-
         char zoomInfo[32];
         sprintf(zoomInfo, "Zoom: %.0f%%", state->camera.zoom * 100.0f);
         ImGui::Text("%s", zoomInfo);
 
         const char* modeNames[] = {"Brush", "Smudge", "Disp", "Cont", "STOP", "Line"};
         ImGui::Text("%s", modeNames[state->mode > 5 ? 0 : state->mode]);
+    }
+
+    if (ImGui::Button("Reload Shaders", ImVec2(-1, 0))) {
+        BrushBlend_Shutdown();
+        BrushBlend_Init();
+        ReloadViewportShader();
+    }
+
+    if (ImGui::Button("Changelog", ImVec2(-1, 0))) {
+        Changelog_Toggle();
     }
 
     // Separator + resize handle at right edge (drawn inside ImGui for proper z-order)

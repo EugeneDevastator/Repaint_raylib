@@ -3,30 +3,38 @@
 
 #include "repaint.h"
 
-// ── SegmentResult: output from drawing a single segment ──
+// Configuration constants
+const float STROKE_ANGLE_BREAK_THRESHOLD = 30.0f;
+const int   STROKE_MAX_SPLINE_POINTS = 4;
+const int   STROKE_SPLINE_SUBDIVS = 8;
+
+// ── SegmentResult ──
 struct SegmentResult {
     Vector2 lastDabPos;
-    float overdraw;  // leftover spacing for next segment
+    float overdraw;
 };
 
-// ── SegmentDrawer: interpolates dabs along a pre-computed segment ──
-// Walks from section->Stroke.pos1 to pos2, places dabs at spacing intervals.
-// Interpolates brush between BrushFrom and Brush.
-// Applies deterministic scatter based on seed.
-// No parameter jitter — that's the caller's concern.
-// initialDabAccum: leftover spacing from previous segment for chaining.
-// outResult: returns last dab position and overdraw for chaining.
-// Returns number of dabs placed in outDabs (max maxDabs).
-int SegmentDrawer_Draw(
+// ── LinearStroke: places dabs at exact spacing from lastDabPos ──
+// No overdraw accumulation. Only places a dab when distance from
+// section->Stroke.pos1 to pos2 reaches spacing. This gives perfectly
+// even dab spacing regardless of input timing.
+int SegmentDrawer_DrawLinear(
+    const d_Section* section,
+    BrushDab* outDabs,
+    int maxDabs,
+    SegmentResult* outResult);
+
+// ── AirflowStroke: accumulates overdraw for bursty placement ──
+// Preserves the old dabAccum behavior: leftover distance carries over
+// between frames, eventually releasing a burst of dabs.
+int SegmentDrawer_DrawAirflow(
     const d_Section* section,
     float initialDabAccum,
     BrushDab* outDabs,
     int maxDabs,
     SegmentResult* outResult);
 
-// ── StrokeEngine: builds segments from real-time input, adds jitter ──
-// Uses modulators + geometry to form segment params, then calls SegmentDrawer.
-
+// ── StrokeEngine ──
 void StrokeEngine_Init(StrokeEngine* se);
 void StrokeEngine_BeginStroke(StrokeEngine* se, const d_Brush* baseBrush, float x, float y);
 int  StrokeEngine_FeedPoint(StrokeEngine* se, const StrokePoint& sp,

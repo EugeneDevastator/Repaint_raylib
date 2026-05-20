@@ -217,7 +217,13 @@ struct StrokeEngine {
     float prevVel;
     float initDir;
     bool initDirSet;
+    // Spline buffer
+    Vector2 splinePts[4];
+    int splineCount;
+    bool strokeSmoothing;
 };
+
+extern bool g_strokeSmoothing;
 
 struct AppState;
 
@@ -460,6 +466,11 @@ void Changelog_Draw(void);
 struct ImDrawList; // forward decl — repaint.h avoids pulling in imgui.h
 struct ImVec2;
 void DrawSlider(BParam* bp, int orient, float thick = 0, float len = 0);
+
+// Draw a group of pressable radio buttons. One selected at a time.
+// selected has light blue bg + dot, unselected has gray bg.
+// items: null-terminated array of strings.
+void DrawRadioGroup(const char* label, int* current, const char* items[], int itemCount);
 
 void QuickPanel_DrawUI(AppState* state);
 void QuickPanel_Init(void);

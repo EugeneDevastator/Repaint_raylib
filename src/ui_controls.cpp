@@ -1,4 +1,5 @@
 #include "repaint.h"
+#include "imgui.h"
 
 static Texture2D penModeTex[PEN_MODE_COUNT];
 static const char* PenIconNames[PEN_MODE_COUNT] = {
@@ -111,6 +112,31 @@ void BParam_SetValue(BParam* bp, float val) {
 void BParam_SnapRunState(BParam* bp) {
     bp->run.clipminF = bp->user.clipminF;
     bp->run.clipmaxF = bp->user.clipmaxF;
+}
+
+void DrawRadioGroup(const char* label, int* current, const char* items[], int itemCount) {
+    if (label) ImGui::Text("%s", label);
+
+    float totalW = ImGui::GetContentRegionAvail().x;
+
+    for (int i = 0; i < itemCount; i++) {
+        ImGui::PushID(i);
+
+        bool isSel = (*current == i);
+        ImVec4 bg = isSel
+            ? ImVec4(1.0f, 1.0f, 1.0f, 1.0f)
+            : ImVec4(0.78f, 0.78f, 0.78f, 1.0f);
+
+        ImGui::PushStyleColor(ImGuiCol_Button, bg);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.9f, 0.9f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.85f, 0.85f, 0.85f, 1.0f));
+
+        if (ImGui::Button(items[i], ImVec2(totalW, 0)))
+            *current = i;
+
+        ImGui::PopStyleColor(3);
+        ImGui::PopID();
+    }
 }
 
 

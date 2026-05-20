@@ -12,7 +12,6 @@ bool g_colorPicking = false;
 Color g_colorPickGrid[9] = {};
 
 // Debug logging - first open flag
-static bool g_quickPanelFirstOpen = true;
 static bool g_quickPanelTexLogged = false;
 
 void QuickPanel_Init(void) {
@@ -140,110 +139,112 @@ void QuickPanel_DrawUI(AppState* state) {
           int texAreaY = iconY + dCtrl + 14;
          int texCount = state->brushTexCount;
 
-         float sectionWidth = vp.width / 5.0f;
-         float baseX = vp.x + sectionWidth;
+         float thirdW = vp.width / 3.0f;
+         float yPos = (float)texAreaY;
 
-         rlSetBlendMode(RL_BLEND_ALPHA);
-         ImGui::SetCursorScreenPos(ImVec2(baseX, texAreaY));
-         if (ImGui::BeginChild("##texCol2", ImVec2(sectionWidth, 0), false)) {
-             int mm = state->currentBrush.Realb.useTexLumAsAlpha ? 1 : 0;
-             ImGui::Text("Mask Mode");
-             if (ImGui::RadioButton("lum is alpha", &mm, 1))
-                 state->currentBrush.Realb.useTexLumAsAlpha = true;
-             if (ImGui::RadioButton("tex.a is alpha", &mm, 0))
-                 state->currentBrush.Realb.useTexLumAsAlpha = false;
-
-         ImGui::Spacing();
-         rlSetBlendMode(RL_BLEND_ALPHA);
+         // ── Left 1/3: 4 radio columns with 2px gap ──
+         int mm = state->currentBrush.Realb.useTexLumAsAlpha ? 1 : 0;
          int mx = state->currentBrush.Realb.texBlendMode;
-         ImGui::Text("Mask Mix");
-         if (ImGui::RadioButton("multiply", &mx, 0))
-             state->currentBrush.Realb.texBlendMode = 0;
-         if (ImGui::RadioButton("threshold", &mx, 1))
-             state->currentBrush.Realb.texBlendMode = 1;
-         if (ImGui::RadioButton("use tex mask", &mx, 2))
-             state->currentBrush.Realb.texBlendMode = 2;
-
-         ImGui::Spacing();
-         ImGui::Separator();
-         rlSetBlendMode(RL_BLEND_ALPHA);
          int tnm = state->currentBrush.Realb.texNoisemode;
-         ImGui::Text("Sample Mode");
-         ImGui::SetNextItemWidth(sectionWidth * 0.85f);
-         if (ImGui::Combo("##noise", &tnm, "Stencil\0Random\0Const\0"))
-             state->currentBrush.Realb.texNoisemode = tnm;
-         ImGui::EndChild();
-         }
+         int cm = state->currentBrush.Realb.texColorMode;
+
+         float colW = (float)uiPanelWidth * 0.6f;
 
          rlSetBlendMode(RL_BLEND_ALPHA);
-         ImGui::SetCursorScreenPos(ImVec2(baseX + sectionWidth, texAreaY));
-         if (ImGui::BeginChild("##texCol3", ImVec2(sectionWidth, 0), false)) {
-             int cm = state->currentBrush.Realb.texColorMode;
-             ImGui::Text("Color");
-             if (ImGui::RadioButton("brush RGB", &cm, 0))
-                 state->currentBrush.Realb.texColorMode = 0;
-             if (ImGui::RadioButton("texture RGB", &cm, 1))
-                 state->currentBrush.Realb.texColorMode = 1;
-             if (ImGui::RadioButton("mul brush*tex", &cm, 2))
-                 state->currentBrush.Realb.texColorMode = 2;
+         ImGui::SetCursorScreenPos(ImVec2(vp.x, yPos));
+         ImGui::BeginChild("##texLeft", ImVec2(thirdW, 0), false);
+         {
+             ImGui::SetCursorPos(ImVec2(10, 10));
+             float x = 10;
 
-             ImGui::Spacing();
-             ImGui::Separator();
-             rlSetBlendMode(RL_BLEND_ALPHA);
-              DrawSlider(&bpTexScale, 0);
-              rlSetBlendMode(RL_BLEND_ALPHA);
-              DrawSlider(&bpTexFeather, 0);
-              rlSetBlendMode(RL_BLEND_ALPHA);
-              DrawSlider(&bpTexThresh, 0);
-              rlSetBlendMode(RL_BLEND_ALPHA);
-              DrawSlider(&bpTexBlendVal, 0);
+             ImGui::SetCursorPos(ImVec2(x, 10));
+             ImGui::BeginChild("##rg0", ImVec2(colW, 0), false);
+             { int v = mm; DrawRadioGroup("Mask Mode", &v, (const char*[]){"lum is alpha", "tex.a is alpha"}, 2); mm = v; }
+             ImGui::EndChild();
+             x += colW + 2.0f;
+
+             ImGui::SetCursorPos(ImVec2(x, 10));
+             ImGui::BeginChild("##rg1", ImVec2(colW, 0), false);
+             { int v = mx; DrawRadioGroup("Mask Mix", &v, (const char*[]){"multiply", "threshold", "use tex mask"}, 3); mx = v; }
+             ImGui::EndChild();
+             x += colW + 2.0f;
+
+             ImGui::SetCursorPos(ImVec2(x, 10));
+             ImGui::BeginChild("##rg2", ImVec2(colW, 0), false);
+             { int v = tnm; DrawRadioGroup("Sample Mode", &v, (const char*[]){"Stencil", "Random", "Const"}, 3); tnm = v; }
+             ImGui::EndChild();
+             x += colW + 2.0f;
+
+             ImGui::SetCursorPos(ImVec2(x, 10));
+             ImGui::BeginChild("##rg3", ImVec2(colW, 0), false);
+             { int v = cm; DrawRadioGroup("Color", &v, (const char*[]){"brush RGB", "texture RGB", "mul brush*tex"}, 3); cm = v; }
              ImGui::EndChild();
          }
+         ImGui::EndChild();
 
-          rlSetBlendMode(RL_BLEND_ALPHA);
-          float gridX = baseX + 2.0f * sectionWidth;
-          ImGui::SetCursorScreenPos(ImVec2(gridX, texAreaY));
-          if (ImGui::BeginChild("##texCol4", ImVec2(sectionWidth, 0), false)) {
-              ImVec2 childOrigin = ImGui::GetCursorScreenPos();
-              int texCols = 4;
-              int texSz = 64;
-              int texGap = 6;
+         state->currentBrush.Realb.useTexLumAsAlpha = (mm == 1);
+         state->currentBrush.Realb.texBlendMode = mx;
+         state->currentBrush.Realb.texNoisemode = tnm;
+         state->currentBrush.Realb.texColorMode = cm;
 
-              ImGui::SetCursorScreenPos(ImVec2(childOrigin.x, childOrigin.y));
-              ImGui::PushID("500");
-              bool isNone = (state->activeBrushTex < 0);
-              if (isNone) { ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(1,1,1,1)); ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.4f,0.4f,0.4f,1)); }
-              if (ImGui::Button("X", ImVec2(texSz, texSz)))
-                  BrushTex_SetActive(state, -1);
-              if (isNone) { ImGui::PopStyleColor(2); }
-              ImGui::PopID();
+         // ── Middle 1/3: texture sliders ──
+         rlSetBlendMode(RL_BLEND_ALPHA);
+         ImGui::SetCursorScreenPos(ImVec2(vp.x + thirdW, yPos));
+         ImGui::BeginChild("##texMiddle", ImVec2(thirdW, 0), false);
+         ImGui::SetCursorPos(ImVec2(10, 10));
+         DrawSlider(&bpTexScale, 0);
+         rlSetBlendMode(RL_BLEND_ALPHA);
+         DrawSlider(&bpTexFeather, 0);
+         rlSetBlendMode(RL_BLEND_ALPHA);
+         DrawSlider(&bpTexThresh, 0);
+         rlSetBlendMode(RL_BLEND_ALPHA);
+         DrawSlider(&bpTexBlendVal, 0);
+         ImGui::EndChild();
 
-              rlSetBlendMode(RL_BLEND_ALPHA);
-              for (int ti = 0; ti < texCount && ti < texCols * 4; ti++) {
-                  int col = ti % texCols;
-                  int row = ti / texCols;
-                  float tx = childOrigin.x + col * (texSz + texGap);
-                  float ty = childOrigin.y + row * (texSz + texGap) + texSz + texGap;
-                  ImGui::SetCursorScreenPos(ImVec2(tx, ty));
-                  ImGui::PushID(501 + ti);
-                  Texture2D thumb = BrushTex_GetThumb(state, ti);
-                  bool isSel = (state->activeBrushTex == ti);
-                  if (isSel) ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(1,1,1,1));
-                  if (thumb.id > 0) {
-                      if (!g_quickPanelTexLogged) {
-                          TraceLog(LOG_INFO, "[QuickPanel] Tex[%d] name='%s' thumb.id=%d rt.id=%d",
-                              ti, state->brushTex[ti].name,
-                              thumb.id, state->brushTex[ti].rt.id);
-                          g_quickPanelTexLogged = true;
-                      }
-                      if (ImGui::ImageButton("##bt", (ImTextureID)(intptr_t)thumb.id, ImVec2(texSz, texSz)))
-                          BrushTex_SetActive(state, ti);
-                  }
-                  if (isSel) ImGui::PopStyleColor();
-                  ImGui::PopID();
-              }
-                ImGui::EndChild();
-           }
+         // ── Right 1/3: thumbnail grid ──
+         rlSetBlendMode(RL_BLEND_ALPHA);
+         ImGui::SetCursorScreenPos(ImVec2(vp.x + 2.0f * thirdW, yPos));
+         ImGui::BeginChild("##texRight", ImVec2(thirdW, 0), false);
+         {
+             ImGui::SetCursorPos(ImVec2(10, 10));
+             int texCols = 3;
+             int texSz = 64;
+             int texGap = 6;
+
+             ImGui::PushID("500");
+             bool isNone = (state->activeBrushTex < 0);
+             if (isNone) { ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(1,1,1,1)); ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.4f,0.4f,0.4f,1)); }
+             if (ImGui::Button("X", ImVec2(texSz, texSz)))
+                 BrushTex_SetActive(state, -1);
+             if (isNone) { ImGui::PopStyleColor(2); }
+             ImGui::PopID();
+
+             rlSetBlendMode(RL_BLEND_ALPHA);
+             for (int ti = 0; ti < texCount && ti < texCols * 6; ti++) {
+                 int col = ti % texCols;
+                 int row = ti / texCols;
+                 float tx = 10 + col * (texSz + texGap);
+                 float ty = 10 + row * (texSz + texGap) + texSz + texGap;
+                 ImGui::SetCursorPos(ImVec2(tx, ty));
+                 ImGui::PushID(501 + ti);
+                 Texture2D thumb = BrushTex_GetThumb(state, ti);
+                 bool isSel = (state->activeBrushTex == ti);
+                 if (isSel) ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(1,1,1,1));
+                 if (thumb.id > 0) {
+                     if (!g_quickPanelTexLogged) {
+                         TraceLog(LOG_INFO, "[QuickPanel] Tex[%d] name='%s' thumb.id=%d rt.id=%d",
+                             ti, state->brushTex[ti].name,
+                             thumb.id, state->brushTex[ti].rt.id);
+                         g_quickPanelTexLogged = true;
+                     }
+                     if (ImGui::ImageButton("##bt", (ImTextureID)(intptr_t)thumb.id, ImVec2(texSz, texSz)))
+                         BrushTex_SetActive(state, ti);
+                 }
+                 if (isSel) ImGui::PopStyleColor();
+                 ImGui::PopID();
+             }
+         }
+         ImGui::EndChild();
       }
 
       ImGui::End();

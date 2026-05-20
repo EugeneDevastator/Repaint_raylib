@@ -275,13 +275,17 @@ void BrushBlend_ApplyStamp(
     float actualRadOut = brush->Realb.rad_out;
     float stampSizePx = (float)drawSz;
 
-    if (actualRadOut < 1.0f && actualRadOut > 0.0f) {
+    if (actualRadOut <= 1.0f && actualRadOut > 0.0f) {
         float ratio = actualRadOut / radOutForGeo;
         stampSizePx = (float)drawSz * ratio;
-        if (stampSizePx < 1.0f) stampSizePx = 1.0f;
-
-        float adjustedOpacity = brush->Realb.opacity * actualRadOut;
-        SetShaderValue(brushBlendShader, locOpacity, &adjustedOpacity, SHADER_UNIFORM_FLOAT);
+        float minStamp = 1.0f;
+        if (actualRadOut < 0.5f) {
+            minStamp = actualRadOut * 2.0f; // 0.5 → 1px, 0.25 → 0.5px → clamp to 1
+            if (minStamp < 1.0f) minStamp = 1.0f;
+            float adjustedOpacity = brush->Realb.opacity * actualRadOut * 2.0f;
+            SetShaderValue(brushBlendShader, locOpacity, &adjustedOpacity, SHADER_UNIFORM_FLOAT);
+        }
+        if (stampSizePx < minStamp) stampSizePx = minStamp;
     }
 
     float x0 = stampX - stampSizePx * 0.5f;
