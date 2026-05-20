@@ -40,6 +40,8 @@ struct QueuedNetDab {
     uint16_t seed;
     int      activeLayer;
     uint8_t  preserveop;
+    uint8_t  eraseMode;
+    float    perspective;
 };
 
 struct NetworkBroker : ICommandBroker {
@@ -79,7 +81,7 @@ struct NetworkBroker : ICommandBroker {
     NetworkBroker();
     ~NetworkBroker();
 
-    void on_input(const InputEvent& e) override;
+    void on_input(const BrushDab& e) override;
     void poll(AppState* state) override;
 
     bool Connect(const char* addr, int port);

@@ -193,7 +193,7 @@ void NetworkBroker::SendChat(const char* msg) {
 
 /* ── ICommandBroker ─────────────────────────────────────────────────────── */
 
-void NetworkBroker::on_input(const InputEvent& e) {
+void NetworkBroker::on_input(const BrushDab& e) {
     int next = (localTail + 1) % CMD_CAPACITY;
     if (next == localHead) return;
     if (!appState) return;
@@ -226,6 +226,8 @@ void NetworkBroker::on_input(const InputEvent& e) {
     localQueue[localTail].bmidx       = (int)e.brush.bmidx;
     localQueue[localTail].seed        = e.brush.seed;
     localQueue[localTail].preserveop  = e.brush.preserveop;
+    localQueue[localTail].eraseMode   = e.brush.eraseMode;
+    localQueue[localTail].perspective = e.brush.perspective;
     localQueue[localTail].activeLayer = layer;
     localQueue[localTail].targetRT    = appState->layerRTs[layer];
 
@@ -263,6 +265,8 @@ void NetworkBroker::poll(AppState* st) {
             brush.Realb.seed       = d->seed;
             brush.Realb.col        = d->color;
             brush.Realb.preserveop = d->preserveop;
+            brush.Realb.eraseMode  = d->eraseMode;
+            brush.Realb.perspective = d->perspective;
 
             RenderTexture2D rt = st->layerRTs[d->activeLayer];
             if (rt.id > 0) {

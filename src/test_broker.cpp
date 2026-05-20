@@ -9,7 +9,7 @@ TestBroker::TestBroker() {
     appState = NULL;
 }
 
-void TestBroker::on_input(const InputEvent& e) {
+void TestBroker::on_input(const BrushDab& e) {
     if (!appState) return;
     int layer = appState->activeLayer;
     if (layer < 0 || layer >= appState->texCount) return;

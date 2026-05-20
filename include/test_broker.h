@@ -19,7 +19,7 @@ struct TestBroker : ICommandBroker {
 
     TestBroker();
     AppState* appState;
-    void on_input(const InputEvent& e) override;
+    void on_input(const BrushDab& e) override;
     void poll(AppState* state) override;
 };
 

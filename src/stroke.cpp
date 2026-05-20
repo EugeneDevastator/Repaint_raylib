@@ -39,6 +39,7 @@ d_RealBrush Stroke_BlendBrushes(d_RealBrush from, d_RealBrush to, float k) {
     bbr.MaskID     = from.MaskID;
     bbr.pipeID     = from.pipeID;
     bbr.bmidx      = from.bmidx;
+    bbr.noiseidx   = from.noiseidx;
     bbr.preserveop = from.preserveop;
     bbr.texId      = from.texId;
     bbr.texBlendMode = from.texBlendMode;
@@ -50,82 +51,8 @@ d_RealBrush Stroke_BlendBrushes(d_RealBrush from, d_RealBrush to, float k) {
     bbr.useTexLumAsAlpha = from.useTexLumAsAlpha;
     bbr.texUseRGB    = from.texUseRGB;
     bbr.texColorMode = from.texColorMode;
+    bbr.perspective  = from.perspective;
+    bbr.eraseMode    = from.eraseMode;
 
     return bbr;
-}
-
-int Stroke_UnpackSection(
-    d_Section* section,
-    Vector2* out_positions,
-    d_Brush* out_brushes,
-    int max_dabs
-) {
-    if (max_dabs <= 0) return 0;
-
-    float stdist = Dist2D(section->Stroke.pos1, section->Stroke.pos2);
-    if (stdist < 0.001f) return 0;
-
-    // Radii at each end of the segment (already include SizeMul)
-    float rad      = section->BrushFrom.Realb.rad_out;
-    float endradius = section->Brush.Realb.rad_out;
-
-    // Direction unit vector (pos1 -> pos2)
-    float dx = section->Stroke.pos1.x - section->Stroke.pos2.x;
-    float dy = section->Stroke.pos1.y - section->Stroke.pos2.y;
-    float x2r = dx / stdist;
-    float y2r = dy / stdist;
-
-    // Walk along stroke segment
-    float curlen  = 0.0f;
-    float nextrad = rad + (curlen * (endradius - rad) / stdist);
-    float nextlen = curlen + nextrad * fmaxf(section->spacing, 0.01f);
-
-    // Scatter range: normalized scatter / 51.0 gives 0-5 range from uint8
-    float rrang = section->Brush.Realb.rad_out * (section->scatter / 51.0f);
-
-    uint16_t n = 0;
-    int count = 0;
-
-    if (nextlen < stdist) {
-        while (nextlen < stdist && count < max_dabs) {
-            n++;
-
-            // Scatter jitter (perpendicular to stroke direction)
-            float rnflw  = Stroke_RawRnd(section->BrushFrom.Realb.seed + n * 2, 1024) * rrang * 2.0f - rrang;
-            float rnside = 0.0f;
-
-            Vector2 dotpos1;
-            dotpos1.x = section->Stroke.pos2.x + ((nextlen * dx) / stdist) - rnflw * y2r + rnside * x2r;
-            dotpos1.y = section->Stroke.pos2.y + ((nextlen * dy) / stdist) + rnflw * x2r + rnside * y2r;
-
-            // Interpolated brush at this position
-            float k = nextlen / stdist;
-            d_Brush cbrush = section->BrushFrom;
-            cbrush.Realb = Stroke_BlendBrushes(section->BrushFrom.Realb, section->Brush.Realb, k);
-
-            // Noise seeding
-            if (section->Noisemode == 0) {
-                cbrush.Realb.noisex = (uint16_t)(Stroke_RawRnd(section->BrushFrom.Realb.seed + n * 3, 1024) * 1024.0f);
-                cbrush.Realb.noisey = (uint16_t)(Stroke_RawRnd(section->BrushFrom.Realb.seed + n + 21, 1024) * 1024.0f);
-            } else if (section->Noisemode == 1) {
-                cbrush.Realb.noisex = 34;
-                cbrush.Realb.noisey = 76;
-            } else if (section->Noisemode == 2) {
-                cbrush.Realb.noisex = (uint16_t)fmaxf(0, (int)dotpos1.x);
-                cbrush.Realb.noisey = (uint16_t)fmaxf(0, (int)dotpos1.y);
-            }
-
-            // Keep noise values in [0, 1024)
-            cbrush.Realb.noisex = (uint16_t)(cbrush.Realb.noisex - 1024 * (int)(cbrush.Realb.noisex / 1024));
-            cbrush.Realb.noisey = (uint16_t)(cbrush.Realb.noisey - 1024 * (int)(cbrush.Realb.noisey / 1024));
-
-            out_positions[count] = dotpos1;
-            out_brushes[count]   = cbrush;
-            count++;
-
-            nextlen = nextlen + nextrad * fmaxf(section->spacing, 0.01f);
-        }
-    }
-
-    return count;
 }

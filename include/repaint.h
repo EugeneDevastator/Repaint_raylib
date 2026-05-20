@@ -180,7 +180,7 @@ typedef struct {
 } Canvas;
 
 // ── Network painter architecture ─────────────────────────────────────────
-struct InputEvent  { float x, y; float srcX, srcY; d_RealBrush brush; };
+struct BrushDab  { float x, y; float srcX, srcY; d_RealBrush brush; };
 struct DrawCommand { float x, y; uint32_t color; float radius; };
 
 // ── Input pipeline architecture ─────────────────────────────────────────
@@ -203,27 +203,26 @@ public:
     StrokePoint Feed(float x, float y, double time);
 };
 
-class BrushInterpolator {
-public:
-    d_Brush segBrushFrom;          // brush at segment start (snapshot)
-    Vector2 lastDabPos;            // last placed dab position (Qt chaining)
-    Vector2 prevInputPos;          // previous raw input position (for spacing measurement)
-    Vector2 smudgeSrcPos;          // smudge source position
-    float dabAccum;                // leftover for spacing
+struct StrokeEngine {
+    // Segment chaining state
+    d_Brush segBrushFrom;
+    Vector2 lastDabPos;
+    float dabAccum;
+    Vector2 smudgeSrcPos;
     bool inStroke;
-
-    BrushInterpolator();
-    void BeginStroke(const d_Brush& userBrush, float startX, float startY);
-    void EndStroke();
-    int FeedStrokePoint(const StrokePoint& pt, const d_RealBrush& targetBrush,
-                        InputEvent* out, int maxOut,
-                        float spacing, int toolMode);
+    // Modulator tracking
+    Vector2 prevSegPos;
+    Vector2 prevSegDir;
+    float prevSegLen;
+    float prevVel;
+    float initDir;
+    bool initDirSet;
 };
 
 struct AppState;
 
 struct ICommandBroker {
-    virtual void on_input(const InputEvent& e) = 0;
+    virtual void on_input(const BrushDab& e) = 0;
     virtual void poll(AppState* state) = 0;
     virtual ~ICommandBroker() = default;
 };
@@ -249,6 +248,8 @@ struct LocalBroker : ICommandBroker {
         uint16_t seed;
         int activeLayer;
         uint8_t preserveop;
+        uint8_t eraseMode;
+        float perspective;
     };
 
     QueuedDab queue[CMD_CAPACITY];
@@ -257,7 +258,7 @@ struct LocalBroker : ICommandBroker {
     AppState* appState;
 
     LocalBroker();
-    void on_input(const InputEvent& e) override;
+    void on_input(const BrushDab& e) override;
     void poll(AppState* state) override;
 };
 
@@ -312,15 +313,8 @@ typedef struct {
     int endLayer;
     ICommandBroker* broker;
     InputFilter inputFilter;
-    BrushInterpolator brushInterp;
+    StrokeEngine strokeEng;
     Vector2 lineLastDabPos;          // line tool dab chaining
-    // Modulator tracking state
-    Vector2 prevSegPos;
-    Vector2 prevSegDir;
-    float prevSegLen;
-    float prevVel;
-    float initDir;
-    bool initDirSet;
 } Viewport;
 
 struct AppState {

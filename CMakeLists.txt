@@ -64,12 +64,12 @@ set(SOURCES
     src/ui_changelog.cpp
     src/ui_style.cpp
     src/stroke.cpp
+    src/stroke_engine.cpp
     src/file_format.cpp
     src/network_broker.cpp
     src/app_config.cpp
     src/sock_platform.cpp
     src/input_filter.cpp
-    src/brush_interpolator.cpp
     src/brush_tex.cpp
     src/usertextures.cpp
     src/test_broker.cpp

@@ -6,7 +6,7 @@ LocalBroker::LocalBroker() {
     appState = NULL;
 }
 
-void LocalBroker::on_input(const InputEvent& e) {
+void LocalBroker::on_input(const BrushDab& e) {
     int next = (tail + 1) % CMD_CAPACITY;
     if (next == head) return;
     if (!appState) return;
@@ -39,6 +39,8 @@ void LocalBroker::on_input(const InputEvent& e) {
     queue[tail].bmidx      = (int)e.brush.bmidx;
     queue[tail].seed       = e.brush.seed;
     queue[tail].preserveop = e.brush.preserveop;
+    queue[tail].eraseMode  = e.brush.eraseMode;
+    queue[tail].perspective = e.brush.perspective;
     queue[tail].activeLayer = layer;
     queue[tail].targetRT   = appState->layerRTs[layer];
 
@@ -73,6 +75,8 @@ void LocalBroker::poll(AppState* state) {
             brush.Realb.seed       = d->seed;
             brush.Realb.col        = d->color;
             brush.Realb.preserveop = d->preserveop;
+            brush.Realb.eraseMode  = d->eraseMode;
+            brush.Realb.perspective = d->perspective;
 
             RenderTexture2D rt = state->layerRTs[d->activeLayer];
             if (rt.id > 0)
