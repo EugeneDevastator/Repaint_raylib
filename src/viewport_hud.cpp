@@ -170,8 +170,11 @@ void ViewportHUD_Draw(AppState* state) {
                     float dr = ((float)rand() / (float)RAND_MAX) * 2.0f - 1.0f;
 
                     // Size jitter
-                    { float d = dr * 2.0f * bpSize.user.jitter * (bpSize.outMax - bpSize.outMin);
-                      dabs[i].rad_out += d; dabs[i].rad_out = fmaxf(bpSize.outMin, fminf(bpSize.outMax, dabs[i].rad_out)); }
+                    { float sizeMulFactor = powf(16.0f, BParam_GetValue(&bpSizeMul) / 128.0f - 1.0f);
+                      float d = dr * 2.0f * bpSize.user.jitter * (bpSize.outMax - bpSize.outMin) * sizeMulFactor;
+                      float rawMin = bpSize.outMin * sizeMulFactor;
+                      float rawMax = bpSize.outMax * sizeMulFactor;
+                      dabs[i].rad_out += d; dabs[i].rad_out = fmaxf(rawMin, fminf(rawMax, dabs[i].rad_out)); }
 
                     // Hardness jitter
                     { float h = dabs[i].rad_in / fmaxf(dabs[i].rad_out, 0.001f);
@@ -183,10 +186,12 @@ void ViewportHUD_Draw(AppState* state) {
                       dabs[i].opacity += d; dabs[i].opacity = fmaxf(0.0f, fminf(1.0f, dabs[i].opacity)); }
 
                     // SizeMul jitter
-                    { float raw = BParam_GetValue(&bpSizeMul) + dr * 2.0f * bpSizeMul.user.jitter * (bpSizeMul.outMax - bpSizeMul.outMin);
+                    { float baseFactor = powf(16.0f, BParam_GetValue(&bpSizeMul) / 128.0f - 1.0f);
+                      float raw = BParam_GetValue(&bpSizeMul) + dr * 2.0f * bpSizeMul.user.jitter * (bpSizeMul.outMax - bpSizeMul.outMin);
                       raw = fmaxf(bpSizeMul.outMin, fminf(bpSizeMul.outMax, raw));
-                      float f = powf(16.0f, raw / 128.0f - 1.0f);
-                      dabs[i].rad_out *= f; dabs[i].rad_in *= f; }
+                      float jitteredFactor = powf(16.0f, raw / 128.0f - 1.0f);
+                      float ratio = (baseFactor > 0.0001f) ? jitteredFactor / baseFactor : 1.0f;
+                      dabs[i].rad_out *= ratio; dabs[i].rad_in *= ratio; }
 
                     // Scatter
                     float scatterVal = GetModVal(&bpScatter);

@@ -10,13 +10,15 @@ extern bool quickPanelShow;
  *   then converted back, so per-dab jitter is on top of the segment's
  *   interpolated base.
  */
-static void PerDabJitter(InputEvent* dabs, int n) {
+static void PerDabJitter(InputEvent* dabs, int n, float sizeMulFactor) {
     for (int i = 0; i < n; i++) {
         float dr = ((float)rand() / (float)RAND_MAX) * 2.0f - 1.0f;
         d_RealBrush& b = dabs[i].brush;
 
-        { float d = dr * 2.0f * bpSize.user.jitter * (bpSize.outMax - bpSize.outMin);
-          b.rad_out += d; b.rad_out = fmaxf(bpSize.outMin, fminf(bpSize.outMax, b.rad_out)); }
+        { float d = dr * 2.0f * bpSize.user.jitter * (bpSize.outMax - bpSize.outMin) * sizeMulFactor;
+          float rawMin = bpSize.outMin * sizeMulFactor;
+          float rawMax = bpSize.outMax * sizeMulFactor;
+          b.rad_out += d; b.rad_out = fmaxf(rawMin, fminf(rawMax, b.rad_out)); }
 
         { float h = b.rad_in / fmaxf(b.rad_out, 0.001f);
           float d = dr * 2.0f * bpHardness.user.jitter * (bpHardness.outMax - bpHardness.outMin);
@@ -42,10 +44,12 @@ static void PerDabJitter(InputEvent* dabs, int n) {
         { float d = dr * 2.0f * bpCloneOpacity.user.jitter * (bpCloneOpacity.outMax - bpCloneOpacity.outMin);
           b.cop += d; b.cop = fmaxf(0.0f, fminf(1.0f, b.cop)); }
 
-        { float raw = BParam_GetValue(&bpSizeMul) + dr * 2.0f * bpSizeMul.user.jitter * (bpSizeMul.outMax - bpSizeMul.outMin);
+        { float baseFactor = sizeMulFactor;
+          float raw = BParam_GetValue(&bpSizeMul) + dr * 2.0f * bpSizeMul.user.jitter * (bpSizeMul.outMax - bpSizeMul.outMin);
           raw = fmaxf(bpSizeMul.outMin, fminf(bpSizeMul.outMax, raw));
-          float f = powf(16.0f, raw / 128.0f - 1.0f);
-          b.rad_out *= f; b.rad_in *= f; }
+          float jitteredFactor = powf(16.0f, raw / 128.0f - 1.0f);
+          float ratio = (baseFactor > 0.0001f) ? jitteredFactor / baseFactor : 1.0f;
+          b.rad_out *= ratio; b.rad_in *= ratio; }
     }
 }
 
@@ -268,7 +272,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                 float spacingVal  = BParam_GetValue(&bpSpacing);
                 float spacing = fmaxf(targetBr.rad_out * 2.0f * spacingVal, 1.0f);
                 int n = vp->brushInterp.FeedStrokePoint(sp, targetBr, dabs, 1024, spacing, state->mode);
-                PerDabJitter(dabs, n);
+                PerDabJitter(dabs, n, sizeMulFactor);
                 d_Brush tb; memset(&tb, 0, sizeof(tb));
                 for (int i = 0; i < n; i++) {
                     tb.Realb = dabs[i].brush;
@@ -377,12 +381,11 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     float sizeMulFactor = powf(16.0f, BParam_GetValue(&bpSizeMul) / 128.0f - 1.0f);
                     targetBr.rad_out *= sizeMulFactor;
                     targetBr.rad_in  *= sizeMulFactor;
-
                     // Feed through BrushInterpolator → dabs
                     float spacingVal = BParam_GetValue(&bpSpacing);
                     float spacing = fmaxf(targetBr.rad_out * 2.0f * spacingVal, 1.0f);
                     int n = vp->brushInterp.FeedStrokePoint(sp, targetBr, dabs, 1024, spacing, state->mode);
-                    PerDabJitter(dabs, n);
+                    PerDabJitter(dabs, n, sizeMulFactor);
                     for (int i = 0; i < n; i++) {
                         if (vp->broker) vp->broker->on_input(dabs[i]);
                         if (vp->strokeLen < MAX_STROKE_PTS)
