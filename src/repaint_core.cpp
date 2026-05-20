@@ -40,7 +40,6 @@ void d_Brush_SelfPack(d_Brush* brush) {
     brush->Pack.seed = brush->Realb.seed;
     brush->Pack.pipeID = brush->Realb.pipeID;
     brush->Pack.resangle = (uint16_t)(brush->Realb.resangle * 65535.0f / 360.0f);
-    brush->Pack.scale = (uint8_t)(brush->Realb.scale * 51.0f);
     brush->Pack.sol = (uint8_t)(brush->Realb.sol * 255.0f);
     brush->Pack.sol2op = (uint8_t)(brush->Realb.sol2op * 255.0f);
     brush->Pack.x2y = (uint8_t)(brush->Realb.x2y * 255.0f);
@@ -64,7 +63,6 @@ void d_Brush_SelfUnpack(d_Brush* brush) {
     brush->Realb.seed = brush->Pack.seed;
     brush->Realb.pipeID = brush->Pack.pipeID;
     brush->Realb.resangle = (float)brush->Pack.resangle * 360.0f / 65535.0f;
-    brush->Realb.scale = (float)brush->Pack.scale * 5.0f / 255.0f;
     brush->Realb.sol = brush->Pack.sol / 255.0f;
     brush->Realb.sol2op = brush->Pack.sol2op / 255.0f;
     brush->Realb.x2y = brush->Pack.x2y / 255.0f;

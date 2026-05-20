@@ -11,13 +11,6 @@ int quickPanelMouseMode = 0;
 bool g_colorPicking = false;
 Color g_colorPickGrid[9] = {};
 
-// Sub-component visibility toggles (controlled from left panel)
-bool g_showBrushPreview = true;   // gizmo ring + rotation arrow
-bool g_showStampPreview = true;   // brush stamp preview (quick panel overlay)
-bool g_showTextureGroup = true;   // texture controls (dropdowns, sliders, grid)
-bool g_showFilePanel = true;     // file operations panel
-bool g_showToolPanel = true;      // tool selection toolbox
-
 // Debug logging - first open flag
 static bool g_quickPanelFirstOpen = true;
 static bool g_quickPanelTexLogged = false;
@@ -40,9 +33,9 @@ void QuickPanel_DrawUI(AppState* state) {
     int gcy = (int)(vp.y + vp.height * 0.5f);
 
     rlSetBlendMode(RL_BLEND_ALPHA);
-    if (g_showFilePanel) FilePanel_Draw(state, vp);
+    FilePanel_Draw(state, vp);
     rlSetBlendMode(RL_BLEND_ALPHA);
-    if (g_showToolPanel) ToolBox_Draw(state, vp);
+    ToolBox_Draw(state, vp);
 
     ImGui::SetNextWindowPos(ImVec2(vp.x, vp.y));
     ImGui::SetNextWindowSize(ImVec2(vp.width, vp.height));
@@ -143,7 +136,7 @@ void QuickPanel_DrawUI(AppState* state) {
         }
     }
 
-     if (g_showTextureGroup) {
+     {
           int texAreaY = iconY + dCtrl + 14;
          int texCount = state->brushTexCount;
 
@@ -249,9 +242,9 @@ void QuickPanel_DrawUI(AppState* state) {
                   if (isSel) ImGui::PopStyleColor();
                   ImGui::PopID();
               }
-              ImGui::EndChild();
-         }
-     }
+                ImGui::EndChild();
+           }
+      }
 
-     ImGui::End();
- }
+      ImGui::End();
+  }

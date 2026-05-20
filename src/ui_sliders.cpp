@@ -18,7 +18,7 @@ static void DrawSliderCore(ImDrawList* dl, int x, int y, int length, int thickne
             float t = (orient == 0) ? (float)k / fmaxf(length-1,1)
                                     : (float)(length-1-k) / fmaxf(length-1,1);
             Color c;
-            if (colorMode == 0) c = HSLToRGB(t, 1.0f, 0.5f);
+            if (colorMode == 0) c = HSLToRGB(t, colorSat, colorLit);
             else if (colorMode == 1) c = HSLToRGB(colorHue, t, colorLit);
             else c = HSLToRGB(colorHue, colorSat, t);
             uint32_t col = IM_COL32(c.r, c.g, c.b, 255);

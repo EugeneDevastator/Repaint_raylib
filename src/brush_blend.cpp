@@ -5,6 +5,7 @@ static Shader brushBlendShader = {0};
 static Shader brushGeoShader   = {0};
 
 static int locUAngle  = -1, locUSquish = -1, locUSize = -1;
+static int locUPerspective = -1;
 static int locOpacity = -1, locRadIn   = -1;
 static int locBrushColor = -1, locCurve = -1;
 static int locSol = -1, locSol2op = -1, locSeed = -1;
@@ -63,6 +64,7 @@ void BrushBlend_Init(void) {
     locUAngle  = GetShaderLocation(brushGeoShader, "uAngle");
     locUSquish = GetShaderLocation(brushGeoShader, "uSquish");
     locUSize   = GetShaderLocation(brushGeoShader, "uSize");
+    locUPerspective = GetShaderLocation(brushGeoShader, "uPerspective");
 
     snprintf(vs, sizeof(vs), "%sshaders/brush_blend.vs", ad);
     snprintf(fs, sizeof(fs), "%sshaders/brush_blend.fs", ad);
@@ -137,7 +139,8 @@ void BrushBlend_ApplyStamp(
     int H = dstRT.texture.height;
 
     float radOut   = fmaxf(brush->Realb.rad_out, 0.001f);
-    float radIn    = (float)brush->Realb.rad_in;
+    float radInRatio = brush->Realb.rad_in / radOut;
+    radInRatio = fmaxf(0.0f, fminf(1.0f, radInRatio));
     float angleRad = (float)brush->Realb.resangle * (float)(M_PI / 180.0);
     float squish   = fmaxf((float)brush->Realb.x2y, 0.01f);
 
@@ -196,6 +199,8 @@ void BrushBlend_ApplyStamp(
     SetShaderValue(brushGeoShader, locUAngle,  &angleRad, SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushGeoShader, locUSquish, &squish,   SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushGeoShader, locUSize,   &size,     SHADER_UNIFORM_FLOAT);
+    float persp = brush->Realb.perspective;
+    SetShaderValue(brushGeoShader, locUPerspective, &persp, SHADER_UNIFORM_FLOAT);
 
     BeginTextureMode(*geoRT);
     ClearBackground((Color){0, 0, 0, 0});
@@ -243,8 +248,7 @@ void BrushBlend_ApplyStamp(
     float sc[2] = { stampX / (float)W, (float)(H - stampY) / (float)H };
 
     SetShaderValue(brushBlendShader, locOpacity,        &opacity,    SHADER_UNIFORM_FLOAT);
-    float radIn_normalized = clampf(radIn / fmaxf( brush->Realb.rad_out, 0.001f), 0.0f, 0.99f);
-    SetShaderValue(brushBlendShader, locRadIn, &radIn_normalized, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(brushBlendShader, locRadIn, &radInRatio, SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locBrushColor,     col,         SHADER_UNIFORM_VEC4);
     SetShaderValue(brushBlendShader, locCurve,          &curve,      SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locSol,            &sol,        SHADER_UNIFORM_FLOAT);
@@ -272,13 +276,8 @@ void BrushBlend_ApplyStamp(
     float stampSizePx = (float)drawSz;
 
     if (actualRadOut < 1.0f && actualRadOut > 0.0f) {
-        float minRadForBucket = 1.0f;
-        float minBboxHalf = minRadForBucket * 1.41421356f;
-        int minSz = (int)ceilf(minBboxHalf * 2.0f);
-        if (minSz < 32) minSz = 32;
-        int minBucket = next_mult32(minSz);
-        float ratio = actualRadOut / minRadForBucket;
-        stampSizePx = (float)minBucket * ratio;
+        float ratio = actualRadOut / radOutForGeo;
+        stampSizePx = (float)drawSz * ratio;
         if (stampSizePx < 1.0f) stampSizePx = 1.0f;
 
         float adjustedOpacity = brush->Realb.opacity * actualRadOut;

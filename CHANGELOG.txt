@@ -1,15 +1,20 @@
-=== Batch 1 Changelog ===
+=== Batch 3 Changelog ===
 
-1. Brush preview now draws entire segment (center to right) with proper spacing, scatter, and size modulation
-2. Added tool power slider (bpPower) forwarded to brush_blend shader via uPwr uniform
-3. Window icon now uses project icon from QT repo (reicon.ico / ICON16.png)
-4. Added two erase modes:
-   - Alpha Erase: reduces canvas alpha by brush alpha
-   - Color Erase: applies color to semi-transparent regions using gamma-based formula
-5. Flipped gradients in vertical sliders (bottom-to-top now matches expected direction)
-6. Small brush handling: when rad_out < 1px, stamp size is scaled down proportionally and opacity is reduced
-7. Added changelog button in left panel - reads CHANGELOG.txt from app directory
-8. Added layer threshold and feather sliders in layer panel:
-   - Threshold: cuts off pixels below alpha level (default 0 = disabled)
-   - Feather: softness of threshold edge (default 1 = fully soft)
-   - Values forwarded to layer_blend shader
+1. Refactored SizeMul to be applied directly in UpdateUI
+   - SizeMul is now applied to rad_out and rad_in in app.cpp UpdateUI
+   - Removed separate SizeMul application from all stroke engine paths (viewport.cpp)
+   - Brush state now always contains final computed sizes
+   - Only 3 params control brush overall size: radOut, radIn (as ratio), SizeMul
+
+2. Removed redundant scale field from brush structs
+   - Removed 'scale' from d_RealBrush and d_PackedBrush
+   - Updated pack/unpack functions in repaint_core.cpp
+   - Updated Stroke_BlendBrushes and Stroke_UnpackSection in stroke.cpp
+   - SizeMul BParam is now the only size multiplier
+
+3. Fixed stroke preview to update every 10 frames
+   - Preview now updates every 10 frames regardless of param changes
+   - Also updates immediately when any brush parameter changes (hash-based detection)
+   - Uses same per-dab jitter logic as the real stroke engine (size, hardness, opacity, SizeMul)
+   - Applies scatter perpendicular to stroke direction
+   - Segment draws diagonally to upper right corner

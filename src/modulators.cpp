@@ -19,6 +19,7 @@ BParam bpAngle;
 BParam bpScaleRel;
 BParam bpSizeMul;
 BParam bpPower;
+BParam bpPerspective;
 
 float g_velocity = 0.0f;
 d_StrokePars g_modPars;
@@ -122,6 +123,9 @@ void Modulators_Init(void) {
 
     BParam_Init(&bpPower, 43, "Power", 0.0f, 1.0f, 0.0f);
     strncpy(bpPower.tooltip, "Displacement power for the Disp tool (0=no displacement, 1=max)", sizeof(bpPower.tooltip) - 1);
+
+    BParam_Init(&bpPerspective, 44, "Perspective", 0.0f, 1.0f, 0.0f);
+    strncpy(bpPerspective.tooltip, "Perspective distortion: rotates brush along Y axis before in-plane rotation", sizeof(bpPerspective.tooltip) - 1);
 
     // Init global modulator defaults
     for (int i = 0; i < csSTOP; i++) g_modPars.Pars[i] = 1.0f;

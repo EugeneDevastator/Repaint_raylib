@@ -112,7 +112,7 @@ typedef struct {
     PackedFloat Prad_in, Prad_out;
     uint8_t crv;
     uint16_t resangle;
-    uint8_t x2y, scale, cop, pwr, sol, sol2op;
+    uint8_t x2y, cop, pwr, sol, sol2op;
     uint16_t seed, noisex, noisey;
     uint8_t NoiseID, MaskID, pipeID, bmidx, noiseidx, preserveop;
     Color col;
@@ -121,7 +121,7 @@ typedef struct {
 typedef struct {
     float rad_in, rad_out, opacity;
     double resangle;
-    float crv, x2y, scale, cop, pwr, sol, sol2op;
+    float crv, x2y, cop, pwr, sol, sol2op;
     uint16_t seed, noisex, noisey;
     uint8_t NoiseID, MaskID, pipeID, bmidx, noiseidx, preserveop;
     int texId;          // -1 = no texture
@@ -135,6 +135,7 @@ typedef struct {
     bool texUseRGB;
     int texColorMode;   // 0 = use brush RGB, 1 = use texture RGB, 2 = multiply
     int eraseMode;      // 0 = none, 1 = alpha erase, 2 = color erase
+    float perspective;  // perspective distortion (Y-axis rotation before in-plane)
     Color col;
 } d_RealBrush;
 
@@ -398,7 +399,6 @@ extern bool quickPanelShow;
 extern int quickPanelMouseMode;
 extern bool g_colorPicking;
 extern Color g_colorPickGrid[9];
-extern bool g_showBrushPreview;
 
 // ── QuickPanel layout constants ────────────────────────────────────────
 #define QP_SLIDER_W 28
@@ -441,6 +441,7 @@ extern BParam bpAngle;
 extern BParam bpScaleRel;
 extern BParam bpSizeMul;
 extern BParam bpPower;
+extern BParam bpPerspective;
 
 extern d_StrokePars g_modPars;
 

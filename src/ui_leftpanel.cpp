@@ -7,7 +7,7 @@
 extern bool layersDirty;
 extern bool panelResizing;
 extern int uiPanelWidth;
-extern BParam bpOpacity, bpSize, bpHardness, bpSpacing, bpCurvature, bpScatter, bpCloneOpacity, bpSizeMul, bpPower;
+extern BParam bpOpacity, bpSize, bpHardness, bpSpacing, bpCurvature, bpScatter, bpCloneOpacity, bpSizeMul, bpPower, bpPerspective;
 
 Texture2D g_blendModeIcon = {0};
 bool g_blendIconLoaded = false;
@@ -62,8 +62,8 @@ void LeftPanel_Draw(AppState* state) {
     ImGui::Spacing();
 
     // BParam sliders
-    BParam* bps[] = {&bpSize, &bpSizeMul, &bpHardness, &bpCurvature, &bpSpacing, &bpOpacity, &bpAngle, &bpScaleRel, &bpCloneOpacity, &bpScatter, &bpPower};
-    for (int i = 0; i < 11; i++)
+    BParam* bps[] = {&bpSize, &bpSizeMul, &bpHardness, &bpCurvature, &bpSpacing, &bpOpacity, &bpAngle, &bpScaleRel, &bpCloneOpacity, &bpScatter, &bpPower, &bpPerspective};
+    for (int i = 0; i < 12; i++)
         DrawSlider(bps[i], 0);
 
     ImGui::Spacing();
@@ -77,16 +77,6 @@ void LeftPanel_Draw(AppState* state) {
     ImGui::Separator();
     ImGui::Text("Debug");
     ImGui::Checkbox("Test Broker (+200px X)", &g_useTestBroker);
-
-    // ── Quick Panel sub-component toggles ────────────────────────────────
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::Text("Quick Panel");
-    ImGui::Checkbox("Brush Preview", &g_showStampPreview);
-    ImGui::Checkbox("Gizmo", &g_showBrushPreview);
-    ImGui::Checkbox("Texture Group", &g_showTextureGroup);
-    ImGui::Checkbox("File Panel", &g_showFilePanel);
-    ImGui::Checkbox("Tool Panel", &g_showToolPanel);
 
     // Pipeline selector
   //  {

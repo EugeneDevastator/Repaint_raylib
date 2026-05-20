@@ -25,7 +25,7 @@
 #define GIZMO_FIXED_RADIUS_PX  180.0f
 
 void XORgizmo_DrawVisual(AppState* state) {
-    if (!quickPanelShow || !g_showBrushPreview) return;
+    if (!quickPanelShow) return;
 
     Rectangle vp = viewport.bounds;
     int gcx = (int)(vp.x + vp.width * 0.5f);
@@ -105,7 +105,7 @@ void XORgizmo_DrawVisual(AppState* state) {
 }
 
 void XORgizmo_HandleInput(AppState* state) {
-    if (!quickPanelShow || !g_showBrushPreview) return;
+    if (!quickPanelShow) return;
 
     Rectangle vp = viewport.bounds;
     int gcx = (int)(vp.x + vp.width * 0.5f);

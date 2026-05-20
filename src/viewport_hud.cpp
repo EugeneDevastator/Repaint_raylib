@@ -4,11 +4,30 @@
 
 extern Viewport viewport;
 extern bool layersDirty;
-extern bool g_showStampPreview;
 
 // Staging RT for brush stamp preview (canvas-sized, lazy-allocated)
 static RenderTexture2D g_stampStage = {0};
 static int g_stageW = 0, g_stageH = 0;
+
+// Preview throttling state
+static int g_frameCounter = 0;
+static const int g_previewUpdateInterval = 10; // update every 10 frames
+static unsigned int g_lastPreviewHash = 0;
+
+static unsigned int ComputeBrushHash(d_Brush* b) {
+    unsigned int h = 0;
+    h ^= (unsigned int)(b->Realb.rad_out * 100);
+    h ^= (unsigned int)(b->Realb.rad_in * 100) << 5;
+    h ^= (unsigned int)(b->Realb.opacity * 100) << 10;
+    h ^= (unsigned int)(b->Realb.crv * 100) << 15;
+    h ^= (unsigned int)(b->Realb.x2y * 100) << 20;
+    h ^= (unsigned int)(b->Realb.resangle) << 25;
+    h ^= b->Realb.bmidx << 28;
+    h ^= (unsigned int)(b->Realb.perspective * 100) << 12;
+    h ^= (unsigned int)(BParam_GetValue(&bpSpacing) * 100) << 8;
+    h ^= (unsigned int)(BParam_GetValue(&bpSizeMul) * 10) << 4;
+    return h;
+}
 
 void ViewportHUD_Draw(AppState* state) {
     int cw = state->canvas.width;
@@ -71,7 +90,7 @@ void ViewportHUD_Draw(AppState* state) {
     Rectangle dstRect = {dstX, dstY, dstW, dstH};
 
     // ── Optional brush stamp preview ────────────────────────────────
-    bool doStamp = quickPanelShow && g_showStampPreview;
+    bool doStamp = quickPanelShow;
 
     // Present shader (dither) applied during screen draw
     bool usePresent = GetPresentInited();
@@ -86,53 +105,128 @@ void ViewportHUD_Draw(AppState* state) {
             g_stageH = ch;
         }
 
-        // Copy composited document into staging RT
-        BeginTextureMode(g_stampStage);
-        ClearBackground(BLANK);
-        DrawTextureRec(docBlendTex->texture, srcRect, Vector2{0, 0}, WHITE);
-        EndTextureMode();
+        g_frameCounter++;
+        unsigned int currentHash = ComputeBrushHash(&state->currentBrush);
+        bool paramsChanged = (currentHash != g_lastPreviewHash);
 
-        // Render brush stamp on top — segment preview matching real spacing formula
-        {
-            Texture2D bt = {0};
-            if (state->activeBrushTex >= 0 && state->activeBrushTex < state->brushTexCount)
-                bt = state->brushTex[state->activeBrushTex].rt.texture;
-            d_Brush pb = state->currentBrush;
+        if (paramsChanged || g_lastPreviewHash == 0 || (g_frameCounter % g_previewUpdateInterval) == 0) {
+            // Copy composited document into staging RT
+            BeginTextureMode(g_stampStage);
+            ClearBackground(BLANK);
+            DrawTextureRec(docBlendTex->texture, srcRect, Vector2{0, 0}, WHITE);
 
-            float cx = state->camera.target.x;
-            float cy = state->camera.target.y;
+            // Use the same stroke engine as real painting
+            {
+                Texture2D bt = {0};
+                if (state->activeBrushTex >= 0 && state->activeBrushTex < state->brushTexCount)
+                    bt = state->brushTex[state->activeBrushTex].rt.texture;
 
-            float spacingVal = GetModVal(&bpSpacing);
-            float sizeMulFactor = powf(16.0f, BParam_GetValue(&bpSizeMul) / 128.0f - 1.0f);
-            float effectiveRadOut = pb.Realb.rad_out * sizeMulFactor;
-            float spacing = fmaxf(effectiveRadOut * spacingVal * spacingVal, 1.0f);
+                float cx = state->camera.target.x;
+                float cy = state->camera.target.y;
 
-            float maxSegLen = 200.0f;
-            float segLen = fminf(effectiveRadOut * 8.0f, maxSegLen);
-            if (segLen < spacing) segLen = spacing;
+                float spacingVal = GetModVal(&bpSpacing);
+                float effectiveRadOut = state->currentBrush.Realb.rad_out;
+                float spacing = fmaxf(effectiveRadOut * 2.0f * spacingVal, 1.0f);
 
-            int numDabs = (int)(segLen / spacing) + 1;
-            if (numDabs < 2) numDabs = 2;
+                float maxSegLen = 200.0f;
+                float segLen = fminf(effectiveRadOut * 8.0f, maxSegLen);
+                if (segLen < spacing) segLen = spacing;
 
-            for (int i = 0; i < numDabs; i++) {
-                float dx = cx + (float)i * spacing;
-                float dy = cy;
+                // Diagonal to upper right corner
+                float dirX = 1.0f;
+                float dirY = -1.0f;
+                float dirLen = sqrtf(dirX * dirX + dirY * dirY);
+                dirX /= dirLen;
+                dirY /= dirLen;
 
-                float dr = ((float)rand() / (float)RAND_MAX) * 2.0f - 1.0f;
-                float raw = BParam_GetValue(&bpSizeMul) + dr * 2.0f * bpSizeMul.user.jitter * (bpSizeMul.outMax - bpSizeMul.outMin);
-                raw = fmaxf(bpSizeMul.outMin, fminf(bpSizeMul.outMax, raw));
-                float jitterMul = powf(16.0f, raw / 128.0f - 1.0f);
+                int numDabs = (int)(segLen / spacing) + 1;
+                if (numDabs < 2) numDabs = 2;
 
-                d_Brush dab = pb;
-                dab.Realb.rad_out = effectiveRadOut * jitterMul;
-                dab.Realb.rad_in = pb.Realb.rad_in * jitterMul;
+                // Build dabs using the same approach as the stroke engine
+                struct PreviewDab {
+                    float x, y;
+                    float rad_out, rad_in, opacity, crv, x2y, resangle;
+                    Color col;
+                };
+                PreviewDab dabs[256];
 
-                float scatterVal = GetModVal(&bpScatter);
-                float scatterOffset = scatterVal * dab.Realb.rad_out * 0.5f;
-                float sy = dy + (((float)rand() / (float)RAND_MAX) * 2.0f - 1.0f) * scatterOffset;
+                for (int i = 0; i < numDabs && i < 256; i++) {
+                    float dist = (float)i * spacing;
+                    dabs[i].x = cx + dist * dirX;
+                    dabs[i].y = cy + dist * dirY;
 
-                BrushBlend_ApplyStamp(g_stampStage, &dab, bt, dx, sy, dx, sy);
+                    // Base brush values
+                    dabs[i].rad_out = state->currentBrush.Realb.rad_out;
+                    dabs[i].rad_in = state->currentBrush.Realb.rad_in;
+                    dabs[i].opacity = state->currentBrush.Realb.opacity;
+                    dabs[i].crv = state->currentBrush.Realb.crv;
+                    dabs[i].x2y = state->currentBrush.Realb.x2y;
+                    dabs[i].resangle = state->currentBrush.Realb.resangle;
+                    dabs[i].col = state->currentBrush.Realb.col;
+                }
+
+                // Apply per-dab jitter (same as PerDabJitter in viewport.cpp)
+                for (int i = 0; i < numDabs && i < 256; i++) {
+                    float dr = ((float)rand() / (float)RAND_MAX) * 2.0f - 1.0f;
+
+                    // Size jitter
+                    { float d = dr * 2.0f * bpSize.user.jitter * (bpSize.outMax - bpSize.outMin);
+                      dabs[i].rad_out += d; dabs[i].rad_out = fmaxf(bpSize.outMin, fminf(bpSize.outMax, dabs[i].rad_out)); }
+
+                    // Hardness jitter
+                    { float h = dabs[i].rad_in / fmaxf(dabs[i].rad_out, 0.001f);
+                      float d = dr * 2.0f * bpHardness.user.jitter * (bpHardness.outMax - bpHardness.outMin);
+                      h += d; h = fmaxf(0.0f, fminf(1.0f, h)); dabs[i].rad_in = dabs[i].rad_out * h; }
+
+                    // Opacity jitter
+                    { float d = dr * 2.0f * bpOpacity.user.jitter * (bpOpacity.outMax - bpOpacity.outMin);
+                      dabs[i].opacity += d; dabs[i].opacity = fmaxf(0.0f, fminf(1.0f, dabs[i].opacity)); }
+
+                    // SizeMul jitter
+                    { float raw = BParam_GetValue(&bpSizeMul) + dr * 2.0f * bpSizeMul.user.jitter * (bpSizeMul.outMax - bpSizeMul.outMin);
+                      raw = fmaxf(bpSizeMul.outMin, fminf(bpSizeMul.outMax, raw));
+                      float f = powf(16.0f, raw / 128.0f - 1.0f);
+                      dabs[i].rad_out *= f; dabs[i].rad_in *= f; }
+
+                    // Scatter
+                    float scatterVal = GetModVal(&bpScatter);
+                    float scatterOffset = scatterVal * dabs[i].rad_out * 0.5f;
+                    float perpX = -dirY;
+                    float perpY = dirX;
+                    float scatterDir = (((float)rand() / (float)RAND_MAX) * 2.0f - 1.0f);
+                    dabs[i].x += perpX * scatterDir * scatterOffset;
+                    dabs[i].y += perpY * scatterDir * scatterOffset;
+                }
+
+                // Apply stamps
+                for (int i = 0; i < numDabs && i < 256; i++) {
+                    d_Brush dab = {};
+                    dab.Realb.rad_out = dabs[i].rad_out;
+                    dab.Realb.rad_in = dabs[i].rad_in;
+                    dab.Realb.opacity = dabs[i].opacity;
+                    dab.Realb.crv = dabs[i].crv;
+                    dab.Realb.x2y = dabs[i].x2y;
+                    dab.Realb.resangle = dabs[i].resangle;
+                    dab.Realb.col = dabs[i].col;
+                    dab.Realb.bmidx = state->currentBrush.Realb.bmidx;
+                    dab.Realb.perspective = state->currentBrush.Realb.perspective;
+                    dab.Realb.texScale = state->currentBrush.Realb.texScale;
+                    dab.Realb.texFeather = state->currentBrush.Realb.texFeather;
+                    dab.Realb.texThresh = state->currentBrush.Realb.texThresh;
+                    dab.Realb.texBlendVal = state->currentBrush.Realb.texBlendVal;
+                    dab.Realb.texBlendMode = state->currentBrush.Realb.texBlendMode;
+                    dab.Realb.texNoisemode = state->currentBrush.Realb.texNoisemode;
+                    dab.Realb.texColorMode = state->currentBrush.Realb.texColorMode;
+                    dab.Realb.useTexLumAsAlpha = state->currentBrush.Realb.useTexLumAsAlpha;
+                    dab.Realb.eraseMode = state->currentBrush.Realb.eraseMode;
+
+                    BrushBlend_ApplyStamp(g_stampStage, &dab, bt, dabs[i].x, dabs[i].y, dabs[i].x, dabs[i].y);
+                }
             }
+
+            EndTextureMode();
+
+            g_lastPreviewHash = currentHash;
         }
 
         // Draw stamped result to screen
@@ -156,4 +250,6 @@ void ViewportHUD_Shutdown(void) {
         g_stageW = 0;
         g_stageH = 0;
     }
+    g_lastPreviewHash = 0;
+    g_frameCounter = 0;
 }

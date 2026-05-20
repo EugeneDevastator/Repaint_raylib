@@ -88,6 +88,10 @@ void UpdateUI(AppState* state) {
     state->currentBrush.Realb.resangle = fmodf(state->initialAngle + GetModVal(&bpAngle), 360.0f);
     state->currentBrush.Realb.x2y      = GetModVal(&bpScaleRel);
 
+    float sizeMulFactor = powf(16.0f, BParam_GetValue(&bpSizeMul) / 128.0f - 1.0f);
+    state->currentBrush.Realb.rad_out *= sizeMulFactor;
+    state->currentBrush.Realb.rad_in  *= sizeMulFactor;
+
     state->currentBrush.Realb.cop = (state->mode == eSmudge)
         ? GetModVal(&bpCloneOpacity) : 0.0f;
 
@@ -97,6 +101,7 @@ void UpdateUI(AppState* state) {
     state->currentBrush.Realb.texBlendVal = GetModVal(&bpTexBlendVal);
     state->currentBrush.Realb.pwr        = GetModVal(&bpPower);
     state->currentBrush.Realb.eraseMode  = state->eraseMode;
+    state->currentBrush.Realb.perspective = GetModVal(&bpPerspective);
 
     colorHue = bpQuickHue.user.clipmaxF;
     colorSat = bpQuickSat.user.clipmaxF;
@@ -299,7 +304,6 @@ void App_Init(AppState* state) {
     state->currentBrush.Realb.resangle = 0.0f;
     state->currentBrush.Realb.crv = 0.0f;
     state->currentBrush.Realb.x2y = 0.8f;
-    state->currentBrush.Realb.scale = 1.0f;
     state->currentBrush.Realb.cop = 0.0f;
     state->currentBrush.Realb.pwr = 0.0f;
     state->currentBrush.Realb.sol = 1.0f;

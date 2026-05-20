@@ -21,7 +21,6 @@ d_RealBrush Stroke_BlendBrushes(d_RealBrush from, d_RealBrush to, float k) {
     bbr.resangle  = Stroke_Lerp((float)from.resangle, (float)to.resangle, k);
     bbr.pwr       = Stroke_Lerp(from.pwr, to.pwr, k);
     bbr.x2y       = Stroke_Lerp(from.x2y, to.x2y, k);
-    bbr.scale     = Stroke_Lerp(from.scale, to.scale, k);
     bbr.opacity   = Stroke_Lerp(from.opacity, to.opacity, k);
     bbr.cop       = Stroke_Lerp(from.cop, to.cop, k);
     bbr.sol       = Stroke_Lerp(from.sol, to.sol, k);
@@ -66,9 +65,9 @@ int Stroke_UnpackSection(
     float stdist = Dist2D(section->Stroke.pos1, section->Stroke.pos2);
     if (stdist < 0.001f) return 0;
 
-    // Scaled radii at each end of the segment
-    float rad      = section->BrushFrom.Realb.rad_out * fmaxf(section->BrushFrom.Realb.scale, 0.01f);
-    float endradius = section->Brush.Realb.rad_out * fmaxf(section->BrushFrom.Realb.scale, 0.01f);
+    // Radii at each end of the segment (already include SizeMul)
+    float rad      = section->BrushFrom.Realb.rad_out;
+    float endradius = section->Brush.Realb.rad_out;
 
     // Direction unit vector (pos1 -> pos2)
     float dx = section->Stroke.pos1.x - section->Stroke.pos2.x;
@@ -82,9 +81,7 @@ int Stroke_UnpackSection(
     float nextlen = curlen + nextrad * fmaxf(section->spacing, 0.01f);
 
     // Scatter range: normalized scatter / 51.0 gives 0-5 range from uint8
-    float rrang = section->Brush.Realb.rad_out *
-                  fmaxf(section->Brush.Realb.scale, 0.01f) *
-                  (section->scatter / 51.0f);
+    float rrang = section->Brush.Realb.rad_out * (section->scatter / 51.0f);
 
     uint16_t n = 0;
     int count = 0;

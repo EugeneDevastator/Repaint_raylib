@@ -6,10 +6,16 @@ out vec4 finalColor;
 uniform float uAngle;
 uniform float uSquish;
 uniform float uSize;
+uniform float uPerspective;
 
 void main() {
     vec2 uv = fragTexCoord;
-    vec2 p = (uv - 0.5) / max(uSize, 0.001);  // scale: bbox->radOut space
+    vec2 p = (uv - 0.5) / max(uSize, 0.001);
+
+    // Perspective distortion: rotate along Y axis before in-plane rotation
+    float perspAngle = uPerspective * 1.5707963; // 0 to 90 degrees
+    float cp = cos(perspAngle), sp = sin(perspAngle);
+    p.x *= cp; // compress X based on perspective (simulates Y-axis rotation)
 
     float c = cos(uAngle), s = sin(uAngle);
     vec2 r = vec2(c*p.x - s*p.y, s*p.x + c*p.y);
