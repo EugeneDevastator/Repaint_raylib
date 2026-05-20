@@ -143,12 +143,14 @@ void main() {
     canvasUV.y *= -1;
     vec4 canvas = texture(canvasTex, canvasUV);
 
-    if (geouv.a < 0.01) {
+    if (geouv.a < 0.999) {
         finalColor = texture(canvasTex, canvasUV);
         return;
     }
 
     vec2  p    = geouv.rg - 0.5;
+    // Clamp geometry UV to prevent bleeding at brush texture edges
+    vec2 geoUV = clamp(geouv.rg, 0.001, 0.999);
     float dist = length(p);
     float d    = dist * 2.0;
 
@@ -158,16 +160,16 @@ void main() {
     vec4 texel = vec4(1.0);
     if (texBlendMode >= 0) {
         // Default: stamp-local UV (brush space 0..1), same every stamp = CONST
-        vec2 stUV = geouv.rg;
+        vec2 stUV = geoUV;
 
         if (texNoisemode == 0) {
             // STENCIL (0): canvas-absolute UV, texture locked to canvas world space
             stUV = canvasFragUV;
         } else if (texNoisemode == 1) {
             // RANDOM (1): stamp-local + per-stamp random offset via texOffset
-            stUV = geouv.rg + texOffset;
+            stUV = geoUV + texOffset;
         }
-        // CONST (2): stUV = geouv.rg, no offset, identical every stamp
+        // CONST (2): stUV = geoUV, no offset, identical every stamp
 
         stUV = stUV * texScale;
         texel = texture(brushTex, stUV);
