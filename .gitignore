@@ -2,4 +2,9 @@ build/*
 build
 build_cmake
 build_cmake/*
-__pycache__/server.cpython-314.pyc
+__pycache__
+__pycache__/*
+/.idea
+/.idea/*
+/cmake-build-debug
+/cmake-build-debug/*
