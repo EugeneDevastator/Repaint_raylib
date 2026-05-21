@@ -208,6 +208,7 @@ struct StrokeEngine {
     d_Brush segBrushFrom;
     Vector2 lastDabPos;
     Vector2 smudgeSrcPos;
+    int dabIndex;         // running dab counter across entire stroke
     bool inStroke;
     // Modulator tracking
     Vector2 prevSegPos;

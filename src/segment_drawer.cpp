@@ -147,8 +147,30 @@ void JitterBrush(CollapsedBrush& b, uint16_t baseSeed, int dabIdx) {
     b.col = HSLToRGB(hue, sat, lit);
 }
 
+// ── Helpers for iterative dab placement ───────────────────────────
+
+// Given last dab's radius and position, estimate the NEXT dab's
+// un-jittered radius by assuming both radii are equal for the step.
+static float FindNextDabRadius(float lastRad, float curPos, float stdist,
+                               float rFrom, float rTo) {
+    float stepEst = lastRad * 2.0f;
+    if (stepEst < 1.0f) stepEst = 1.0f;
+    float nextPos = fminf(curPos + stepEst, stdist);
+    float k = nextPos / stdist;
+    return rFrom + (rTo - rFrom) * k;
+}
+
+// Given last dab's radius and position, and the NEW dab's radius,
+// find the position where they just touch (edge-to-edge).
+static float FindPosForDab(float lastRad, float curPos,
+                           float newRad, float spacingMult) {
+    float step = (lastRad + newRad) * spacingMult;
+    if (step < 1.0f) step = 1.0f;
+    return curPos + step;
+}
+
 // ── DrawLinear ─────────────────────────────────────────────────────
-int DrawLinear(const DrawSegment* seg, DrawDab* out, int maxOut, SegResult* res) {
+int DrawLinear(const DrawSegment* seg, int dabOffset, DrawDab* out, int maxOut, SegResult* res) {
     if (maxOut <= 0 || !res) return 0;
     Vector2 from = seg->pos1;
     res->lastDabPos = from;
@@ -162,46 +184,45 @@ int DrawLinear(const DrawSegment* seg, DrawDab* out, int maxOut, SegResult* res)
     float spacingMult = seg->spacing;
     if (spacingMult < 0.0f) spacingMult = 0.0f;
 
+    float rFrom = seg->brushFrom.rad_out_px;
+    float rTo   = seg->brush.rad_out_px;
+
     float dx = to.x - from.x, dy = to.y - from.y;
     float x2r = dx / stdist, y2r = dy / stdist;
 
     float curPos = 0.0f;
     int count = 0;
-    float noisex = 0, noisey = 0;
     uint16_t nn = 0;
 
     while (curPos < stdist && count < maxOut) {
-        float k = curPos / stdist;
-        CollapsedBrush cb = BlendBrushes(seg->brushFrom, seg->brush, k);
+        // Brush at the CURRENT position (last placed dab)
+        CollapsedBrush lastCB = BlendBrushes(seg->brushFrom, seg->brush, curPos / stdist);
+        JitterBrush(lastCB, seg->brushFrom.baseSeed, dabOffset + count);
+        float lastRad = lastCB.rad_out_px;
 
-        // Jitter this dab (including rad_out_px for spacing)
-        JitterBrush(cb, seg->brushFrom.baseSeed, count);
+        // 1. Find next dab's un-jittered radius (estimate from equal-radii step)
+        float nextBaseRad = FindNextDabRadius(lastRad, curPos, stdist, rFrom, rTo);
 
-        float step = cb.rad_out_px * 2.0f * spacingMult;
-        if (step < 1.0f) step = 1.0f;
+        // 2. Randomize it
+        float dr = RawRnd(seg->brushFrom.baseSeed + (uint16_t)((dabOffset + count + 1) * 7 + 1), 1024) / 1024.0f * 2.0f - 1.0f;
+        float nextRad = nextBaseRad + dr * seg->brushFrom.jitRadOut;
 
-        float nextPos = curPos + step;
+        // 3. Find position for the randomized radius (touching last dab)
+        float nextPos = FindPosForDab(lastRad, curPos, nextRad, spacingMult);
         if (nextPos > stdist) break;
         curPos = nextPos;
 
+        // 4. Build brush at the CORRECT position (where the dab actually lands)
+        CollapsedBrush dabCB = BlendBrushes(seg->brushFrom, seg->brush, curPos / stdist);
+        JitterBrush(dabCB, seg->brushFrom.baseSeed, dabOffset + count + 1);
+
         nn++;
         Vector2 pos = {from.x + curPos * x2r, from.y + curPos * y2r};
-
-        // Scatter (deterministic noise perpendicular to stroke)
-        if (seg->Noisemode != 255) {
-            // Per-dab noise for texture variations (stored in output brush)
-            float ns = 0, ny = 0;
-            ApplyNoise(cb, seg->Noisemode, seg->seed, pos, nn, ns, ny);
-            (void)ns; (void)ny;
-        }
-
-        // Re-apply jitter for the output (same seed, so same result)
-        // JitterBrush was already called above — the output cb is already jittered
         out[count].x = pos.x;
         out[count].y = pos.y;
         out[count].srcX = pos.x;
         out[count].srcY = pos.y;
-        out[count].brush = cb;
+        out[count].brush = dabCB;
         count++;
     }
 

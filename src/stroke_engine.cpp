@@ -39,9 +39,8 @@ CollapsedBrush CollapseBrushParams(const d_RealBrush& b, float initialAngle, int
     cb.texColorMode = b.texColorMode;
     cb.useTexLumAsAlpha = b.useTexLumAsAlpha;
 
-    // Jitter ranges: UI slider range × jitter fraction
-    float smf = powf(16.0f, BParam_GetValue(&bpSizeMul) / 128.0f - 1.0f);
-    cb.jitRadOut  = bpSize.user.jitter * (bpSize.outMax - bpSize.outMin) * smf;
+    // Jitter ranges: proportional to final values in drawing space
+    cb.jitRadOut  = bpSize.user.jitter * b.rad_out;
     cb.jitRadIn   = bpHardness.user.jitter;
     cb.jitOpacity = bpOpacity.user.jitter;
     cb.jitCrv     = bpCurvature.user.jitter;
@@ -81,6 +80,8 @@ void StrokeEngine_Init(StrokeEngine* se) {
     se->initDir = 0.0f;
     se->initDirSet = false;
     se->splineCount = 0;
+    se->splinePts[0] = Vector2{0, 0};
+    se->dabIndex = 0;
     se->strokeSmoothing = false;
 }
 
@@ -98,6 +99,7 @@ void StrokeEngine_BeginStroke(StrokeEngine* se, const d_Brush* baseBrush, float 
     se->splineCount = 0;
     se->splinePts[0] = Vector2{x, y};
     se->splineCount = 1;
+    se->dabIndex = 0;
     se->strokeSmoothing = g_strokeSmoothing;
 }
 
@@ -173,7 +175,7 @@ static int FeedOnePoint(StrokeEngine* se, Vector2 pos, float velocity,
     dseg.seed     = baseBrush->seed;
 
     SegResult r;
-    int n = DrawLinear(&dseg, outDabs, maxDabs, &r);
+    int n = DrawLinear(&dseg, se->dabIndex, outDabs, maxDabs, &r);
 
     if (n > 0 && toolMode == eSmudge) {
         outDabs[0].srcX = se->smudgeSrcPos.x;
@@ -187,6 +189,7 @@ static int FeedOnePoint(StrokeEngine* se, Vector2 pos, float velocity,
 
     se->lastDabPos = r.lastDabPos;
     se->segBrushFrom.Realb = target;
+    se->dabIndex += n;
     return n;
 }
 
@@ -323,11 +326,11 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex,
     DrawDab dabs[512];
     SegResult r;
     int total = 0;
-    int n1 = DrawLinear(&s1, dabs + total, 256, &r);
+    int n1 = DrawLinear(&s1, 0, dabs + total, 256, &r);
     total += n1;
 
     s2.pos1 = r.lastDabPos;  // chain from first segment
-    int n2 = DrawLinear(&s2, dabs + total, 256, &r);
+    int n2 = DrawLinear(&s2, 0, dabs + total, 256, &r);
 
     StrokeEngine_ApplyDabs(dstRT, brushTex, dabs, n1 + n2);
 }
