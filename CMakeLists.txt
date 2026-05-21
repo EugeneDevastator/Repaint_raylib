@@ -123,7 +123,7 @@ if(WIN32)
         target_link_options(tablet-calibrator PRIVATE "-Wl,--allow-multiple-definition")
     endif()
 else()
-    target_sources(tablet-calibrator PRIVATE src/tablet_lnx.cpp)
+    target_sources(tablet-calibrator PRIVATE src/tablet_lnx.cpp src/platform_utils_lnx.cpp)
     target_link_libraries(tablet-calibrator PRIVATE m pthread dl)
 endif()
 
