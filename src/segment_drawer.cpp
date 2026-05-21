@@ -173,11 +173,11 @@ static float FindNextDabPosition(float lastRad, float lastPos,
 }
 
 // ── DrawLinear ─────────────────────────────────────────────────────
-int DrawLinear(const DrawSegment* seg, int dabOffset, DrawDab* out, int maxOut, SegResult* res) {
+int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad, DrawDab* out, int maxOut, SegResult* res) {
     if (maxOut <= 0 || !res) return 0;
     Vector2 from = seg->pos1;
     res->lastDabPos = from;
-    res->lastRadOut = seg->brushFrom.rad_out_px;
+
     res->overdraw = 0.0f;
 
     Vector2 to = seg->pos2;
@@ -194,7 +194,8 @@ int DrawLinear(const DrawSegment* seg, int dabOffset, DrawDab* out, int maxOut, 
     float x2r = dx / stdist, y2r = dy / stdist;
 
     float lastDabPos = 0.0f;
-    float lastDabRad = rFrom;
+    float lastDabRad = (initialRad > 0.0f) ? initialRad : rFrom;
+    res->lastRadOut = lastDabRad;
     int count = 0;
     uint16_t nn = 0;
 

@@ -82,6 +82,7 @@ void StrokeEngine_Init(StrokeEngine* se) {
     se->splineCount = 0;
     se->splinePts[0] = Vector2{0, 0};
     se->dabIndex = 0;
+    se->lastDabRad = 0.0f;
     se->strokeSmoothing = false;
 }
 
@@ -100,6 +101,7 @@ void StrokeEngine_BeginStroke(StrokeEngine* se, const d_Brush* baseBrush, float 
     se->splinePts[0] = Vector2{x, y};
     se->splineCount = 1;
     se->dabIndex = 0;
+    se->lastDabRad = 0.0f;
     se->strokeSmoothing = g_strokeSmoothing;
 }
 
@@ -175,7 +177,7 @@ static int FeedOnePoint(StrokeEngine* se, Vector2 pos, float velocity,
     dseg.seed     = baseBrush->seed;
 
     SegResult r;
-    int n = DrawLinear(&dseg, se->dabIndex, outDabs, maxDabs, &r);
+    int n = DrawLinear(&dseg, se->dabIndex, se->lastDabRad, outDabs, maxDabs, &r);
 
     if (n > 0 && toolMode == eSmudge) {
         outDabs[0].srcX = se->smudgeSrcPos.x;
@@ -188,6 +190,7 @@ static int FeedOnePoint(StrokeEngine* se, Vector2 pos, float velocity,
     }
 
     se->lastDabPos = r.lastDabPos;
+    se->lastDabRad = r.lastRadOut;
     se->segBrushFrom.Realb = target;
     se->dabIndex += n;
     return n;
@@ -327,11 +330,11 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex,
     DrawDab dabs[512];
     SegResult r;
     int total = 0;
-    int n1 = DrawLinear(&s1, 0, dabs + total, 256, &r);
+    int n1 = DrawLinear(&s1, 0, 0.0f, dabs + total, 256, &r);
     total += n1;
 
-    s2.pos1 = r.lastDabPos;  // chain from first segment
-    int n2 = DrawLinear(&s2, 0, dabs + total, 256, &r);
+    s2.pos1 = r.lastDabPos;
+    int n2 = DrawLinear(&s2, 0, r.lastRadOut, dabs + total, 256, &r);
 
     StrokeEngine_ApplyDabs(dstRT, brushTex, dabs, n1 + n2);
 }

@@ -64,7 +64,7 @@ CollapsedBrush BlendBrushes(CollapsedBrush from, CollapsedBrush to, float k);
 void JitterBrush(CollapsedBrush& b, uint16_t baseSeed, int dabIdx);
 
 // ── Linear stroke: places next dab only when distance >= spacing ──
-int DrawLinear(const DrawSegment* seg, int dabOffset, DrawDab* out, int maxOut, SegResult* res);
+int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad, DrawDab* out, int maxOut, SegResult* res);
 
 // ── Airflow stroke: accumulates overdraw, bursty placement ─────────
 int DrawAirflow(const DrawSegment* seg, float accum, DrawDab* out, int maxOut, SegResult* res);
