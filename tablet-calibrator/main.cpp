@@ -1,24 +1,14 @@
 #include "tablet_platform.h"
+#include "platform_utils.h"
 #include "raylib.h"
 #include <cmath>
 
-#ifdef _WIN32
-typedef struct GLFWwindow GLFWwindow;
-extern "C" GLFWwindow* glfwGetCurrentContext(void);
-extern "C" void* glfwGetWin32Window(GLFWwindow*);
-#endif
-
 int main() {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-    InitWindow(600, 620, "Tablet Calibrator");
+    InitWindow(600, 540, "Tablet Calibrator");
     SetTargetFPS(60);
 
-#ifdef _WIN32
-    void* hwnd = glfwGetWin32Window(glfwGetCurrentContext());
-#else
-    void* hwnd = NULL;
-#endif
-    bool tabletOk = TabletPlatform_Init(hwnd);
+    bool tabletOk = TabletPlatform_Init(Platform_GetNativeWindowHandle());
 
     TabletState state;
     float angle = 0.0f;
@@ -46,11 +36,9 @@ int main() {
         DrawText(TextFormat("Rotation: %.4f", state.rotation), 20, 326, 32, WHITE);
 
         DrawText(TextFormat("WM_POINTER msgs: %i", TabletPlatform_GetHookCount()), 20, 364, 32, LIME);
-        DrawText(TextFormat("PenInfo OK: %i", TabletPlatform_GetPenSuccess()), 20, 402, 32, LIME);
-        DrawText(TextFormat("Type mismatch: %i  last type: %i", TabletPlatform_GetTypeMismatch(), TabletPlatform_GetLastType()), 20, 440, 32, YELLOW);
 
-        DrawRectangle(20, 486, (int)(state.pressure * 400.0f), 20, BLUE);
-        DrawRectangleLines(20, 486, 400, 20, LIGHTGRAY);
+        DrawRectangle(20, 410, (int)(state.pressure * 400.0f), 20, BLUE);
+        DrawRectangleLines(20, 410, 400, 20, LIGHTGRAY);
 
         Vector2 center = { 540, 60 };
         float rad = angle * DEG2RAD;

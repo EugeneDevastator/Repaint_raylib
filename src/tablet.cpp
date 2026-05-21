@@ -6,6 +6,7 @@ static bool g_tabletOn = false;
 
 bool Tablet_Init(void* nativeWindow) {
     g_tabletOn = TabletPlatform_Init(nativeWindow);
+    g_modPars.Pars[csPressure] = 1.0f;
     return true;
 }
 

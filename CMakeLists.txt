@@ -85,7 +85,7 @@ set(SOURCES
 add_executable(repaint ${SOURCES})
 
 if(WIN32)
-    target_sources(repaint PRIVATE resources/icon.rc src/tablet_win.cpp)
+    target_sources(repaint PRIVATE resources/icon.rc src/tablet_win.cpp src/platform_utils_win.cpp)
     target_compile_definitions(repaint PRIVATE WINVER=0x0602 _WIN32_WINNT=0x0602)
     target_link_libraries(repaint PRIVATE opengl32 gdi32 winmm user32)
     if(MINGW)
@@ -93,7 +93,7 @@ if(WIN32)
         target_link_options(repaint PRIVATE "-Wl,--allow-multiple-definition")
     endif()
 else()
-    target_sources(repaint PRIVATE src/tablet_lnx.cpp)
+    target_sources(repaint PRIVATE src/tablet_lnx.cpp src/platform_utils_lnx.cpp)
 endif()
 
 target_include_directories(repaint PRIVATE
@@ -116,7 +116,7 @@ add_executable(tablet-calibrator ${CALIB_SOURCES})
 target_include_directories(tablet-calibrator PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 if(WIN32)
-    target_sources(tablet-calibrator PRIVATE src/tablet_win.cpp)
+    target_sources(tablet-calibrator PRIVATE src/tablet_win.cpp src/platform_utils_win.cpp)
     target_compile_definitions(tablet-calibrator PRIVATE WINVER=0x0602 _WIN32_WINNT=0x0602)
     target_link_libraries(tablet-calibrator PRIVATE opengl32 gdi32 winmm user32)
     if(MINGW)

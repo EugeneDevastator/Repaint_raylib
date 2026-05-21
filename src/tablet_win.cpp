@@ -16,24 +16,15 @@
 
 static TabletState g_penState = {0};
 static CRITICAL_SECTION g_penLock;
-
-// Debug counters
 static int g_hookCount = 0;
-static int g_penSuccess = 0;
-static int g_typeMismatch = 0;
-static int g_lastType = 0;
 
 typedef BOOL (WINAPI *GetPointerPenInfoFn)(UINT32 pointerId, POINTER_PEN_INFO* penInfo);
 static GetPointerPenInfoFn g_GetPointerPenInfo = NULL;
-typedef BOOL (WINAPI *GetPointerInfoFn)(UINT32 pointerId, POINTER_INFO* penInfo);
-static GetPointerInfoFn g_GetPointerInfo = NULL;
 
 static void LoadPointerAPI(void) {
     HMODULE hUser32 = LoadLibraryA("user32.dll");
-    if (hUser32) {
+    if (hUser32)
         g_GetPointerPenInfo = (GetPointerPenInfoFn)GetProcAddress(hUser32, "GetPointerPenInfo");
-        g_GetPointerInfo = (GetPointerInfoFn)GetProcAddress(hUser32, "GetPointerInfo");
-    }
 }
 
 static LRESULT CALLBACK TabletMsgHook(int code, WPARAM wParam, LPARAM lParam) {
@@ -46,8 +37,6 @@ static LRESULT CALLBACK TabletMsgHook(int code, WPARAM wParam, LPARAM lParam) {
             if (g_GetPointerPenInfo) {
                 POINTER_PEN_INFO penInfo;
                 if (g_GetPointerPenInfo(pointerId, &penInfo)) {
-                    g_penSuccess++;
-                    g_lastType = (int)penInfo.pointerInfo.pointerType;
                     EnterCriticalSection(&g_penLock);
                     g_penState.pressure = penInfo.pressure / 1024.0f;
                     if (g_penState.pressure > 1.0f) g_penState.pressure = 1.0f;
@@ -105,6 +94,6 @@ bool TabletPlatform_Poll(TabletState* state) {
 }
 
 int TabletPlatform_GetHookCount(void)   { return g_hookCount; }
-int TabletPlatform_GetPenSuccess(void)  { return g_penSuccess; }
-int TabletPlatform_GetTypeMismatch(void){ return g_typeMismatch; }
-int TabletPlatform_GetLastType(void)    { return g_lastType; }
+int TabletPlatform_GetPenSuccess(void)  { return 0; }
+int TabletPlatform_GetTypeMismatch(void){ return 0; }
+int TabletPlatform_GetLastType(void)    { return 0; }

@@ -13,6 +13,7 @@ struct TabletState {
     bool touching;    // pen is pressing on surface
 };
 
+// nativeWindow: platform-specific handle (HWND on Windows, NULL on Linux)
 bool Tablet_Init(void* nativeWindow);
 void Tablet_Shutdown(void);
 bool Tablet_Poll(TabletState* out);

@@ -2,12 +2,12 @@
 #include "test_broker.h"
 #include "network_broker.h"
 #include "tablet.h"
+#include "platform_utils.h"
 #include <pthread.h>
 
 typedef struct GLFWwindow GLFWwindow;
 extern "C" GLFWwindow* glfwGetCurrentContext(void);
 extern "C" void glfwMakeContextCurrent(GLFWwindow*);
-extern "C" void* glfwGetWin32Window(GLFWwindow*);
 
 static pthread_t renderThread;
 static pthread_mutex_t renderMutex = PTHREAD_MUTEX_INITIALIZER;
@@ -45,7 +45,7 @@ static void* RenderLoop(void* arg) {
 int main() {
     AppState state = {0};
     App_Init(&state);
-    Tablet_Init(glfwGetWin32Window(glfwGetCurrentContext()));
+    Tablet_Init(Platform_GetNativeWindowHandle());
     SetExitKey(KEY_NULL);
     while (!WindowShouldClose()) {
         Tablet_UpdateModulators();
