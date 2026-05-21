@@ -177,10 +177,6 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     StrokeEngine_BeginStroke(&vp->strokeEng, &state->currentBrush, tx, ty);
                     vp->inputFilter.Reset();
                     vp->inputFilter.Feed(tx, ty, GetTime());
-                    d_Brush tb; memset(&tb, 0, sizeof(tb));
-                    tb.Realb = state->currentBrush.Realb;
-                    tb.Realb.opacity = 1.0f;
-                    BrushBlend_ApplyStamp(bt->rt, &tb, g_activeBrushTex, tx, ty, tx, ty);
                     vp->wasMouseDown = true;
                 }
             } else if (leftDown) {
@@ -214,11 +210,6 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                                              canvasPos.x, canvasPos.y);
                     vp->inputFilter.Reset();
                     vp->inputFilter.Feed(canvasPos.x, canvasPos.y, GetTime());
-                    if (vp->broker) {
-                        BrushDab ev = {canvasPos.x, canvasPos.y, canvasPos.x, canvasPos.y,
-                                       state->currentBrush.Realb};
-                        vp->broker->on_input(ev);
-                    }
                     vp->wasMouseDown = true;
                     if (vp->strokeLen < MAX_STROKE_PTS)
                         vp->strokePts[vp->strokeLen++] = canvasPos;
