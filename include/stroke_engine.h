@@ -10,6 +10,7 @@ const int   STROKE_SPLINE_SUBDIVS = 8;    // subdivisions between control points
 // ── SegmentResult ──
 struct SegmentResult {
     Vector2 lastDabPos;
+    float lastRadOut;
     float overdraw;
 };
 
