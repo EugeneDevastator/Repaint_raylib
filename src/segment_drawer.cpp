@@ -155,9 +155,19 @@ static float FindNextDabRadius(float lastRad, float lastPos,
                                float segStart, float segEnd,
                                float segStartRad, float segEndRad,
                                float spacingMult) {
-    float stepEst = lastRad * 2.0f * spacingMult;
-    if (stepEst < 1.0f) stepEst = 1.0f;
-    float t = (lastPos + stepEst - segStart) / (segEnd - segStart);
+    float step = lastRad * 2.0f * spacingMult;
+    if (step < 1.0f) step = 1.0f;
+    for (int i = 0; i < 5; i++) {
+        float t = (lastPos + step - segStart) / (segEnd - segStart);
+        if (t < 0.0f) t = 0.0f;
+        if (t > 1.0f) t = 1.0f;
+        float rad = segStartRad + (segEndRad - segStartRad) * t;
+        float newStep = (lastRad + rad) * spacingMult;
+        if (newStep < 1.0f) newStep = 1.0f;
+        if (fabsf(newStep - step) < 0.1f) break;
+        step = (step + newStep) * 0.5f;  // damped convergence
+    }
+    float t = (lastPos + step - segStart) / (segEnd - segStart);
     if (t < 0.0f) t = 0.0f;
     if (t > 1.0f) t = 1.0f;
     return segStartRad + (segEndRad - segStartRad) * t;
@@ -213,10 +223,9 @@ int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad, DrawDab*
                                                 nextDabRad, spacingMult);
         if (nextDabPos > stdist) break;
 
-        // 4. Build brush at the actual position, jitter visual params, keep rad from loop
+        // 4. Build brush at the actual position, jitter visual params
         CollapsedBrush dabCB = BlendBrushes(seg->brushFrom, seg->brush, nextDabPos / stdist);
         JitterBrush(dabCB, seg->brushFrom.baseSeed, dabOffset + count);
-        dabCB.rad_out_px = nextDabRad;  // override: spacing was computed with this jittered rad
 
         nn++;
         Vector2 pos = {from.x + nextDabPos * x2r, from.y + nextDabPos * y2r};
@@ -228,7 +237,7 @@ int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad, DrawDab*
         count++;
 
         lastDabPos = nextDabPos;
-        lastDabRad = nextDabRad;
+        lastDabRad = dabCB.rad_out_px;
     }
 
     if (count > 0) {
