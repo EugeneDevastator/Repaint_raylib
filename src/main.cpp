@@ -1,6 +1,8 @@
 #include "repaint.h"
 #include "test_broker.h"
 #include "network_broker.h"
+#include "tablet.h"
+#include "platform_utils.h"
 #include <pthread.h>
 
 typedef struct GLFWwindow GLFWwindow;
@@ -43,8 +45,10 @@ static void* RenderLoop(void* arg) {
 int main() {
     AppState state = {0};
     App_Init(&state);
-	SetExitKey(KEY_NULL);
+    Tablet_Init(Platform_GetNativeWindowHandle());
+    SetExitKey(KEY_NULL);
     while (!WindowShouldClose()) {
+        Tablet_UpdateModulators();
         if (!App_IsDialogActive()) {
             UpdateUI(&state);
             viewport.broker = g_useTestBroker

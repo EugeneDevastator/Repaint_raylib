@@ -1,6 +1,7 @@
 #include "repaint.h"
 #include "rlgl.h"
 #include "stroke.h"
+#include "tablet.h"
 #include "rlImGui.h"
 #include "imgui.h"
 #include "imgui_internal.h"
@@ -540,6 +541,7 @@ void App_Close(AppState* state) {
     UIStyle::Shutdown();
     Painter_Shutdown();
     BrushBlend_Shutdown();
+    Tablet_Shutdown();
     UserTexture_Shutdown();
     CloseWindow();
 }

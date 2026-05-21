@@ -3,8 +3,57 @@
 #include "stroke.h"
 #include <math.h>
 
-bool g_strokeSmoothing = true;
+bool g_strokeSmoothing = false;
 
+// ── BaseModVal helper ────────────────────────────────────────────────
+static inline float BaseModVal(const BParam& bp, float cpar) {
+    float rng = bp.run.clipmaxF - bp.run.clipminF;
+    float base = cpar * rng + bp.run.clipminF;
+    base = fminf(fmaxf(base, 0.0f), 1.0f);
+    return base * (bp.outMax - bp.outMin) + bp.outMin;
+}
+
+// ── Bridge: collapse UI brush → drawing-space brush ─────────────────
+CollapsedBrush CollapseBrushParams(const d_RealBrush& b, float initialAngle, int toolMode) {
+    CollapsedBrush cb;
+    cb.rad_out_px = b.rad_out;
+    cb.radInRatio = (b.rad_out > 0.001f) ? b.rad_in / b.rad_out : 0.0f;
+    cb.scale_x    = 1.0f;
+    cb.scale_y    = b.x2y;
+    cb.resangle   = (float)b.resangle;
+    cb.opacity    = b.opacity;
+    cb.crv        = b.crv;
+    cb.cop        = (toolMode == eSmudge) ? b.cop : 0.0f;
+    cb.col        = b.col;
+    cb.pwr        = b.pwr;
+    cb.bmidx      = (int)b.bmidx;
+    cb.eraseMode  = b.eraseMode;
+    cb.preserveop = b.preserveop;
+    cb.perspective = b.perspective;
+    cb.texScale   = b.texScale;
+    cb.texFeather = b.texFeather;
+    cb.texThresh  = b.texThresh;
+    cb.texBlendVal = b.texBlendVal;
+    cb.texBlendMode = b.texBlendMode;
+    cb.texNoisemode = b.texNoisemode;
+    cb.texColorMode = b.texColorMode;
+    cb.useTexLumAsAlpha = b.useTexLumAsAlpha;
+
+    // Jitter ranges: proportional to final values in drawing space
+    cb.jitRadOut  = bpSize.user.jitter * b.rad_out;
+    cb.jitRadIn   = bpHardness.user.jitter;
+    cb.jitOpacity = bpOpacity.user.jitter;
+    cb.jitCrv     = bpCurvature.user.jitter;
+    cb.jitX2y     = bpScaleRel.user.jitter;
+    cb.jitHue     = bpQuickHue.user.jitter * (bpQuickHue.outMax - bpQuickHue.outMin);
+    cb.jitSat     = bpQuickSat.user.jitter * (bpQuickSat.outMax - bpQuickSat.outMin);
+    cb.jitLit     = bpQuickLit.user.jitter * (bpQuickLit.outMax - bpQuickLit.outMin);
+    cb.jitCloneOp = bpCloneOpacity.user.jitter;
+    cb.baseSeed   = b.seed;
+    return cb;
+}
+
+// ── Catmull-Rom spline ──────────────────────────────────────────────
 static Vector2 CatmullRom(Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, float t) {
     float t2 = t * t, t3 = t2 * t;
     return Vector2{
@@ -17,204 +66,11 @@ static Vector2 CatmullRom(Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, float 
     };
 }
 
-static void ApplyNoise(d_Brush* cbrush, int noisemode, uint16_t seed, Vector2 pos, uint16_t n) {
-    if (noisemode == 0) {
-        cbrush->Realb.noisex = (uint16_t)(Stroke_RawRnd(seed + n * 3, 1024) * 1024.0f);
-        cbrush->Realb.noisey = (uint16_t)(Stroke_RawRnd(seed + n + 21, 1024) * 1024.0f);
-    } else if (noisemode == 1) {
-        cbrush->Realb.noisex = 34;
-        cbrush->Realb.noisey = 76;
-    } else if (noisemode == 2) {
-        cbrush->Realb.noisex = (uint16_t)fmaxf(0, (int)pos.x);
-        cbrush->Realb.noisey = (uint16_t)fmaxf(0, (int)pos.y);
-    }
-    cbrush->Realb.noisex = (uint16_t)(cbrush->Realb.noisex
-        - 1024 * (int)(cbrush->Realb.noisex / 1024));
-    cbrush->Realb.noisey = (uint16_t)(cbrush->Realb.noisey
-        - 1024 * (int)(cbrush->Realb.noisey / 1024));
-}
-
-static void PerDabJitter(BrushDab* dabs, int n, float sizeMulFactor, uint16_t baseSeed) {
-    for (int i = 0; i < n; i++) {
-        float dr = Stroke_RawRnd(baseSeed + (uint16_t)(i * 7 + 1), 1024) / 1024.0f * 2.0f - 1.0f;
-        d_RealBrush& b = dabs[i].brush;
-
-        { float d = dr * 2.0f * bpSize.user.jitter * (bpSize.outMax - bpSize.outMin) * sizeMulFactor;
-          float rawMin = bpSize.outMin * sizeMulFactor, rawMax = bpSize.outMax * sizeMulFactor;
-          b.rad_out += d; b.rad_out = fmaxf(rawMin, fminf(rawMax, b.rad_out)); }
-
-        { float h = b.rad_in / fmaxf(b.rad_out, 0.001f);
-          float d = dr * 2.0f * bpHardness.user.jitter * (bpHardness.outMax - bpHardness.outMin);
-          h += d; h = fmaxf(0.0f, fminf(1.0f, h)); b.rad_in = b.rad_out * h; }
-
-        { float d = dr * 2.0f * bpCurvature.user.jitter * (bpCurvature.outMax - bpCurvature.outMin);
-          b.crv += d; b.crv = fmaxf(0.0f, fminf(1.0f, b.crv)); }
-
-        { float d = dr * 2.0f * bpOpacity.user.jitter * (bpOpacity.outMax - bpOpacity.outMin);
-          b.opacity += d; b.opacity = fmaxf(0.0f, fminf(1.0f, b.opacity)); }
-
-        { float d = dr * 2.0f * bpScaleRel.user.jitter * (bpScaleRel.outMax - bpScaleRel.outMin);
-          b.x2y += d; b.x2y = fmaxf(0.0f, fminf(1.0f, b.x2y)); }
-
-        { float h, s, l; RGBToHSL(b.col, h, s, l);
-          h += dr * 2.0f * bpQuickHue.user.jitter * (bpQuickHue.outMax - bpQuickHue.outMin);
-          s += dr * 2.0f * bpQuickSat.user.jitter * (bpQuickSat.outMax - bpQuickSat.outMin);
-          l += dr * 2.0f * bpQuickLit.user.jitter * (bpQuickLit.outMax - bpQuickLit.outMin);
-          h = fmodf(h, 1.0f); if (h < 0) h += 1.0f;
-          s = fmaxf(0.0f, fminf(1.0f, s)); l = fmaxf(0.0f, fminf(1.0f, l));
-          b.col = HSLToRGB(h, s, l); }
-
-        { float d = dr * 2.0f * bpCloneOpacity.user.jitter * (bpCloneOpacity.outMax - bpCloneOpacity.outMin);
-          b.cop += d; b.cop = fmaxf(0.0f, fminf(1.0f, b.cop)); }
-
-        { float baseFactor = sizeMulFactor;
-          float raw = BParam_GetValue(&bpSizeMul) + dr * 2.0f * bpSizeMul.user.jitter * (bpSizeMul.outMax - bpSizeMul.outMin);
-          raw = fmaxf(bpSizeMul.outMin, fminf(bpSizeMul.outMax, raw));
-          float jitteredFactor = powf(16.0f, raw / 128.0f - 1.0f);
-          float ratio = (baseFactor > 0.0001f) ? jitteredFactor / baseFactor : 1.0f;
-          b.rad_out *= ratio; b.rad_in *= ratio; }
-
-        float scatterVal = GetModVal(&bpScatter);
-        if (scatterVal > 0.001f) {
-            float scatterOffset = scatterVal * b.rad_out * 0.5f;
-            dabs[i].x += (Stroke_RawRnd(baseSeed + (uint16_t)(i * 11 + 2), 1024) / 1024.0f * 2.0f - 1.0f) * scatterOffset;
-            dabs[i].y += (Stroke_RawRnd(baseSeed + (uint16_t)(i * 13 + 3), 1024) / 1024.0f * 2.0f - 1.0f) * scatterOffset;
-        }
-    }
-}
-
-static inline float BaseModVal(const BParam& bp, float cpar) {
-    float rng = bp.run.clipmaxF - bp.run.clipminF;
-    float base = cpar * rng + bp.run.clipminF;
-    base = fminf(fmaxf(base, 0.0f), 1.0f);
-    return base * (bp.outMax - bp.outMin) + bp.outMin;
-}
-
-// ── LinearStroke: even dab spacing from lastDabPos ─────────────────────
-
-int SegmentDrawer_DrawLinear(const d_Section* section, BrushDab* outDabs,
-                             int maxDabs, SegmentResult* outResult) {
-    if (maxDabs <= 0 || !outResult) return 0;
-    Vector2 from = section->Stroke.pos1;
-    outResult->lastDabPos = from;
-    outResult->overdraw = 0.0f;
-
-    Vector2 to = section->Stroke.pos2;
-    float stdist = Dist2D(from, to);
-    if (stdist < 0.001f) return 0;
-
-    float spacing = fmaxf(section->spacing, 1.0f);
-    int maxDab = (int)(stdist / spacing);
-    if (maxDab < 1) return 0;
-
-    float dx = to.x - from.x, dy = to.y - from.y;
-    float x2r = dx / stdist, y2r = dy / stdist;
-    float rrang = section->Brush.Realb.rad_out * (section->scatter / 51.0f);
-    uint16_t n = 0;
-
-    for (int i = 1; i <= maxDab && i - 1 < maxDabs; i++) {
-        float d = i * spacing;
-        Vector2 pos = {from.x + d * x2r, from.y + d * y2r};
-
-        n++;
-        float rnflw = Stroke_RawRnd(section->BrushFrom.Realb.seed + n * 2, 1024) * rrang * 2.0f - rrang;
-        pos.x -= rnflw * y2r;
-        pos.y += rnflw * x2r;
-
-        float k = (maxDab > 1) ? (float)(i - 1) / (float)(maxDab - 1) : 0.5f;
-        d_Brush cbrush = section->BrushFrom;
-        cbrush.Realb = Stroke_BlendBrushes(section->BrushFrom.Realb, section->Brush.Realb, k);
-        ApplyNoise(&cbrush, section->Noisemode, section->BrushFrom.Realb.seed, pos, n);
-
-        int idx = i - 1;
-        outDabs[idx].x = pos.x;
-        outDabs[idx].y = pos.y;
-        outDabs[idx].srcX = pos.x;
-        outDabs[idx].srcY = pos.y;
-        outDabs[idx].brush = cbrush.Realb;
-    }
-
-    int count = (maxDab < maxDabs) ? maxDab : maxDabs;
-    if (count > 0) {
-        float lastD = count * spacing;
-        outResult->lastDabPos = Vector2{from.x + lastD * x2r, from.y + lastD * y2r};
-    }
-    return count;
-}
-
-// ── AirflowStroke: bursty dab placement with overdraw accumulation ─────
-
-int SegmentDrawer_DrawAirflow(const d_Section* section, float initialDabAccum,
-                              BrushDab* outDabs, int maxDabs,
-                              SegmentResult* outResult) {
-    if (maxDabs <= 0 || !outResult) return 0;
-    outResult->lastDabPos = section->Stroke.pos1;
-    outResult->overdraw = 0.0f;
-
-    Vector2 from = section->Stroke.pos1, to = section->Stroke.pos2;
-    float stdist = Dist2D(from, to);
-    if (stdist < 0.001f) return 0;
-
-    float dx = to.x - from.x, dy = to.y - from.y;
-    float x2r = dx / stdist, y2r = dy / stdist;
-
-    float tdist = stdist + initialDabAccum;
-    float spacing = fmaxf(section->spacing, 1.0f);
-    if (tdist < spacing) {
-        outResult->overdraw = tdist;
-        outResult->lastDabPos = from;
-        return 0;
-    }
-
-    float firstDist = spacing - initialDabAccum;
-    if (firstDist < 0.0f) firstDist = 0.0f;
-    float remaining = stdist - firstDist;
-    int extraDabs = (remaining > 0.0f) ? (int)(remaining / spacing) : 0;
-    int count = 0;
-
-    float rrang = section->Brush.Realb.rad_out * (section->scatter / 51.0f);
-    uint16_t n = 0;
-    float dabbable = fmaxf(stdist - firstDist, 0.001f);
-
-    for (int i = 0; i <= extraDabs && count < maxDabs; i++) {
-        float d = firstDist + i * spacing;
-        if (d > stdist) break;
-
-        Vector2 pos = {from.x + d * x2r, from.y + d * y2r};
-        n++;
-        float rnflw = Stroke_RawRnd(section->BrushFrom.Realb.seed + n * 2, 1024) * rrang * 2.0f - rrang;
-        pos.x -= rnflw * y2r;
-        pos.y += rnflw * x2r;
-
-        float k = fminf((d - firstDist) / dabbable, 1.0f);
-        d_Brush cbrush = section->BrushFrom;
-        cbrush.Realb = Stroke_BlendBrushes(section->BrushFrom.Realb, section->Brush.Realb, k);
-        ApplyNoise(&cbrush, section->Noisemode, section->BrushFrom.Realb.seed, pos, n);
-
-        outDabs[count].x = pos.x;
-        outDabs[count].y = pos.y;
-        outDabs[count].srcX = pos.x;
-        outDabs[count].srcY = pos.y;
-        outDabs[count].brush = cbrush.Realb;
-        count++;
-    }
-
-    if (count > 0) {
-        float lastDabDist = firstDist + (count - 1) * spacing;
-        outResult->lastDabPos = Vector2{from.x + lastDabDist * x2r, from.y + lastDabDist * y2r};
-        outResult->overdraw = stdist - lastDabDist;
-    } else {
-        outResult->overdraw = initialDabAccum + stdist;
-    }
-    return count;
-}
-
-// ── StrokeEngine implementation ─────────────────────────────────────────
+// ── StrokeEngine implementation ─────────────────────────────────────
 
 void StrokeEngine_Init(StrokeEngine* se) {
     memset(&se->segBrushFrom, 0, sizeof(se->segBrushFrom));
     se->lastDabPos = Vector2{0, 0};
-    se->dabAccum = 0.0f;
     se->smudgeSrcPos = Vector2{0, 0};
     se->inStroke = false;
     se->prevSegPos = Vector2{0, 0};
@@ -224,14 +80,16 @@ void StrokeEngine_Init(StrokeEngine* se) {
     se->initDir = 0.0f;
     se->initDirSet = false;
     se->splineCount = 0;
-    se->strokeSmoothing = true;
+    se->splinePts[0] = Vector2{0, 0};
+    se->dabIndex = 0;
+    se->lastDabRad = 0.0f;
+    se->strokeSmoothing = false;
 }
 
 void StrokeEngine_BeginStroke(StrokeEngine* se, const d_Brush* baseBrush, float x, float y) {
     memset(&se->segBrushFrom, 0, sizeof(se->segBrushFrom));
     se->segBrushFrom = *baseBrush;
     se->lastDabPos = Vector2{x, y};
-    se->dabAccum = 0.0f;
     se->smudgeSrcPos = Vector2{x, y};
     se->inStroke = true;
     se->prevSegPos = Vector2{x, y};
@@ -242,13 +100,15 @@ void StrokeEngine_BeginStroke(StrokeEngine* se, const d_Brush* baseBrush, float 
     se->splineCount = 0;
     se->splinePts[0] = Vector2{x, y};
     se->splineCount = 1;
+    se->dabIndex = 0;
+    se->lastDabRad = 0.0f;
     se->strokeSmoothing = g_strokeSmoothing;
 }
 
-static int FeedOnePointLinear(StrokeEngine* se, Vector2 pos, float velocity,
-                              const d_RealBrush* baseBrush,
-                              float initialAngle, int toolMode,
-                              BrushDab* outDabs, int maxDabs) {
+static int FeedOnePoint(StrokeEngine* se, Vector2 pos, float velocity,
+                        const d_RealBrush* baseBrush,
+                        float initialAngle, int toolMode,
+                        DrawDab* outDabs, int maxDabs) {
     if (!se->inStroke || maxDabs <= 0) return 0;
 
     float segDx = pos.x - se->prevSegPos.x;
@@ -282,10 +142,8 @@ static int FeedOnePointLinear(StrokeEngine* se, Vector2 pos, float velocity,
     se->prevSegLen = segLen;
     se->prevVel = velocity;
 
+    // Build modulated brush
     float sizeMulFactor = powf(16.0f, BParam_GetValue(&bpSizeMul) / 128.0f - 1.0f);
-    float spacingBaseRad = BParam_GetValue(&bpSize) * sizeMulFactor;
-    float spacingVal = BParam_GetValue(&bpSpacing);
-    float spacing = fmaxf(spacingBaseRad * 2.0f * spacingVal, 1.0f);
 
     d_RealBrush target = *baseBrush;
     target.rad_out  = BaseModVal(bpSize,       g_modPars.Pars[bpSize.penMode]);
@@ -302,42 +160,46 @@ static int FeedOnePointLinear(StrokeEngine* se, Vector2 pos, float velocity,
     target.rad_out *= sizeMulFactor;
     target.rad_in  *= sizeMulFactor;
 
-    d_Section section;
-    memset(&section, 0, sizeof(section));
-    section.Stroke.pos1 = se->lastDabPos;
-    section.Stroke.pos2 = pos;
-    section.BrushFrom = se->segBrushFrom;
-    section.Brush.Realb = target;
-    section.spacing = spacing;
-    section.scatter = 0;
-    section.Noisemode = 0;
-    section.BrushFrom.Realb.seed = baseBrush->seed;
+    float spacingVal = BParam_GetValue(&bpSpacing);
 
-    SegmentResult result;
-    int n = SegmentDrawer_DrawLinear(&section, outDabs, maxDabs, &result);
+    // Collapse both endpoint brushes
+    CollapsedBrush cbFrom = CollapseBrushParams(se->segBrushFrom.Realb, initialAngle, toolMode);
+    CollapsedBrush cbTo   = CollapseBrushParams(target, initialAngle, toolMode);
 
-    if (n > 0) {
-        if (toolMode == eSmudge) {
-            outDabs[0].srcX = se->smudgeSrcPos.x;
-            outDabs[0].srcY = se->smudgeSrcPos.y;
-            for (int i = 1; i < n; i++) {
-                outDabs[i].srcX = outDabs[i-1].x;
-                outDabs[i].srcY = outDabs[i-1].y;
-            }
-            se->smudgeSrcPos = Vector2{outDabs[n-1].x, outDabs[n-1].y};
+    DrawSegment dseg;
+    memset(&dseg, 0, sizeof(dseg));
+    dseg.pos1     = se->lastDabPos;
+    dseg.pos2     = pos;
+    dseg.brushFrom = cbFrom;
+    dseg.brush    = cbTo;
+    dseg.spacing  = spacingVal;
+    dseg.Noisemode = 0;
+    dseg.seed     = baseBrush->seed;
+
+    SegResult r;
+    int n = DrawLinear(&dseg, se->dabIndex, se->lastDabRad, outDabs, maxDabs, &r);
+
+    if (n > 0 && toolMode == eSmudge) {
+        outDabs[0].srcX = se->smudgeSrcPos.x;
+        outDabs[0].srcY = se->smudgeSrcPos.y;
+        for (int i = 1; i < n; i++) {
+            outDabs[i].srcX = outDabs[i-1].x;
+            outDabs[i].srcY = outDabs[i-1].y;
         }
-        PerDabJitter(outDabs, n, sizeMulFactor, baseBrush->seed);
+        se->smudgeSrcPos = Vector2{outDabs[n-1].x, outDabs[n-1].y};
     }
 
-    se->lastDabPos = result.lastDabPos;
+    se->lastDabPos = r.lastDabPos;
+    se->lastDabRad = r.lastRadOut;
     se->segBrushFrom.Realb = target;
+    se->dabIndex += n;
     return n;
 }
 
 int StrokeEngine_FeedPoint(StrokeEngine* se, const StrokePoint& sp,
                            const d_RealBrush* baseBrush,
                            float initialAngle, int toolMode,
-                           BrushDab* outDabs, int maxDabs) {
+                           DrawDab* outDabs, int maxDabs) {
     if (!se->inStroke || maxDabs <= 0) return 0;
 
     Vector2 pos = {sp.x, sp.y};
@@ -352,12 +214,15 @@ int StrokeEngine_FeedPoint(StrokeEngine* se, const StrokePoint& sp,
     }
 
     if (!se->strokeSmoothing || se->splineCount < STROKE_SPLINE_POINTS) {
-        return FeedOnePointLinear(se, pos, sp.velocity, baseBrush, initialAngle, toolMode, outDabs, maxDabs);
+        return FeedOnePoint(se, pos, sp.velocity, baseBrush, initialAngle, toolMode, outDabs, maxDabs);
     }
 
-    // Spline mode: walk midpoints, accumulate distance, feed segment when length >= spacing
-    float splineSpacing = fmaxf(BParam_GetValue(&bpSize) * 
-        powf(16.0f, BParam_GetValue(&bpSizeMul) / 128.0f - 1.0f) * 2.0f * BParam_GetValue(&bpSpacing), 1.0f);
+    // Spline mode
+    float spacingVal = BParam_GetValue(&bpSpacing);
+    float sizeMulFactor = powf(16.0f, BParam_GetValue(&bpSizeMul) / 128.0f - 1.0f);
+    float rad = BParam_GetValue(&bpSize) * sizeMulFactor;
+    float splineSpacing = fmaxf(rad * 2.0f * spacingVal, 1.0f);
+
     int totalDabs = 0;
     float vel = sp.velocity;
     Vector2 accStart = se->lastDabPos;
@@ -375,8 +240,8 @@ int StrokeEngine_FeedPoint(StrokeEngine* se, const StrokePoint& sp,
         if (accDist >= splineSpacing) {
             int rem = maxDabs - totalDabs;
             if (rem <= 0) break;
-            totalDabs += FeedOnePointLinear(se, mid, vel, baseBrush, initialAngle, toolMode,
-                                            outDabs + totalDabs, rem);
+            totalDabs += FeedOnePoint(se, mid, vel, baseBrush, initialAngle, toolMode,
+                                      outDabs + totalDabs, rem);
             accDist = 0.0f;
             accStart = se->lastDabPos;
         }
@@ -386,17 +251,38 @@ int StrokeEngine_FeedPoint(StrokeEngine* se, const StrokePoint& sp,
 
 void StrokeEngine_EndStroke(StrokeEngine* se) {
     se->inStroke = false;
-    se->dabAccum = 0.0f;
     se->splineCount = 0;
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────
 
-void StrokeEngine_ApplyDabs(RenderTexture2D dstRT, Texture2D brushTex, BrushDab* dabs, int n) {
+void StrokeEngine_ApplyDabs(RenderTexture2D dstRT, Texture2D brushTex,
+                            DrawDab* dabs, int n) {
     for (int i = 0; i < n; i++) {
         d_Brush tb; memset(&tb, 0, sizeof(tb));
-        tb.Realb = dabs[i].brush;
-        BrushBlend_ApplyStamp(dstRT, &tb, brushTex, dabs[i].x, dabs[i].y, dabs[i].srcX, dabs[i].srcY);
+        tb.Realb.rad_out     = dabs[i].brush.rad_out_px;
+        tb.Realb.rad_in      = dabs[i].brush.rad_out_px * dabs[i].brush.radInRatio;
+        tb.Realb.opacity     = dabs[i].brush.opacity;
+        tb.Realb.crv         = dabs[i].brush.crv;
+        tb.Realb.x2y         = dabs[i].brush.scale_y;
+        tb.Realb.resangle    = dabs[i].brush.resangle;
+        tb.Realb.col         = dabs[i].brush.col;
+        tb.Realb.cop         = dabs[i].brush.cop;
+        tb.Realb.bmidx       = (uint8_t)dabs[i].brush.bmidx;
+        tb.Realb.preserveop  = dabs[i].brush.preserveop;
+        tb.Realb.eraseMode   = dabs[i].brush.eraseMode;
+        tb.Realb.perspective = dabs[i].brush.perspective;
+        tb.Realb.texScale    = dabs[i].brush.texScale;
+        tb.Realb.texFeather  = dabs[i].brush.texFeather;
+        tb.Realb.texThresh   = dabs[i].brush.texThresh;
+        tb.Realb.texBlendVal = dabs[i].brush.texBlendVal;
+        tb.Realb.texBlendMode = dabs[i].brush.texBlendMode;
+        tb.Realb.texNoisemode = dabs[i].brush.texNoisemode;
+        tb.Realb.texColorMode = dabs[i].brush.texColorMode;
+        tb.Realb.useTexLumAsAlpha = dabs[i].brush.useTexLumAsAlpha;
+        tb.Realb.pwr         = dabs[i].brush.pwr;
+        BrushBlend_ApplyStamp(dstRT, &tb, brushTex,
+                              dabs[i].x, dabs[i].y, dabs[i].srcX, dabs[i].srcY);
     }
 }
 
@@ -405,45 +291,55 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex,
     float sizeMulFactor = powf(16.0f, BParam_GetValue(&bpSizeMul) / 128.0f - 1.0f);
     float spacingBaseRad = BParam_GetValue(&bpSize) * sizeMulFactor;
     float spacingVal = BParam_GetValue(&bpSpacing);
-    float spacing = fmaxf(spacingBaseRad * 2.0f * spacingVal, 1.0f);
+    float minPxSpacing = fmaxf(spacingBaseRad * 2.0f * spacingVal, 1.0f);
 
-    float maxSegLen = 200.0f;
-    float segLen = fminf(baseBrush->rad_out * 8.0f, maxSegLen);
-    if (segLen < spacing) segLen = spacing;
+    float segLen = fminf(baseBrush->rad_out * 8.0f, 600.0f);
+    if (segLen < minPxSpacing) segLen = minPxSpacing;
 
     float dirX = 1.0f, dirY = -1.0f;
     float dirLen = sqrtf(dirX * dirX + dirY * dirY);
     dirX /= dirLen; dirY /= dirLen;
 
     Vector2 start = {cx, cy};
-    Vector2 mid = {cx + segLen * dirX, cy + segLen * dirY};
 
-    float dir2X = -0.8f, dir2Y = -0.2f;
-    float dir2Len = sqrtf(dir2X * dir2X + dir2Y * dir2Y);
-    dir2X /= dir2Len; dir2Y /= dir2Len;
-    Vector2 end = {mid.x + segLen * 0.7f * dir2X, mid.y + segLen * 0.7f * dir2Y};
+    CollapsedBrush cb = CollapseBrushParams(*baseBrush, 0.0f, eBrush);
+    cb.jitRadOut = cb.jitRadIn = cb.jitOpacity = cb.jitCrv = cb.jitX2y = 0;
+    cb.jitHue = cb.jitSat = cb.jitLit = cb.jitCloneOp = 0;
+    cb.baseSeed = 0;
 
-    BrushDab dabs[512];
+    CollapsedBrush cbSmall = cb;
+    cbSmall.rad_out_px = 1.0f;
 
-    d_Section s1;
-    memset(&s1, 0, sizeof(s1));
-    s1.Stroke.pos1 = start; s1.Stroke.pos2 = mid;
-    s1.BrushFrom.Realb = *baseBrush; s1.Brush.Realb = *baseBrush;
-    s1.spacing = spacing; s1.scatter = 0; s1.Noisemode = 0;
-    s1.BrushFrom.Realb.seed = baseBrush->seed;
-
+    DrawDab dabs[512];
+    SegResult r;
     int total = 0;
-    SegmentResult r;
-    int n1 = SegmentDrawer_DrawLinear(&s1, dabs + total, 256, &r);
 
-    d_Section s2;
+    // Segment 1: constant brush, long enough for several dabs
+    Vector2 mid = {cx + segLen * dirX, cy + segLen * dirY};
+    DrawSegment s1;
+    memset(&s1, 0, sizeof(s1));
+    s1.pos1 = start; s1.pos2 = mid;
+    s1.brushFrom = cb; s1.brush = cb;
+    s1.spacing = spacingVal;
+    s1.seed = baseBrush->seed;
+
+    int n1 = DrawLinear(&s1, 0, 0.0f, dabs + total, 256, &r);
+    total += n1;
+
+    // Segment 2: goes left from where segment 1 ended, radius shrinks to 1
+    Vector2 seg2start = (n1 > 0) ? r.lastDabPos : mid;
+    float seg2Len = segLen * 0.7f;
+    Vector2 seg2end = {seg2start.x - seg2Len, seg2start.y};
+    DrawSegment s2;
     memset(&s2, 0, sizeof(s2));
-    s2.Stroke.pos1 = mid; s2.Stroke.pos2 = end;
-    s2.BrushFrom.Realb = *baseBrush; s2.Brush.Realb = *baseBrush;
-    s2.spacing = spacing; s2.scatter = 0; s2.Noisemode = 0;
-    s2.BrushFrom.Realb.seed = baseBrush->seed;
+    s2.pos1 = seg2start; s2.pos2 = seg2end;
+    s2.brushFrom = cb; s2.brush = cbSmall;
+    s2.spacing = spacingVal;
+    s2.seed = baseBrush->seed;
 
-    int n2 = SegmentDrawer_DrawLinear(&s2, dabs + total + n1, 256, &r);
+    int n2 = DrawLinear(&s2, 0, (n1 > 0) ? r.lastRadOut : cb.rad_out_px,
+                        dabs + total, 256, &r);
+    total += n2;
 
-    StrokeEngine_ApplyDabs(dstRT, brushTex, dabs, n1 + n2);
+    StrokeEngine_ApplyDabs(dstRT, brushTex, dabs, total);
 }

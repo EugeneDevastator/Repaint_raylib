@@ -157,27 +157,32 @@ void QuickPanel_DrawUI(AppState* state) {
              ImGui::SetCursorPos(ImVec2(10, 10));
              float x = 10;
 
+             static const char* items0[] = {"lum is alpha", "tex.a is alpha"};
+             static const char* items1[] = {"multiply", "threshold", "use tex mask"};
+             static const char* items2[] = {"Stencil", "Random", "Const"};
+             static const char* items3[] = {"brush RGB", "texture RGB", "mul brush*tex"};
+
              ImGui::SetCursorPos(ImVec2(x, 10));
              ImGui::BeginChild("##rg0", ImVec2(colW, 0), false);
-             { int v = mm; DrawRadioGroup("Mask Mode", &v, (const char*[]){"lum is alpha", "tex.a is alpha"}, 2); mm = v; }
+             { int v = mm; DrawRadioGroup("Mask Mode", &v, items0, 2); mm = v; }
              ImGui::EndChild();
              x += colW + 2.0f;
 
              ImGui::SetCursorPos(ImVec2(x, 10));
              ImGui::BeginChild("##rg1", ImVec2(colW, 0), false);
-             { int v = mx; DrawRadioGroup("Mask Mix", &v, (const char*[]){"multiply", "threshold", "use tex mask"}, 3); mx = v; }
+             { int v = mx; DrawRadioGroup("Mask Mix", &v, items1, 3); mx = v; }
              ImGui::EndChild();
              x += colW + 2.0f;
 
              ImGui::SetCursorPos(ImVec2(x, 10));
              ImGui::BeginChild("##rg2", ImVec2(colW, 0), false);
-             { int v = tnm; DrawRadioGroup("Sample Mode", &v, (const char*[]){"Stencil", "Random", "Const"}, 3); tnm = v; }
+             { int v = tnm; DrawRadioGroup("Sample Mode", &v, items2, 3); tnm = v; }
              ImGui::EndChild();
              x += colW + 2.0f;
 
              ImGui::SetCursorPos(ImVec2(x, 10));
              ImGui::BeginChild("##rg3", ImVec2(colW, 0), false);
-             { int v = cm; DrawRadioGroup("Color", &v, (const char*[]){"brush RGB", "texture RGB", "mul brush*tex"}, 3); cm = v; }
+             { int v = cm; DrawRadioGroup("Color", &v, items3, 3); cm = v; }
              ImGui::EndChild();
          }
          ImGui::EndChild();

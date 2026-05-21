@@ -65,6 +65,8 @@ set(SOURCES
     src/ui_style.cpp
     src/stroke.cpp
     src/stroke_engine.cpp
+    src/segment_drawer.cpp
+    src/tablet.cpp
     src/file_format.cpp
     src/network_broker.cpp
     src/app_config.cpp
@@ -84,7 +86,15 @@ set(SOURCES
 add_executable(repaint ${SOURCES})
 
 if(WIN32)
-    target_sources(repaint PRIVATE resources/icon.rc)
+    target_sources(repaint PRIVATE resources/icon.rc src/tablet_win.cpp src/platform_utils_win.cpp)
+    target_compile_definitions(repaint PRIVATE WINVER=0x0602 _WIN32_WINNT=0x0602)
+    target_link_libraries(repaint PRIVATE opengl32 gdi32 winmm user32)
+    if(MINGW)
+        # raylib defines CloseWindow/ShowCursor which conflict with Win32 API
+        target_link_options(repaint PRIVATE "-Wl,--allow-multiple-definition")
+    endif()
+else()
+    target_sources(repaint PRIVATE src/tablet_lnx.cpp src/platform_utils_lnx.cpp)
 endif()
 
 target_include_directories(repaint PRIVATE
@@ -100,6 +110,26 @@ endif()
 
 target_link_libraries(repaint PRIVATE raylib)
 
+# ── tablet-calibrator (standalone diagnostic tool) ───────────────────────────
+set(CALIB_SOURCES tablet-calibrator/main.cpp)
+add_executable(tablet-calibrator ${CALIB_SOURCES})
+
+target_include_directories(tablet-calibrator PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+if(WIN32)
+    target_sources(tablet-calibrator PRIVATE src/tablet_win.cpp src/platform_utils_win.cpp)
+    target_compile_definitions(tablet-calibrator PRIVATE WINVER=0x0602 _WIN32_WINNT=0x0602)
+    target_link_libraries(tablet-calibrator PRIVATE opengl32 gdi32 winmm user32)
+    if(MINGW)
+        target_link_options(tablet-calibrator PRIVATE "-Wl,--allow-multiple-definition")
+    endif()
+else()
+    target_sources(tablet-calibrator PRIVATE src/tablet_lnx.cpp src/platform_utils_lnx.cpp)
+    target_link_libraries(tablet-calibrator PRIVATE m pthread dl)
+endif()
+
+target_link_libraries(tablet-calibrator PRIVATE raylib)
+
 # ── platform linking ──────────────────────────────────────────────────────────
 if(UNIX AND NOT APPLE)
     find_package(X11 QUIET)
@@ -107,10 +137,6 @@ if(UNIX AND NOT APPLE)
         target_link_libraries(repaint PRIVATE ${X11_LIBRARIES})
     endif()
     target_link_libraries(repaint PRIVATE m pthread dl)
-endif()
-
-if(WIN32)
-    target_link_libraries(repaint PRIVATE opengl32 gdi32 winmm)
 endif()
 
 # ── resource copies (configure-time + post-build) ───────────────────────────
