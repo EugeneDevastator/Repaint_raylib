@@ -154,24 +154,32 @@ void JitterBrush(CollapsedBrush& b, uint16_t baseSeed, int dabIdx) {
 static float FindNextDabRadius(float lastRad, float lastPos,
                                float segStart, float segEnd,
                                float segStartRad, float segEndRad,
-                               float spacingMult) {
-    float step = lastRad * 2.0f * spacingMult;
-    if (step < 1.0f) step = 1.0f;
-    for (int i = 0; i < 5; i++) {
-        float t = (lastPos + step - segStart) / (segEnd - segStart);
-        if (t < 0.0f) t = 0.0f;
-        if (t > 1.0f) t = 1.0f;
-        float rad = segStartRad + (segEndRad - segStartRad) * t;
-        float newStep = (lastRad + rad) * spacingMult;
-        if (newStep < 1.0f) newStep = 1.0f;
-        if (fabsf(newStep - step) < 0.1f) break;
-        step = (step + newStep) * 0.5f;  // damped convergence
+                               float spacingMult)
+{
+    float segLen = segEnd - segStart;
+    if (segLen < 0.0001f)
+        return segStartRad;
+
+    float slope = (segEndRad - segStartRad) / segLen;
+    float rAtLast = segStartRad + slope * (lastPos - segStart);
+
+    float denom = 1.0f - spacingMult * slope;
+    float step;
+    if (fabsf(denom) < 0.0001f) {
+        // degenerate: radius grows as fast as spacing, fallback
+        step = (lastRad + rAtLast) * spacingMult;
+    } else {
+        step = spacingMult * (lastRad + rAtLast) / denom;
     }
-    float t = (lastPos + step - segStart) / (segEnd - segStart);
+    if (step < 1.0f) step = 1.0f;
+
+    float nextPos = lastPos + step;
+    float t = (nextPos - segStart) / segLen;
     if (t < 0.0f) t = 0.0f;
     if (t > 1.0f) t = 1.0f;
     return segStartRad + (segEndRad - segStartRad) * t;
 }
+
 
 // Given the last dab's radius and position and the NEW dab's radius,
 // find where the new dab should be placed so edges touch.
