@@ -6,6 +6,7 @@ static Shader brushGeoShader   = {0};
 
 static int locUAngle  = -1, locUSquish = -1, locUSize = -1;
 static int locUPerspective = -1;
+static int locURadIn  = -1, locUCurve = -1;
 static int locOpacity = -1, locRadIn   = -1;
 static int locBrushColor = -1, locCurve = -1;
 static int locSol = -1, locSol2op = -1, locSeed = -1;
@@ -65,6 +66,8 @@ void BrushBlend_Init(void) {
     locUSquish = GetShaderLocation(brushGeoShader, "uSquish");
     locUSize   = GetShaderLocation(brushGeoShader, "uSize");
     locUPerspective = GetShaderLocation(brushGeoShader, "uPerspective");
+    locURadIn  = GetShaderLocation(brushGeoShader, "uRadIn");
+    locUCurve  = GetShaderLocation(brushGeoShader, "uCurve");
 
     snprintf(vs, sizeof(vs), "%sshaders/brush_blend.vs", ad);
     snprintf(fs, sizeof(fs), "%sshaders/brush_blend.fs", ad);
@@ -139,8 +142,6 @@ void BrushBlend_ApplyStamp(
     int H = dstRT.texture.height;
 
     float radOut   = fmaxf(brush->Realb.rad_out, 0.001f);
-    float radInRatio = brush->Realb.rad_in / radOut;
-    radInRatio = fmaxf(0.0f, fminf(1.0f, radInRatio));
     float angleRad = (float)brush->Realb.resangle * (float)(M_PI / 180.0);
     float squish   = fmaxf((float)brush->Realb.x2y, 0.01f);
 
@@ -148,6 +149,7 @@ void BrushBlend_ApplyStamp(
     if (canvasCopyRT.id == 0 || canvasCopyW != W || canvasCopyH != H) {
         if (canvasCopyRT.id > 0) UnloadRenderTexture(canvasCopyRT);
         canvasCopyRT = Load16BitRT(W, H);
+        SetTextureFilter(canvasCopyRT.texture, TEXTURE_FILTER_BILINEAR);
         canvasCopyW  = W;
         canvasCopyH  = H;
     }
@@ -188,7 +190,7 @@ void BrushBlend_ApplyStamp(
         rt.texture.height  = bucket;
         rt.texture.format  = RL_PIXELFORMAT_UNCOMPRESSED_R16G16B16A16;
         rt.texture.mipmaps = 1;
-        SetTextureFilter(rt.texture, TEXTURE_FILTER_BILINEAR);
+        SetTextureFilter(rt.texture, TEXTURE_FILTER_POINT);
         SetTextureWrap(rt.texture, TEXTURE_WRAP_CLAMP);
         geoPool[pidx]      = rt;
     }
@@ -203,7 +205,13 @@ void BrushBlend_ApplyStamp(
     SetShaderValue(brushGeoShader, locUSize,   &size,     SHADER_UNIFORM_FLOAT);
     float persp = brush->Realb.perspective;
     SetShaderValue(brushGeoShader, locUPerspective, &persp, SHADER_UNIFORM_FLOAT);
+    float radInRatio = brush->Realb.rad_in / fmaxf(brush->Realb.rad_out, 0.001f);
+    float curve      = clampf((float)brush->Realb.crv, 0.0f, 1.0f);
+    SetShaderValue(brushGeoShader, locURadIn,  &radInRatio, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(brushGeoShader, locUCurve,  &curve,      SHADER_UNIFORM_FLOAT);
 
+    // Geometry pass: render crisp mask with point filtering
+    SetTextureFilter(geoRT->texture, TEXTURE_FILTER_POINT);
     BeginTextureMode(*geoRT);
     ClearBackground((Color){0, 0, 0, 0});
     BeginShaderMode(brushGeoShader);
@@ -214,9 +222,11 @@ void BrushBlend_ApplyStamp(
     EndShaderMode();
     EndTextureMode();
 
+    // Switch to bilinear for sub-pixel blend sampling
+    SetTextureFilter(geoRT->texture, TEXTURE_FILTER_BILINEAR);
+
     // -------- Pass 2: blend
     float opacity    = clampf((float)brush->Realb.opacity, 0.0f, 1.0f);
-    float curve      = clampf((float)brush->Realb.crv,     0.0f, 1.0f);
     float sol        = (float)brush->Realb.sol;
     float sol2op     = (float)brush->Realb.sol2op;
     float seed       = (float)brush->Realb.seed + (float)rand()/(float)RAND_MAX
@@ -250,9 +260,7 @@ void BrushBlend_ApplyStamp(
     float sc[2] = { stampX / (float)W, (float)(H - stampY) / (float)H };
 
     SetShaderValue(brushBlendShader, locOpacity,        &opacity,    SHADER_UNIFORM_FLOAT);
-    SetShaderValue(brushBlendShader, locRadIn, &radInRatio, SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locBrushColor,     col,         SHADER_UNIFORM_VEC4);
-    SetShaderValue(brushBlendShader, locCurve,          &curve,      SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locSol,            &sol,        SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locSol2op,         &sol2op,     SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locSeed,           &seed,       SHADER_UNIFORM_FLOAT);

@@ -8,8 +8,6 @@ uniform sampler2D canvasTex;
 uniform sampler2D brushTex;
 
 uniform float opacity;
-uniform float radIn;
-uniform float curve;
 uniform float sol;
 uniform float sol2op;
 uniform float seed;
@@ -118,22 +116,6 @@ vec4 applyBlend(int mode, vec4 canvas, vec3 brushRGB, float brushA) {
     return vec4(clamp(outRGB, 0.0, 1.0), clamp(outA, 0.0, 1.0));
 }
 
-float applyRadialFalloff(float d) {
-    if (d<0.0000000001) return 0.0;
-    float innerT = clamp(radIn, 0.0, 1.0); // already normalized [0..1]
-    float a = 1.0;
-    if (d > innerT) {
-        float edgeRange = 1.0 - innerT;
-        if (edgeRange > 0.001)
-            a = 1.0 - (d - innerT) / edgeRange;
-    }
-    a = clamp(a, 0.0, 1.0);
-    float crvt      = curve * 2.0 - 1.0;
-    float curvePower = (crvt >= 0.0) ? mix(1.0, 3.0, crvt) : mix(1.0, 1.0/3.0, -crvt);
-    return clamp(pow(a, curvePower), 0.0, 1.0);
-}
-
-
 void main() {
     vec2 uv       = fragTexCoord;
     vec2 sampleUV = vec2(uv.x, 1.0 - uv.y);
@@ -143,33 +125,27 @@ void main() {
     canvasUV.y *= -1;
     vec4 canvas = texture(canvasTex, canvasUV);
 
-    if (geouv.a < 0.999) {
+    if (geouv.a < 0.01) {
         finalColor = texture(canvasTex, canvasUV);
         return;
     }
 
-    vec2  p    = geouv.rg - 0.5;
-    // Clamp geometry UV to prevent bleeding at brush texture edges
-    vec2 geoUV = clamp(geouv.rg, 0.001, 0.999);
-    float dist = length(p);
-    float d    = dist * 2.0;
-
-    float alpha = applyRadialFalloff(d);
+    float alpha = geouv.a;
 
     // --- texture sampling ---
     vec4 texel = vec4(1.0);
     if (texBlendMode >= 0) {
         // Default: stamp-local UV (brush space 0..1), same every stamp = CONST
-        vec2 stUV = geoUV;
+        vec2 stUV = geouv.rg;
 
         if (texNoisemode == 0) {
             // STENCIL (0): canvas-absolute UV, texture locked to canvas world space
             stUV = canvasFragUV;
         } else if (texNoisemode == 1) {
             // RANDOM (1): stamp-local + per-stamp random offset via texOffset
-            stUV = geoUV + texOffset;
+            stUV = geouv.rg + texOffset;
         }
-        // CONST (2): stUV = geoUV, no offset, identical every stamp
+        // CONST (2): stUV = geouv.rg, no offset, identical every stamp
 
         stUV = stUV * texScale;
         texel = texture(brushTex, stUV);
@@ -192,7 +168,7 @@ void main() {
         secondMask = 1.0;
     } else if (texBlendMode == 2) {
         firstMask  = applyThreshold(userTexA, abs(texThresh), texFeather);
-        firstMask  = applyRadialFalloff(firstMask);
+        firstMask  *= alpha;
         secondMask = 1;
     } else {
         // Threshold
