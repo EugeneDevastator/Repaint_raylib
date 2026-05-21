@@ -3,7 +3,7 @@
 #include "stroke.h"
 #include <math.h>
 
-bool g_strokeSmoothing = true;
+bool g_strokeSmoothing = false;
 
 static Vector2 CatmullRom(Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, float t) {
     float t2 = t * t, t3 = t2 * t;
@@ -104,58 +104,49 @@ int SegmentDrawer_DrawLinear(const d_Section* section, BrushDab* outDabs,
     float stdist = Dist2D(from, to);
     if (stdist < 0.001f) return 0;
 
+    // Convert multiplier to pixel spacing using base brush radius
     float spacingMult = fmaxf(section->spacing, 0.0f);
-    float radFrom = section->BrushFrom.Realb.rad_out;
-    float radTo   = section->Brush.Realb.rad_out;
+    float baseRad = section->BrushFrom.Realb.rad_out;
+    if (baseRad < 0.001f) baseRad = 1.0f;
+    float spacing = fmaxf(baseRad * 2.0f * spacingMult, 1.0f);
+
+    int maxDab = (int)(stdist / spacing);
+    if (maxDab < 1) return 0;
 
     float dx = to.x - from.x, dy = to.y - from.y;
     float x2r = dx / stdist, y2r = dy / stdist;
     float rrang = section->Brush.Realb.rad_out * (section->scatter / 51.0f);
     uint16_t n = 0;
 
-    float curPos = 0.0f;
-    int count = 0;
-
-    while (curPos < stdist && count < maxDabs) {
-        float k0 = curPos / stdist;
-        float rad = radFrom + (radTo - radFrom) * k0;
-
-        float stepEst = rad * 2.0f * spacingMult;
-        if (stepEst < 1.0f) stepEst = 1.0f;
-        float k1 = (curPos + stepEst) / stdist;
-        if (k1 > 1.0f) k1 = 1.0f;
-        float radNext = radFrom + (radTo - radFrom) * k1;
-
-        float step = (rad + radNext) * spacingMult;
-        if (step < 1.0f) step = 1.0f;
-
-        curPos += step;
-        if (curPos > stdist) break;
+    for (int i = 1; i <= maxDab && i - 1 < maxDabs; i++) {
+        float d = i * spacing;
+        Vector2 pos = {from.x + d * x2r, from.y + d * y2r};
 
         n++;
-        Vector2 pos = {from.x + curPos * x2r, from.y + curPos * y2r};
-
         float rnflw = Stroke_RawRnd(section->BrushFrom.Realb.seed + n * 2, 1024) * rrang * 2.0f - rrang;
         pos.x -= rnflw * y2r;
         pos.y += rnflw * x2r;
 
-        float k2 = curPos / stdist;
+        float k = (maxDab > 1) ? (float)(i - 1) / (float)(maxDab - 1) : 0.5f;
         d_Brush cbrush = section->BrushFrom;
-        cbrush.Realb = Stroke_BlendBrushes(section->BrushFrom.Realb, section->Brush.Realb, k2);
+        cbrush.Realb = Stroke_BlendBrushes(section->BrushFrom.Realb, section->Brush.Realb, k);
         ApplyNoise(&cbrush, section->Noisemode, section->BrushFrom.Realb.seed, pos, n);
 
-        outDabs[count].x = pos.x;
-        outDabs[count].y = pos.y;
-        outDabs[count].srcX = pos.x;
-        outDabs[count].srcY = pos.y;
-        outDabs[count].brush = cbrush.Realb;
-        count++;
+        int idx = i - 1;
+        outDabs[idx].x = pos.x;
+        outDabs[idx].y = pos.y;
+        outDabs[idx].srcX = pos.x;
+        outDabs[idx].srcY = pos.y;
+        outDabs[idx].brush = cbrush.Realb;
     }
 
+    int count = (maxDab < maxDabs) ? maxDab : maxDabs;
     if (count > 0) {
-        float lastRad = radFrom + (radTo - radFrom) * (curPos / stdist);
-        outResult->lastRadOut = lastRad;
-        outResult->lastDabPos = Vector2{from.x + curPos * x2r, from.y + curPos * y2r};
+        float lastD = count * spacing;
+        float lastK = lastD / stdist;
+        outResult->lastRadOut = section->BrushFrom.Realb.rad_out
+            + (section->Brush.Realb.rad_out - section->BrushFrom.Realb.rad_out) * lastK;
+        outResult->lastDabPos = Vector2{from.x + lastD * x2r, from.y + lastD * y2r};
     }
     return count;
 }
