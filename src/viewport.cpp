@@ -4,6 +4,37 @@
 
 extern bool quickPanelShow;
 
+static BrushDab MakeBrushDab(float x, float y, const DrawDab& d) {
+    BrushDab r;
+    r.x = x; r.y = y;
+    r.srcX = d.srcX; r.srcY = d.srcY;
+    r.brush.rad_out     = d.brush.rad_out_px;
+    r.brush.rad_in      = d.brush.rad_out_px * d.brush.radInRatio;
+    r.brush.opacity     = d.brush.opacity;
+    r.brush.crv         = d.brush.crv;
+    r.brush.x2y         = d.brush.scale_y;
+    r.brush.resangle    = d.brush.resangle;
+    r.brush.col         = d.brush.col;
+    r.brush.cop         = d.brush.cop;
+    r.brush.bmidx       = (uint8_t)d.brush.bmidx;
+    r.brush.preserveop  = d.brush.preserveop;
+    r.brush.eraseMode   = d.brush.eraseMode;
+    r.brush.perspective = d.brush.perspective;
+    r.brush.texScale    = d.brush.texScale;
+    r.brush.texFeather  = d.brush.texFeather;
+    r.brush.texThresh   = d.brush.texThresh;
+    r.brush.texBlendVal = d.brush.texBlendVal;
+    r.brush.texBlendMode = d.brush.texBlendMode;
+    r.brush.texNoisemode = d.brush.texNoisemode;
+    r.brush.texColorMode = d.brush.texColorMode;
+    r.brush.useTexLumAsAlpha = d.brush.useTexLumAsAlpha;
+    r.brush.pwr         = d.brush.pwr;
+    r.brush.seed        = 0;
+    r.brush.sol         = 1.0f;
+    r.brush.sol2op      = 0.0f;
+    return r;
+}
+
 void Viewport_Init(Viewport* vp, Rectangle bounds) {
     vp->bounds = bounds;
     vp->strokeLen = 0;
@@ -24,7 +55,7 @@ void Viewport_SetBounds(Viewport* vp, Rectangle bounds) {
 }
 
 void Viewport_HandleInput(Viewport* vp, AppState* state) {
-    static BrushDab dabs[1024];
+    static DrawDab dabs[1024];
 
     if (IsKeyPressed(KEY_F1)) vp->debugShowStamps = !vp->debugShowStamps;
     if (quickPanelShow) return;
@@ -198,7 +229,10 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                         &state->currentBrush.Realb, state->initialAngle, state->mode,
                         dabs, 1024);
                     for (int i = 0; i < n; i++) {
-                        if (vp->broker) vp->broker->on_input(dabs[i]);
+                        if (vp->broker) {
+                            BrushDab bd = MakeBrushDab(dabs[i].x, dabs[i].y, dabs[i]);
+                            vp->broker->on_input(bd);
+                        }
                         if (vp->strokeLen < MAX_STROKE_PTS)
                             vp->strokePts[vp->strokeLen++] = Vector2{dabs[i].x, dabs[i].y};
                     }

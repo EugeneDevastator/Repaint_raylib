@@ -65,6 +65,7 @@ set(SOURCES
     src/ui_style.cpp
     src/stroke.cpp
     src/stroke_engine.cpp
+    src/segment_drawer.cpp
     src/tablet.cpp
     src/file_format.cpp
     src/network_broker.cpp

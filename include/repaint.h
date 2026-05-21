@@ -207,7 +207,6 @@ struct StrokeEngine {
     // Segment chaining state
     d_Brush segBrushFrom;
     Vector2 lastDabPos;
-    float dabAccum;
     Vector2 smudgeSrcPos;
     bool inStroke;
     // Modulator tracking
