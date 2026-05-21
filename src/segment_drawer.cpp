@@ -97,15 +97,15 @@ CollapsedBrush BlendBrushes(CollapsedBrush from, CollapsedBrush to, float k) {
     r.texColorMode = from.texColorMode;
     r.useTexLumAsAlpha = from.useTexLumAsAlpha;
 
-    // Jitter ranges (carry from start, used by JitterBrush)
-    r.jitRadOut = from.jitRadOut;
-    r.jitRadIn  = from.jitRadIn;
-    r.jitOpacity = from.jitOpacity;
-    r.jitCrv    = from.jitCrv;
-    r.jitX2y    = from.jitX2y;
-    r.jitHue    = from.jitHue;
-    r.jitSat    = from.jitSat;
-    r.jitLit    = from.jitLit;
+    // Jitter ranges (interpolated — proportional to radius)
+    r.jitRadOut = lerp(from.jitRadOut, to.jitRadOut, k);
+    r.jitRadIn  = lerp(from.jitRadIn, to.jitRadIn, k);
+    r.jitOpacity = lerp(from.jitOpacity, to.jitOpacity, k);
+    r.jitCrv    = lerp(from.jitCrv, to.jitCrv, k);
+    r.jitX2y    = lerp(from.jitX2y, to.jitX2y, k);
+    r.jitHue    = lerp(from.jitHue, to.jitHue, k);
+    r.jitSat    = lerp(from.jitSat, to.jitSat, k);
+    r.jitLit    = lerp(from.jitLit, to.jitLit, k);
     r.jitCloneOp = from.jitCloneOp;
     r.baseSeed  = from.baseSeed;
     return r;
@@ -149,24 +149,27 @@ void JitterBrush(CollapsedBrush& b, uint16_t baseSeed, int dabIdx) {
 
 // ── Helpers for iterative dab placement ───────────────────────────
 
-// Given last dab's radius and position, estimate the NEXT dab's
+// Given the last dab's radius and position, estimate the NEXT dab's
 // un-jittered radius by assuming both radii are equal for the step.
-static float FindNextDabRadius(float lastRad, float curPos, float stdist,
-                               float rFrom, float rTo) {
-    float stepEst = lastRad * 2.0f;
+static float FindNextDabRadius(float lastRad, float lastPos,
+                               float segStart, float segEnd,
+                               float segStartRad, float segEndRad,
+                               float spacingMult) {
+    float stepEst = lastRad * 2.0f * spacingMult;
     if (stepEst < 1.0f) stepEst = 1.0f;
-    float nextPos = fminf(curPos + stepEst, stdist);
-    float k = nextPos / stdist;
-    return rFrom + (rTo - rFrom) * k;
+    float t = (lastPos + stepEst - segStart) / (segEnd - segStart);
+    if (t < 0.0f) t = 0.0f;
+    if (t > 1.0f) t = 1.0f;
+    return segStartRad + (segEndRad - segStartRad) * t;
 }
 
-// Given last dab's radius and position, and the NEW dab's radius,
-// find the position where they just touch (edge-to-edge).
-static float FindPosForDab(float lastRad, float curPos,
-                           float newRad, float spacingMult) {
-    float step = (lastRad + newRad) * spacingMult;
+// Given the last dab's radius and position and the NEW dab's radius,
+// find where the new dab should be placed so edges touch.
+static float FindNextDabPosition(float lastRad, float lastPos,
+                                  float nextRad, float spacingMult) {
+    float step = (lastRad + nextRad) * spacingMult;
     if (step < 1.0f) step = 1.0f;
-    return curPos + step;
+    return lastPos + step;
 }
 
 // ── DrawLinear ─────────────────────────────────────────────────────
@@ -190,45 +193,46 @@ int DrawLinear(const DrawSegment* seg, int dabOffset, DrawDab* out, int maxOut, 
     float dx = to.x - from.x, dy = to.y - from.y;
     float x2r = dx / stdist, y2r = dy / stdist;
 
-    float curPos = 0.0f;
+    float lastDabPos = 0.0f;
+    float lastDabRad = rFrom;
     int count = 0;
     uint16_t nn = 0;
 
-    while (curPos < stdist && count < maxOut) {
-        // Brush at the CURRENT position (last placed dab)
-        CollapsedBrush lastCB = BlendBrushes(seg->brushFrom, seg->brush, curPos / stdist);
-        JitterBrush(lastCB, seg->brushFrom.baseSeed, dabOffset + count);
-        float lastRad = lastCB.rad_out_px;
+    while (lastDabPos < stdist && count < maxOut) {
+        // 1. Find next dab's un-jittered base radius
+        float nextDabRad = FindNextDabRadius(lastDabRad, lastDabPos,
+                                             0.0f, stdist, rFrom, rTo, spacingMult);
 
-        // 1. Find next dab's un-jittered radius (estimate from equal-radii step)
-        float nextBaseRad = FindNextDabRadius(lastRad, curPos, stdist, rFrom, rTo);
+        // 2. Randomize the next dab's radius
+        float dr = RawRnd(seg->brushFrom.baseSeed + (uint16_t)((dabOffset + count) * 7 + 1), 1024) / 1024.0f * 2.0f - 1.0f;
+        nextDabRad += dr * seg->brushFrom.jitRadOut;
 
-        // 2. Randomize it
-        float dr = RawRnd(seg->brushFrom.baseSeed + (uint16_t)((dabOffset + count + 1) * 7 + 1), 1024) / 1024.0f * 2.0f - 1.0f;
-        float nextRad = nextBaseRad + dr * seg->brushFrom.jitRadOut;
+        // 3. Find position where the randomized radius touches the last dab
+        float nextDabPos = FindNextDabPosition(lastDabRad, lastDabPos,
+                                                nextDabRad, spacingMult);
+        if (nextDabPos > stdist) break;
 
-        // 3. Find position for the randomized radius (touching last dab)
-        float nextPos = FindPosForDab(lastRad, curPos, nextRad, spacingMult);
-        if (nextPos > stdist) break;
-        curPos = nextPos;
-
-        // 4. Build brush at the CORRECT position (where the dab actually lands)
-        CollapsedBrush dabCB = BlendBrushes(seg->brushFrom, seg->brush, curPos / stdist);
-        JitterBrush(dabCB, seg->brushFrom.baseSeed, dabOffset + count + 1);
+        // 4. Build brush at the actual position, jitter visual params, keep rad from loop
+        CollapsedBrush dabCB = BlendBrushes(seg->brushFrom, seg->brush, nextDabPos / stdist);
+        JitterBrush(dabCB, seg->brushFrom.baseSeed, dabOffset + count);
+        dabCB.rad_out_px = nextDabRad;  // override: spacing was computed with this jittered rad
 
         nn++;
-        Vector2 pos = {from.x + curPos * x2r, from.y + curPos * y2r};
+        Vector2 pos = {from.x + nextDabPos * x2r, from.y + nextDabPos * y2r};
         out[count].x = pos.x;
         out[count].y = pos.y;
         out[count].srcX = pos.x;
         out[count].srcY = pos.y;
         out[count].brush = dabCB;
         count++;
+
+        lastDabPos = nextDabPos;
+        lastDabRad = nextDabRad;
     }
 
     if (count > 0) {
         res->lastRadOut = out[count-1].brush.rad_out_px;
-        res->lastDabPos = Vector2{from.x + curPos * x2r, from.y + curPos * y2r};
+        res->lastDabPos = Vector2{from.x + lastDabPos * x2r, from.y + lastDabPos * y2r};
     }
     return count;
 }

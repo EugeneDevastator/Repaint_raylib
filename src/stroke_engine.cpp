@@ -309,6 +309,7 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex,
     CollapsedBrush cb = CollapseBrushParams(*baseBrush, 0.0f, eBrush);
     CollapsedBrush cbSmall = cb;
     cbSmall.rad_out_px = 1.0f;
+    cbSmall.jitRadOut = bpSize.user.jitter * 1.0f;
 
     DrawSegment s1, s2;
     memset(&s1, 0, sizeof(s1));
