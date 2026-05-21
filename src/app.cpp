@@ -17,6 +17,28 @@ bool g_panelsVisible = true;
 
 Viewport viewport;
 
+float g_splashAlpha = 1.0f;
+static Texture2D g_splashTex = {0};
+
+static void DrawSplash(const char* msg) {
+    int sw = GetScreenWidth(), sh = GetScreenHeight();
+    if (g_splashTex.id == 0 && FileExists("resources/splash.png")) {
+        Image img = LoadImage("resources/splash.png");
+        if (img.data) g_splashTex = LoadTextureFromImage(img);
+        UnloadImage(img);
+    }
+    BeginDrawing();
+    ClearBackground((Color){35, 35, 40, 255});
+    if (g_splashTex.id > 0) {
+        float scale = fminf(sw / (float)g_splashTex.width, sh / (float)g_splashTex.height) * 0.7f;
+        float x = (sw - g_splashTex.width * scale) * 0.5f;
+        float y = (sh - g_splashTex.height * scale) * 0.5f - 30;
+        DrawTextureEx(g_splashTex, Vector2{x, y}, 0.0f, scale, WHITE);
+    }
+    DrawText(msg, sw / 2 - MeasureText(msg, 20) / 2, sh / 2 + 80, 20, (Color){230, 230, 240, 255});
+    EndDrawing();
+}
+
 /* ── File dialog / path state ──────────────────────────────────────────── */
 static AppState* g_state = NULL;
 DialogState g_fileDlg;
@@ -248,6 +270,7 @@ void App_Init(AppState* state) {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "RePaint");
     MaximizeWindow();
+    DrawSplash("Initializing...");
 
     if (FileExists("resources/icon.png")) {
         Image icon = LoadImage("resources/icon.png");
@@ -260,6 +283,7 @@ void App_Init(AppState* state) {
     UIStyle::Init();
     LeftPanel_Init();
     SetTargetFPS(60);
+    DrawSplash("Loading brushes...");
 
     Painter_Init();
     BrushBlend_Init();
@@ -267,6 +291,7 @@ void App_Init(AppState* state) {
     BrushTex_Init(state);
     UserTexture_Init();
     QuickPanel_Init();
+    DrawSplash("Starting network...");
 
     networkBroker.appState = state;
     g_testBroker.appState = state;
@@ -276,6 +301,7 @@ void App_Init(AppState* state) {
 
     Modulators_Init();
     Changelog_Init();
+    DrawSplash("Creating canvas...");
 
     state->canvas = Canvas_Create(800, 600, WHITE);
     state->activeLayer = 0;
@@ -504,6 +530,26 @@ void App_Draw(AppState* state) {
     }
 
     rlImGuiEnd();
+
+    // Splash overlay: fades out over ~15 frames
+    if (g_splashAlpha > 0.001f) {
+        int sw = GetScreenWidth(), sh = GetScreenHeight();
+        Color bg = {35, 35, 40, (uint8_t)(g_splashAlpha * 255)};
+        DrawRectangle(0, 0, sw, sh, bg);
+        if (g_splashTex.id > 0) {
+            float scale = fminf(sw / (float)g_splashTex.width, sh / (float)g_splashTex.height) * 0.7f;
+            float x = (sw - g_splashTex.width * scale) * 0.5f;
+            float y = (sh - g_splashTex.height * scale) * 0.5f - 30;
+            DrawTextureEx(g_splashTex, Vector2{x, y}, 0.0f, scale, Color{255, 255, 255, (uint8_t)(g_splashAlpha * 255)});
+        }
+        Color tc = {230, 230, 240, (uint8_t)(g_splashAlpha * 255)};
+        DrawText("Ready", sw / 2 - MeasureText("Ready", 20) / 2, sh / 2 + 80, 20, tc);
+        g_splashAlpha -= 0.07f;
+        if (g_splashAlpha < 0.0f) {
+            g_splashAlpha = 0.0f;
+            if (g_splashTex.id > 0) { UnloadTexture(g_splashTex); g_splashTex = Texture2D{0}; }
+        }
+    }
 
     EndDrawing();
 
