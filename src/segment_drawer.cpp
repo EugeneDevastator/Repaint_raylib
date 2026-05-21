@@ -180,8 +180,9 @@ int DrawLinear(const DrawSegment* seg, DrawDab* out, int maxOut, SegResult* res)
         float step = cb.rad_out_px * 2.0f * spacingMult;
         if (step < 1.0f) step = 1.0f;
 
-        curPos += step;
-        if (curPos > stdist) break;
+        float nextPos = curPos + step;
+        if (nextPos > stdist) break;
+        curPos = nextPos;
 
         nn++;
         Vector2 pos = {from.x + curPos * x2r, from.y + curPos * y2r};
