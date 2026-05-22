@@ -19,7 +19,7 @@ static inline float BaseModVal(const BParam& bp, float cpar) {
 CollapsedBrush CollapseBrushParams(const d_RealBrush& b, float initialAngle, int toolMode) {
     CollapsedBrush cb;
     cb.rad_out_px = b.rad_out;
-    cb.radInRatio = (b.rad_out > 0.001f) ? b.rad_in / b.rad_out : 0.0f;
+    cb.radInRatio = fminf(b.rad_in, 1.0f);
     cb.scale_x    = 1.0f;
     cb.scale_y    = b.x2y;
     cb.resangle   = (float)b.resangle;
@@ -151,7 +151,7 @@ static int FeedOnePoint(StrokeEngine* se, Vector2 pos, float velocity,
     d_RealBrush target = *baseBrush;
     target.rad_out  = BaseModVal(bpSize,       g_modPars.Pars[bpSize.penMode]);
     float hVal      = BaseModVal(bpHardness,   g_modPars.Pars[bpHardness.penMode]);
-    target.rad_in   = target.rad_out * hVal;
+    target.rad_in   = hVal;
     target.crv      = BaseModVal(bpCurvature,  g_modPars.Pars[bpCurvature.penMode]);
     target.opacity  = BaseModVal(bpOpacity,    g_modPars.Pars[bpOpacity.penMode]);
     target.resangle = fmodf(initialAngle + BaseModVal(bpAngle, g_modPars.Pars[bpAngle.penMode]), 360.0f);
@@ -161,7 +161,6 @@ static int FeedOnePoint(StrokeEngine* se, Vector2 pos, float velocity,
                                BaseModVal(bpQuickLit, g_modPars.Pars[bpQuickLit.penMode]));
     target.cop = (toolMode == eSmudge) ? BaseModVal(bpCloneOpacity, g_modPars.Pars[bpCloneOpacity.penMode]) : 0.0f;
     target.rad_out *= sizeMulFactor;
-    target.rad_in  *= sizeMulFactor;
 
     float spacingVal = BParam_GetValue(&bpSpacing);
 

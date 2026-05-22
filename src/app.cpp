@@ -105,7 +105,7 @@ void UpdateUI(AppState* state) {
     }
 
     state->currentBrush.Realb.rad_out  = GetModVal(&bpSize);
-    state->currentBrush.Realb.rad_in   = state->currentBrush.Realb.rad_out * GetModVal(&bpHardness);
+    state->currentBrush.Realb.rad_in   = GetModVal(&bpHardness);
     state->currentBrush.Realb.crv      = GetModVal(&bpCurvature);
     state->currentBrush.Realb.opacity  = GetModVal(&bpOpacity);
     state->currentBrush.Realb.resangle = fmodf(state->initialAngle + GetModVal(&bpAngle), 360.0f);
@@ -113,7 +113,6 @@ void UpdateUI(AppState* state) {
 
     float sizeMulFactor = powf(16.0f, BParam_GetValue(&bpSizeMul) / 128.0f - 1.0f);
     state->currentBrush.Realb.rad_out *= sizeMulFactor;
-    state->currentBrush.Realb.rad_in  *= sizeMulFactor;
 
     state->currentBrush.Realb.cop = (state->mode == eSmudge)
         ? GetModVal(&bpCloneOpacity) : 0.0f;
