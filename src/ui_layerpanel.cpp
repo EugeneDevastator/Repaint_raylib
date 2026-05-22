@@ -195,7 +195,7 @@ void LayerPanel_Draw(AppState* state) {
                 if (idx < state->texCount && state->layerRTs[idx].id > 0) {
                     float ts = 36.0f;
                     ImGui::Image((ImTextureID)(intptr_t)state->layerRTs[idx].texture.id,
-                        ImVec2(ts, ts));
+                        ImVec2(ts, ts), ImVec2(0, 1), ImVec2(1, 0));
                     ImGui::SameLine();
                 }
 

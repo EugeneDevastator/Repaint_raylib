@@ -3,6 +3,8 @@
 #include "stroke_engine.h"
 
 extern bool quickPanelShow;
+extern bool g_layerTransformMode;
+extern float g_layerPivotX, g_layerPivotY;
 
 static BrushDab MakeBrushDab(float x, float y, const DrawDab& d) {
     BrushDab r;
@@ -65,8 +67,8 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
     vp->inBounds = mousePos.x >= vp->bounds.x && mousePos.x <= vp->bounds.x + vp->bounds.width &&
                    mousePos.y >= vp->bounds.y && mousePos.y <= vp->bounds.y + vp->bounds.height;
 
-    // Pan
-    if (vp->inBounds && IsMouseButtonDown(MOUSE_RIGHT_BUTTON)) {
+    // Pan (disabled in layer transform mode — right-click rotates instead)
+    if (!g_layerTransformMode && vp->inBounds && IsMouseButtonDown(MOUSE_RIGHT_BUTTON)) {
         if (vp->rightMouseDown) {
             Vector2 delta = {
                 mousePos.x - vp->lastMousePos.x,
@@ -146,7 +148,68 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
     if (IsKeyDown(KEY_LEFT_ALT)) return;
 
     Vector2 canvasPos = GetScreenToWorld2D(mousePos, state->camera);
-    bool leftDown = IsMouseButtonDown(MOUSE_LEFT_BUTTON);
+
+    // ── Layer transform mode (key '1' toggle) ────────────────────────
+    if (g_layerTransformMode && vp->inBounds && state->activeLayer >= 0) {
+        sLayerProps* lp = &state->canvas.layerProps[state->activeLayer];
+        float cDist = Dist2D(canvasPos, Vector2{g_layerPivotX, g_layerPivotY});
+        bool nearCenter = cDist < 12.0f;
+
+        static int dragAction = 0; // 1=drag layer, 2=drag pivot, 3=rotate
+        static Vector2 dragStart = {0, 0};
+        static float dragStartTx = 0, dragStartTy = 0;
+        static float dragStartRot = 0;
+
+        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+            if (nearCenter) {
+                dragAction = 2;
+            } else {
+                dragAction = 1;
+            }
+            dragStart = canvasPos;
+            dragStartTx = lp->tx; dragStartTy = lp->ty;
+        }
+
+        if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
+            dragAction = 3;
+            dragStart = canvasPos;
+            dragStartRot = lp->rot;
+        }
+
+        if (dragAction == 1 && IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
+            float dx = canvasPos.x - dragStart.x;
+            float dy = canvasPos.y - dragStart.y;
+            float cosR = cosf(lp->rot * (float)M_PI / 180.0f);
+            float sinR = sinf(lp->rot * (float)M_PI / 180.0f);
+            lp->tx = dragStartTx + dx * cosR + dy * sinR;
+            lp->ty = dragStartTy - dx * sinR + dy * cosR;
+            layersDirty = true;
+        }
+
+        if (dragAction == 2 && IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
+            g_layerPivotX = canvasPos.x;
+            g_layerPivotY = canvasPos.y;
+        }
+
+        if (dragAction == 3 && IsMouseButtonDown(MOUSE_RIGHT_BUTTON)) {
+            float startAng = atan2f(dragStart.y - g_layerPivotY, dragStart.x - g_layerPivotX);
+            float curAng  = atan2f(canvasPos.y - g_layerPivotY, canvasPos.x - g_layerPivotX);
+            float deltaDeg = (curAng - startAng) * (180.0f / (float)M_PI);
+            if (deltaDeg > 180.0f) deltaDeg -= 360.0f;
+            else if (deltaDeg < -180.0f) deltaDeg += 360.0f;
+            lp->rot = dragStartRot + deltaDeg;
+            layersDirty = true;
+        }
+
+        if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON) || IsMouseButtonReleased(MOUSE_RIGHT_BUTTON))
+            dragAction = 0;
+
+        // Suppress normal painting while in transform mode
+        if (IsMouseButtonDown(MOUSE_LEFT_BUTTON) || IsMouseButtonDown(MOUSE_RIGHT_BUTTON))
+            return;
+    }
+
+    bool leftDown = IsMouseButtonDown(MOUSE_BUTTON_LEFT);
     int active = state->activeLayer;
 
     // Record input positions for debug (during active stroke)

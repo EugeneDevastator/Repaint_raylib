@@ -9,6 +9,7 @@
 #include "network_broker.h"
 #include "test_broker.h"
 #include "ui_leftpanel.h"
+#include "external/glad.h"
 #include <time.h>
 
 int uiPanelWidth = 250;
@@ -19,6 +20,8 @@ Viewport viewport;
 
 float g_splashAlpha = 1.0f;
 static Texture2D g_splashTex = {0};
+bool g_layerTransformMode = false;
+float g_layerPivotX = 0.0f, g_layerPivotY = 0.0f;
 
 static void DrawSplash(const char* msg) {
     int sw = GetScreenWidth(), sh = GetScreenHeight();
@@ -87,7 +90,14 @@ void UpdateUI(AppState* state) {
     else
         quickPanelMouseMode = 0;
 
-    if (IsKeyPressed(KEY_ONE)) state->mode = eBrush;
+    if (IsKeyPressed(KEY_ONE)) {
+        g_layerTransformMode = !g_layerTransformMode;
+        if (g_layerTransformMode && state->activeLayer >= 0) {
+            sLayerProps* lp = &state->canvas.layerProps[state->activeLayer];
+            g_layerPivotX = lp->tx + state->canvas.width * 0.5f;
+            g_layerPivotY = lp->ty + state->canvas.height * 0.5f;
+        }
+    }
     if (IsKeyPressed(KEY_TWO)) state->mode = eSmudge;
     if (IsKeyPressed(KEY_THREE)) state->mode = eLine;
     if (IsKeyPressed(KEY_FOUR)) state->mode = eDisp;
@@ -430,6 +440,50 @@ void App_Draw(AppState* state) {
 
     // Gizmo visual drawn early (raylib XOR, before ImGui)
     XORgizmo_DrawVisual(state);
+
+    // ── Layer transform XOR gizmo ──────────────────────────────────────
+    if (g_layerTransformMode && state->activeLayer >= 0) {
+        sLayerProps* lp = &state->canvas.layerProps[state->activeLayer];
+        float cw = (float)state->canvas.width, ch = (float)state->canvas.height;
+
+        auto ws = [&](Vector2 wp) -> Vector2 {
+            return GetWorldToScreen2D(wp, state->camera);
+        };
+
+        rlDrawRenderBatchActive();
+        glEnable(GL_COLOR_LOGIC_OP);
+        glLogicOp(GL_XOR);
+
+        // UI pivot crosshair (floating UI element, does not affect transform)
+        Vector2 uip = ws(Vector2{g_layerPivotX, g_layerPivotY});
+        float chLen = 12.0f;
+        DrawLine(uip.x - chLen, uip.y, uip.x + chLen, uip.y, WHITE);
+        DrawLine(uip.x, uip.y - chLen, uip.x, uip.y + chLen, WHITE);
+        DrawCircle(uip.x, uip.y, 3.0f, WHITE);
+
+        // Layer outline — rotate each corner around visual pivot
+        float cosR = cosf(lp->rot * (float)M_PI / 180.0f);
+        float sinR = sinf(lp->rot * (float)M_PI / 180.0f);
+        Vector2 pts[4] = {
+            {lp->tx,            lp->ty},
+            {lp->tx + cw,       lp->ty},
+            {lp->tx + cw,       lp->ty + ch},
+            {lp->tx,            lp->ty + ch}
+        };
+        Vector2 corners[5];
+        float vpX = g_layerPivotX, vpY = g_layerPivotY;
+        for (int ci = 0; ci < 4; ci++) {
+            float dx = pts[ci].x - vpX, dy = pts[ci].y - vpY;
+            float rx = vpX + dx * cosR - dy * sinR;
+            float ry = vpY + dx * sinR + dy * cosR;
+            corners[ci] = ws(Vector2{rx, ry});
+        }
+        corners[4] = corners[0];
+        DrawLineStrip(corners, 5, WHITE);
+
+        rlDrawRenderBatchActive();
+        glDisable(GL_COLOR_LOGIC_OP);
+    }
 
     rlImGuiBegin();
 

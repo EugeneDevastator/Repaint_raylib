@@ -144,6 +144,9 @@ void Canvas_InsertLayer(Canvas* canvas, int idx) {
     canvas->layerProps[idx].threshold = 0.0f;
     canvas->layerProps[idx].feather = 1.0f;
     canvas->layerProps[idx].layerName[0] = '\0';
+    canvas->layerProps[idx].tx = 0.0f;
+    canvas->layerProps[idx].ty = 0.0f;
+    canvas->layerProps[idx].rot = 0.0f;
 }
 
 void Canvas_DeleteLayer(Canvas* canvas, int index) {

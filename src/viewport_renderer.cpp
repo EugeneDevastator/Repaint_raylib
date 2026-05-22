@@ -153,10 +153,28 @@ RenderTexture2D* DocBlender_Composite(AppState* state) {
             float threshold = state->canvas.layerProps[i].threshold;
             float feather = state->canvas.layerProps[i].feather;
 
+            sLayerProps* lp = &state->canvas.layerProps[i];
+            bool hasTransform = (lp->tx != 0.0f || lp->ty != 0.0f || lp->rot != 0.0f);
+
             BeginTextureMode(*dst);
             ClearBackground(BLANK);
 
-            if (shaderInited) {
+            if (hasTransform) {
+                // Transformed layers: draw accumulator then layer using matrix stack
+                // (blend mode is not applied — standard alpha blend only)
+                DrawTextureRec(src->texture,
+                    Rectangle{0, 0, (float)cw, (float)-ch},
+                    Vector2{0, 0}, WHITE);
+
+                rlPushMatrix();
+                rlTranslatef(g_layerPivotX, g_layerPivotY, 0);
+                rlRotatef(lp->rot, 0, 0, 1);
+                rlTranslatef(-g_layerPivotX + lp->tx, -g_layerPivotY + lp->ty, 0);
+                DrawTextureRec(state->layerRTs[i].texture,
+                    Rectangle{0, 0, (float)cw, (float)-ch},
+                    Vector2{0, 0}, ColorAlpha(WHITE, alpha));
+                rlPopMatrix();
+            } else if (shaderInited) {
                 rlSetBlendMode(RL_BLEND_CUSTOM);
                 rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
                 BeginShaderMode(layerBlendShader);
