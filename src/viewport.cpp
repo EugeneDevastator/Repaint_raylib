@@ -150,45 +150,57 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
     Vector2 canvasPos = GetScreenToWorld2D(mousePos, state->camera);
 
     // ── Layer transform mode (key '1' toggle) ────────────────────────
+    static int dragAction = 0; // 1=drag layer, 2=drag pivot, 3=rotate
+    static Vector2 dragStart = {0, 0};
+    static float dragStartTx = 0, dragStartTy = 0;
+    static float dragStartRot = 0;
+    if (!g_layerTransformMode) dragAction = 0;
+
     if (g_layerTransformMode && vp->inBounds && state->activeLayer >= 0) {
         sLayerProps* lp = &state->canvas.layerProps[state->activeLayer];
+        float cw = (float)state->canvas.width, ch = (float)state->canvas.height;
+        float cosR = cosf(lp->rot * (float)M_PI / 180.0f);
+        float sinR = sinf(lp->rot * (float)M_PI / 180.0f);
+
+        // Check if click is on the transformed layer
+        float dx = canvasPos.x - g_layerPivotX;
+        float dy = canvasPos.y - g_layerPivotY;
+        float A = dx * cosR + dy * sinR;
+        float B = -dx * sinR + dy * cosR;
+        float localX = A + g_layerPivotX - lp->tx;
+        float localY = B + g_layerPivotY - lp->ty;
+        bool onLayer = (localX >= 0 && localY >= 0 && localX < cw && localY < ch);
+
         float cDist = Dist2D(canvasPos, Vector2{g_layerPivotX, g_layerPivotY});
         bool nearCenter = cDist < 12.0f;
-
-        static int dragAction = 0; // 1=drag layer, 2=drag pivot, 3=rotate
-        static Vector2 dragStart = {0, 0};
-        static float dragStartTx = 0, dragStartTy = 0;
-        static float dragStartRot = 0;
 
         if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
             if (nearCenter) {
                 dragAction = 2;
-            } else {
+            } else if (onLayer) {
                 dragAction = 1;
             }
             dragStart = canvasPos;
             dragStartTx = lp->tx; dragStartTy = lp->ty;
         }
 
-        if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
-            dragAction = 3;
-            dragStart = canvasPos;
-            dragStartRot = lp->rot;
-        }
-
         if (dragAction == 1 && IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
-            float dx = canvasPos.x - dragStart.x;
-            float dy = canvasPos.y - dragStart.y;
-            float cosR = cosf(lp->rot * (float)M_PI / 180.0f);
-            float sinR = sinf(lp->rot * (float)M_PI / 180.0f);
-            lp->tx = dragStartTx + dx * cosR + dy * sinR;
-            lp->ty = dragStartTy - dx * sinR + dy * cosR;
+            float mdx = canvasPos.x - dragStart.x;
+            float mdy = canvasPos.y - dragStart.y;
+            lp->tx = dragStartTx + mdx * cosR + mdy * sinR;
+            lp->ty = dragStartTy - mdx * sinR + mdy * cosR;
             layersDirty = true;
         }
 
         if (dragAction == 2 && IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
             g_layerPivotX = canvasPos.x;
             g_layerPivotY = canvasPos.y;
+        }
+
+        if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
+            dragAction = 3;
+            dragStart = canvasPos;
+            dragStartRot = lp->rot;
         }
 
         if (dragAction == 3 && IsMouseButtonDown(MOUSE_RIGHT_BUTTON)) {
@@ -203,18 +215,33 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
 
         if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON) || IsMouseButtonReleased(MOUSE_RIGHT_BUTTON))
             dragAction = 0;
-
-        // Suppress normal painting while in transform mode
-        if (IsMouseButtonDown(MOUSE_LEFT_BUTTON) || IsMouseButtonDown(MOUSE_RIGHT_BUTTON))
-            return;
     }
+
+    // Suppress normal painting only while dragging the gizmo
+    if (dragAction != 0) return;
 
     bool leftDown = IsMouseButtonDown(MOUSE_BUTTON_LEFT);
     int active = state->activeLayer;
 
+    // Transform brush position if the active layer has a transform
+    Vector2 paintPos = canvasPos;
+    if (!state->editTexMode && active >= 0 && active < state->canvas.layerCount) {
+        sLayerProps* lp = &state->canvas.layerProps[active];
+        if (lp->tx != 0.0f || lp->ty != 0.0f || lp->rot != 0.0f) {
+            float dx = canvasPos.x - g_layerPivotX;
+            float dy = canvasPos.y - g_layerPivotY;
+            float cosR = cosf(lp->rot * (float)M_PI / 180.0f);
+            float sinR = sinf(lp->rot * (float)M_PI / 180.0f);
+            float A = dx * cosR + dy * sinR;
+            float B = -dx * sinR + dy * cosR;
+            paintPos.x = A + g_layerPivotX - lp->tx;
+            paintPos.y = B + g_layerPivotY - lp->ty;
+        }
+    }
+
     // Record input positions for debug (during active stroke)
     if ((vp->wasMouseDown || leftDown) && vp->inputLen < MAX_STROKE_PTS)
-        vp->inputPts[vp->inputLen++] = canvasPos;
+        vp->inputPts[vp->inputLen++] = paintPos;
 
     // ── Texture editing mode ──────────────────────────────────────────
     if (state->editTexMode && state->activeBrushTex >= 0 &&
@@ -276,15 +303,15 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     Modulators_SnapRunState();
                     vp->inputLen = 0;
                     StrokeEngine_BeginStroke(&vp->strokeEng, &state->currentBrush,
-                                             canvasPos.x, canvasPos.y);
+                                             paintPos.x, paintPos.y);
                     vp->inputFilter.Reset();
-                    vp->inputFilter.Feed(canvasPos.x, canvasPos.y, GetTime());
+                    vp->inputFilter.Feed(paintPos.x, paintPos.y, GetTime());
                     vp->wasMouseDown = true;
                     if (vp->strokeLen < MAX_STROKE_PTS)
-                        vp->strokePts[vp->strokeLen++] = canvasPos;
+                        vp->strokePts[vp->strokeLen++] = paintPos;
                 } else {
                     double now = GetTime();
-                    StrokePoint sp = vp->inputFilter.Feed(canvasPos.x, canvasPos.y, now);
+                    StrokePoint sp = vp->inputFilter.Feed(paintPos.x, paintPos.y, now);
                     int n = StrokeEngine_FeedPoint(&vp->strokeEng, sp,
                         &state->currentBrush.Realb, state->initialAngle, state->mode,
                         dabs, 1024);
@@ -304,19 +331,19 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                 if (spacing < 2.0f) spacing = 2.0f;
                 if (!vp->wasMouseDown) {
                     if (vp->broker) {
-                        BrushDab ev = {canvasPos.x, canvasPos.y, canvasPos.x, canvasPos.y,
+                        BrushDab ev = {paintPos.x, paintPos.y, paintPos.x, paintPos.y,
                                        state->currentBrush.Realb};
                         vp->broker->on_input(ev);
                     }
                     vp->wasMouseDown = true;
                 } else {
-                    if (Dist2D(vp->strokeEng.lastDabPos, canvasPos) >= spacing) {
+                    if (Dist2D(vp->strokeEng.lastDabPos, paintPos) >= spacing) {
                         if (vp->broker) {
-                            BrushDab ev = {canvasPos.x, canvasPos.y, canvasPos.x, canvasPos.y,
+                            BrushDab ev = {paintPos.x, paintPos.y, paintPos.x, paintPos.y,
                                            state->currentBrush.Realb};
                             vp->broker->on_input(ev);
                         }
-                        vp->strokeEng.lastDabPos = canvasPos;
+                        vp->strokeEng.lastDabPos = paintPos;
                     }
                 }
             }
@@ -352,18 +379,18 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
     // Line tool
     if (state->mode == eLine && vp->inBounds && leftDown && active >= 0 && active < state->texCount && state->layerRTs[active].id > 0) {
         if (!vp->wasMouseDown) {
-            vp->lineLastDabPos = canvasPos;
+            vp->lineLastDabPos = paintPos;
             vp->wasMouseDown = true;
         } else {
             float spacing = fmaxf(state->currentBrush.Realb.rad_out * 2.0f * BParam_GetValue(&bpSpacing), 2.0f);
-            if (Dist2D(vp->lineLastDabPos, canvasPos) > spacing) {
-                float segLen = Dist2D(vp->lineLastDabPos, canvasPos);
+            if (Dist2D(vp->lineLastDabPos, paintPos) > spacing) {
+                float segLen = Dist2D(vp->lineLastDabPos, paintPos);
                 int steps = (int)(segLen / spacing) + 1;
                 if (steps < 1) steps = 1;
                 for (int s = 0; s <= steps; s++) {
                     float t = (float)s / (float)steps;
-                    Vector2 pos = {vp->lineLastDabPos.x + (canvasPos.x - vp->lineLastDabPos.x) * t,
-                                   vp->lineLastDabPos.y + (canvasPos.y - vp->lineLastDabPos.y) * t};
+                    Vector2 pos = {vp->lineLastDabPos.x + (paintPos.x - vp->lineLastDabPos.x) * t,
+                                   vp->lineLastDabPos.y + (paintPos.y - vp->lineLastDabPos.y) * t};
                     if (vp->broker) {
                         BrushDab ev = {pos.x, pos.y, pos.x, pos.y, state->currentBrush.Realb};
                         vp->broker->on_input(ev);
