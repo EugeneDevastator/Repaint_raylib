@@ -9,6 +9,7 @@
 #include "network_broker.h"
 #include "test_broker.h"
 #include "ui_leftpanel.h"
+#include "layerstack.h"
 #include "external/glad.h"
 #include <time.h>
 
@@ -319,6 +320,9 @@ void App_Init(AppState* state) {
 
     state->canvas = Canvas_Create(800, 600, WHITE);
     state->activeLayer = 0;
+    EnsureRTs(state);
+    LayerStack_Init(800, 600);
+    LayerStack_Bind(state);
 
     Rectangle viewportBounds = {
         (float)uiPanelWidth, 0,

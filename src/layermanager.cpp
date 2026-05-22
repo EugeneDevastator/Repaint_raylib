@@ -43,7 +43,6 @@ void SyncImageFromRT(AppState* state, int layer) {
     if (state->layerRTs[layer].id == 0) return;
     Image cap = LoadImageFromTexture(state->layerRTs[layer].texture);
     ImageFlipVertical(&cap);
-    ImageFormat(&cap, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
     Image* dst = &state->canvas.layerImages[layer];
     UnloadImage(*dst);
     *dst = cap;

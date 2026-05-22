@@ -88,7 +88,10 @@ bool SaveRePaint(const char* path, Canvas* canvas, AppState* state) {
         uint8_t* wp = blobs[i].propsData;
         _writeProps(&wp, &canvas->layerProps[i]);
 
-        blobs[i].pngData = ExportImageToMemory(canvas->layerImages[i], ".png", &blobs[i].pngSz);
+        Image pngImg = ImageCopy(canvas->layerImages[i]);
+        ImageFormat(&pngImg, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+        blobs[i].pngData = ExportImageToMemory(pngImg, ".png", &blobs[i].pngSz);
+        UnloadImage(pngImg);
         if (!blobs[i].pngData) {
             for (int j = 0; j <= i; j++) { free(blobs[j].propsData); if (blobs[j].pngData) MemFree(blobs[j].pngData); }
             free(blobs); MemFree(compPng); return false;
@@ -104,7 +107,15 @@ bool SaveRePaint(const char* path, Canvas* canvas, AppState* state) {
     unsigned char** texPngData = (unsigned char**)calloc(tc, sizeof(unsigned char*));
     for (int i = 0; i < tc; i++) {
         int idx = i + BUILTIN_TEX_COUNT;
-        texPngData[i] = ExportImageToMemory(state->brushTex[idx].cpuImage, ".png", &texPngSizes[i]);
+        Image texPngImg = state->brushTex[idx].cpuImage;
+        bool owned = false;
+        if (texPngImg.data && texPngImg.format != PIXELFORMAT_UNCOMPRESSED_R8G8B8A8) {
+            texPngImg = ImageCopy(texPngImg);
+            ImageFormat(&texPngImg, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+            owned = true;
+        }
+        texPngData[i] = ExportImageToMemory(texPngImg, ".png", &texPngSizes[i]);
+        if (owned) UnloadImage(texPngImg);
         if (texPngData[i]) texTotalSz += 4 + 4 + 4 + 4 + 64 + texPngSizes[i];
     }
 
@@ -225,6 +236,7 @@ bool LoadRePaint(const char* path, Canvas* canvas, AppState* state) {
         canvas->layerImages[layerIdx] = layerImg;
         if (layerImg.width != (int)w || layerImg.height != (int)h)
             ImageResize(&canvas->layerImages[layerIdx], (int)w, (int)h);
+        ImageFormat(&canvas->layerImages[layerIdx], PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
     }
 
     /* Load textures */

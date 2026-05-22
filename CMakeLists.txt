@@ -43,6 +43,7 @@ set(SOURCES
     src/app.cpp
     src/modulators.cpp
     src/layermanager.cpp
+    src/layerstack.cpp
     src/repaint_core.cpp
     src/repaint_painter.cpp
     src/serialize.cpp

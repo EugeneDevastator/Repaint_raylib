@@ -380,6 +380,10 @@ void Canvas_SetLayerFeather(Canvas* canvas, int layer, float feather);
 void Canvas_MoveLayer(Canvas* canvas, int from, int to);
 void Canvas_DuplicateLayer(Canvas* canvas, int idx);
 void Layer_ApplyTransform(sLayerProps* lp, const float mat[6]);
+void LayerStack_SetDirty(void);
+void LayerStack_ReloadShader(void);
+bool LayerStack_PresentInited(void);
+Shader LayerStack_GetPresentShader(void);
 
 void Painter_Init(void);
 void Painter_Shutdown(void);
