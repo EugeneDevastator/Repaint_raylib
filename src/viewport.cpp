@@ -2,8 +2,6 @@
 #include "rlgl.h"
 #include "stroke_engine.h"
 
-extern bool quickPanelShow;
-extern bool g_layerTransformMode;
 extern float g_pivotCursorX, g_pivotCursorY;
 
 static BrushDab MakeBrushDab(float x, float y, const DrawDab& d) {
@@ -60,7 +58,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
     static DrawDab dabs[1024];
 
     if (IsKeyPressed(KEY_F1)) vp->debugShowStamps = !vp->debugShowStamps;
-    if (quickPanelShow) return;
+    if (g_activeHud == HUD_QUICK) return;
 
     Vector2 mousePos = GetMousePosition();
 
@@ -68,7 +66,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                    mousePos.y >= vp->bounds.y && mousePos.y <= vp->bounds.y + vp->bounds.height;
 
     // Pan (disabled in layer transform mode — right-click rotates instead)
-    if (!g_layerTransformMode && vp->inBounds && IsMouseButtonDown(MOUSE_RIGHT_BUTTON)) {
+    if (g_activeHud != HUD_LAYER_XFORM && vp->inBounds && IsMouseButtonDown(MOUSE_RIGHT_BUTTON)) {
         if (vp->rightMouseDown) {
             Vector2 delta = {
                 mousePos.x - vp->lastMousePos.x,
@@ -153,13 +151,13 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
     static int dragAction = 0; // 1=drag layer, 2=drag pivot, 3=rotate
     static Vector2 dragStart = {0, 0};
     static float savedMat[6];
-    if (!g_layerTransformMode) {
+    if (g_activeHud != HUD_LAYER_XFORM) {
         dragAction = 0;
         dragStart = Vector2{0,0};
         memset(savedMat, 0, sizeof(savedMat));
     }
 
-    if (g_layerTransformMode && vp->inBounds && state->activeLayer >= 0) {
+    if (g_activeHud == HUD_LAYER_XFORM && vp->inBounds && state->activeLayer >= 0) {
         sLayerProps* lp = &state->canvas.layerProps[state->activeLayer];
 
         float cDist = Dist2D(canvasPos, Vector2{g_pivotCursorX, g_pivotCursorY});

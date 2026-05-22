@@ -20,7 +20,7 @@ Viewport viewport;
 
 float g_splashAlpha = 1.0f;
 static Texture2D g_splashTex = {0};
-bool g_layerTransformMode = false;
+int g_activeHud = HUD_NONE;
 float g_pivotCursorX = 0.0f, g_pivotCursorY = 0.0f;
 
 static void DrawSplash(const char* msg) {
@@ -82,20 +82,25 @@ void UpdateUI(AppState* state) {
     if (IsKeyPressed(KEY_TAB))
         g_panelsVisible = !g_panelsVisible;
 
-    if (IsKeyPressed(KEY_LEFT_SHIFT) || IsKeyPressed(KEY_RIGHT_SHIFT))
-        quickPanelShow = !quickPanelShow;
+    if (IsKeyPressed(KEY_LEFT_SHIFT) || IsKeyPressed(KEY_RIGHT_SHIFT)) {
+        if (g_activeHud == HUD_QUICK)
+            g_activeHud = HUD_NONE;
+        else
+            g_activeHud = HUD_QUICK;
+    }
 
-    if (quickPanelShow)
-        ; // QuickPanel handles input internally
-    else
+    if (g_activeHud != HUD_QUICK)
         quickPanelMouseMode = 0;
 
     if (IsKeyPressed(KEY_ONE)) {
-        g_layerTransformMode = !g_layerTransformMode;
-        if (g_layerTransformMode && state->activeLayer >= 0) {
-            sLayerProps* lp = &state->canvas.layerProps[state->activeLayer];
-            g_pivotCursorX = state->canvas.width * 0.5f;
-            g_pivotCursorY = state->canvas.height * 0.5f;
+        if (g_activeHud == HUD_LAYER_XFORM) {
+            g_activeHud = HUD_NONE;
+        } else {
+            g_activeHud = HUD_LAYER_XFORM;
+            if (state->activeLayer >= 0) {
+                g_pivotCursorX = state->canvas.width * 0.5f;
+                g_pivotCursorY = state->canvas.height * 0.5f;
+            }
         }
     }
     if (IsKeyPressed(KEY_TWO)) state->mode = eSmudge;
@@ -442,7 +447,7 @@ void App_Draw(AppState* state) {
     XORgizmo_DrawVisual(state);
 
     // ── Layer transform XOR gizmo ──────────────────────────────────────
-    if (g_layerTransformMode && state->activeLayer >= 0) {
+    if (g_activeHud == HUD_LAYER_XFORM && state->activeLayer >= 0) {
         sLayerProps* lp = &state->canvas.layerProps[state->activeLayer];
         float cw = (float)state->canvas.width, ch = (float)state->canvas.height;
 

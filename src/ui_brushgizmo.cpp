@@ -3,16 +3,10 @@
 #include "external/glad.h"
 #include "imgui.h"
 #include <math.h>
-// ── Gizmo sector arc configuration ─────────────────────────────────────
-// All angles in degrees, counter-clockwise in math coords (right=0°, up=90°)
-// Hardness arc starts at HARD_ANG_START and spans HARD_ANG_SPAN CCW.
-// Curve arc starts where hardness ends and spans CURVE_ANG_SPAN CCW.
 
 #define GIZMO_FIXED_RADIUS_PX  180.0f
-
 #define GIZMO_RADOUT_START   30.0f
 #define GIZMO_RADOUT_ANG_SPAN    120.0f
-
 #define GIZMO_HARD_ANG_START   150.0f
 #define GIZMO_HARD_ANG_SPAN    120.0f
 #define GIZMO_CURVE_ANG_SPAN   120.0f
@@ -22,10 +16,8 @@
 #define ARROW_MIN_RADIUS    30.0f
 #define ARROW_DETECT_PX     5.0f
 
-#define GIZMO_FIXED_RADIUS_PX  180.0f
-
 void XORgizmo_DrawVisual(AppState* state) {
-    if (!quickPanelShow) return;
+    if (g_activeHud != HUD_QUICK) return;
 
     Rectangle vp = viewport.bounds;
     int gcx = (int)(vp.x + vp.width * 0.5f);
@@ -105,7 +97,7 @@ void XORgizmo_DrawVisual(AppState* state) {
 }
 
 void XORgizmo_HandleInput(AppState* state) {
-    if (!quickPanelShow) return;
+    if (g_activeHud != HUD_QUICK) return;
 
     Rectangle vp = viewport.bounds;
     int gcx = (int)(vp.x + vp.width * 0.5f);

@@ -6,7 +6,6 @@
 void FilePanel_Draw(AppState* state, Rectangle vp);
 void ToolBox_Draw(AppState* state, Rectangle vp);
 
-bool quickPanelShow = false;
 int quickPanelMouseMode = 0;
 bool g_colorPicking = false;
 Color g_colorPickGrid[9] = {};
@@ -25,7 +24,7 @@ void QuickPanel_Shutdown(void) {
 }
 
 void QuickPanel_DrawUI(AppState* state) {
-    if (!quickPanelShow) return;
+    if (g_activeHud != HUD_QUICK) return;
 
     Rectangle vp = viewport.bounds;
     int gcx = (int)(vp.x + vp.width * 0.5f);

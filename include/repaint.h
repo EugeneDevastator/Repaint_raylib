@@ -411,12 +411,14 @@ extern float colorLit;
 
 extern float g_velocity;
 
-extern bool quickPanelShow;
 extern int quickPanelMouseMode;
 extern bool g_colorPicking;
 extern Color g_colorPickGrid[9];
-extern bool g_layerTransformMode;
 extern float g_pivotCursorX, g_pivotCursorY;
+#define HUD_NONE 0
+#define HUD_QUICK 1
+#define HUD_LAYER_XFORM 2
+extern int g_activeHud;
 
 // ── QuickPanel layout constants ────────────────────────────────────────
 #define QP_SLIDER_W 28

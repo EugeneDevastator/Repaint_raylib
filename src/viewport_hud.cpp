@@ -78,7 +78,7 @@ void ViewportHUD_Draw(AppState* state) {
     Rectangle srcRect = {0, 0, (float)cw, (float)-ch};
     Rectangle dstRect = {dstX, dstY, dstW, dstH};
 
-    bool doStamp = quickPanelShow;
+    bool doStamp = (g_activeHud == HUD_QUICK);
 
     bool usePresent = GetPresentInited();
     if (usePresent) BeginShaderMode(GetPresentShader());
