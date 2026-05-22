@@ -221,6 +221,9 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
     bool leftDown = IsMouseButtonDown(MOUSE_BUTTON_LEFT);
     int active = state->activeLayer;
 
+    // Adjust brush rotation so stamps appear upright in world space
+    float adjustedAngle = state->initialAngle;
+
     // Transform brush position if the active layer has a transform
     Vector2 paintPos = canvasPos;
     if (!state->editTexMode && active >= 0 && active < state->canvas.layerCount) {
@@ -238,6 +241,9 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                 paintPos.x = canvasPos.x * ia + canvasPos.y * ib + itx;
                 paintPos.y = canvasPos.x * ic + canvasPos.y * id + ity;
             }
+            // Subtract layer rotation so brush stamps appear upright in world space
+            float layerRot = atan2f(lp->mat[3], lp->mat[0]) * (180.0f / (float)M_PI);
+            adjustedAngle -= layerRot;
         }
     }
 
@@ -315,7 +321,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     double now = GetTime();
                     StrokePoint sp = vp->inputFilter.Feed(paintPos.x, paintPos.y, now);
                     int n = StrokeEngine_FeedPoint(&vp->strokeEng, sp,
-                        &state->currentBrush.Realb, state->initialAngle, state->mode,
+                        &state->currentBrush.Realb, adjustedAngle, state->mode,
                         dabs, 1024);
                     for (int i = 0; i < n; i++) {
                         if (vp->broker) {
@@ -359,7 +365,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         }
         if (vp->wasMouseDown) {
             int fn = StrokeEngine_FlushSmoothing(&vp->strokeEng, &state->currentBrush.Realb,
-                                                  state->initialAngle, state->mode, dabs, 1024);
+                                                   adjustedAngle, state->mode, dabs, 1024);
             for (int i = 0; i < fn; i++) {
                 if (vp->broker) {
                     BrushDab bd = MakeBrushDab(dabs[i].x, dabs[i].y, dabs[i]);
