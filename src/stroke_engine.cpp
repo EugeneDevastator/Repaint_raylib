@@ -372,7 +372,7 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex,
     float spacingVal = BParam_GetValue(&bpSpacing);
     float minPxSpacing = fmaxf(spacingBaseRad * 2.0f * spacingVal, 1.0f);
 
-    float segLen = fminf(baseBrush->rad_out * 8.0f, 600.0f);
+    float segLen = fminf(baseBrush->rad_out * 4.0f, 300.0f);
     if (segLen < minPxSpacing) segLen = minPxSpacing;
 
     float dirX = 1.0f, dirY = -1.0f;

@@ -65,21 +65,18 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
     vp->inBounds = mousePos.x >= vp->bounds.x && mousePos.x <= vp->bounds.x + vp->bounds.width &&
                    mousePos.y >= vp->bounds.y && mousePos.y <= vp->bounds.y + vp->bounds.height;
 
-    // Pan (disabled in layer transform mode — right-click rotates instead)
-    if (g_activeHud != HUD_LAYER_XFORM && vp->inBounds && IsMouseButtonDown(MOUSE_RIGHT_BUTTON)) {
-        if (vp->rightMouseDown) {
-            Vector2 delta = {
-                mousePos.x - vp->lastMousePos.x,
-                mousePos.y - vp->lastMousePos.y
-            };
-            state->camera.target.x -= delta.x / state->camera.zoom;
-            state->camera.target.y -= delta.y / state->camera.zoom;
-            layersDirty = true;
-        }
-        vp->rightMouseDown = true;
-    } else {
-        vp->rightMouseDown = false;
+    // Global pan: space+move (no click needed)
+    bool spaceHeld = IsKeyDown(KEY_SPACE);
+    if (spaceHeld && vp->inBounds) {
+        Vector2 delta = { mousePos.x - vp->lastMousePos.x, mousePos.y - vp->lastMousePos.y };
+        state->camera.target.x -= delta.x / state->camera.zoom;
+        state->camera.target.y -= delta.y / state->camera.zoom;
+        layersDirty = true;
     }
+
+    // Right-click is only used in HUD_LAYER_XFORM mode (rotation). No default right-click pan.
+    if (g_activeHud != HUD_LAYER_XFORM)
+        vp->rightMouseDown = false;
 
     // Zoom
     float wheel = GetMouseWheelMove();
@@ -157,7 +154,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         memset(savedMat, 0, sizeof(savedMat));
     }
 
-    if (g_activeHud == HUD_LAYER_XFORM && vp->inBounds && state->activeLayer >= 0) {
+    if (g_activeHud == HUD_LAYER_XFORM && vp->inBounds && state->activeLayer >= 0 && !spaceHeld) {
         sLayerProps* lp = &state->canvas.layerProps[state->activeLayer];
 
         float cDist = Dist2D(canvasPos, Vector2{g_pivotCursorX, g_pivotCursorY});
@@ -209,12 +206,20 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             layersDirty = true;
         }
 
-        if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON) || IsMouseButtonReleased(MOUSE_RIGHT_BUTTON))
+        if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) {
+            if (dragAction == 1) {
+                // Move pivot to where the cursor ended up (click or drag)
+                g_pivotCursorX = canvasPos.x;
+                g_pivotCursorY = canvasPos.y;
+            }
+            dragAction = 0;
+        }
+        if (IsMouseButtonReleased(MOUSE_RIGHT_BUTTON))
             dragAction = 0;
     }
 
-    // Suppress normal painting only while dragging the gizmo
-    if (dragAction != 0) return;
+    // Suppress normal painting while dragging the gizmo or space-panning
+    if (dragAction != 0 || spaceHeld) return;
 
     bool leftDown = IsMouseButtonDown(MOUSE_BUTTON_LEFT);
     int active = state->activeLayer;

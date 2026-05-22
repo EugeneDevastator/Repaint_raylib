@@ -102,7 +102,7 @@ void Modulators_Init(void) {
     strncpy(bpTexFeather.tooltip, "Softness of the threshold mask edge", sizeof(bpTexFeather.tooltip) - 1);
     BParam_SetIcon(&bpTexFeather, "ctlfeather");
 
-    BParam_Init(&bpTexThresh, 32, "Thresh Mul", -2.0f, 2.0f, 1.0f);
+    BParam_Init(&bpTexThresh, 32, "Thresh Mul", -1.0f, 1.0f, 0.0f);
     strncpy(bpTexThresh.tooltip, "Threshold multiplier; negative inverts texture mask", sizeof(bpTexThresh.tooltip) - 1);
     BParam_SetIcon(&bpTexThresh, "ctltresh");
 

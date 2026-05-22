@@ -142,7 +142,7 @@ void QuickPanel_DrawUI(AppState* state) {
          float yPos = (float)texAreaY;
 
          // ── Left 1/3: 4 radio columns with 2px gap ──
-         int mm = state->currentBrush.Realb.useTexLumAsAlpha ? 1 : 0;
+         int mm = state->currentBrush.Realb.useTexLumAsAlpha ? 0 : 1;
          int mx = state->currentBrush.Realb.texBlendMode;
          int tnm = state->currentBrush.Realb.texNoisemode;
          int cm = state->currentBrush.Realb.texColorMode;
@@ -156,37 +156,37 @@ void QuickPanel_DrawUI(AppState* state) {
              ImGui::SetCursorPos(ImVec2(10, 10));
              float x = 10;
 
-             static const char* items0[] = {"lum is alpha", "tex.a is alpha"};
-             static const char* items1[] = {"multiply", "threshold", "use tex mask"};
-             static const char* items2[] = {"Stencil", "Random", "Const"};
-             static const char* items3[] = {"brush RGB", "texture RGB", "mul brush*tex"};
+              static const char* items0[] = {"lum is alpha", "tex.a is alpha"};
+              static const char* items1[] = {"multiply", "threshold", "use tex mask"};
+              static const char* items2[] = {"Stencil", "Random", "Const"};
+              static const char* items3[] = {"brush RGB", "texture RGB", "mul brush*tex"};
 
-             ImGui::SetCursorPos(ImVec2(x, 10));
-             ImGui::BeginChild("##rg0", ImVec2(colW, 0), false);
-             { int v = mm; DrawRadioGroup("Mask Mode", &v, items0, 2); mm = v; }
-             ImGui::EndChild();
-             x += colW + 2.0f;
+              ImGui::SetCursorPos(ImVec2(x, 10));
+              ImGui::BeginChild("##rg0", ImVec2(colW, 0), false);
+              { int v = mm; DrawRadioGroup("Mask Mode", &v, items0, 2); mm = v; }
+              ImGui::EndChild();
+              x += colW + 2.0f;
 
-             ImGui::SetCursorPos(ImVec2(x, 10));
-             ImGui::BeginChild("##rg1", ImVec2(colW, 0), false);
-             { int v = mx; DrawRadioGroup("Mask Mix", &v, items1, 3); mx = v; }
-             ImGui::EndChild();
-             x += colW + 2.0f;
+              ImGui::SetCursorPos(ImVec2(x, 10));
+              ImGui::BeginChild("##rg1", ImVec2(colW, 0), false);
+              { int v = mx; DrawRadioGroup("Mask Mix", &v, items1, 3); mx = v; }
+              ImGui::EndChild();
+              x += colW + 2.0f;
 
-             ImGui::SetCursorPos(ImVec2(x, 10));
-             ImGui::BeginChild("##rg2", ImVec2(colW, 0), false);
-             { int v = tnm; DrawRadioGroup("Sample Mode", &v, items2, 3); tnm = v; }
-             ImGui::EndChild();
-             x += colW + 2.0f;
+              ImGui::SetCursorPos(ImVec2(x, 10));
+              ImGui::BeginChild("##rg2", ImVec2(colW, 0), false);
+              { int v = tnm; DrawRadioGroup("Sample Mode", &v, items2, 3); tnm = v; }
+              ImGui::EndChild();
 
-             ImGui::SetCursorPos(ImVec2(x, 10));
-             ImGui::BeginChild("##rg3", ImVec2(colW, 0), false);
-             { int v = cm; DrawRadioGroup("Color", &v, items3, 3); cm = v; }
-             ImGui::EndChild();
-         }
-         ImGui::EndChild();
+              // Color mode on next line
+              ImGui::SetCursorPos(ImVec2(10, 120));
+              ImGui::BeginChild("##rg3", ImVec2(colW, 0), false);
+              { int v = cm; DrawRadioGroup("Color", &v, items3, 3); cm = v; }
+              ImGui::EndChild();
+          }
+          ImGui::EndChild();
 
-         state->currentBrush.Realb.useTexLumAsAlpha = (mm == 1);
+          state->currentBrush.Realb.useTexLumAsAlpha = (mm == 0);
          state->currentBrush.Realb.texBlendMode = mx;
          state->currentBrush.Realb.texNoisemode = tnm;
          state->currentBrush.Realb.texColorMode = cm;
