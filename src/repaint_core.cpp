@@ -138,7 +138,7 @@ void Canvas_InsertLayer(Canvas* canvas, int idx) {
     canvas->layerImages[idx] = GenImageColor(canvas->width, canvas->height, BLANK);
     canvas->layerProps[idx].op = 1.0f;
     canvas->layerProps[idx].visible = true;
-    canvas->layerProps[idx].blendmode = bmNormal;
+    canvas->layerProps[idx].blendmode = bmGamma;
     canvas->layerProps[idx].presop = 0;
     canvas->layerProps[idx].locked = false;
     canvas->layerProps[idx].threshold = 0.0f;

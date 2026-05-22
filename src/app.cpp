@@ -335,7 +335,7 @@ void App_Init(AppState* state) {
     state->currentBrush.Realb.sol = 1.0f;
     state->currentBrush.Realb.sol2op = 0.0f;
     state->currentBrush.Realb.seed = 0;
-    state->currentBrush.Realb.bmidx = bmNormal;
+    state->currentBrush.Realb.bmidx = bmGamma;
     state->currentBrush.Realb.pipeID = plCFNSR;
     state->currentBrush.Realb.preserveop = 0;
     state->currentBrush.Realb.texId = -1;

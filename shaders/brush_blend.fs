@@ -47,6 +47,38 @@ float applyThreshold(float combined, float cut, float texFeather) {
     return clamp(edgeDist / max(texFeather, 0.0001), 0.0, 1.0);
 }
 
+// ── HSL helpers for Color mode ──────────────────────────────────────
+vec3 rgb2hsl(vec3 c) {
+    float mx = max(c.r, max(c.g, c.b)), mn = min(c.r, min(c.g, c.b));
+    float d = mx - mn;
+    float h = 0.0, s = 0.0, l = (mx + mn) * 0.5;
+    if (d > 0.001) {
+        s = (l <= 0.5) ? d / (mx + mn) : d / (2.0 - mx - mn);
+        if (c.r == mx)      h = (c.g - c.b) / d + (c.g < c.b ? 6.0 : 0.0);
+        else if (c.g == mx) h = (c.b - c.r) / d + 2.0;
+        else                h = (c.r - c.g) / d + 4.0;
+        h /= 6.0;
+    }
+    return vec3(h, s, l);
+}
+
+float hue2rgb(float p, float q, float t) {
+    if (t < 0.0) t += 1.0;
+    if (t > 1.0) t -= 1.0;
+    if (t < 1.0/6.0) return p + (q - p) * 6.0 * t;
+    if (t < 1.0/2.0) return q;
+    if (t < 2.0/3.0) return p + (q - p) * (2.0/3.0 - t) * 6.0;
+    return p;
+}
+
+vec3 hsl2rgb(vec3 hsl) {
+    float h = hsl.x, s = hsl.y, l = hsl.z;
+    if (s < 0.001) return vec3(l);
+    float q = (l < 0.5) ? l * (1.0 + s) : l + s - l * s;
+    float p = 2.0 * l - q;
+    return vec3(hue2rgb(p, q, h + 1.0/3.0), hue2rgb(p, q, h), hue2rgb(p, q, h - 1.0/3.0));
+}
+
 vec4 applyBlend(int mode, vec4 canvas, vec3 brushRGB, float brushA) {
     vec3 brushPremul = brushRGB * brushA;
     vec3 outRGB;
@@ -56,58 +88,56 @@ vec4 applyBlend(int mode, vec4 canvas, vec3 brushRGB, float brushA) {
         return vec4(clamp(brushRGB, 0.0, 1.0), clamp(brushA, 0.0, 1.0));
     }
 
-    if (mode == 0) {
+    if (mode == 0) { // N-Gamma
         vec3 brushLin  = brushRGB * brushRGB;
         vec3 canvasLin = canvas.rgb * canvas.rgb;
         outRGB = sqrt(brushLin * brushA + canvasLin * (1.0 - brushA));
         outA   = brushA + canvas.a * (1.0 - brushA);
-    } else if (mode == 1) {
-        outRGB = canvas.rgb + brushPremul;
-        outA   = min(1.0, canvas.a + brushA);
-    } else if (mode == 2) {
-        outRGB = canvas.rgb + brushPremul * (1.0 - canvas.rgb);
-        outA   = min(1.0, canvas.a + brushA);
-    } else if (mode == 3) {
-        outRGB = 1.0 - (1.0 - canvas.rgb) * (1.0 - brushPremul);
-        outA   = 1.0 - (1.0 - canvas.a) * (1.0 - brushA);
-    } else if (mode == 4) {
-        outRGB = max(canvas.rgb, brushPremul);
-        outA   = max(canvas.a, brushA);
-    } else if (mode == 5) {
-        outRGB = 1.0 - (1.0 - canvas.rgb) / (brushPremul + 0.001);
-        outA   = min(1.0, canvas.a + brushA);
-    } else if (mode == 6) {
-        outRGB = canvas.rgb * mix(vec3(1.0), brushRGB, brushA);
-        outA   = canvas.a;
-    } else if (mode == 7) {
-        outRGB = min(canvas.rgb, brushPremul);
-        outA   = min(canvas.a, brushA);
-    } else if (mode == 8) {
+    } else if (mode == 1) { // N-Linear
         outRGB = brushPremul + canvas.rgb * (1.0 - brushA);
         outA   = brushA + canvas.a * (1.0 - brushA);
-    } else if (mode == 9) {
-        outRGB = brushPremul + canvas.rgb * (1.0 - brushA);
-        outA   = brushA + canvas.a * (1.0 - brushA);
-    } else if (mode == 10) {
-        outRGB = brushPremul + canvas.rgb * (1.0 - brushA);
-        outA   = brushA + canvas.a * (1.0 - brushA);
-    } else if (mode == 11) {
-        outRGB = mix(canvas.rgb, vec3(1.0) - canvas.rgb, brushA);
-        outA   = canvas.a;
-    } else if (mode == 12) {
-        outRGB = abs(canvas.rgb - brushRGB);
-        outA   = canvas.a;
-    } else if (mode == 13) {
-        outRGB = canvas.rgb + brushRGB - 2.0 * canvas.rgb * brushRGB;
-        outA   = canvas.a;
-    } else if (mode == 14) {
+    } else if (mode == 2) { // EraseA
         outRGB = canvas.rgb;
         outA   = canvas.a * (1.0 - brushA);
-    } else if (mode == 15) {
+    } else if (mode == 3) { // EraseColor
         float gamma = 2.2;
         float eraseMask = pow(canvas.a, gamma) * brushA;
         outRGB = mix(canvas.rgb, brushRGB, eraseMask);
         outA   = canvas.a * (1.0 - brushA * 0.5);
+    } else if (mode == 4) { // Screen
+        outRGB = 1.0 - (1.0 - canvas.rgb) * (1.0 - brushPremul);
+        outA   = 1.0 - (1.0 - canvas.a) * (1.0 - brushA);
+    } else if (mode == 5) { // Color Dodge
+        outRGB = canvas.rgb + brushPremul * (1.0 - canvas.rgb);
+        outA   = min(1.0, canvas.a + brushA);
+    } else if (mode == 6) { // Lighten
+        outRGB = max(canvas.rgb, brushPremul);
+        outA   = max(canvas.a, brushA);
+    } else if (mode == 7) { // Darken
+        outRGB = min(canvas.rgb, brushPremul);
+        outA   = min(canvas.a, brushA);
+    } else if (mode == 8) { // Burn
+        outRGB = 1.0 - (1.0 - canvas.rgb) / (brushPremul + 0.001);
+        outA   = min(1.0, canvas.a + brushA);
+    } else if (mode == 9) { // Multiply
+        outRGB = canvas.rgb * mix(vec3(1.0), brushRGB, brushA);
+        outA   = canvas.a;
+    } else if (mode == 10) { // Overlay
+        vec3 ov;
+        if (canvas.rgb.r < 0.5) ov.r = 2.0 * canvas.rgb.r * brushRGB.r;
+        else ov.r = 1.0 - 2.0 * (1.0 - canvas.rgb.r) * (1.0 - brushRGB.r);
+        if (canvas.rgb.g < 0.5) ov.g = 2.0 * canvas.rgb.g * brushRGB.g;
+        else ov.g = 1.0 - 2.0 * (1.0 - canvas.rgb.g) * (1.0 - brushRGB.g);
+        if (canvas.rgb.b < 0.5) ov.b = 2.0 * canvas.rgb.b * brushRGB.b;
+        else ov.b = 1.0 - 2.0 * (1.0 - canvas.rgb.b) * (1.0 - brushRGB.b);
+        outRGB = canvas.rgb * (1.0 - brushA) + ov * brushA;
+        outA   = brushA + canvas.a * (1.0 - brushA);
+    } else if (mode == 11) { // Color
+        vec3 bHSL = rgb2hsl(brushRGB);
+        vec3 cHSL = rgb2hsl(canvas.rgb);
+        vec3 col = hsl2rgb(vec3(bHSL.x, bHSL.y, cHSL.z));
+        outRGB = canvas.rgb * (1.0 - brushA) + col * brushA;
+        outA   = brushA + canvas.a * (1.0 - brushA);
     } else {
         outRGB = brushPremul + canvas.rgb * (1.0 - brushA);
         outA   = brushA + canvas.a * (1.0 - brushA);

@@ -102,19 +102,18 @@ void LayerPanel_Draw(AppState* state) {
 
     {
         static const char* blendNames[] = {
-            "Normal","Add","Dodge","Screen","Lighten","Burn",
-            "Multiply","Darken","Overlay","Highlight","Shadowlight",
-            "Xor","Diff","Exclusion"
+            "N-Gamma","N-Linear","Screen","Color Dodge",
+            "Lighten","Darken","Burn","Multiply","Overlay","Color"
         };
         int blend = state->canvas.layerProps[state->activeLayer].blendmode;
-        if (blend < 0 || blend >= 14) blend = 0;
+        if (blend < 0 || blend >= 10) blend = 0;
         if (g_blendIconLoaded)
             ImGui::Image((ImTextureID)(intptr_t)g_blendModeIcon.id, ImVec2(24, 24));
         else
             ImGui::Dummy(ImVec2(24, 24));
         ImGui::SameLine();
         ImGui::SetNextItemWidth(-1);
-        if (ImGui::Combo("##blend", &blend, blendNames, 14, 14)) {
+        if (ImGui::Combo("##blend", &blend, blendNames, 10, 10)) {
             Canvas_SetLayerBlendMode(&state->canvas, state->activeLayer, blend);
             layersDirty = true;
             if (networkBroker.IsConnected()) {
