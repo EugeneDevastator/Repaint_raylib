@@ -192,7 +192,13 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         }
         layersDirty = true;
         if (!leftDown) {
-            if (vp->wasMouseDown) StrokeEngine_EndStroke(&vp->strokeEng);
+            if (vp->wasMouseDown) {
+                int fn = StrokeEngine_FlushSmoothing(&vp->strokeEng, &state->currentBrush.Realb,
+                                                      state->initialAngle, state->mode, dabs, 1024);
+                if (fn > 0)
+                    StrokeEngine_ApplyDabs(bt->rt, g_activeBrushTex, dabs, fn);
+                StrokeEngine_EndStroke(&vp->strokeEng);
+            }
             vp->wasMouseDown = false;
         }
     }
@@ -260,6 +266,14 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             vp->strokeLen = 0;
         }
         if (vp->wasMouseDown) {
+            int fn = StrokeEngine_FlushSmoothing(&vp->strokeEng, &state->currentBrush.Realb,
+                                                  state->initialAngle, state->mode, dabs, 1024);
+            for (int i = 0; i < fn; i++) {
+                if (vp->broker) {
+                    BrushDab bd = MakeBrushDab(dabs[i].x, dabs[i].y, dabs[i]);
+                    vp->broker->on_input(bd);
+                }
+            }
             StrokeEngine_EndStroke(&vp->strokeEng);
             vp->strokeEnded = true;
             vp->endLayer = active;

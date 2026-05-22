@@ -190,23 +190,83 @@ static float FindNextDabPosition(float lastRad, float lastPos,
     return lastPos + step;
 }
 
+// ── Catmull-Rom ────────────────────────────────────────────────────
+static Vector2 CatmullRom(Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, float t) {
+    float t2 = t * t, t3 = t2 * t;
+    return Vector2{
+        0.5f * ((2.0f * p1.x) + (-p0.x + p2.x) * t +
+                (2.0f * p0.x - 5.0f * p1.x + 4.0f * p2.x - p3.x) * t2 +
+                (-p0.x + 3.0f * p1.x - 3.0f * p2.x + p3.x) * t3),
+        0.5f * ((2.0f * p1.y) + (-p0.y + p2.y) * t +
+                (2.0f * p0.y - 5.0f * p1.y + 4.0f * p2.y - p3.y) * t2 +
+                (-p0.y + 3.0f * p1.y - 3.0f * p2.y + p3.y) * t3)
+    };
+}
+
+// Walk along a pre-computed polyline (curvePts[0..n-1]) by `step` pixels
+// starting from arc position `curPos`. Returns the new position and advances arcPos.
+static Vector2 WalkArc(Vector2* pts, int n, float& arcPos, float step, float totalLen) {
+    float target = arcPos + step;
+    if (target > totalLen) target = totalLen;
+    if (target < 0) target = 0;
+
+    float remaining = target;
+    for (int i = 1; i < n; i++) {
+        float segLen = sqrtf((pts[i].x - pts[i-1].x) * (pts[i].x - pts[i-1].x) +
+                              (pts[i].y - pts[i-1].y) * (pts[i].y - pts[i-1].y));
+        if (remaining <= segLen || i == n - 1) {
+            float t = (segLen > 0.001f) ? remaining / segLen : 0;
+            if (t < 0) t = 0; if (t > 1) t = 1;
+            arcPos = target;
+            return Vector2{pts[i-1].x + (pts[i].x - pts[i-1].x) * t,
+                           pts[i-1].y + (pts[i].y - pts[i-1].y) * t};
+        }
+        remaining -= segLen;
+    }
+    arcPos = target;
+    return pts[n - 1];
+}
+
 // ── DrawLinear ─────────────────────────────────────────────────────
 int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad, DrawDab* out, int maxOut, SegResult* res) {
     if (maxOut <= 0 || !res) return 0;
     Vector2 from = seg->pos1;
     res->lastDabPos = from;
-
+    res->lastRadOut = seg->brushFrom.rad_out_px;
     res->overdraw = 0.0f;
 
     Vector2 to = seg->pos2;
     float stdist = sqrtf((to.x - from.x) * (to.x - from.x) + (to.y - from.y) * (to.y - from.y));
     if (stdist < 0.001f) return 0;
 
+    bool isCurved = (seg->ctrl0.x != from.x || seg->ctrl0.y != from.y ||
+                     seg->ctrl3.x != to.x   || seg->ctrl3.y != to.y);
+
     float spacingMult = seg->spacing;
     if (spacingMult < 0.0f) spacingMult = 0.0f;
 
     float rFrom = seg->brushFrom.rad_out_px;
     float rTo   = seg->brush.rad_out_px;
+
+    // Pre-compute curve polyline (65 points for 64 subdivisions)
+    Vector2 curvePts[65];
+    float totalLen = stdist;
+    if (isCurved) {
+        totalLen = 0;
+        for (int i = 0; i <= 64; i++) {
+            float t = (float)i / 64.0f;
+            curvePts[i] = CatmullRom(seg->ctrl0, from, to, seg->ctrl3, t);
+            if (i > 0)
+                totalLen += sqrtf((curvePts[i].x - curvePts[i-1].x) * (curvePts[i].x - curvePts[i-1].x) +
+                                   (curvePts[i].y - curvePts[i-1].y) * (curvePts[i].y - curvePts[i-1].y));
+        }
+    } else {
+        float dx = to.x - from.x, dy = to.y - from.y;
+        for (int i = 0; i <= 64; i++) {
+            float t = (float)i / 64.0f;
+            curvePts[i] = Vector2{from.x + dx * t, from.y + dy * t};
+        }
+    }
 
     float dx = to.x - from.x, dy = to.y - from.y;
     float x2r = dx / stdist, y2r = dy / stdist;
@@ -217,26 +277,32 @@ int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad, DrawDab*
     int count = 0;
     uint16_t nn = 0;
 
-    while (lastDabPos < stdist && count < maxOut) {
+    while (lastDabPos < totalLen - 1.0f && count < maxOut) {
         // 1. Find next dab's un-jittered base radius
+        float k = lastDabPos / totalLen;
+        float baseRad = rFrom + (rTo - rFrom) * k;
         float nextDabRad = FindNextDabRadius(lastDabRad, lastDabPos,
-                                             0.0f, stdist, rFrom, rTo, spacingMult);
+                                             0.0f, totalLen, rFrom, rTo, spacingMult);
 
         // 2. Randomize the next dab's radius
         float dr = RawRnd(seg->brushFrom.baseSeed + (uint16_t)((dabOffset + count) * 7 + 1), 1024) / 1024.0f * 2.0f - 1.0f;
         nextDabRad += dr * seg->brushFrom.jitRadOut;
 
-        // 3. Find position where the randomized radius touches the last dab
-        float nextDabPos = FindNextDabPosition(lastDabRad, lastDabPos,
-                                                nextDabRad, spacingMult);
-        if (nextDabPos > stdist) break;
+        // 3. Find position along the curve where the randomized radius touches the last dab
+        float nextArc = FindNextDabPosition(lastDabRad, lastDabPos, nextDabRad, spacingMult);
+        if (nextArc > totalLen) break;
 
-        // 4. Build brush at the actual position, jitter visual params
-        CollapsedBrush dabCB = BlendBrushes(seg->brushFrom, seg->brush, nextDabPos / stdist);
+        // 4. Get position on curve at this arc distance
+        float arcPos = lastDabPos; // dummy, will be updated by WalkArc
+        Vector2 pos = WalkArc(curvePts, 65, arcPos, nextArc - lastDabPos, totalLen);
+        lastDabPos = nextArc;
+
+        // 5. Build brush at the actual position, jitter visual params
+        float k2 = lastDabPos / totalLen;
+        CollapsedBrush dabCB = BlendBrushes(seg->brushFrom, seg->brush, k2);
         JitterBrush(dabCB, seg->brushFrom.baseSeed, dabOffset + count);
 
         nn++;
-        Vector2 pos = {from.x + nextDabPos * x2r, from.y + nextDabPos * y2r};
         out[count].x = pos.x;
         out[count].y = pos.y;
         out[count].srcX = pos.x;
@@ -244,16 +310,31 @@ int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad, DrawDab*
         out[count].brush = dabCB;
         count++;
 
-        lastDabPos = nextDabPos;
         lastDabRad = dabCB.rad_out_px;
     }
 
     if (count > 0) {
         res->lastRadOut = out[count-1].brush.rad_out_px;
-        res->lastDabPos = Vector2{from.x + lastDabPos * x2r, from.y + lastDabPos * y2r};
+        if (isCurved) {
+            // Last arc position on the curve
+            float t = (lastDabPos / totalLen);
+            if (t < 0) t = 0; if (t > 1) t = 1;
+            float idxF = t * 64;
+            int idx = (int)idxF;
+            float frac = idxF - idx;
+            if (idx < 0) idx = 0;
+            if (idx > 63) idx = 63;
+            Vector2 lp;
+            lp.x = curvePts[idx].x + (curvePts[idx+1].x - curvePts[idx].x) * frac;
+            lp.y = curvePts[idx].y + (curvePts[idx+1].y - curvePts[idx].y) * frac;
+            res->lastDabPos = lp;
+        } else {
+            res->lastDabPos = Vector2{from.x + lastDabPos * x2r, from.y + lastDabPos * y2r};
+        }
     }
     return count;
 }
+
 
 // ── DrawAirflow ────────────────────────────────────────────────────
 int DrawAirflow(const DrawSegment* seg, float accum, DrawDab* out, int maxOut, SegResult* res) {

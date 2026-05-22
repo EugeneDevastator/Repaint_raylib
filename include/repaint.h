@@ -219,12 +219,21 @@ struct StrokeEngine {
     float initDir;
     bool initDirSet;
     // Spline buffer
-    Vector2 splinePts[4];
+    Vector2 splinePts[256];
     int splineCount;
-    bool strokeSmoothing;
+    int processedCount;
+    // Smooth mode buffer
+    Vector2 smoothBuf[4];
+    int smoothBufCount;
 };
 
-extern bool g_strokeSmoothing;
+#define SMOOTH_MODE_LINEAR 0
+#define SMOOTH_MODE_SMOOTH 1
+#define SMOOTH_MODE_SPLINE 2
+
+extern int g_strokeSmoothingMode;
+extern float g_splineMinDist;
+extern float g_splineAngleThreshold;
 
 struct AppState;
 

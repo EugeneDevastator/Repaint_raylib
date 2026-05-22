@@ -67,8 +67,21 @@ void LeftPanel_Draw(AppState* state) {
     ImGui::Checkbox("Preserve Layer Alpha", (bool*)&preserve);
     state->currentBrush.Realb.preserveop = (uint8_t)preserve;
 
-    extern bool g_strokeSmoothing;
-    ImGui::Checkbox("Stroke Smoothing", &g_strokeSmoothing);
+    extern int g_strokeSmoothingMode;
+    ImGui::Text("Smoothing");
+    ImGui::RadioButton("Linear", &g_strokeSmoothingMode, SMOOTH_MODE_LINEAR); ImGui::SameLine();
+    ImGui::RadioButton("Smooth", &g_strokeSmoothingMode, SMOOTH_MODE_SMOOTH); ImGui::SameLine();
+    ImGui::RadioButton("Spline", &g_strokeSmoothingMode, SMOOTH_MODE_SPLINE);
+
+    extern float g_splineMinDist, g_splineAngleThreshold;
+    if (g_strokeSmoothingMode == SMOOTH_MODE_SPLINE) {
+        ImGui::Indent(10);
+        ImGui::SetNextItemWidth(-15);
+        ImGui::SliderFloat("Min Dist", &g_splineMinDist, 0.0f, 1024.0f, "%.0f");
+        ImGui::SetNextItemWidth(-15);
+        ImGui::SliderFloat("Angle", &g_splineAngleThreshold, 10.0f, 180.0f, "%.0f");
+        ImGui::Unindent(10);
+    }
 
     ImGui::Separator();
     ImGui::Text("Debug");
