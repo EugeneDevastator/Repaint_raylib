@@ -163,11 +163,11 @@ void XORgizmo_HandleInput(AppState* state) {
         else curMode = 3;
 
         if (quickPanelMouseMode == 1) {
-            float rel = fminf(state->currentBrush.Realb.rad_in, 1.0f);
+            float rel = fminf(state->currentBrush.Realb.radInRatio, 1.0f);
             if (curMode != 1) rad = roundf(rad / 10.0f) * 10.0f;
             float newRad = fmaxf(1.0f, rad);
             state->currentBrush.Realb.rad_out = newRad;
-            state->currentBrush.Realb.rad_in  = rel;
+            state->currentBrush.Realb.radInRatio = rel;
             BParam_SetValue(&bpSize, newRad);
             BParam_SetValue(&bpHardness, rel);
         }
@@ -175,7 +175,7 @@ void XORgizmo_HandleInput(AppState* state) {
             float h = fminf(absrad / GIZMO_FIXED_RADIUS_PX, 1.0f);
             if (curMode != 2) h = 0.0f;
             if (h < 0.05f) h = 0.0f;
-            state->currentBrush.Realb.rad_in = h;
+            state->currentBrush.Realb.radInRatio = h;
             BParam_SetValue(&bpHardness, h);
         }
         if (quickPanelMouseMode == 3) {

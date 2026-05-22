@@ -15,7 +15,7 @@ float Stroke_Lerp(float from, float to, float k) {
 
 d_RealBrush Stroke_BlendBrushes(d_RealBrush from, d_RealBrush to, float k) {
     d_RealBrush bbr;
-    bbr.rad_in    = Stroke_Lerp(from.rad_in, to.rad_in, k);
+    bbr.radInRatio = Stroke_Lerp(from.radInRatio, to.radInRatio, k);
     bbr.rad_out   = Stroke_Lerp(from.rad_out, to.rad_out, k);
     bbr.crv       = Stroke_Lerp(from.crv, to.crv, k);
     bbr.resangle  = Stroke_Lerp((float)from.resangle, (float)to.resangle, k);

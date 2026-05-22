@@ -9,7 +9,7 @@ static BrushDab MakeBrushDab(float x, float y, const DrawDab& d) {
     r.x = x; r.y = y;
     r.srcX = d.srcX; r.srcY = d.srcY;
     r.brush.rad_out     = d.brush.rad_out_px;
-    r.brush.rad_in      = d.brush.rad_out_px * d.brush.radInRatio;
+    r.brush.radInRatio  = d.brush.radInRatio;
     r.brush.opacity     = d.brush.opacity;
     r.brush.crv         = d.brush.crv;
     r.brush.x2y         = d.brush.scale_y;

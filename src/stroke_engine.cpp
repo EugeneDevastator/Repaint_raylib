@@ -19,7 +19,7 @@ static inline float BaseModVal(const BParam& bp, float cpar) {
 CollapsedBrush CollapseBrushParams(const d_RealBrush& b, float initialAngle, int toolMode) {
     CollapsedBrush cb;
     cb.rad_out_px = b.rad_out;
-    cb.radInRatio = fminf(b.rad_in, 1.0f);
+    cb.radInRatio = fminf(b.radInRatio, 1.0f);
     cb.scale_x    = 1.0f;
     cb.scale_y    = b.x2y;
     cb.resangle   = (float)b.resangle;
@@ -151,7 +151,7 @@ static int FeedOnePoint(StrokeEngine* se, Vector2 pos, float velocity,
     d_RealBrush target = *baseBrush;
     target.rad_out  = BaseModVal(bpSize,       g_modPars.Pars[bpSize.penMode]);
     float hVal      = BaseModVal(bpHardness,   g_modPars.Pars[bpHardness.penMode]);
-    target.rad_in   = hVal;
+    target.radInRatio = hVal;
     target.crv      = BaseModVal(bpCurvature,  g_modPars.Pars[bpCurvature.penMode]);
     target.opacity  = BaseModVal(bpOpacity,    g_modPars.Pars[bpOpacity.penMode]);
     target.resangle = fmodf(initialAngle + BaseModVal(bpAngle, g_modPars.Pars[bpAngle.penMode]), 360.0f);
@@ -340,7 +340,7 @@ void StrokeEngine_ApplyDabs(RenderTexture2D dstRT, Texture2D brushTex,
     for (int i = 0; i < n; i++) {
         d_Brush tb; memset(&tb, 0, sizeof(tb));
         tb.Realb.rad_out     = dabs[i].brush.rad_out_px;
-        tb.Realb.rad_in      = dabs[i].brush.rad_out_px * dabs[i].brush.radInRatio;
+        tb.Realb.radInRatio  = dabs[i].brush.radInRatio;
         tb.Realb.opacity     = dabs[i].brush.opacity;
         tb.Realb.crv         = dabs[i].brush.crv;
         tb.Realb.x2y         = dabs[i].brush.scale_y;

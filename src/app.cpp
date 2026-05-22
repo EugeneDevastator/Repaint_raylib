@@ -105,7 +105,7 @@ void UpdateUI(AppState* state) {
     }
 
     state->currentBrush.Realb.rad_out  = GetModVal(&bpSize);
-    state->currentBrush.Realb.rad_in   = GetModVal(&bpHardness);
+    state->currentBrush.Realb.radInRatio = GetModVal(&bpHardness);
     state->currentBrush.Realb.crv      = GetModVal(&bpCurvature);
     state->currentBrush.Realb.opacity  = GetModVal(&bpOpacity);
     state->currentBrush.Realb.resangle = fmodf(state->initialAngle + GetModVal(&bpAngle), 360.0f);
@@ -324,7 +324,7 @@ void App_Init(AppState* state) {
 
     state->initialAngle = 0.0f;
 
-    state->currentBrush.Realb.rad_in = 1.0f;
+    state->currentBrush.Realb.radInRatio = 1.0f;
     state->currentBrush.Realb.rad_out = 20.0f;
     state->currentBrush.Realb.opacity = 1.0f;
     state->currentBrush.Realb.resangle = 0.0f;

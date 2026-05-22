@@ -26,7 +26,7 @@ Vector2 d_PointF_ToVector2(d_PointF* p) {
 }
 
 void d_Brush_SelfPack(d_Brush* brush) {
-    PackedFloat_SetVal(&brush->Pack.Prad_in, brush->Realb.rad_in);
+    PackedFloat_SetVal(&brush->Pack.Prad_in, brush->Realb.radInRatio);
     PackedFloat_SetVal(&brush->Pack.Prad_out, brush->Realb.rad_out);
     brush->Pack.bmidx = brush->Realb.bmidx;
     brush->Pack.col = brush->Realb.col;
@@ -48,7 +48,7 @@ void d_Brush_SelfPack(d_Brush* brush) {
 }
 
 void d_Brush_SelfUnpack(d_Brush* brush) {
-    brush->Realb.rad_in = PackedFloat_GetVal(&brush->Pack.Prad_in);
+    brush->Realb.radInRatio = PackedFloat_GetVal(&brush->Pack.Prad_in);
     brush->Realb.rad_out = PackedFloat_GetVal(&brush->Pack.Prad_out);
     brush->Realb.bmidx = brush->Pack.bmidx;
     brush->Realb.col = brush->Pack.col;

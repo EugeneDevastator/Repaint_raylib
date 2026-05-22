@@ -26,7 +26,7 @@ struct QueuedNetDab {
     RenderTexture2D targetRT;
     float    x, y;
     float    srcX, srcY;
-    float    rad_in, rad_out, opacity, crv, x2y, sol, sol2op, resangle;
+    float    radInRatio, rad_out, opacity, crv, x2y, sol, sol2op, resangle;
     float    cop;
     float    texBlendVal;
     float    texScale;

@@ -16,7 +16,7 @@ static unsigned int g_lastPreviewHash = 0;
 static unsigned int ComputeBrushHash(d_Brush* b) {
     unsigned int h = 0;
     h ^= (unsigned int)(b->Realb.rad_out * 100);
-    h ^= (unsigned int)(b->Realb.rad_in * 100) << 5;
+    h ^= (unsigned int)(b->Realb.radInRatio * 100) << 5;
     h ^= (unsigned int)(b->Realb.opacity * 100) << 10;
     h ^= (unsigned int)(b->Realb.crv * 100) << 15;
     h ^= (unsigned int)(b->Realb.x2y * 100) << 20;

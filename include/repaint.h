@@ -119,7 +119,7 @@ typedef struct {
 } d_PackedBrush;
 
 typedef struct {
-    float rad_in, rad_out, opacity;
+    float radInRatio, rad_out, opacity;
     double resangle;
     float crv, x2y, cop, pwr, sol, sol2op;
     uint16_t seed, noisex, noisey;
@@ -250,7 +250,7 @@ struct LocalBroker : ICommandBroker {
         RenderTexture2D targetRT;
         float x, y;
         float srcX, srcY;
-        float rad_in, rad_out, opacity, crv, x2y, sol, sol2op, resangle;
+        float radInRatio, rad_out, opacity, crv, x2y, sol, sol2op, resangle;
         float cop;
         float texBlendVal;
         float texScale;

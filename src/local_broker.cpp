@@ -19,7 +19,7 @@ void LocalBroker::on_input(const BrushDab& e) {
     queue[tail].srcY = e.srcY;
     queue[tail].color      = e.brush.col;
     queue[tail].rad_out    = e.brush.rad_out;
-    queue[tail].rad_in     = e.brush.rad_in;
+    queue[tail].radInRatio = e.brush.radInRatio;
     queue[tail].opacity    = e.brush.opacity;
     queue[tail].crv        = e.brush.crv;
     queue[tail].x2y        = e.brush.x2y;
@@ -53,7 +53,7 @@ void LocalBroker::poll(AppState* state) {
 
         if (d->targetRT.id != 0 && d->activeLayer >= 0 && d->activeLayer < state->texCount) {
             d_Brush brush = {};
-            brush.Realb.rad_in   = d->rad_in;
+            brush.Realb.radInRatio = d->radInRatio;
             brush.Realb.rad_out  = d->rad_out;
             brush.Realb.opacity  = d->opacity;
             brush.Realb.crv      = d->crv;

@@ -205,7 +205,7 @@ void BrushBlend_ApplyStamp(
     SetShaderValue(brushGeoShader, locUSize,   &size,     SHADER_UNIFORM_FLOAT);
     float persp = brush->Realb.perspective;
     SetShaderValue(brushGeoShader, locUPerspective, &persp, SHADER_UNIFORM_FLOAT);
-    float radInRatio = brush->Realb.rad_in / fmaxf(brush->Realb.rad_out, 0.001f);
+    float radInRatio = brush->Realb.radInRatio;
     float curve      = clampf((float)brush->Realb.crv, 0.0f, 1.0f);
     SetShaderValue(brushGeoShader, locURadIn,  &radInRatio, SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushGeoShader, locUCurve,  &curve,      SHADER_UNIFORM_FLOAT);

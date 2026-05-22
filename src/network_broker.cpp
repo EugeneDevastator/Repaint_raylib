@@ -206,7 +206,7 @@ void NetworkBroker::on_input(const BrushDab& e) {
     localQueue[localTail].srcY  = e.srcY;
     localQueue[localTail].color       = e.brush.col;
     localQueue[localTail].rad_out     = e.brush.rad_out;
-    localQueue[localTail].rad_in      = e.brush.rad_in;
+    localQueue[localTail].radInRatio  = e.brush.radInRatio;
     localQueue[localTail].opacity     = e.brush.opacity;
     localQueue[localTail].crv         = e.brush.crv;
     localQueue[localTail].x2y         = e.brush.x2y;
@@ -243,7 +243,7 @@ void NetworkBroker::poll(AppState* st) {
 
         if (d->targetRT.id != 0 && d->activeLayer >= 0 && d->activeLayer < st->texCount) {
             d_Brush brush = {};
-            brush.Realb.rad_in   = d->rad_in;
+            brush.Realb.radInRatio = d->radInRatio;
             brush.Realb.rad_out  = d->rad_out;
             brush.Realb.opacity  = d->opacity;
             brush.Realb.crv      = d->crv;
@@ -279,7 +279,7 @@ void NetworkBroker::poll(AppState* st) {
             d_Action act;
             act.ToolID = (uint8_t)st->mode;
             act.Brush  = {};
-            act.Brush.Realb.rad_in   = d->rad_in;
+            act.Brush.Realb.radInRatio = d->radInRatio;
             act.Brush.Realb.rad_out  = d->rad_out;
             act.Brush.Realb.opacity  = d->opacity;
             act.Brush.Realb.crv      = d->crv;
