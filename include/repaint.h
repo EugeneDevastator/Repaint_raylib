@@ -95,6 +95,7 @@ typedef struct {
     char layerName[256];
     float tx, ty;        // translation offset (canvas pixels)
     float rot;           // rotation (degrees)
+    float mat[6];        // 2×3 affine matrix (row-major: [a,b,tx, c,d,ty])
 } sLayerProps;
 
 #define MAX_BRUSH_TEX 32
@@ -378,6 +379,7 @@ void Canvas_SetLayerThreshold(Canvas* canvas, int layer, float threshold);
 void Canvas_SetLayerFeather(Canvas* canvas, int layer, float feather);
 void Canvas_MoveLayer(Canvas* canvas, int from, int to);
 void Canvas_DuplicateLayer(Canvas* canvas, int idx);
+void Layer_ApplyTransform(sLayerProps* lp, const float mat[6]);
 
 void Painter_Init(void);
 void Painter_Shutdown(void);
@@ -414,7 +416,7 @@ extern int quickPanelMouseMode;
 extern bool g_colorPicking;
 extern Color g_colorPickGrid[9];
 extern bool g_layerTransformMode;
-extern float g_layerPivotX, g_layerPivotY;
+extern float g_pivotCursorX, g_pivotCursorY;
 
 // ── QuickPanel layout constants ────────────────────────────────────────
 #define QP_SLIDER_W 28

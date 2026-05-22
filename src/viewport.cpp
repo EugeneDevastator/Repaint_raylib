@@ -4,7 +4,7 @@
 
 extern bool quickPanelShow;
 extern bool g_layerTransformMode;
-extern float g_layerPivotX, g_layerPivotY;
+extern float g_pivotCursorX, g_pivotCursorY;
 
 static BrushDab MakeBrushDab(float x, float y, const DrawDab& d) {
     BrushDab r;
@@ -152,64 +152,62 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
     // ── Layer transform mode (key '1' toggle) ────────────────────────
     static int dragAction = 0; // 1=drag layer, 2=drag pivot, 3=rotate
     static Vector2 dragStart = {0, 0};
-    static float dragStartTx = 0, dragStartTy = 0;
-    static float dragStartRot = 0;
-    if (!g_layerTransformMode) dragAction = 0;
+    static float savedMat[6];
+    if (!g_layerTransformMode) {
+        dragAction = 0;
+        dragStart = Vector2{0,0};
+        memset(savedMat, 0, sizeof(savedMat));
+    }
 
     if (g_layerTransformMode && vp->inBounds && state->activeLayer >= 0) {
         sLayerProps* lp = &state->canvas.layerProps[state->activeLayer];
-        float cw = (float)state->canvas.width, ch = (float)state->canvas.height;
-        float cosR = cosf(lp->rot * (float)M_PI / 180.0f);
-        float sinR = sinf(lp->rot * (float)M_PI / 180.0f);
 
-        // Check if click is on the transformed layer
-        float dx = canvasPos.x - g_layerPivotX;
-        float dy = canvasPos.y - g_layerPivotY;
-        float A = dx * cosR + dy * sinR;
-        float B = -dx * sinR + dy * cosR;
-        float localX = A + g_layerPivotX - lp->tx;
-        float localY = B + g_layerPivotY - lp->ty;
-        bool onLayer = (localX >= 0 && localY >= 0 && localX < cw && localY < ch);
-
-        float cDist = Dist2D(canvasPos, Vector2{g_layerPivotX, g_layerPivotY});
+        float cDist = Dist2D(canvasPos, Vector2{g_pivotCursorX, g_pivotCursorY});
         bool nearCenter = cDist < 12.0f;
 
+        // Any left click on the viewport moves the layer (cursor has priority)
         if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-            if (nearCenter) {
-                dragAction = 2;
-            } else if (onLayer) {
-                dragAction = 1;
-            }
+            dragAction = nearCenter ? 2 : 1;
             dragStart = canvasPos;
-            dragStartTx = lp->tx; dragStartTy = lp->ty;
+            memcpy(savedMat, lp->mat, sizeof(savedMat));
         }
 
         if (dragAction == 1 && IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
             float mdx = canvasPos.x - dragStart.x;
             float mdy = canvasPos.y - dragStart.y;
-            lp->tx = dragStartTx + mdx * cosR + mdy * sinR;
-            lp->ty = dragStartTy - mdx * sinR + mdy * cosR;
+            memcpy(lp->mat, savedMat, sizeof(savedMat));
+            float tmat[6] = {1, 0, mdx, 0, 1, mdy};
+            Layer_ApplyTransform(lp, tmat);
             layersDirty = true;
         }
 
         if (dragAction == 2 && IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
-            g_layerPivotX = canvasPos.x;
-            g_layerPivotY = canvasPos.y;
+            g_pivotCursorX = canvasPos.x;
+            g_pivotCursorY = canvasPos.y;
         }
 
         if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
             dragAction = 3;
             dragStart = canvasPos;
-            dragStartRot = lp->rot;
+            memcpy(savedMat, lp->mat, sizeof(savedMat));
         }
 
         if (dragAction == 3 && IsMouseButtonDown(MOUSE_RIGHT_BUTTON)) {
-            float startAng = atan2f(dragStart.y - g_layerPivotY, dragStart.x - g_layerPivotX);
-            float curAng  = atan2f(canvasPos.y - g_layerPivotY, canvasPos.x - g_layerPivotX);
+            float startAng = atan2f(dragStart.y - g_pivotCursorY, dragStart.x - g_pivotCursorX);
+            float curAng  = atan2f(canvasPos.y - g_pivotCursorY, canvasPos.x - g_pivotCursorX);
             float deltaDeg = (curAng - startAng) * (180.0f / (float)M_PI);
             if (deltaDeg > 180.0f) deltaDeg -= 360.0f;
             else if (deltaDeg < -180.0f) deltaDeg += 360.0f;
-            lp->rot = dragStartRot + deltaDeg;
+            // Reset to drag-start state, then apply rotation around pivot
+            memcpy(lp->mat, savedMat, sizeof(savedMat));
+            float cosD = cosf(deltaDeg * (float)M_PI / 180.0f);
+            float sinD = sinf(deltaDeg * (float)M_PI / 180.0f);
+            float pivX = g_pivotCursorX, pivY = g_pivotCursorY;
+            float mat[6] = {
+                cosD, -sinD, pivX - pivX * cosD + pivY * sinD,
+                sinD,  cosD, pivY - pivX * sinD - pivY * cosD
+            };
+            Layer_ApplyTransform(lp, mat);
             layersDirty = true;
         }
 
@@ -227,15 +225,19 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
     Vector2 paintPos = canvasPos;
     if (!state->editTexMode && active >= 0 && active < state->canvas.layerCount) {
         sLayerProps* lp = &state->canvas.layerProps[active];
-        if (lp->tx != 0.0f || lp->ty != 0.0f || lp->rot != 0.0f) {
-            float dx = canvasPos.x - g_layerPivotX;
-            float dy = canvasPos.y - g_layerPivotY;
-            float cosR = cosf(lp->rot * (float)M_PI / 180.0f);
-            float sinR = sinf(lp->rot * (float)M_PI / 180.0f);
-            float A = dx * cosR + dy * sinR;
-            float B = -dx * sinR + dy * cosR;
-            paintPos.x = A + g_layerPivotX - lp->tx;
-            paintPos.y = B + g_layerPivotY - lp->ty;
+        if (lp->mat[0] != 1.0f || lp->mat[1] != 0.0f || lp->mat[2] != 0.0f ||
+            lp->mat[3] != 0.0f || lp->mat[4] != 1.0f || lp->mat[5] != 0.0f) {
+            // Inverse of 2x3 affine matrix: [a,b,tx, c,d,ty]
+            float a = lp->mat[0], b = lp->mat[1], tx = lp->mat[2];
+            float c = lp->mat[3], d = lp->mat[4], ty = lp->mat[5];
+            float det = a * d - b * c;
+            if (fabsf(det) > 0.0001f) {
+                float invDet = 1.0f / det;
+                float ia = d * invDet, ib = -b * invDet, itx = (b * ty - d * tx) * invDet;
+                float ic = -c * invDet, id = a * invDet, ity = (c * tx - a * ty) * invDet;
+                paintPos.x = canvasPos.x * ia + canvasPos.y * ib + itx;
+                paintPos.y = canvasPos.x * ic + canvasPos.y * id + ity;
+            }
         }
     }
 

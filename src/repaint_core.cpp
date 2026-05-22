@@ -147,6 +147,9 @@ void Canvas_InsertLayer(Canvas* canvas, int idx) {
     canvas->layerProps[idx].tx = 0.0f;
     canvas->layerProps[idx].ty = 0.0f;
     canvas->layerProps[idx].rot = 0.0f;
+    // Identity matrix
+    canvas->layerProps[idx].mat[0] = 1.0f; canvas->layerProps[idx].mat[1] = 0.0f; canvas->layerProps[idx].mat[2] = 0.0f;
+    canvas->layerProps[idx].mat[3] = 0.0f; canvas->layerProps[idx].mat[4] = 1.0f; canvas->layerProps[idx].mat[5] = 0.0f;
 }
 
 void Canvas_DeleteLayer(Canvas* canvas, int index) {
@@ -209,5 +212,24 @@ void Canvas_DuplicateLayer(Canvas* canvas, int idx) {
     Canvas_InsertLayer(canvas, idx + 1);
     canvas->layerImages[idx + 1] = ImageCopy(canvas->layerImages[idx]);
     canvas->layerProps[idx + 1] = canvas->layerProps[idx];
+}
+
+void Layer_ApplyTransform(sLayerProps* lp, const float mat[6]) {
+    // mat and lp->mat are 2×3 row-major: [a, b, tx, c, d, ty]
+    // Compose: new_mat = mat * lp->mat  (given * current)
+    float a = mat[0], b = mat[1], tx = mat[2];
+    float c = mat[3], d = mat[4], ty = mat[5];
+    float ca = lp->mat[0], cb = lp->mat[1], ctx = lp->mat[2];
+    float cc = lp->mat[3], cd = lp->mat[4], cty = lp->mat[5];
+    lp->mat[0] = a * ca + b * cc;
+    lp->mat[1] = a * cb + b * cd;
+    lp->mat[2] = a * ctx + b * cty + tx;
+    lp->mat[3] = c * ca + d * cc;
+    lp->mat[4] = c * cb + d * cd;
+    lp->mat[5] = c * ctx + d * cty + ty;
+    // Keep tx, ty, rot in sync for code that still uses them directly
+    lp->tx = lp->mat[2];
+    lp->ty = lp->mat[5];
+    lp->rot = atan2f(lp->mat[3], lp->mat[0]) * (180.0f / (float)M_PI);
 }
 

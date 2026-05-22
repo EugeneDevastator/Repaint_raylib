@@ -21,7 +21,7 @@ Viewport viewport;
 float g_splashAlpha = 1.0f;
 static Texture2D g_splashTex = {0};
 bool g_layerTransformMode = false;
-float g_layerPivotX = 0.0f, g_layerPivotY = 0.0f;
+float g_pivotCursorX = 0.0f, g_pivotCursorY = 0.0f;
 
 static void DrawSplash(const char* msg) {
     int sw = GetScreenWidth(), sh = GetScreenHeight();
@@ -94,8 +94,8 @@ void UpdateUI(AppState* state) {
         g_layerTransformMode = !g_layerTransformMode;
         if (g_layerTransformMode && state->activeLayer >= 0) {
             sLayerProps* lp = &state->canvas.layerProps[state->activeLayer];
-            g_layerPivotX = lp->tx + state->canvas.width * 0.5f;
-            g_layerPivotY = lp->ty + state->canvas.height * 0.5f;
+            g_pivotCursorX = state->canvas.width * 0.5f;
+            g_pivotCursorY = state->canvas.height * 0.5f;
         }
     }
     if (IsKeyPressed(KEY_TWO)) state->mode = eSmudge;
@@ -454,28 +454,23 @@ void App_Draw(AppState* state) {
         glEnable(GL_COLOR_LOGIC_OP);
         glLogicOp(GL_XOR);
 
-        // UI pivot crosshair (floating UI element, does not affect transform)
-        Vector2 uip = ws(Vector2{g_layerPivotX, g_layerPivotY});
+        // Pivot cursor (pure UI, defines rotation center during drags)
+        Vector2 uip = ws(Vector2{g_pivotCursorX, g_pivotCursorY});
         float chLen = 12.0f;
         DrawLine(uip.x - chLen, uip.y, uip.x + chLen, uip.y, WHITE);
         DrawLine(uip.x, uip.y - chLen, uip.x, uip.y + chLen, WHITE);
         DrawCircle(uip.x, uip.y, 3.0f, WHITE);
 
-        // Layer outline — rotate each corner around visual pivot
-        float cosR = cosf(lp->rot * (float)M_PI / 180.0f);
-        float sinR = sinf(lp->rot * (float)M_PI / 180.0f);
+        // Layer outline — transform 4 corners through the layer matrix
+        float a = lp->mat[0], b = lp->mat[1], tx = lp->mat[2];
+        float c = lp->mat[3], d = lp->mat[4], ty = lp->mat[5];
         Vector2 pts[4] = {
-            {lp->tx,            lp->ty},
-            {lp->tx + cw,       lp->ty},
-            {lp->tx + cw,       lp->ty + ch},
-            {lp->tx,            lp->ty + ch}
+            {0, 0}, {cw, 0}, {cw, ch}, {0, ch}
         };
         Vector2 corners[5];
-        float vpX = g_layerPivotX, vpY = g_layerPivotY;
         for (int ci = 0; ci < 4; ci++) {
-            float dx = pts[ci].x - vpX, dy = pts[ci].y - vpY;
-            float rx = vpX + dx * cosR - dy * sinR;
-            float ry = vpY + dx * sinR + dy * cosR;
+            float rx = pts[ci].x * a + pts[ci].y * b + tx;
+            float ry = pts[ci].x * c + pts[ci].y * d + ty;
             corners[ci] = ws(Vector2{rx, ry});
         }
         corners[4] = corners[0];

@@ -157,17 +157,23 @@ RenderTexture2D* DocBlender_Composite(AppState* state) {
             float feather = state->canvas.layerProps[i].feather;
 
             sLayerProps* lp = &state->canvas.layerProps[i];
-            bool hasTransform = (lp->tx != 0.0f || lp->ty != 0.0f || lp->rot != 0.0f);
+            bool hasTransform = (lp->mat[0] != 1.0f || lp->mat[1] != 0.0f || lp->mat[2] != 0.0f ||
+                                 lp->mat[3] != 0.0f || lp->mat[4] != 1.0f || lp->mat[5] != 0.0f);
 
-            // If transformed, render the layer to a temp RT first
+            // If transformed, render the layer to a temp RT with ONE,ZERO (overwrite)
             if (hasTransform && layerTransRT.id > 0) {
-                rlSetBlendMode(RL_BLEND_ALPHA);
+                rlSetBlendMode(RL_BLEND_CUSTOM);
+                rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
                 BeginTextureMode(layerTransRT);
                 ClearBackground(BLANK);
                 rlPushMatrix();
-                rlTranslatef(g_layerPivotX, g_layerPivotY, 0);
-                rlRotatef(lp->rot, 0, 0, 1);
-                rlTranslatef(-g_layerPivotX + lp->tx, -g_layerPivotY + lp->ty, 0);
+                float m[16] = {
+                    lp->mat[0], lp->mat[3], 0, 0,
+                    lp->mat[ 1], lp->mat[4], 0, 0,
+                    0, 0, 1, 0,
+                    lp->mat[2], lp->mat[5], 0, 1
+                };
+                rlMultMatrixf(m);
                 DrawTextureRec(state->layerRTs[i].texture,
                     Rectangle{0, 0, (float)cw, (float)-ch},
                     Vector2{0, 0}, WHITE);
