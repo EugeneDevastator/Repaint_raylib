@@ -26,6 +26,7 @@ RenderTexture2D Load16BitRT(int width, int height) {
 
 static RenderTexture2D accumA = {0};
 static RenderTexture2D accumB = {0};
+static RenderTexture2D layerTransRT = {0};
 static bool accumInited = false;
 static Texture2D checkerTex = {0};
 static bool checkerValid = false;
@@ -96,9 +97,11 @@ static void EnsureAccumulators(int w, int h) {
     if (accumInited) {
         UnloadRenderTexture(accumA);
         UnloadRenderTexture(accumB);
+        UnloadRenderTexture(layerTransRT);
     }
     accumA = Load16BitRT(w, h);
     accumB = Load16BitRT(w, h);
+    layerTransRT = Load16BitRT(w, h);
     curCanvasW = w;
     curCanvasH = h;
     accumInited = true;
@@ -156,30 +159,33 @@ RenderTexture2D* DocBlender_Composite(AppState* state) {
             sLayerProps* lp = &state->canvas.layerProps[i];
             bool hasTransform = (lp->tx != 0.0f || lp->ty != 0.0f || lp->rot != 0.0f);
 
-            BeginTextureMode(*dst);
-            ClearBackground(BLANK);
-
-            if (hasTransform) {
-                // Transformed layers: draw accumulator then layer using matrix stack
-                // (blend mode is not applied — standard alpha blend only)
-                DrawTextureRec(src->texture,
-                    Rectangle{0, 0, (float)cw, (float)-ch},
-                    Vector2{0, 0}, WHITE);
-
+            // If transformed, render the layer to a temp RT first
+            if (hasTransform && layerTransRT.id > 0) {
+                rlSetBlendMode(RL_BLEND_ALPHA);
+                BeginTextureMode(layerTransRT);
+                ClearBackground(BLANK);
                 rlPushMatrix();
                 rlTranslatef(g_layerPivotX, g_layerPivotY, 0);
                 rlRotatef(lp->rot, 0, 0, 1);
                 rlTranslatef(-g_layerPivotX + lp->tx, -g_layerPivotY + lp->ty, 0);
                 DrawTextureRec(state->layerRTs[i].texture,
                     Rectangle{0, 0, (float)cw, (float)-ch},
-                    Vector2{0, 0}, ColorAlpha(WHITE, alpha));
+                    Vector2{0, 0}, WHITE);
                 rlPopMatrix();
-            } else if (shaderInited) {
+                EndTextureMode();
+            }
+
+            BeginTextureMode(*dst);
+            ClearBackground(BLANK);
+
+            Texture2D layerTex = hasTransform ? layerTransRT.texture : state->layerRTs[i].texture;
+
+            if (shaderInited) {
                 rlSetBlendMode(RL_BLEND_CUSTOM);
                 rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
                 BeginShaderMode(layerBlendShader);
 
-                SetShaderValueTexture(layerBlendShader, locLayerTex, state->layerRTs[i].texture);
+                SetShaderValueTexture(layerBlendShader, locLayerTex, layerTex);
                 SetShaderValue(layerBlendShader, locLayerAlpha, &alpha, SHADER_UNIFORM_FLOAT);
                 SetShaderValue(layerBlendShader, locBmIdx, &bmidx, SHADER_UNIFORM_INT);
                 SetShaderValue(layerBlendShader, locLayerThreshold, &threshold, SHADER_UNIFORM_FLOAT);
@@ -190,11 +196,12 @@ RenderTexture2D* DocBlender_Composite(AppState* state) {
                     Vector2{0, 0}, WHITE);
 
                 EndShaderMode();
+                rlSetBlendMode(RL_BLEND_ALPHA);
             } else {
                 DrawTextureRec(src->texture,
                     Rectangle{0, 0, (float)cw, (float)-ch},
                     Vector2{0, 0}, WHITE);
-                DrawTextureRec(state->layerRTs[i].texture,
+                DrawTextureRec(layerTex,
                     Rectangle{0, 0, (float)cw, (float)-ch},
                     Vector2{0, 0}, ColorAlpha(WHITE, alpha));
             }
@@ -363,6 +370,8 @@ void UnloadViewportRenderer(void) {
     if (accumInited) {
         UnloadRenderTexture(accumA);
         UnloadRenderTexture(accumB);
+        UnloadRenderTexture(layerTransRT);
+        layerTransRT = RenderTexture2D{0};
         accumInited = false;
     }
     if (checkerValid) {
