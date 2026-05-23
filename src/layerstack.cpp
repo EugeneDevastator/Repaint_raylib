@@ -278,20 +278,47 @@ static void MatInvMul(const float below[6], const float top[6], float out[6]) {
     out[4] = ic * tb + id_ * td;
     out[5] = ic * ttx + id_ * tty + ity;
 }
+// layerstack.cpp
+// layerstack.cpp
+
 static void BakeTransformLooped(RenderTexture2D dst, Texture2D src, const float mat[6], int w, int h)
 {
-    rlSetBlendMode(RL_BLEND_CUSTOM);
-    rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
-    BeginTextureMode(dst);
-    ClearBackground(BLANK);
     float m[16] = {
         mat[0], mat[3], 0, 0,
         mat[1], mat[4], 0, 0,
         0,      0,      1, 0,
         mat[2], mat[5], 0, 1
     };
+
+    // Use accumA/accumB as scratch ping-pong for tile compositing
+    // We need two temp RTs: reuse LS.accumA and LS.accumB temporarily
+    // But those are in use during composite — so allocate two small ones here.
+    RenderTexture2D pingA = Load16BitRT(w, h);
+    RenderTexture2D pingB = Load16BitRT(w, h);
+    RenderTexture2D* cur = &pingA;
+    RenderTexture2D* nxt = &pingB;
+
+    // Clear cur
+    BeginTextureMode(*cur);
+    rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+    rlSetBlendMode(RL_BLEND_CUSTOM);
+    ClearBackground(BLANK);
+    EndTextureMode();
+
     for (int dy = -1; dy <= 1; dy++) {
         for (int dx = -1; dx <= 1; dx++) {
+            // Draw this tile into nxt, over cur
+            BeginTextureMode(*nxt);
+            rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+            rlSetBlendMode(RL_BLEND_CUSTOM);
+            ClearBackground(BLANK);
+
+            // Copy cur into nxt first (no blend, straight copy)
+            DrawTextureRec(cur->texture, Rectangle{0,0,(float)w,(float)-h}, Vector2{0,0}, WHITE);
+
+            // Now draw this tile over it with alpha-over
+            rlSetBlendFactors(RL_ONE, RL_ONE_MINUS_SRC_ALPHA, RL_FUNC_ADD);
+            rlSetBlendMode(RL_BLEND_CUSTOM);
             rlPushMatrix();
             float offset[16] = {
                 1,0,0,0, 0,1,0,0, 0,0,1,0,
@@ -301,10 +328,23 @@ static void BakeTransformLooped(RenderTexture2D dst, Texture2D src, const float 
             rlMultMatrixf(m);
             DrawTextureRec(src, Rectangle{0,0,(float)w,(float)-h}, Vector2{0,0}, WHITE);
             rlPopMatrix();
+            EndTextureMode();
+
+            RenderTexture2D* tmp = cur; cur = nxt; nxt = tmp;
         }
     }
+
+    // Copy result into dst
+    BeginTextureMode(dst);
+    rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+    rlSetBlendMode(RL_BLEND_CUSTOM);
+    ClearBackground(BLANK);
+    DrawTextureRec(cur->texture, Rectangle{0,0,(float)w,(float)-h}, Vector2{0,0}, WHITE);
     EndTextureMode();
     rlSetBlendMode(RL_BLEND_ALPHA);
+
+    UnloadRenderTexture(pingA);
+    UnloadRenderTexture(pingB);
 }
 
 // ── Merge down ───────────────────────────────────────────────────────
