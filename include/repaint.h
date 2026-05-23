@@ -87,8 +87,6 @@ typedef struct {
     float threshold;
     float feather;
     char layerName[256];
-    float tx, ty;        // translation offset (canvas pixels)
-    float rot;           // rotation (degrees)
     float mat[6];        // 2×3 affine matrix (row-major: [a,b,tx, c,d,ty])
 } sLayerProps;
 

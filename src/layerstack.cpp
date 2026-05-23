@@ -423,8 +423,15 @@ Image LayerStack_CompositeWithDither(void) {
     for (int i = 0; i < layerCount; i++) {
         if (!props[i].visible || rts[i].id == 0) continue;
         sLayerProps* p = &props[i];
+        bool hasTransform = (p->mat[0] != 1.0f || p->mat[1] != 0.0f || p->mat[2] != 0.0f ||
+                             p->mat[3] != 0.0f || p->mat[4] != 1.0f || p->mat[5] != 0.0f);
+        Texture2D layerTex = rts[i].texture;
+        if (hasTransform && LS.layerTransRT.id > 0) {
+            BakeTransform(LS.layerTransRT, rts[i].texture, p->mat, w, h);
+            layerTex = LS.layerTransRT.texture;
+        }
         if (LS.shaderInited)
-            ApplyBlendShader(*dst, src->texture, rts[i].texture, p->op, p->blendmode, p->threshold, p->feather, w, h);
+            ApplyBlendShader(*dst, src->texture, layerTex, p->op, p->blendmode, p->threshold, p->feather, w, h);
         RenderTexture2D* tmp = src; src = dst; dst = tmp;
     }
 

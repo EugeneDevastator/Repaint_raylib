@@ -88,10 +88,6 @@ void Canvas_InsertLayer(Canvas* canvas, int idx) {
     canvas->layerProps[idx].threshold = 0.0f;
     canvas->layerProps[idx].feather = 1.0f;
     canvas->layerProps[idx].layerName[0] = '\0';
-    canvas->layerProps[idx].tx = 0.0f;
-    canvas->layerProps[idx].ty = 0.0f;
-    canvas->layerProps[idx].rot = 0.0f;
-    // Identity matrix
     canvas->layerProps[idx].mat[0] = 1.0f; canvas->layerProps[idx].mat[1] = 0.0f; canvas->layerProps[idx].mat[2] = 0.0f;
     canvas->layerProps[idx].mat[3] = 0.0f; canvas->layerProps[idx].mat[4] = 1.0f; canvas->layerProps[idx].mat[5] = 0.0f;
 }
@@ -171,9 +167,5 @@ void Layer_ApplyTransform(sLayerProps* lp, const float mat[6]) {
     lp->mat[3] = c * ca + d * cc;
     lp->mat[4] = c * cb + d * cd;
     lp->mat[5] = c * ctx + d * cty + ty;
-    // Keep tx, ty, rot in sync for code that still uses them directly
-    lp->tx = lp->mat[2];
-    lp->ty = lp->mat[5];
-    lp->rot = atan2f(lp->mat[3], lp->mat[0]) * (180.0f / (float)M_PI);
 }
 

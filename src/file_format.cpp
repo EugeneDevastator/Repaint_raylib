@@ -5,7 +5,7 @@
 
 #define MAGIC      "REPAINT"
 #define MAGIC_LEN  8
-#define FILE_VER   3
+#define FILE_VER   4
 
 /* ── Write helpers ─────────────────────────────────────────────────────── */
 
@@ -24,7 +24,7 @@ static void _wcpy(uint8_t** p, const void* src, size_t n) {
 
 static size_t _propsSize(sLayerProps* lp) {
     uint32_t nameLen = (uint32_t)strnlen(lp->layerName, sizeof(lp->layerName));
-    return sizeof(float) + 1 + 1 + 1 + 1 + 1 + 1 + 1 + sizeof(uint32_t) + nameLen;
+    return sizeof(float) + 1 + 1 + 1 + 1 + 1 + 1 + 1 + sizeof(uint32_t) + nameLen + 6 * sizeof(float);
 }
 
 static void _writeProps(uint8_t** p, sLayerProps* lp) {
@@ -39,9 +39,11 @@ static void _writeProps(uint8_t** p, sLayerProps* lp) {
     *(*p)++ = lp->realidx;
     _wu32(p, nameLen);
     if (nameLen > 0) _wcpy(p, lp->layerName, nameLen);
+    // mat[6] — 2×3 affine transform
+    _wcpy(p, lp->mat, 6 * sizeof(float));
 }
 
-static void _readProps(const uint8_t** p, sLayerProps* lp) {
+static void _readProps(const uint8_t** p, sLayerProps* lp, uint32_t ver) {
     memcpy(&lp->op, *p, sizeof(float)); *p += sizeof(float);
     lp->visible    = *(*p)++ != 0;
     lp->blendmode  = *(*p)++;
@@ -55,8 +57,14 @@ static void _readProps(const uint8_t** p, sLayerProps* lp) {
     if (nameLen >= sizeof(lp->layerName)) nameLen = (uint32_t)(sizeof(lp->layerName) - 1);
     if (nameLen > 0) { memcpy(lp->layerName, *p, nameLen); *p += nameLen; }
     lp->layerName[nameLen] = '\0';
-}
-
+    // mat[6] transform — format v4+
+    if (ver >= 4) {
+        memcpy(lp->mat, *p, 6 * sizeof(float)); *p += 6 * sizeof(float);
+    } else {
+        lp->mat[0] = 1; lp->mat[1] = 0; lp->mat[2] = 0;
+        lp->mat[3] = 0; lp->mat[4] = 1; lp->mat[5] = 0;
+    }
+} 
 /* ── Save ──────────────────────────────────────────────────────────────── */
 
 bool SaveRePaint(const char* path, Canvas* canvas, AppState* state) {
@@ -201,7 +209,7 @@ bool LoadRePaint(const char* path, Canvas* canvas, AppState* state) {
     if (memcmp(p, MAGIC, MAGIC_LEN) != 0) { UnloadFileData(fileData); return false; }
     p += MAGIC_LEN;
 
-    uint32_t ver = _ru32(&p); (void)ver;
+    uint32_t ver = _ru32(&p);
     uint32_t w = _ru32(&p);
     uint32_t h = _ru32(&p);
     if (w < 1 || w > 32768 || h < 1 || h > 32768) { UnloadFileData(fileData); return false; }
@@ -224,7 +232,7 @@ bool LoadRePaint(const char* path, Canvas* canvas, AppState* state) {
         Canvas_AddLayer(canvas);
         int layerIdx = canvas->layerCount - 1;
         const uint8_t* propStart = p;
-        _readProps(&p, &canvas->layerProps[layerIdx]);
+        _readProps(&p, &canvas->layerProps[layerIdx], ver);
         p = propStart + propSz;
 
         uint32_t pngSz = _ru32(&p);
