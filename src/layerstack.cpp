@@ -131,6 +131,9 @@ static void EnsureAccumulators(int w, int h) {
     LS.accumA = Load16BitRT(w, h);
     LS.accumB = Load16BitRT(w, h);
     LS.layerTransRT = Load16BitRT(w, h);
+    SetTextureWrap(LS.accumA.texture, TEXTURE_WRAP_REPEAT);
+    SetTextureWrap(LS.accumB.texture, TEXTURE_WRAP_REPEAT);
+    SetTextureWrap(LS.layerTransRT.texture, TEXTURE_WRAP_REPEAT);
     LS.curCanvasW = w;
     LS.curCanvasH = h;
     LS.accumInited = true;
@@ -260,6 +263,34 @@ static void MatInvMul(const float below[6], const float top[6], float out[6]) {
     out[4] = ic * tb + id_ * td;
     out[5] = ic * ttx + id_ * tty + ity;
 }
+static void BakeTransformLooped(RenderTexture2D dst, Texture2D src, const float mat[6], int w, int h)
+{
+    rlSetBlendMode(RL_BLEND_CUSTOM);
+    rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+    BeginTextureMode(dst);
+    ClearBackground(BLANK);
+    float m[16] = {
+        mat[0], mat[3], 0, 0,
+        mat[1], mat[4], 0, 0,
+        0,      0,      1, 0,
+        mat[2], mat[5], 0, 1
+    };
+    for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            rlPushMatrix();
+            float offset[16] = {
+                1,0,0,0, 0,1,0,0, 0,0,1,0,
+                (float)(dx*w), (float)(dy*h), 0, 1
+            };
+            rlMultMatrixf(offset);
+            rlMultMatrixf(m);
+            DrawTextureRec(src, Rectangle{0,0,(float)w,(float)-h}, Vector2{0,0}, WHITE);
+            rlPopMatrix();
+        }
+    }
+    EndTextureMode();
+    rlSetBlendMode(RL_BLEND_ALPHA);
+}
 
 // ── Merge down ───────────────────────────────────────────────────────
 void LayerStack_MergeDown(int idx) {
@@ -348,6 +379,82 @@ void LayerStack_MergeDown(int idx) {
     texs[n] = Texture2D{0};
     state->texCount = n;
 
+    LS.dirty = true;
+}
+
+void LayerStack_MergeDownSeamless(int idx) {
+    if (!LS.app || !LS.shaderInited) return;
+    AppState* state = LS.app;
+    int layerCount = state->canvas.layerCount;
+    RenderTexture2D* rts = state->layerRTs;
+    Texture2D* texs = state->layerTextures;
+    Image* imgs = state->canvas.layerImages;
+    sLayerProps* props = state->canvas.layerProps;
+    int cw = LS.cw, ch = LS.ch;
+    if (idx <= 0 || idx >= layerCount) return;
+    if (rts[idx].id == 0 || rts[idx - 1].id == 0) return;
+
+    float relMat[6];
+    MatInvMul(props[idx - 1].mat, props[idx].mat, relMat);
+
+    bool needBake = (relMat[0] != 1.0f || relMat[1] != 0.0f || relMat[2] != 0.0f ||
+                     relMat[3] != 0.0f || relMat[4] != 1.0f || relMat[5] != 0.0f);
+    Texture2D topTex = rts[idx].texture;
+    if (needBake && LS.layerTransRT.id > 0) {
+        // NEW:
+        BakeTransformLooped(LS.layerTransRT, rts[idx].texture, props[idx].mat, cw, ch);
+
+        topTex = LS.layerTransRT.texture;
+    }
+
+    // Set REPEAT so shader's fract(uv) wrapping actually works at edges
+    SetTextureWrap(topTex.id > 0 ? topTex : rts[idx].texture, TEXTURE_WRAP_REPEAT);
+
+    // Composite with seamless wrapping via blend shader
+    RenderTexture2D mergedRT = Load16BitRT(cw, ch);
+    float alpha = props[idx].op;
+    int bmidx = props[idx].blendmode;
+    float threshold = props[idx].threshold;
+    float feather = props[idx].feather;
+    BeginTextureMode(mergedRT);
+    rlSetBlendMode(RL_BLEND_CUSTOM);
+    rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+    BeginShaderMode(LS.blendShader);
+    SetShaderValueTexture(LS.blendShader, LS.locLayerTex, topTex);
+    SetShaderValue(LS.blendShader, LS.locLayerAlpha, &alpha, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(LS.blendShader, LS.locBmIdx, &bmidx, SHADER_UNIFORM_INT);
+    SetShaderValue(LS.blendShader, LS.locLayerThreshold, &threshold, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(LS.blendShader, LS.locLayerFeather, &feather, SHADER_UNIFORM_FLOAT);
+    DrawTextureRec(rts[idx - 1].texture,
+        Rectangle{0, 0, (float)cw, (float)-ch}, Vector2{0, 0}, WHITE);
+    EndShaderMode();
+    rlSetBlendMode(RL_BLEND_ALPHA);
+    EndTextureMode();
+
+    // Swap merged RT into below layer
+    RenderTexture2D oldRT = rts[idx - 1];
+    rts[idx - 1] = mergedRT;
+    Texture2D oldTex = texs[idx - 1];
+    texs[idx - 1] = mergedRT.texture;
+    Image cap = LoadImageFromTexture(mergedRT.texture);
+    ImageFlipVertical(&cap);
+    UnloadImage(imgs[idx - 1]);
+    imgs[idx - 1] = cap;
+    UnloadRenderTexture(oldRT);
+    if (oldTex.id > 0) UnloadTexture(oldTex);
+
+    // Remove top layer
+    if (rts[idx].id > 0) UnloadRenderTexture(rts[idx]);
+    if (texs[idx].id > 0) UnloadTexture(texs[idx]);
+    Canvas_DeleteLayer(&state->canvas, idx);
+    for (int i = idx; i < state->canvas.layerCount; i++) {
+        rts[i]   = rts[i + 1];
+        texs[i]  = texs[i + 1];
+    }
+    int n = state->canvas.layerCount;
+    rts[n] = RenderTexture2D{0};
+    texs[n] = Texture2D{0};
+    state->texCount = n;
     LS.dirty = true;
 }
 

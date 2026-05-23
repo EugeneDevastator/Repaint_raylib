@@ -27,6 +27,7 @@ void LayerStack_Delete(int idx);
 void LayerStack_Duplicate(int idx);
 void LayerStack_Move(int from, int after);
 void LayerStack_MergeDown(int idx);
+void LayerStack_MergeDownSeamless(int idx);
 void LayerStack_ApplyTransform(int idx, const float mat[6]);
 
 // ── Sync between GPU RT ↔ CPU image ───────────────────────────────

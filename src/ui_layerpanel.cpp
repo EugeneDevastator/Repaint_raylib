@@ -1,4 +1,5 @@
 #include "repaint.h"
+#include "layerstack.h"
 #include "imgui.h"
 #include "network_broker.h"
 #include <cstdint>
@@ -69,7 +70,7 @@ void LayerPanel_Draw(AppState* state) {
         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
 
     float aw = ImGui::GetContentRegionAvail().x;
-    float bw = (aw - 9.0f) / 4.0f;
+    float bw = (aw - 12.0f) / 5.0f;
     if (ImGui::Button("+Add", ImVec2(bw, 36))) {
         d_LAction lact = {};
         lact.ActID = laAdd;
@@ -89,6 +90,13 @@ void LayerPanel_Draw(AppState* state) {
         lact.ActID = laDrop;
         lact.layer = (int16_t)state->activeLayer;
         CommitLayerOp(state, &lact);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Seamless", ImVec2(bw, 36)) && state->activeLayer > 0) {
+        LayerStack_MergeDownSeamless(state->activeLayer);
+        if (state->activeLayer >= state->canvas.layerCount)
+            state->activeLayer = state->canvas.layerCount - 1;
+        layersDirty = true;
     }
     ImGui::SameLine();
     if (ImGui::Button("Del", ImVec2(bw, 36)) && layerCount > 1) {

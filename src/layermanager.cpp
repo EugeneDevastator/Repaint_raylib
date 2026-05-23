@@ -13,6 +13,7 @@ void EnsureRTs(AppState* state) {
         memset(&state->layerTextures[old], 0, (newCount - old) * sizeof(Texture2D));
         for (int i = old; i < newCount; i++) {
             state->layerRTs[i] = Load16BitRT(state->canvas.width, state->canvas.height);
+            SetTextureWrap(state->layerRTs[i].texture, TEXTURE_WRAP_REPEAT);
             BeginTextureMode(state->layerRTs[i]);
             ClearBackground(BLANK);
             EndTextureMode();
@@ -20,12 +21,12 @@ void EnsureRTs(AppState* state) {
     }
     state->texCount = newCount;
 }
-
 void SyncRTFromImage(AppState* state, int layer) {
     if (layer < 0 || layer >= state->texCount) return;
     Image* img = &state->canvas.layerImages[layer];
     if (state->layerRTs[layer].id == 0) {
         state->layerRTs[layer] = Load16BitRT(img->width, img->height);
+        SetTextureWrap(state->layerRTs[layer].texture, TEXTURE_WRAP_REPEAT);
     }
     Texture2D tmp = LoadTextureFromImage(*img);
     BeginTextureMode(state->layerRTs[layer]);
@@ -37,6 +38,7 @@ void SyncRTFromImage(AppState* state, int layer) {
     EndTextureMode();
     UnloadTexture(tmp);
 }
+
 
 void SyncImageFromRT(AppState* state, int layer) {
     if (layer < 0 || layer >= state->texCount) return;
