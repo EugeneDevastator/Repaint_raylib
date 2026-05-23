@@ -205,26 +205,41 @@ void LayerStack_SyncAllImages(void) {
 // ── Layer management (delegate to Canvas API) ────────────────────────
 int LayerStack_Add(void) {
     if (!LS.app) return -1;
-    Canvas_AddLayer(&LS.app->canvas);
-    int n = LS.app->canvas.layerCount - 1;
-    EnsureRTs(LS.app);
-    SyncRTFromImage(LS.app, n);
+    AppState* state = LS.app;
+    Canvas_AddLayer(&state->canvas);
+    int n = state->canvas.layerCount;
+    int newIdx = n - 1;
+
+    // Force realloc check by temporarily mismatching texCount
+    state->texCount = newIdx; // one less than layerCount → EnsureRTs will extend
+    EnsureRTs(state);         // allocates and clears the new slot, inits RT
+
+    SyncRTFromImage(state, newIdx);
     LS.dirty = true;
-    return n;
+    return newIdx;
 }
 void LayerStack_Delete(int idx) {
     if (!LS.app) return;
-    if (LS.app->canvas.layerCount <= 1) return;
-    UnloadRenderTexture(LS.app->layerRTs[idx]);
-    if (LS.app->layerTextures[idx].id > 0) UnloadTexture(LS.app->layerTextures[idx]);
-    Canvas_DeleteLayer(&LS.app->canvas, idx);
-    for (int i = idx; i < LS.app->canvas.layerCount; i++) {
-        LS.app->layerRTs[i] = LS.app->layerRTs[i + 1];
-        LS.app->layerTextures[i] = LS.app->layerTextures[i + 1];
+    AppState* state = LS.app;
+    int n = state->canvas.layerCount;
+    if (n <= 1 || idx < 0 || idx >= n) return;
+
+    if (state->layerRTs[idx].id > 0)       UnloadRenderTexture(state->layerRTs[idx]);
+    if (state->layerTextures[idx].id > 0)  UnloadTexture(state->layerTextures[idx]);
+
+    Canvas_DeleteLayer(&state->canvas, idx);
+    int newN = state->canvas.layerCount; // n-1
+
+    for (int i = idx; i < newN; i++) {
+        state->layerRTs[i]      = state->layerRTs[i + 1];
+        state->layerTextures[i] = state->layerTextures[i + 1];
     }
-    LS.app->texCount = LS.app->canvas.layerCount;
+    state->layerRTs[newN]      = RenderTexture2D{0};
+    state->layerTextures[newN] = Texture2D{0};
+    state->texCount = newN;
     LS.dirty = true;
 }
+
 void LayerStack_Duplicate(int idx) {
     if (!LS.app) return;
     Canvas_DuplicateLayer(&LS.app->canvas, idx);
@@ -401,21 +416,18 @@ void LayerStack_MergeDownSeamless(int idx) {
                      relMat[3] != 0.0f || relMat[4] != 1.0f || relMat[5] != 0.0f);
     Texture2D topTex = rts[idx].texture;
     if (needBake && LS.layerTransRT.id > 0) {
-        // NEW:
         BakeTransformLooped(LS.layerTransRT, rts[idx].texture, props[idx].mat, cw, ch);
-
         topTex = LS.layerTransRT.texture;
     }
 
-    // Set REPEAT so shader's fract(uv) wrapping actually works at edges
-    SetTextureWrap(topTex.id > 0 ? topTex : rts[idx].texture, TEXTURE_WRAP_REPEAT);
+    SetTextureWrap(topTex, TEXTURE_WRAP_REPEAT);
 
-    // Composite with seamless wrapping via blend shader
     RenderTexture2D mergedRT = Load16BitRT(cw, ch);
     float alpha = props[idx].op;
     int bmidx = props[idx].blendmode;
     float threshold = props[idx].threshold;
     float feather = props[idx].feather;
+
     BeginTextureMode(mergedRT);
     rlSetBlendMode(RL_BLEND_CUSTOM);
     rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
@@ -434,25 +446,28 @@ void LayerStack_MergeDownSeamless(int idx) {
     // Swap merged RT into below layer
     RenderTexture2D oldRT = rts[idx - 1];
     rts[idx - 1] = mergedRT;
-    Texture2D oldTex = texs[idx - 1];
-    texs[idx - 1] = mergedRT.texture;
+
+    // Capture image from merged RT
     Image cap = LoadImageFromTexture(mergedRT.texture);
     ImageFlipVertical(&cap);
     UnloadImage(imgs[idx - 1]);
     imgs[idx - 1] = cap;
+
+    // Unload old RT (not texs — texs[idx-1] is a separate CPU-side texture, unload it separately)
     UnloadRenderTexture(oldRT);
-    if (oldTex.id > 0) UnloadTexture(oldTex);
+    if (texs[idx - 1].id > 0) UnloadTexture(texs[idx - 1]);
+    texs[idx - 1] = Texture2D{0};  // will be rebuilt on next SyncLayerTexture call
 
     // Remove top layer
     if (rts[idx].id > 0) UnloadRenderTexture(rts[idx]);
     if (texs[idx].id > 0) UnloadTexture(texs[idx]);
     Canvas_DeleteLayer(&state->canvas, idx);
-    for (int i = idx; i < state->canvas.layerCount; i++) {
-        rts[i]   = rts[i + 1];
-        texs[i]  = texs[i + 1];
-    }
     int n = state->canvas.layerCount;
-    rts[n] = RenderTexture2D{0};
+    for (int i = idx; i < n; i++) {
+        rts[i]  = rts[i + 1];
+        texs[i] = texs[i + 1];
+    }
+    rts[n]  = RenderTexture2D{0};
     texs[n] = Texture2D{0};
     state->texCount = n;
     LS.dirty = true;
