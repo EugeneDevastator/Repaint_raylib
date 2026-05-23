@@ -188,26 +188,10 @@ static void EnsureChecker(int w, int h) {
 }
 
 // ── Query ────────────────────────────────────────────────────────────
-int    LayerStack_Count(void)            { return LS.app ? LS.app->canvas.layerCount : 0; }
 int    LayerStack_Width(void)            { return LS.cw; }
 int    LayerStack_Height(void)           { return LS.ch; }
-bool   LayerStack_Dirty(void)            { return LS.dirty; }
 bool   LayerStack_PresentInited(void)    { return LS.presentInited; }
 Shader LayerStack_GetPresentShader(void) { return LS.presentShader; }
-void   LayerStack_SetDirty(void)         { LS.dirty = true; }
-
-// ── Data access ──────────────────────────────────────────────────────
-sLayerProps*    LayerStack_GetProps(int idx) { return (LS.app && idx >= 0 && idx < LS.app->canvas.layerCount) ? &LS.app->canvas.layerProps[idx]  : NULL; }
-Image*          LayerStack_GetImage(int idx) { return (LS.app && idx >= 0 && idx < LS.app->canvas.layerCount) ? &LS.app->canvas.layerImages[idx] : NULL; }
-RenderTexture2D LayerStack_GetRT(int idx)    { return (LS.app && idx >= 0 && idx < LS.app->texCount) ? LS.app->layerRTs[idx]      : RenderTexture2D{0}; }
-Texture2D       LayerStack_GetTex(int idx)   { return (LS.app && idx >= 0 && idx < LS.app->texCount) ? LS.app->layerTextures[idx] : Texture2D{0}; }
-
-// ── Sync helpers ─────────────────────────────────────────────────────
-void LayerStack_SyncRTFromImage(int idx) { if (LS.app) SyncRTFromImage(LS.app, idx); }
-void LayerStack_SyncImageFromRT(int idx) { if (LS.app) SyncImageFromRT(LS.app, idx); }
-void LayerStack_SyncLayerTex(int idx)    { if (LS.app) SyncLayerTexture(LS.app, idx); }
-void LayerStack_SyncAllRTs(void)         { if (LS.app) SyncAllRTs(LS.app); }
-void LayerStack_SyncAllImages(void)      { if (LS.app) SyncAllImages(LS.app); }
 
 // ── Layer slot removal ───────────────────────────────────────────────
 static void RemoveLayerSlot(AppState* state, int idx) {
@@ -221,48 +205,6 @@ static void RemoveLayerSlot(AppState* state, int idx) {
     rts[n]  = RenderTexture2D{0};
     texs[n] = Texture2D{0};
     state->texCount = n;
-}
-
-// ── Layer management ─────────────────────────────────────────────────
-int LayerStack_Add(void) {
-    if (!LS.app) return -1;
-    AppState* state = LS.app;
-    Canvas_AddLayer(&state->canvas);
-    int newIdx = state->canvas.layerCount - 1;
-    state->texCount = newIdx;
-    EnsureRTs(state);
-    SyncRTFromImage(state, newIdx);
-    LS.dirty = true;
-    return newIdx;
-}
-
-void LayerStack_Delete(int idx) {
-    if (!LS.app) return;
-    int n = LS.app->canvas.layerCount;
-    if (n <= 1 || idx < 0 || idx >= n) return;
-    RemoveLayerSlot(LS.app, idx);
-    LS.dirty = true;
-}
-
-void LayerStack_Duplicate(int idx) {
-    if (!LS.app) return;
-    Canvas_DuplicateLayer(&LS.app->canvas, idx);
-    EnsureRTs(LS.app);
-    SyncRTFromImage(LS.app, idx + 1);
-    LS.dirty = true;
-}
-
-void LayerStack_Move(int from, int to) {
-    if (!LS.app) return;
-    Canvas_MoveLayer(&LS.app->canvas, from, to);
-    SyncAllRTs(LS.app);
-    LS.dirty = true;
-}
-
-void LayerStack_ApplyTransform(int idx, const float mat[6]) {
-    if (!LS.app || idx < 0 || idx >= LS.app->canvas.layerCount) return;
-    Layer_ApplyTransform(&LS.app->canvas.layerProps[idx], mat);
-    LS.dirty = true;
 }
 
 // ── Matrix helpers ───────────────────────────────────────────────────
