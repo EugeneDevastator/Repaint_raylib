@@ -366,7 +366,8 @@ void StrokeEngine_ApplyDabs(RenderTexture2D dstRT, Texture2D brushTex,
 }
 
 void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex,
-                              const d_RealBrush* baseBrush, float cx, float cy) {
+                              const d_RealBrush* baseBrush, int toolMode,
+                              float cx, float cy) {
     float sizeMulFactor = powf(16.0f, BParam_GetValue(&bpSizeMul) / 128.0f - 1.0f);
     float radOut = baseBrush->rad_out;
     float spacingVal = BParam_GetValue(&bpSpacing);
@@ -380,7 +381,7 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex,
     Vector2 start = {cx, cy};
     Vector2 end   = {cx + segLen * dirX, cy + segLen * dirY};
 
-    CollapsedBrush cbFull = CollapseBrushParams(*baseBrush, 0.0f, eBrush);
+    CollapsedBrush cbFull = CollapseBrushParams(*baseBrush, 0.0f, toolMode);
     cbFull.jitRadOut = cbFull.jitRadIn = cbFull.jitOpacity = cbFull.jitCrv = cbFull.jitX2y = 0;
     cbFull.jitHue = cbFull.jitSat = cbFull.jitLit = cbFull.jitCloneOp = 0;
     cbFull.baseSeed = 0;
@@ -400,6 +401,16 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex,
     s.seed = baseBrush->seed;
 
     int n = DrawLinear(&s, 0, 0.0f, dabs, 256, &r);
+
+    // Set smudge source positions (feedback: src = previous dab position)
+    if (toolMode == eSmudge && n > 0) {
+        dabs[0].srcX = cx;
+        dabs[0].srcY = cy;
+        for (int i = 1; i < n; i++) {
+            dabs[i].srcX = dabs[i-1].x;
+            dabs[i].srcY = dabs[i-1].y;
+        }
+    }
 
     StrokeEngine_ApplyDabs(dstRT, brushTex, dabs, n);
 }

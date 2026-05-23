@@ -106,10 +106,23 @@ void ViewportHUD_Draw(AppState* state) {
             if (state->activeBrushTex >= 0 && state->activeBrushTex < state->brushTexCount)
                 bt = state->brushTex[state->activeBrushTex].rt.texture;
 
-            // Draw preview strokes on a transparent RT — canvas is already underneath
+            // Copy the visible canvas area as background (needed for smudge, harmless for paint)
+            Camera2D prevCam = {};
+            prevCam.target = state->camera.target;
+            prevCam.offset = Vector2{PREVIEW_SZ * 0.5f, PREVIEW_SZ * 0.5f};
+            prevCam.zoom   = state->camera.zoom;
+
             BeginTextureMode(g_previewRT);
             ClearBackground(BLANK);
-            StrokeEngine_DrawPreview(g_previewRT, bt, &zoomBrush,
+            BeginMode2D(prevCam);
+            rlSetBlendMode(RL_BLEND_CUSTOM);
+            rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+            DrawTextureRec(docBlendTex->texture,
+                Rectangle{0, 0, (float)cw, (float)-ch},
+                Vector2{0, 0}, WHITE);
+            EndMode2D();
+            // Draw preview strokes on top
+            StrokeEngine_DrawPreview(g_previewRT, bt, &zoomBrush, state->mode,
                                      PREVIEW_SZ * 0.5f, PREVIEW_SZ * 0.5f);
             EndTextureMode();
 
