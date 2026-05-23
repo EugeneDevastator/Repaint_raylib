@@ -33,9 +33,10 @@ static int is_pen_device(int fd) {
 }
 
 int TabletPlatform_GetHookCount(void)   { return 0; }
-int TabletPlatform_GetPenSuccess(void)  { return 0; }
-int TabletPlatform_GetTypeMismatch(void){ return 0; }
-int TabletPlatform_GetLastType(void)    { return 0; }
+
+void TabletPlatform_GetDebugInfo(char* buf, size_t sz) {
+    snprintf(buf, sz, "Linux evdev — no Windows Ink equivalent");
+}
 
 bool TabletPlatform_Init(void* nativeWindow) {
     (void)nativeWindow;

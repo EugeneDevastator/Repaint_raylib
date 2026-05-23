@@ -1,11 +1,12 @@
+#include "raylib.h"
 #include "tablet_platform.h"
 #include "platform_utils.h"
-#include "raylib.h"
 #include <cmath>
+#include <cstdio>
 
 int main() {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-    InitWindow(600, 540, "Tablet Calibrator");
+    InitWindow(700, 640, "Tablet Calibrator");
     SetTargetFPS(60);
 
     bool tabletOk = TabletPlatform_Init(Platform_GetNativeWindowHandle());
@@ -13,6 +14,7 @@ int main() {
     TabletState state;
     float angle = 0.0f;
     int frames = 0;
+    char debugInfo[1024] = "";
 
     while (!WindowShouldClose()) {
         TabletPlatform_Poll(&state);
@@ -23,24 +25,33 @@ int main() {
         ClearBackground((Color){30, 30, 30, 255});
 
         DrawText("Tablet Calibrator", 20, 16, 32, WHITE);
-        DrawText(TextFormat("FPS: %i", frames), 20, 54, 32, LIME);
+        DrawText(TextFormat("FPS: %i", frames), 20, 54, 22, LIME);
 
-        DrawText(tabletOk ? "[OK] Tablet initialized" : "[--] Tablet not found",
-                 20, 92, 32, tabletOk ? GREEN : RED);
+        if (tabletOk) {
+            DrawText("[OK] Tablet initialized", 20, 88, 20, GREEN);
+        } else {
+            DrawText("[FAIL] Tablet not detected", 20, 88, 20, RED);
+        }
 
-        DrawText(TextFormat("Active:   %s", state.active ? "YES" : "no"), 20, 136, 32, WHITE);
-        DrawText(TextFormat("Touching: %s", state.touching ? "YES" : "no"), 20, 174, 32, WHITE);
-        DrawText(TextFormat("Pressure: %.4f", state.pressure), 20, 212, 32, WHITE);
-        DrawText(TextFormat("Tilt X:   %+.4f", state.tiltX), 20, 250, 32, WHITE);
-        DrawText(TextFormat("Tilt Y:   %+.4f", state.tiltY), 20, 288, 32, WHITE);
-        DrawText(TextFormat("Rotation: %.4f", state.rotation), 20, 326, 32, WHITE);
+        TabletPlatform_GetDebugInfo(debugInfo, sizeof(debugInfo));
+        DrawText(debugInfo, 20, tabletOk ? 118 : 118, 16, LIGHTGRAY);
 
-        DrawText(TextFormat("WM_POINTER msgs: %i", TabletPlatform_GetHookCount()), 20, 364, 32, LIME);
+        float ly = tabletOk ? 270.0f : 270.0f;
+        DrawText(TextFormat("Active:     %s", state.active   ? "YES" : "no"), 20, (int)ly,      22, WHITE);
+        DrawText(TextFormat("Touching:   %s", state.touching ? "YES" : "no"), 20, (int)ly + 32,  22, WHITE);
+        DrawText(TextFormat("Pressure:   %.4f", state.pressure), 20, (int)ly + 64,  22, WHITE);
+        DrawText(TextFormat("Tilt X:     %+.4f", state.tiltX), 20, (int)ly + 96,  22, WHITE);
+        DrawText(TextFormat("Tilt Y:     %+.4f", state.tiltY), 20, (int)ly + 128, 22, WHITE);
+        DrawText(TextFormat("Rotation:   %.4f", state.rotation), 20, (int)ly + 160, 22, WHITE);
 
-        DrawRectangle(20, 410, (int)(state.pressure * 400.0f), 20, BLUE);
-        DrawRectangleLines(20, 410, 400, 20, LIGHTGRAY);
+        if (tabletOk)
+            DrawText(TextFormat("WM_POINTER msgs: %i", TabletPlatform_GetHookCount()), 20, (int)ly + 192, 22, LIME);
 
-        Vector2 center = { 540, 60 };
+        float barY = ly + 230;
+        DrawRectangle(20, (int)barY, (int)(state.pressure * 400.0f), 20, BLUE);
+        DrawRectangleLines(20, (int)barY, 400, 20, LIGHTGRAY);
+
+        Vector2 center = { 580, 60 };
         float rad = angle * DEG2RAD;
         Vector2 p1 = { center.x + std::cos(rad) * 20, center.y + std::sin(rad) * 20 };
         Vector2 p2 = { center.x + std::cos(rad + 1.5708f) * 20, center.y + std::sin(rad + 1.5708f) * 20 };

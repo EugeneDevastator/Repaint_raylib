@@ -9,10 +9,8 @@ bool TabletPlatform_Init(void* nativeWindow);
 void TabletPlatform_Shutdown(void);
 bool TabletPlatform_Poll(TabletState* out);
 
-// Debug: number of WM_POINTER messages intercepted this session
+// Debug diagnostics (platform-independent)
 int TabletPlatform_GetHookCount(void);
-int TabletPlatform_GetPenSuccess(void);
-int TabletPlatform_GetTypeMismatch(void);
-int TabletPlatform_GetLastType(void);
+void TabletPlatform_GetDebugInfo(char* buf, size_t sz);
 
 #endif

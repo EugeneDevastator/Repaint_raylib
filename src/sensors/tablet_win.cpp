@@ -1,8 +1,10 @@
 #include "tablet_platform.h"
+#include "platform_utils.h"
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <winuser.h>
+#include <cstdio>
 
 #ifndef GET_POINTERID_WPARAM
 #define GET_POINTERID_WPARAM(wParam) (LOWORD(wParam))
@@ -61,23 +63,25 @@ static LRESULT CALLBACK TabletMsgHook(int code, WPARAM wParam, LPARAM lParam) {
 static HHOOK g_msgHook = NULL;
 
 bool TabletPlatform_Init(void* nativeWindow) {
-    InitializeCriticalSection(&g_penLock);
-    memset(&g_penState, 0, sizeof(g_penState));
-    g_penState.pressure = 1.0f;
-    g_penState.rotation = 0.5f;
-
     LoadPointerAPI();
     if (!g_GetPointerPenInfo)
-        return false;
-    if (!(GetSystemMetrics(SM_DIGITIZER) & 0x01))
         return false;
 
     HWND hwnd = (HWND)nativeWindow;
     if (!hwnd) return false;
 
+    InitializeCriticalSection(&g_penLock);
+    memset(&g_penState, 0, sizeof(g_penState));
+    g_penState.pressure = 1.0f;
+    g_penState.rotation = 0.5f;
+
     DWORD threadId = GetWindowThreadProcessId(hwnd, NULL);
     g_msgHook = SetWindowsHookEx(WH_GETMESSAGE, TabletMsgHook, NULL, threadId);
-    return (g_msgHook != NULL);
+    if (!g_msgHook) {
+        DeleteCriticalSection(&g_penLock);
+        return false;
+    }
+    return true;
 }
 
 void TabletPlatform_Shutdown(void) {
@@ -94,6 +98,39 @@ bool TabletPlatform_Poll(TabletState* state) {
 }
 
 int TabletPlatform_GetHookCount(void)   { return g_hookCount; }
-int TabletPlatform_GetPenSuccess(void)  { return 0; }
-int TabletPlatform_GetTypeMismatch(void){ return 0; }
-int TabletPlatform_GetLastType(void)    { return 0; }
+
+void TabletPlatform_GetDebugInfo(char* buf, size_t sz) {
+    UINT digitizer = GetSystemMetrics(SM_DIGITIZER);
+    const char* flavor;
+    if (digitizer == 0)
+        flavor = "NONE";
+    else if (digitizer == 0x01)
+        flavor = "INTEGRATED_TOUCH";
+    else if (digitizer == 0x02)
+        flavor = "INTEGRATED_PEN";
+    else if (digitizer == 0x40)
+        flavor = "EXTERNAL_PEN";
+    else if (digitizer == 0x42)
+        flavor = "INTEGRATED_PEN | EXTERNAL_PEN";
+    else
+        flavor = "MULTI";
+
+    HMODULE hMod = GetModuleHandleA("user32.dll");
+    bool hasPtr = hMod && GetProcAddress(hMod, "GetPointerPenInfo");
+
+    HWND hwnd = (HWND)Platform_GetNativeWindowHandle();
+    DWORD tid = hwnd ? GetWindowThreadProcessId(hwnd, NULL) : 0;
+
+    snprintf(buf, sz,
+        "SM_DIGITIZER:     0x%02X (%s)\n"
+        "GetPointerPenInfo: %s\n"
+        "Window handle:     0x%p (thread %lu)\n"
+        "Hook installed:    %s\n"
+        "WM_POINTER msgs:   %i\n"
+        "Hint: enable 'Windows Ink' in Wacom settings",
+        digitizer, flavor,
+        hasPtr ? "AVAILABLE" : "MISSING",
+        (void*)hwnd, tid,
+        (hwnd && tid) ? "YES" : "NO",
+        g_hookCount);
+}
