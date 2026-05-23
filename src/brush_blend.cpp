@@ -23,6 +23,7 @@ static int locCanvasSize = -1;
 static int locStampOffset = -1;
 static int locPwr = -1;
 static int locEraseMode = -1;
+static int locSeamless = -1;
 static bool inited = false;
 
 static RenderTexture2D canvasCopyRT = {0};
@@ -125,6 +126,7 @@ void BrushBlend_Init(void) {
     locRadOut         = GetShaderLocation(brushBlendShader, "radOut");
     locPwr            = GetShaderLocation(brushBlendShader, "pwr");
     locEraseMode      = GetShaderLocation(brushBlendShader, "eraseMode");
+    locSeamless       = GetShaderLocation(brushBlendShader, "uSeamless");
 
     if (locCanvasTex >= 0) { int u = 1; SetShaderValue(brushBlendShader, locCanvasTex, &u, SHADER_UNIFORM_INT); }
     if (locBrushTex  >= 0) { int u = 2; SetShaderValue(brushBlendShader, locBrushTex,  &u, SHADER_UNIFORM_INT); }
@@ -341,12 +343,6 @@ void BrushBlend_ApplyStamp(
     SetShaderValue(brushBlendShader, locEraseMode, &eraseMode, SHADER_UNIFORM_INT);
 
     // ------------- final blit
-    // Set wrap on canvas copy — fragment shader uses fract(gl_FragCoord / canvasSize)
-    // to wrap UVs seamlessly, but also set the hardware wrap for safety.
-    // user: this is not the way, it breaks drawing.
-  //  SetTextureWrap(canvasCopyRT.texture,
-  //      g_seamlessPaint ? TEXTURE_WRAP_REPEAT : TEXTURE_WRAP_CLAMP);
-
     BeginTextureMode(dstRT);
     rlSetBlendMode(RL_BLEND_CUSTOM);
     rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
@@ -358,11 +354,12 @@ void BrushBlend_ApplyStamp(
     rlActiveTextureSlot(0);
 
     BeginShaderMode(brushBlendShader);
-    bool looped = true;
+    int uSeamlessVal = g_seamlessPaint ? 1 : 0;
+    SetShaderValue(brushBlendShader, locSeamless, &uSeamlessVal, SHADER_UNIFORM_INT);
     DrawTextureLooped(geoRT->texture,
         (Rectangle){0, 0, (float)drawSz, (float)-drawSz},
         x0, y0, stampSizePx, stampSizePx,
-        W, H, looped);
+        W, H, g_seamlessPaint);
 
     EndShaderMode();
 

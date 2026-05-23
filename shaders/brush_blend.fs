@@ -30,7 +30,7 @@ uniform vec2  stampCenter;
 uniform vec2  canvasSize;
 uniform float pwr;
 uniform int   eraseMode;
-
+uniform bool  uSeamless;
 in vec2 canvasFragUV;
 
 float hash2(vec2 p) {
@@ -150,15 +150,11 @@ void main() {
     vec2 uv       = fragTexCoord;
     vec2 sampleUV = vec2(uv.x, 1.0 - uv.y);
     vec4 geouv    = texture(texture0, sampleUV);
-    bool looped = true;
-
     vec2 canvasUV = canvasFragUV;
-    vec4 canvas;
     canvasUV.y *= -1;
-    if(!looped) // if clipped
-        canvas = texture(canvasTex, canvasUV);
-    else
-        canvas = texture(canvasTex, fract(canvasUV));  // was: texture(canvasTex, canvasUV) - for clipped.
+    vec4 canvas = uSeamless 
+        ? texture(canvasTex, fract(canvasUV))
+        : texture(canvasTex, canvasUV);
 
     if (geouv.a < 0.01) {
         finalColor = canvas;
@@ -258,12 +254,9 @@ void main() {
 float cloneOpacity = smudgeStrength;
     if (cloneOpacity > 0.000001) {
 
-    vec2 smudgeUV;
-
-if(!looped) // clipped
-    smudgeUV = clamp(canvasFragUV - smudgeOffsetUV, 0.001, 0.999);
-else
-    smudgeUV = fract(canvasFragUV - smudgeOffsetUV);  // was: clamp(..., 0.001, 0.999)
+    vec2 smudgeUV = uSeamless
+        ? fract(canvasFragUV - smudg    eOffsetUV)
+        : clamp(canvasFragUV - smudgeOffsetUV, 0.001, 0.999);
 
         smudgeUV.y *= -1;
         smudgeUV = fract(smudgeUV);
