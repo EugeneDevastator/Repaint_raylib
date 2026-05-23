@@ -155,7 +155,7 @@ void UpdateUI(AppState* state) {
 NetworkBroker networkBroker;
 
 bool App_IsDialogActive(void) {
-    return g_fileDlg.type != 0;
+    return g_fileDlg.type != 0 || g_newCanvasActive;
 }
 
 /* ── Callbacks ─────────────────────────────────────────────────────────── */
@@ -203,6 +203,7 @@ static void DoCreateNew(void) {
     g_state->camera.target = Vector2{(float)g_newW * 0.5f, (float)g_newH * 0.5f};
     g_state->camera.zoom = 1.0f;
     SyncAllRTs(g_state);
+    LayerStack_Bind(g_state);
     layersDirty = true;
     g_currentFilePath[0] = '\0';
     g_newCanvasActive = false;
@@ -321,7 +322,6 @@ void App_Init(AppState* state) {
 
     state->canvas = Canvas_Create(800, 600, WHITE);
     state->activeLayer = 0;
-    EnsureRTs(state);
     LayerStack_Init(800, 600);
     LayerStack_Bind(state);
 
@@ -373,11 +373,6 @@ void App_Init(AppState* state) {
     colorHue = 0.35f;
     colorSat = 1.0f;
     colorLit = 0.5f;
-
-    state->layerTextures = NULL;
-    state->layerRTs = NULL;
-    state->texDirty = NULL;
-    state->texCount = 0;
 
     SyncAllRTs(state);
 

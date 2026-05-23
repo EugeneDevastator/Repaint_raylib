@@ -255,7 +255,7 @@ float cloneOpacity = smudgeStrength;
     if (cloneOpacity > 0.000001) {
 
     vec2 smudgeUV = uSeamless
-        ? fract(canvasFragUV - smudg    eOffsetUV)
+        ? fract(canvasFragUV - smudgeOffsetUV)
         : clamp(canvasFragUV - smudgeOffsetUV, 0.001, 0.999);
 
         smudgeUV.y *= -1;
