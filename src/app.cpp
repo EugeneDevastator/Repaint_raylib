@@ -166,7 +166,12 @@ static void OnOpenResult(DialogResult r) {
                 memcpy(g_currentFilePath, r.output, len + 1);
             g_state->activeLayer = 0;
             g_state->texCount = 0;
+            g_state->camera.target = Vector2{
+                (float)g_state->canvas.width * 0.5f,
+                (float)g_state->canvas.height * 0.5f
+            };
             SyncAllRTs(g_state);
+            LayerStack_Bind(g_state);
             layersDirty = true;
         }
     }
@@ -253,7 +258,12 @@ void App_FileReload(void) {
     if (LoadRePaint(g_currentFilePath, &g_state->canvas, g_state)) {
         g_state->activeLayer = 0;
         g_state->texCount = 0;
+        g_state->camera.target = Vector2{
+            (float)g_state->canvas.width * 0.5f,
+            (float)g_state->canvas.height * 0.5f
+        };
         SyncAllRTs(g_state);
+        LayerStack_Bind(g_state);
         layersDirty = true;
     }
 }
