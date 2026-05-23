@@ -26,13 +26,13 @@ RenderTexture2D Load16BitRT(int w, int h) {
     target.id = rlLoadFramebuffer();
     if (target.id > 0) {
         rlEnableFramebuffer(target.id);
-        target.texture.id     = rlLoadTexture(NULL, w, h, PIXELFORMAT_UNCOMPRESSED_R16G16B16A16, 1);
-        target.texture.width  = w; target.texture.height = h;
-        target.texture.format = PIXELFORMAT_UNCOMPRESSED_R16G16B16A16;
+        target.texture.id      = rlLoadTexture(NULL, w, h, PIXELFORMAT_UNCOMPRESSED_R16G16B16A16, 1);
+        target.texture.width   = w; target.texture.height = h;
+        target.texture.format  = PIXELFORMAT_UNCOMPRESSED_R16G16B16A16;
         target.texture.mipmaps = 1;
-        target.depth.id     = rlLoadTextureDepth(w, h, true);
-        target.depth.width  = w; target.depth.height = h;
-        target.depth.format = 19; target.depth.mipmaps = 1;
+        target.depth.id        = rlLoadTextureDepth(w, h, true);
+        target.depth.width     = w; target.depth.height = h;
+        target.depth.format    = 19; target.depth.mipmaps = 1;
         rlFramebufferAttach(target.id, target.texture.id, RL_ATTACHMENT_COLOR_CHANNEL0, RL_ATTACHMENT_TEXTURE2D, 0);
         rlFramebufferAttach(target.id, target.depth.id,   RL_ATTACHMENT_DEPTH,          RL_ATTACHMENT_RENDERBUFFER, 0);
         rlFramebufferComplete(target.id);
@@ -44,10 +44,14 @@ RenderTexture2D Load16BitRT(int w, int h) {
 // ── Draw helpers ─────────────────────────────────────────────────────
 static Rectangle FullRect(int w, int h) { return Rectangle{0, 0, (float)w, (float)-h}; }
 
-static void BlitCopy(RenderTexture2D dst, Texture2D src, int w, int h) {
-    BeginTextureMode(dst);
+static void SetBlendCopy(void) {
     rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
     rlSetBlendMode(RL_BLEND_CUSTOM);
+}
+
+static void BlitCopy(RenderTexture2D dst, Texture2D src, int w, int h) {
+    BeginTextureMode(dst);
+    SetBlendCopy();
     ClearBackground(BLANK);
     DrawTextureRec(src, FullRect(w, h), Vector2{0,0}, WHITE);
     EndTextureMode();
@@ -56,8 +60,7 @@ static void BlitCopy(RenderTexture2D dst, Texture2D src, int w, int h) {
 static void ApplyBlendShader(RenderTexture2D dst, Texture2D base, Texture2D layerTex,
                               float alpha, int bmidx, float threshold, float feather, int w, int h) {
     BeginTextureMode(dst);
-    rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
-    rlSetBlendMode(RL_BLEND_CUSTOM);
+    SetBlendCopy();
     ClearBackground(BLANK);
     BeginShaderMode(LS.blendShader);
     SetShaderValueTexture(LS.blendShader, LS.locLayerTex,       layerTex);
@@ -71,19 +74,19 @@ static void ApplyBlendShader(RenderTexture2D dst, Texture2D base, Texture2D laye
     EndTextureMode();
 }
 
+static void BuildMatrix16(const float mat[6], float m[16]) {
+    m[0]=mat[0]; m[1]=mat[3]; m[2]=0; m[3]=0;
+    m[4]=mat[1]; m[5]=mat[4]; m[6]=0; m[7]=0;
+    m[8]=0;      m[9]=0;      m[10]=1; m[11]=0;
+    m[12]=mat[2];m[13]=mat[5];m[14]=0; m[15]=1;
+}
+
 static void BakeTransform(RenderTexture2D dst, Texture2D src, const float mat[6], int w, int h) {
-    float m[16] = {
-        mat[0], mat[3], 0, 0,
-        mat[1], mat[4], 0, 0,
-        0,      0,      1, 0,
-        mat[2], mat[5], 0, 1
-    };
+    float m[16]; BuildMatrix16(mat, m);
     BeginTextureMode(dst);
-    rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
-    rlSetBlendMode(RL_BLEND_CUSTOM);
+    SetBlendCopy();
     ClearBackground(BLANK);
-    rlPushMatrix();
-    rlMultMatrixf(m);
+    rlPushMatrix(); rlMultMatrixf(m);
     DrawTextureRec(src, FullRect(w, h), Vector2{0,0}, WHITE);
     rlPopMatrix();
     EndTextureMode();
@@ -119,10 +122,14 @@ void LayerStack_Shutdown(void) {
 }
 
 // ── Shader loading ───────────────────────────────────────────────────
-static void LoadBlendShader(void) {
+static void LoadShaderFromAppDir(Shader* out, const char* name) {
     char fs[512];
-    snprintf(fs, sizeof(fs), "%sshaders/layer_blend.fs", GetApplicationDirectory());
-    LS.blendShader = LoadShader(0, fs);
+    snprintf(fs, sizeof(fs), "%sshaders/%s", GetApplicationDirectory(), name);
+    *out = LoadShader(0, fs);
+}
+
+static void LoadBlendShader(void) {
+    LoadShaderFromAppDir(&LS.blendShader, "layer_blend.fs");
     if (LS.blendShader.id == 0) { TraceLog(LOG_ERROR, "layer_blend.fs failed"); return; }
     LS.locLayerTex       = GetShaderLocation(LS.blendShader, "layerTex");
     LS.locLayerAlpha     = GetShaderLocation(LS.blendShader, "layerAlpha");
@@ -137,12 +144,11 @@ void LayerStack_ReloadShader(void) {
     LoadBlendShader();
 }
 
-static void EnsureShader(void)        { if (!LS.shaderInited) LoadBlendShader(); }
+static void EnsureShader(void) { if (!LS.shaderInited) LoadBlendShader(); }
+
 static void EnsurePresentShader(void) {
     if (LS.presentInited) return;
-    char fs[512];
-    snprintf(fs, sizeof(fs), "%sshaders/present.fs", GetApplicationDirectory());
-    LS.presentShader = LoadShader(0, fs);
+    LoadShaderFromAppDir(&LS.presentShader, "present.fs");
     LS.presentInited = LS.presentShader.id > 0;
 }
 
@@ -154,11 +160,11 @@ static void EnsureAccumulators(int w, int h) {
         UnloadRenderTexture(LS.accumB);
         UnloadRenderTexture(LS.layerTransRT);
     }
-    LS.accumA      = Load16BitRT(w, h);
-    LS.accumB      = Load16BitRT(w, h);
+    LS.accumA       = Load16BitRT(w, h);
+    LS.accumB       = Load16BitRT(w, h);
     LS.layerTransRT = Load16BitRT(w, h);
-    SetTextureWrap(LS.accumA.texture,      TEXTURE_WRAP_REPEAT);
-    SetTextureWrap(LS.accumB.texture,      TEXTURE_WRAP_REPEAT);
+    SetTextureWrap(LS.accumA.texture,       TEXTURE_WRAP_REPEAT);
+    SetTextureWrap(LS.accumB.texture,       TEXTURE_WRAP_REPEAT);
     SetTextureWrap(LS.layerTransRT.texture, TEXTURE_WRAP_REPEAT);
     LS.curCanvasW = w; LS.curCanvasH = h;
     LS.accumInited = true;
@@ -182,13 +188,13 @@ static void EnsureChecker(int w, int h) {
 }
 
 // ── Query ────────────────────────────────────────────────────────────
-int   LayerStack_Count(void)  { return LS.app ? LS.app->canvas.layerCount : 0; }
-int   LayerStack_Width(void)  { return LS.cw; }
-int   LayerStack_Height(void) { return LS.ch; }
-bool  LayerStack_Dirty(void)  { return LS.dirty; }
-bool  LayerStack_PresentInited(void)    { return LS.presentInited; }
+int    LayerStack_Count(void)            { return LS.app ? LS.app->canvas.layerCount : 0; }
+int    LayerStack_Width(void)            { return LS.cw; }
+int    LayerStack_Height(void)           { return LS.ch; }
+bool   LayerStack_Dirty(void)            { return LS.dirty; }
+bool   LayerStack_PresentInited(void)    { return LS.presentInited; }
 Shader LayerStack_GetPresentShader(void) { return LS.presentShader; }
-void  LayerStack_SetDirty(void)         { LS.dirty = true; }
+void   LayerStack_SetDirty(void)         { LS.dirty = true; }
 
 // ── Data access ──────────────────────────────────────────────────────
 sLayerProps*    LayerStack_GetProps(int idx) { return (LS.app && idx >= 0 && idx < LS.app->canvas.layerCount) ? &LS.app->canvas.layerProps[idx]  : NULL; }
@@ -197,13 +203,13 @@ RenderTexture2D LayerStack_GetRT(int idx)    { return (LS.app && idx >= 0 && idx
 Texture2D       LayerStack_GetTex(int idx)   { return (LS.app && idx >= 0 && idx < LS.app->texCount) ? LS.app->layerTextures[idx] : Texture2D{0}; }
 
 // ── Sync helpers ─────────────────────────────────────────────────────
-void LayerStack_SyncRTFromImage(int idx)  { if (LS.app) SyncRTFromImage(LS.app, idx); }
-void LayerStack_SyncImageFromRT(int idx)  { if (LS.app) SyncImageFromRT(LS.app, idx); }
-void LayerStack_SyncLayerTex(int idx)     { if (LS.app) SyncLayerTexture(LS.app, idx); }
-void LayerStack_SyncAllRTs(void)          { if (LS.app) SyncAllRTs(LS.app); }
-void LayerStack_SyncAllImages(void)       { if (LS.app) SyncAllImages(LS.app); }
+void LayerStack_SyncRTFromImage(int idx) { if (LS.app) SyncRTFromImage(LS.app, idx); }
+void LayerStack_SyncImageFromRT(int idx) { if (LS.app) SyncImageFromRT(LS.app, idx); }
+void LayerStack_SyncLayerTex(int idx)    { if (LS.app) SyncLayerTexture(LS.app, idx); }
+void LayerStack_SyncAllRTs(void)         { if (LS.app) SyncAllRTs(LS.app); }
+void LayerStack_SyncAllImages(void)      { if (LS.app) SyncAllImages(LS.app); }
 
-// ── Layer slot removal (shared by Delete and MergeDown) ──────────────
+// ── Layer slot removal ───────────────────────────────────────────────
 static void RemoveLayerSlot(AppState* state, int idx) {
     RenderTexture2D* rts  = state->layerRTs;
     Texture2D*       texs = state->layerTextures;
@@ -232,10 +238,9 @@ int LayerStack_Add(void) {
 
 void LayerStack_Delete(int idx) {
     if (!LS.app) return;
-    AppState* state = LS.app;
-    int n = state->canvas.layerCount;
+    int n = LS.app->canvas.layerCount;
     if (n <= 1 || idx < 0 || idx >= n) return;
-    RemoveLayerSlot(state, idx);
+    RemoveLayerSlot(LS.app, idx);
     LS.dirty = true;
 }
 
@@ -262,17 +267,17 @@ void LayerStack_ApplyTransform(int idx, const float mat[6]) {
 
 // ── Matrix helpers ───────────────────────────────────────────────────
 static void MatInvMul(const float below[6], const float top[6], float out[6]) {
-    float a = below[0], b = below[1], tbx = below[2];
-    float c = below[3], d = below[4], tby = below[5];
+    float a=below[0], b=below[1], tbx=below[2];
+    float c=below[3], d=below[4], tby=below[5];
     float det = a*d - b*c;
     if (fabsf(det) < 0.0001f) { memcpy(out, top, 6*sizeof(float)); return; }
-    float id = 1.0f/det;
-    float ia = d*id, ib = -b*id, itx = (b*tby - d*tbx)*id;
-    float ic = -c*id, id_ = a*id, ity = (c*tbx - a*tby)*id;
-    float ta = top[0], tb = top[1], ttx = top[2];
-    float tc = top[3], td = top[4], tty = top[5];
-    out[0] = ia*ta + ib*tc; out[1] = ia*tb + ib*td; out[2] = ia*ttx + ib*tty + itx;
-    out[3] = ic*ta + id_*tc; out[4] = ic*tb + id_*td; out[5] = ic*ttx + id_*tty + ity;
+    float id=1.0f/det;
+    float ia=d*id, ib=-b*id, itx=(b*tby-d*tbx)*id;
+    float ic=-c*id, id_=a*id, ity=(c*tbx-a*tby)*id;
+    float ta=top[0], tb=top[1], ttx=top[2];
+    float tc=top[3], td=top[4], tty=top[5];
+    out[0]=ia*ta+ib*tc;  out[1]=ia*tb+ib*td;  out[2]=ia*ttx+ib*tty+itx;
+    out[3]=ic*ta+id_*tc; out[4]=ic*tb+id_*td; out[5]=ic*ttx+id_*tty+ity;
 }
 
 static bool IsIdentityMat(const float mat[6]) {
@@ -282,30 +287,18 @@ static bool IsIdentityMat(const float mat[6]) {
 
 // ── BakeTransformLooped ──────────────────────────────────────────────
 static void BakeTransformLooped(RenderTexture2D dst, Texture2D src, const float mat[6], int w, int h) {
-    float m[16] = {
-        mat[0], mat[3], 0, 0,
-        mat[1], mat[4], 0, 0,
-        0,      0,      1, 0,
-        mat[2], mat[5], 0, 1
-    };
+    float m[16]; BuildMatrix16(mat, m);
     RenderTexture2D pingA = Load16BitRT(w, h);
     RenderTexture2D pingB = Load16BitRT(w, h);
     RenderTexture2D* cur = &pingA;
     RenderTexture2D* nxt = &pingB;
 
-    BlitCopy(*cur, cur->texture, w, h); // clear cur via blit of blank
-
-    BeginTextureMode(*cur);
-    rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
-    rlSetBlendMode(RL_BLEND_CUSTOM);
-    ClearBackground(BLANK);
-    EndTextureMode();
+    BeginTextureMode(*cur); SetBlendCopy(); ClearBackground(BLANK); EndTextureMode();
 
     for (int dy = -1; dy <= 1; dy++) {
         for (int dx = -1; dx <= 1; dx++) {
             BeginTextureMode(*nxt);
-            rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
-            rlSetBlendMode(RL_BLEND_CUSTOM);
+            SetBlendCopy();
             ClearBackground(BLANK);
             DrawTextureRec(cur->texture, FullRect(w, h), Vector2{0,0}, WHITE);
             rlSetBlendFactors(RL_ONE, RL_ONE_MINUS_SRC_ALPHA, RL_FUNC_ADD);
@@ -345,24 +338,30 @@ static void FinalizeMerge(AppState* state, int idx, RenderTexture2D mergedRT) {
     LS.dirty = true;
 }
 
-// ── Merge down ───────────────────────────────────────────────────────
-void LayerStack_MergeDown(int idx) {
-    if (!LS.app || !LS.shaderInited) return;
-    AppState* state = LS.app;
-    RenderTexture2D* rts  = state->layerRTs;
-    sLayerProps*     props = state->canvas.layerProps;
-    int layerCount = state->canvas.layerCount;
-    if (idx <= 0 || idx >= layerCount) return;
-    if (rts[idx].id == 0 || rts[idx-1].id == 0) return;
-
+static Texture2D GetTransformedTop(RenderTexture2D* rts, sLayerProps* props, int idx, bool looped) {
     float relMat[6];
     MatInvMul(props[idx-1].mat, props[idx].mat, relMat);
-
-    Texture2D topTex = rts[idx].texture;
-    if (!IsIdentityMat(relMat) && LS.layerTransRT.id > 0) {
+    if (IsIdentityMat(relMat) || LS.layerTransRT.id == 0)
+        return rts[idx].texture;
+    if (looped)
+        BakeTransformLooped(LS.layerTransRT, rts[idx].texture, props[idx].mat, LS.cw, LS.ch);
+    else
         BakeTransform(LS.layerTransRT, rts[idx].texture, relMat, LS.cw, LS.ch);
-        topTex = LS.layerTransRT.texture;
-    }
+    return LS.layerTransRT.texture;
+}
+
+// ── Merge down ───────────────────────────────────────────────────────
+static void MergeDownImpl(int idx, bool seamless) {
+    if (!LS.app || !LS.shaderInited) return;
+    AppState* state = LS.app;
+    int layerCount = state->canvas.layerCount;
+    if (idx <= 0 || idx >= layerCount) return;
+    RenderTexture2D* rts = state->layerRTs;
+    if (rts[idx].id == 0 || rts[idx-1].id == 0) return;
+
+    sLayerProps* props = state->canvas.layerProps;
+    Texture2D topTex = GetTransformedTop(rts, props, idx, seamless);
+    if (seamless) SetTextureWrap(topTex, TEXTURE_WRAP_REPEAT);
 
     RenderTexture2D mergedRT = Load16BitRT(LS.cw, LS.ch);
     sLayerProps* p = &props[idx];
@@ -370,31 +369,8 @@ void LayerStack_MergeDown(int idx) {
     FinalizeMerge(state, idx, mergedRT);
 }
 
-void LayerStack_MergeDownSeamless(int idx) {
-    if (!LS.app || !LS.shaderInited) return;
-    AppState* state = LS.app;
-    RenderTexture2D* rts  = state->layerRTs;
-    sLayerProps*     props = state->canvas.layerProps;
-    int layerCount = state->canvas.layerCount;
-    int cw = LS.cw, ch = LS.ch;
-    if (idx <= 0 || idx >= layerCount) return;
-    if (rts[idx].id == 0 || rts[idx-1].id == 0) return;
-
-    float relMat[6];
-    MatInvMul(props[idx-1].mat, props[idx].mat, relMat);
-
-    Texture2D topTex = rts[idx].texture;
-    if (!IsIdentityMat(relMat) && LS.layerTransRT.id > 0) {
-        BakeTransformLooped(LS.layerTransRT, rts[idx].texture, props[idx].mat, cw, ch);
-        topTex = LS.layerTransRT.texture;
-    }
-    SetTextureWrap(topTex, TEXTURE_WRAP_REPEAT);
-
-    RenderTexture2D mergedRT = Load16BitRT(cw, ch);
-    sLayerProps* p = &props[idx];
-    ApplyBlendShader(mergedRT, rts[idx-1].texture, topTex, p->op, p->blendmode, p->threshold, p->feather, cw, ch);
-    FinalizeMerge(state, idx, mergedRT);
-}
+void LayerStack_MergeDown(int idx)         { MergeDownImpl(idx, false); }
+void LayerStack_MergeDownSeamless(int idx) { MergeDownImpl(idx, true);  }
 
 // ── Compositing ──────────────────────────────────────────────────────
 RenderTexture2D* LayerStack_Composite(void) {
