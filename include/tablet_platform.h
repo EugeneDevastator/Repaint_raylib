@@ -1,6 +1,7 @@
 #ifndef TABLET_PLATFORM_H
 #define TABLET_PLATFORM_H
-
+// This header must expose and contain only platform-independend definitions
+#include <cstddef>
 #include "tablet.h"
 
 // Platform-specific tablet backend (implemented per-platform)

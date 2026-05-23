@@ -8,8 +8,7 @@
 extern Viewport viewport;
 extern bool layersDirty;
 
-static RenderTexture2D g_previewBg  = {0};  // snapshot of canvas
-static RenderTexture2D g_previewDst = {0};  // composited result (bg + brush)
+static RenderTexture2D g_previewRT = {0};   // brush preview (strokes on transparent bg)
 static int g_frameCounter = 0;
 static const int g_previewUpdateInterval = 10;
 static unsigned int g_lastPreviewHash = 0;
@@ -30,10 +29,8 @@ static unsigned int ComputeBrushHash(d_Brush* b) {
 }
 
 static void EnsurePreviewRTs(void) {
-    if (g_previewBg.id == 0) {
-        g_previewBg  = Load16BitRT(PREVIEW_SZ, PREVIEW_SZ);
-        g_previewDst = Load16BitRT(PREVIEW_SZ, PREVIEW_SZ);
-    }
+    if (g_previewRT.id == 0)
+        g_previewRT = Load16BitRT(PREVIEW_SZ, PREVIEW_SZ);
 }
 
 void ViewportHUD_Draw(AppState* state) {
@@ -101,44 +98,18 @@ void ViewportHUD_Draw(AppState* state) {
         bool paramsChanged = (currentHash != g_lastPreviewHash);
 
         if (paramsChanged || g_lastPreviewHash == 0 || (g_frameCounter % g_previewUpdateInterval) == 0) {
-            float zoom  = state->camera.zoom;
-            float cx    = state->camera.target.x;
-            float cy    = state->camera.target.y;
-
-            // Use a camera centered on target with zoom, positioned so that
-            // (0,0) in the RT maps to the visible canvas area at the viewport center.
-            Camera2D prevCam = {};
-            prevCam.target   = Vector2{cx, cy};
-            prevCam.offset   = Vector2{PREVIEW_SZ * 0.5f, PREVIEW_SZ * 0.5f};
-            prevCam.zoom     = zoom;
-
-            // Copy the visible canvas area into bg RT via the camera transform
-            BeginTextureMode(g_previewBg);
-            ClearBackground(BLANK);
-            BeginMode2D(prevCam);
-            rlSetBlendMode(RL_BLEND_CUSTOM);
-            rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
-            DrawTextureRec(docBlendTex->texture,
-                Rectangle{0, 0, (float)cw, (float)-ch},
-                Vector2{0, 0}, WHITE);
-            EndMode2D();
-            EndTextureMode();
-
             // Scale brush radius by zoom so preview matches on-screen size
             d_RealBrush zoomBrush = state->currentBrush.Realb;
-            zoomBrush.rad_out *= zoom;
+            zoomBrush.rad_out *= state->camera.zoom;
 
             Texture2D bt = {0};
             if (state->activeBrushTex >= 0 && state->activeBrushTex < state->brushTexCount)
                 bt = state->brushTex[state->activeBrushTex].rt.texture;
 
-            BeginTextureMode(g_previewDst);
-            rlSetBlendMode(RL_BLEND_CUSTOM);
-            rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
-            DrawTextureRec(g_previewBg.texture,
-                Rectangle{0, 0, (float)PREVIEW_SZ, (float)-PREVIEW_SZ},
-                Vector2{0, 0}, WHITE);
-            StrokeEngine_DrawPreview(g_previewDst, bt, &zoomBrush,
+            // Draw preview strokes on a transparent RT — canvas is already underneath
+            BeginTextureMode(g_previewRT);
+            ClearBackground(BLANK);
+            StrokeEngine_DrawPreview(g_previewRT, bt, &zoomBrush,
                                      PREVIEW_SZ * 0.5f, PREVIEW_SZ * 0.5f);
             EndTextureMode();
 
@@ -149,7 +120,8 @@ void ViewportHUD_Draw(AppState* state) {
         float hh = PREVIEW_SZ * 0.5f;
         float px = vpBounds.x + vpBounds.width * 0.5f - hh;
         float py = vpBounds.y + vpBounds.height * 0.5f - hh;
-        DrawTexturePro(g_previewDst.texture,
+        // Draw preview over the canvas — transparent bg lets canvas show through
+        DrawTexturePro(g_previewRT.texture,
             Rectangle{0, 0, (float)PREVIEW_SZ, (float)-PREVIEW_SZ},
             Rectangle{px, py, (float)PREVIEW_SZ, (float)PREVIEW_SZ},
             Vector2{0, 0}, 0.0f, WHITE);
@@ -160,8 +132,7 @@ void ViewportHUD_Draw(AppState* state) {
 }
 
 void ViewportHUD_Shutdown(void) {
-    if (g_previewBg.id > 0)  { UnloadRenderTexture(g_previewBg);  g_previewBg  = RenderTexture2D{0}; }
-    if (g_previewDst.id > 0) { UnloadRenderTexture(g_previewDst); g_previewDst = RenderTexture2D{0}; }
+    if (g_previewRT.id > 0) { UnloadRenderTexture(g_previewRT); g_previewRT = RenderTexture2D{0}; }
     g_lastPreviewHash = 0;
     g_frameCounter = 0;
 }
