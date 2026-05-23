@@ -97,15 +97,14 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         int cx = (int)cp.x, cy = (int)cp.y;
         Color picked = {0, 0, 0, 0};
         int gi = 0;
-        for (int dy = -1; dy <= 1; dy++) {
-            for (int dx = -1; dx <= 1; dx++) {
+        for (int dy = -2; dy <= 2; dy++) {
+            for (int dx = -2; dx <= 2; dx++) {
                 int px = cx + dx, py = cy + dy;
                 Color c = {0, 0, 0, 0};
                 if (px >= 0 && px < state->canvas.width && py >= 0 && py < state->canvas.height) {
                     for (int li = 0; li < state->canvas.layerCount; li++) {
                         if (!state->canvas.layerProps[li].visible) continue;
-                        Color* lpix = (Color*)state->canvas.layerImages[li].data;
-                        Color sp = lpix[py * state->canvas.width + px];
+                        Color sp = GetImageColor(state->canvas.layerImages[li], px, py);
                         float sa = sp.a / 255.0f * state->canvas.layerProps[li].op;
                         float da = c.a / 255.0f;
                         float outa = sa + da * (1.0f - sa);
@@ -296,8 +295,19 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             if (vp->wasMouseDown) {
                 int fn = StrokeEngine_FlushSmoothing(&vp->strokeEng, &state->currentBrush.Realb,
                                                       state->initialAngle, state->mode, dabs, 1024);
-                if (fn > 0)
+                if (fn > 0) {
                     StrokeEngine_ApplyDabs(bt->rt, g_activeBrushTex, dabs, fn);
+                } else if (vp->strokeEng.dabIndex == 0) {
+                    // Single click — place dab at start point
+                    Vector2 pos = vp->strokeEng.lastDabPos;
+                    DrawDab single = {};
+                    single.x = pos.x; single.y = pos.y;
+                    single.brush = CollapseBrushParams(state->currentBrush.Realb, state->initialAngle, state->mode);
+                    Texture2D saved = g_activeBrushTex;
+                    g_activeBrushTex = g_defaultBrushTex;
+                    StrokeEngine_ApplyDabs(bt->rt, g_activeBrushTex, &single, 1);
+                    g_activeBrushTex = saved;
+                }
                 StrokeEngine_EndStroke(&vp->strokeEng);
             }
             vp->wasMouseDown = false;
@@ -369,6 +379,18 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         if (vp->wasMouseDown) {
             int fn = StrokeEngine_FlushSmoothing(&vp->strokeEng, &state->currentBrush.Realb,
                                                    adjustedAngle, state->mode, dabs, 1024);
+            if (fn == 0 && vp->strokeEng.dabIndex == 0 && vp->broker) {
+                // Single click — no segments produced; place a dab at the start point
+                Vector2 pos = vp->strokeEng.lastDabPos;
+                DrawDab single = {};
+                single.x = pos.x;
+                single.y = pos.y;
+                single.brush = CollapseBrushParams(state->currentBrush.Realb, state->initialAngle, state->mode);
+                BrushDab bd = MakeBrushDab(pos.x, pos.y, single);
+                vp->broker->on_input(bd);
+                if (vp->strokeLen < MAX_STROKE_PTS)
+                    vp->strokePts[vp->strokeLen++] = pos;
+            }
             for (int i = 0; i < fn; i++) {
                 if (vp->broker) {
                     BrushDab bd = MakeBrushDab(dabs[i].x, dabs[i].y, dabs[i]);

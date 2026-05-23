@@ -402,7 +402,7 @@ extern float g_velocity;
 
 extern int quickPanelMouseMode;
 extern bool g_colorPicking;
-extern Color g_colorPickGrid[9];
+extern Color g_colorPickGrid[25];
 extern float g_pivotCursorX, g_pivotCursorY;
 extern bool g_seamlessPaint;
 #define HUD_NONE 0

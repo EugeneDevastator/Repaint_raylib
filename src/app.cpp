@@ -514,10 +514,10 @@ void App_Draw(AppState* state) {
     if (g_colorPicking) {
         ImDrawList* fdl = ImGui::GetForegroundDrawList();
         ImVec2 mp = ImGui::GetMousePos();
-        int sz = 32;
+        int sz = 28;
         ImVec2 org(mp.x + 12, mp.y + 12);
-        for (int i = 0; i < 9; i++) {
-            int gx = i % 3, gy = i / 3;
+        for (int i = 0; i < 25; i++) {
+            int gx = i % 5, gy = i / 5;
             Color c = g_colorPickGrid[i];
             ImU32 col = IM_COL32(c.r, c.g, c.b, 255);
             fdl->AddRectFilled(ImVec2(org.x + gx * sz, org.y + gy * sz),

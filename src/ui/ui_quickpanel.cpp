@@ -8,7 +8,7 @@ void ToolBox_Draw(AppState* state, Rectangle vp);
 
 int quickPanelMouseMode = 0;
 bool g_colorPicking = false;
-Color g_colorPickGrid[9] = {};
+Color g_colorPickGrid[25] = {};
 
 // Debug logging - first open flag
 static bool g_quickPanelTexLogged = false;

@@ -12,7 +12,7 @@ const int   STROKE_SPLINE_SUBDIVS = 32;
 // Called by StrokeEngine before passing to segment drawer.
 // Converts size × SizeMul → rad_out_px, x2y → scale_x/scale_y,
 // hardness → radInRatio, and fills jitter ranges from BParams.
-CollapsedBrush CollapseBrushParams(const d_RealBrush& uiBrush, float initialAngle);
+CollapsedBrush CollapseBrushParams(const d_RealBrush& uiBrush, float initialAngle, int toolMode);
 
 // ── StrokeEngine ──
 void StrokeEngine_Init(StrokeEngine* se);
