@@ -91,7 +91,6 @@ struct NetworkBroker : ICommandBroker {
     void SendPacket(uint8_t hid, const uint8_t* data, uint32_t size);
     void SendAction(const d_Action* act);
     void SendLAction(const d_LAction* lact);
-    void SendChat(const char* msg);
 
     void LoadConfig(const char* path);
     void SaveConfig();

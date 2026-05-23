@@ -47,8 +47,6 @@ static void DrawSplash(const char* msg) {
 /* ── File dialog / path state ──────────────────────────────────────────── */
 static AppState* g_state = NULL;
 DialogState g_fileDlg;
-char g_currentFilePath[1024] = "";
-Font g_dialogFont = {0};
 
 /* ── New canvas dialog state ───────────────────────────────────────────── */
 static bool g_newCanvasActive = false;
@@ -56,12 +54,11 @@ static bool g_newCanvasConfirm = false;
 static int g_newW = 800;
 static int g_newH = 600;
 static int g_newPreset = 0;
-static const char* g_presets[] = {
-    "800 x 600", "1024 x 768", "1280 x 720",
-    "1920 x 1080", "2560 x 1440", "3840 x 2160"
-};
 static int g_presetW[] = { 800, 1024, 1280, 1920, 2560, 3840 };
 static int g_presetH[] = { 600, 768,  720,  1080, 1440, 2160 };
+static const char* g_presets[] = { "800x600", "1024x768", "1280x720", "1920x1080", "2560x1440", "3840x2160" };
+static char g_currentFilePath[1024] = "";
+static Font g_dialogFont = {0};
 
 void UpdateUI(AppState* state) {
     // ── Track mouse velocity (canvas-space) ──
@@ -302,7 +299,6 @@ void App_Init(AppState* state) {
     SetTargetFPS(60);
     DrawSplash("Loading brushes...");
 
-    Painter_Init();
     BrushBlend_Init();
     LoadPenIcons();
     BrushTex_Init(state);
@@ -638,7 +634,6 @@ void App_Close(AppState* state) {
     }
     if (g_dialogFont.texture.id > 0) UnloadFont(g_dialogFont);
     UIStyle::Shutdown();
-    Painter_Shutdown();
     BrushBlend_Shutdown();
     Tablet_Shutdown();
     UserTexture_Shutdown();

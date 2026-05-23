@@ -45,37 +45,41 @@ set(SOURCES
     src/layermanager.cpp
     src/layerstack.cpp
     src/repaint_core.cpp
-    src/repaint_painter.cpp
-    src/serialize.cpp
-    src/brush_blend.cpp
-    src/viewport.cpp
-    src/viewport_renderer.cpp
-    src/raygui_impl.cpp
-    src/local_broker.cpp
-    src/ui_controls.cpp
-    src/ui_color.cpp
-    src/ui_quickpanel.cpp
-    src/viewport_hud.cpp
-    src/ui_brushgizmo.cpp
-    src/ui_sliders.cpp
-    src/ui_filepanel.cpp
-    src/ui_toolbox.cpp
-    src/ui_layerpanel.cpp
-    src/ui_leftpanel.cpp
-    src/ui_changelog.cpp
-    src/ui_style.cpp
-    src/stroke.cpp
-    src/stroke_engine.cpp
-    src/segment_drawer.cpp
-    src/tablet.cpp
     src/file_format.cpp
-    src/network_broker.cpp
     src/app_config.cpp
-    src/sock_platform.cpp
-    src/input_filter.cpp
-    src/brush_tex.cpp
     src/usertextures.cpp
-    src/test_broker.cpp
+    # ── ui ───────────────────────────────────────────────────────────
+    src/ui/ui_controls.cpp
+    src/ui/ui_color.cpp
+    src/ui/ui_quickpanel.cpp
+    src/ui/ui_brushgizmo.cpp
+    src/ui/ui_sliders.cpp
+    src/ui/ui_filepanel.cpp
+    src/ui/ui_toolbox.cpp
+    src/ui/ui_layerpanel.cpp
+    src/ui/ui_leftpanel.cpp
+    src/ui/ui_changelog.cpp
+    src/ui/ui_style.cpp
+    src/ui/raygui_impl.cpp
+    # ── sensors ───────────────────────────────────────────────────────
+    src/sensors/tablet.cpp
+    src/sensors/input_filter.cpp
+    # ── drawing ───────────────────────────────────────────────────────
+    src/drawing/brush_blend.cpp
+    src/drawing/brush_tex.cpp
+    src/drawing/viewport.cpp
+    src/drawing/viewport_renderer.cpp
+    src/drawing/viewport_hud.cpp
+    src/drawing/stroke.cpp
+    src/drawing/stroke_engine.cpp
+    src/drawing/segment_drawer.cpp
+    # ── network ───────────────────────────────────────────────────────
+    src/network/serialize.cpp
+    src/network/local_broker.cpp
+    src/network/network_broker.cpp
+    src/network/sock_platform.cpp
+    src/network/test_broker.cpp
+    # ── external ──────────────────────────────────────────────────────
     dialog/dialog.c
     ${imgui_SOURCE_DIR}/imgui.cpp
     ${imgui_SOURCE_DIR}/imgui_draw.cpp
@@ -87,15 +91,14 @@ set(SOURCES
 add_executable(repaint ${SOURCES})
 
 if(WIN32)
-    target_sources(repaint PRIVATE resources/icon.rc src/tablet_win.cpp src/platform_utils_win.cpp)
+    target_sources(repaint PRIVATE resources/icon.rc src/sensors/tablet_win.cpp src/sensors/platform_utils_win.cpp)
     target_compile_definitions(repaint PRIVATE WINVER=0x0602 _WIN32_WINNT=0x0602)
     target_link_libraries(repaint PRIVATE opengl32 gdi32 winmm user32)
     if(MINGW)
-        # raylib defines CloseWindow/ShowCursor which conflict with Win32 API
         target_link_options(repaint PRIVATE "-Wl,--allow-multiple-definition")
     endif()
 else()
-    target_sources(repaint PRIVATE src/tablet_lnx.cpp src/platform_utils_lnx.cpp)
+    target_sources(repaint PRIVATE src/sensors/tablet_lnx.cpp src/sensors/platform_utils_lnx.cpp)
 endif()
 
 target_include_directories(repaint PRIVATE
@@ -118,14 +121,14 @@ add_executable(tablet-calibrator ${CALIB_SOURCES})
 target_include_directories(tablet-calibrator PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 if(WIN32)
-    target_sources(tablet-calibrator PRIVATE src/tablet_win.cpp src/platform_utils_win.cpp)
+    target_sources(tablet-calibrator PRIVATE src/sensors/tablet_win.cpp src/sensors/platform_utils_win.cpp)
     target_compile_definitions(tablet-calibrator PRIVATE WINVER=0x0602 _WIN32_WINNT=0x0602)
     target_link_libraries(tablet-calibrator PRIVATE opengl32 gdi32 winmm user32)
     if(MINGW)
         target_link_options(tablet-calibrator PRIVATE "-Wl,--allow-multiple-definition")
     endif()
 else()
-    target_sources(tablet-calibrator PRIVATE src/tablet_lnx.cpp src/platform_utils_lnx.cpp)
+    target_sources(tablet-calibrator PRIVATE src/sensors/tablet_lnx.cpp src/sensors/platform_utils_lnx.cpp)
     target_link_libraries(tablet-calibrator PRIVATE m pthread dl)
 endif()
 

@@ -24,11 +24,11 @@ extern bool g_panelsVisible;
 typedef enum {
     csNone, csPressure, csVel, csDir, csRot, csTilt, csRelang,
     csHtilt, csVtilt, csLenpx, csAcc, csXtilt, csYtilt,
-    csSTOP, csERASER, csLen, csCrv, csIdir, csHVdir, csHVrot, csENDPOINT
+    csSTOP, csCrv, csIdir, csHVdir, csHVrot
 } csParams;
 
 typedef enum {
-    eBrush, eSmudge, eDisp, eCont, eSTOP, eLine, eEOE
+    eBrush, eSmudge, eDisp, eCont, eLine
 } eTools;
 
 typedef enum {
@@ -43,17 +43,11 @@ typedef enum {
 } bmBlends;
 
 typedef enum {
-    laAdd, laDel, laDup, laOp, laBm, laVis, laDrop, laDropall,
-    laProps, laSel, laMove, laTransform, laCropLayer,
-    laNewCanvas, laResizeCanvas, laCropCanvas, laSTOP
+    laAdd, laDel, laDup, laOp, laBm, laDrop, laMove
 } eLActions;
 
 typedef enum {
-    caNew, caResize, caCrop, caSTOP
-} eCanvasActions;
-
-typedef enum {
-    plCFNSR, plRS, plSTOP
+    plCFNSR
 } ePipelines;
 
 typedef struct {
@@ -358,17 +352,13 @@ struct AppState {
 
 float PackedFloat_GetVal(PackedFloat* pf);
 void PackedFloat_SetVal(PackedFloat* pf, double val);
-void d_PointF_SetByVector2(d_PointF* p, Vector2 src);
-Vector2 d_PointF_ToVector2(d_PointF* p);
-void d_Brush_SelfPack(d_Brush* brush);
-void d_Brush_SelfUnpack(d_Brush* brush);
 float Dist2D(Vector2 pos1, Vector2 pos2);
 float AtanXY(float x, float y);
 float RngConv(float inval, float inmin, float inmax, float outmin, float outmax);
 
 Canvas Canvas_Create(int width, int height, Color bgColor);
 void Canvas_Destroy(Canvas* canvas);
-Image Image_CompositeDithered(Image flat);
+
 void Canvas_AddLayer(Canvas* canvas);
 void Canvas_InsertLayer(Canvas* canvas, int idx);
 void Canvas_DeleteLayer(Canvas* canvas, int index);
@@ -384,9 +374,6 @@ void LayerStack_SetDirty(void);
 void LayerStack_ReloadShader(void);
 bool LayerStack_PresentInited(void);
 Shader LayerStack_GetPresentShader(void);
-
-void Painter_Init(void);
-void Painter_Shutdown(void);
 
 void BrushBlend_Init(void);
 void BrushBlend_Shutdown(void);
@@ -441,11 +428,6 @@ void FilePanel_Draw(AppState* state, Rectangle vp);
 void ToolBox_Init(void);
 void ToolBox_Shutdown(void);
 void ToolBox_Draw(AppState* state, Rectangle vp);
-
-extern int dragFromIdx;
-extern bool dragActive;
-extern Vector2 dragMouseDownPos;
-extern int dragDropTarget;
 
 extern Viewport viewport;
 extern BParam bpOpacity;

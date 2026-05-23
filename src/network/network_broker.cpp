@@ -1,4 +1,5 @@
 #include "network_broker.h"
+#include "layerstack.h"
 #include "serialize.h"
 #include "sock_platform.h"
 #include "app_config.h"
@@ -183,12 +184,6 @@ void NetworkBroker::SendLAction(const d_LAction* lact) {
     uint8_t buf[512];
     size_t sz = LAction_Serialize((d_LAction*)lact, buf, sizeof(buf));
     if (sz > 0) SendPacket(sdLAction, buf, (uint32_t)sz);
-}
-
-void NetworkBroker::SendChat(const char* msg) {
-    uint8_t buf[2048];
-    size_t sz = SZstring(msg, buf, sizeof(buf));
-    SendPacket(sdGetMsg, buf, (uint32_t)sz);
 }
 
 /* ── ICommandBroker ─────────────────────────────────────────────────────── */
@@ -377,17 +372,6 @@ void NetworkBroker::ProcessReceived(uint8_t hid, uint8_t* data, uint32_t size) {
         break;
     }
 
-    case sdGetMsg: {
-        char msg[2048] = "";
-        SZstring_unpack(data, size, msg, sizeof(msg));
-        msg[sizeof(msg) - 1] = '\0';
-        char shortmsg[200];
-        strncpy(shortmsg, msg, sizeof(shortmsg) - 1);
-        shortmsg[sizeof(shortmsg) - 1] = '\0';
-        snprintf(statusMsg, sizeof(statusMsg), "Chat: %s", shortmsg);
-        break;
-    }
-
     case sdLAction: {
         if (!appState || size < 3) break;
         char   senderName[256] = "";
@@ -400,8 +384,7 @@ void NetworkBroker::ProcessReceived(uint8_t hid, uint8_t* data, uint32_t size) {
         switch (lact.ActID) {
         case laAdd: {
             int insertAfter = lact.layer < 0 ? 0 : lact.layer;
-            Canvas_InsertLayer(&appState->canvas, insertAfter);
-            SyncAllRTs(appState);
+            LayerStack_InsertLayer(insertAfter);
             if (createdByMe)
                 appState->activeLayer = insertAfter;
             else if (appState->activeLayer >= insertAfter)
@@ -412,8 +395,7 @@ void NetworkBroker::ProcessReceived(uint8_t hid, uint8_t* data, uint32_t size) {
         case laDel: {
             int idx = lact.layer;
             if (idx < 0 || idx >= appState->canvas.layerCount) break;
-            Canvas_DeleteLayer(&appState->canvas, idx);
-            SyncAllRTs(appState);
+            LayerStack_DeleteLayer(idx);
             if (appState->activeLayer >= appState->canvas.layerCount)
                 appState->activeLayer = appState->canvas.layerCount - 1;
             layersDirty = true;
@@ -422,8 +404,7 @@ void NetworkBroker::ProcessReceived(uint8_t hid, uint8_t* data, uint32_t size) {
         case laDup: {
             int idx = lact.layer;
             if (idx < 0 || idx >= appState->canvas.layerCount) break;
-            Canvas_DuplicateLayer(&appState->canvas, idx);
-            SyncAllRTs(appState);
+            LayerStack_DuplicateLayer(idx);
             layersDirty = true;
             break;
         }
@@ -433,8 +414,7 @@ void NetworkBroker::ProcessReceived(uint8_t hid, uint8_t* data, uint32_t size) {
             if (fromIdx < 0 || fromIdx >= appState->canvas.layerCount) break;
             if (toIdx   < 0 || toIdx   >= appState->canvas.layerCount) break;
             if (fromIdx == toIdx) break;
-            Canvas_MoveLayer(&appState->canvas, fromIdx, toIdx);
-            SyncAllRTs(appState);
+            LayerStack_MoveLayer(fromIdx, toIdx);
             if (appState->activeLayer == fromIdx)
                 appState->activeLayer = toIdx;
             layersDirty = true;

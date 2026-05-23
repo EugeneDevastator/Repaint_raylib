@@ -13,63 +13,6 @@ void PackedFloat_SetVal(PackedFloat* pf, double val) {
     pf->FVal = (uint8_t)floor((val - floor(val)) * 255.0f);
 }
 
-void d_PointF_SetByVector2(d_PointF* p, Vector2 src) {
-    PackedFloat_SetVal(&p->xpos, src.x);
-    PackedFloat_SetVal(&p->ypos, src.y);
-}
-
-Vector2 d_PointF_ToVector2(d_PointF* p) {
-    Vector2 res;
-    res.x = PackedFloat_GetVal(&p->xpos);
-    res.y = PackedFloat_GetVal(&p->ypos);
-    return res;
-}
-
-void d_Brush_SelfPack(d_Brush* brush) {
-    PackedFloat_SetVal(&brush->Pack.Prad_in, brush->Realb.radInRatio);
-    PackedFloat_SetVal(&brush->Pack.Prad_out, brush->Realb.rad_out);
-    brush->Pack.bmidx = brush->Realb.bmidx;
-    brush->Pack.col = brush->Realb.col;
-    brush->Pack.cop = (uint8_t)(brush->Realb.cop * 255.0f);
-    brush->Pack.crv = (uint8_t)(brush->Realb.crv * 255.0f);
-    brush->Pack.MaskID = brush->Realb.MaskID;
-    brush->Pack.NoiseID = brush->Realb.NoiseID;
-    brush->Pack.noisex = brush->Realb.noisex;
-    brush->Pack.noisey = brush->Realb.noisey;
-    brush->Pack.noiseidx = brush->Realb.noiseidx;
-    brush->Pack.seed = brush->Realb.seed;
-    brush->Pack.pipeID = brush->Realb.pipeID;
-    brush->Pack.resangle = (uint16_t)(brush->Realb.resangle * 65535.0f / 360.0f);
-    brush->Pack.sol = (uint8_t)(brush->Realb.sol * 255.0f);
-    brush->Pack.sol2op = (uint8_t)(brush->Realb.sol2op * 255.0f);
-    brush->Pack.x2y = (uint8_t)(brush->Realb.x2y * 255.0f);
-    brush->Pack.preserveop = brush->Realb.preserveop;
-    brush->Pack.pwr = (uint8_t)((brush->Realb.pwr + 1.0f) * 127.0f);
-}
-
-void d_Brush_SelfUnpack(d_Brush* brush) {
-    brush->Realb.radInRatio = PackedFloat_GetVal(&brush->Pack.Prad_in);
-    brush->Realb.rad_out = PackedFloat_GetVal(&brush->Pack.Prad_out);
-    brush->Realb.bmidx = brush->Pack.bmidx;
-    brush->Realb.col = brush->Pack.col;
-    brush->Realb.opacity = (float)brush->Pack.col.a / 255.0f;
-    brush->Realb.cop = brush->Pack.cop / 255.0f;
-    brush->Realb.crv = brush->Pack.crv / 255.0f;
-    brush->Realb.MaskID = brush->Pack.MaskID;
-    brush->Realb.NoiseID = brush->Pack.NoiseID;
-    brush->Realb.noisex = brush->Pack.noisex;
-    brush->Realb.noisey = brush->Pack.noisey;
-    brush->Realb.noiseidx = brush->Pack.noiseidx;
-    brush->Realb.seed = brush->Pack.seed;
-    brush->Realb.pipeID = brush->Pack.pipeID;
-    brush->Realb.resangle = (float)brush->Pack.resangle * 360.0f / 65535.0f;
-    brush->Realb.sol = brush->Pack.sol / 255.0f;
-    brush->Realb.sol2op = brush->Pack.sol2op / 255.0f;
-    brush->Realb.x2y = brush->Pack.x2y / 255.0f;
-    brush->Realb.preserveop = brush->Pack.preserveop;
-    brush->Realb.pwr = (float)brush->Pack.pwr / 127.0f - 1.0f;
-}
-
 float Dist2D(Vector2 pos1, Vector2 pos2) {
     float dx = pos1.x - pos2.x;
     float dy = pos1.y - pos2.y;

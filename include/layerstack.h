@@ -11,6 +11,10 @@ void LayerStack_Bind(AppState* state);
 int  LayerStack_Width(void);
 int  LayerStack_Height(void);
 
+int  LayerStack_InsertLayer(int afterIdx);
+void LayerStack_DeleteLayer(int idx);
+void LayerStack_DuplicateLayer(int idx);
+void LayerStack_MoveLayer(int from, int to);
 void LayerStack_MergeDown(int idx);
 void LayerStack_MergeDownSeamless(int idx);
 

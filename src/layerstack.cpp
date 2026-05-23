@@ -207,6 +207,43 @@ static void RemoveLayerSlot(AppState* state, int idx) {
     state->texCount = n;
 }
 
+// ── Layer management (encapsulates Canvas data + GPU sync) ──────────
+int LayerStack_InsertLayer(int afterIdx) {
+    if (!LS.app) return -1;
+    AppState* state = LS.app;
+    Canvas_InsertLayer(&state->canvas, afterIdx);
+    int newIdx = afterIdx;
+    EnsureRTs(state);
+    SyncRTFromImage(state, newIdx);
+    LS.dirty = true;
+    return newIdx;
+}
+
+void LayerStack_DeleteLayer(int idx) {
+    if (!LS.app) return;
+    int n = LS.app->canvas.layerCount;
+    if (n <= 1 || idx < 0 || idx >= n) return;
+    RemoveLayerSlot(LS.app, idx);
+    LS.dirty = true;
+}
+
+void LayerStack_DuplicateLayer(int idx) {
+    if (!LS.app) return;
+    AppState* state = LS.app;
+    Canvas_DuplicateLayer(&state->canvas, idx);
+    EnsureRTs(state);
+    SyncRTFromImage(state, idx + 1);
+    LS.dirty = true;
+}
+
+void LayerStack_MoveLayer(int from, int to) {
+    if (!LS.app) return;
+    AppState* state = LS.app;
+    Canvas_MoveLayer(&state->canvas, from, to);
+    SyncAllRTs(state);
+    LS.dirty = true;
+}
+
 // ── Matrix helpers ───────────────────────────────────────────────────
 static void MatInvMul(const float below[6], const float top[6], float out[6]) {
     float a=below[0], b=below[1], tbx=below[2];

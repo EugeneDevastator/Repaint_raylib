@@ -16,26 +16,20 @@ static void CommitLayerOp(AppState* state, d_LAction* lact) {
         // local mode: apply directly
         switch (lact->ActID) {
         case laAdd: {
-            int insertAfter = lact->layer;
-            Canvas_InsertLayer(&state->canvas, insertAfter);
-            SyncAllRTs(state);
-            state->activeLayer = insertAfter;  // new layer becomes active
+            state->activeLayer = LayerStack_InsertLayer(lact->layer);
             break;
         }
         case laDel: {
             int idx = lact->layer;
-            Canvas_DeleteLayer(&state->canvas, idx);
+            LayerStack_DeleteLayer(idx);
             if (state->activeLayer >= state->canvas.layerCount)
                 state->activeLayer = state->canvas.layerCount - 1;
-            SyncAllRTs(state);
             break;
         }
         case laDup: {
             int idx = lact->layer;
-            Canvas_DuplicateLayer(&state->canvas, idx);
+            LayerStack_DuplicateLayer(idx);
             state->activeLayer = idx + 1;
-            EnsureRTs(state);
-            SyncRTFromImage(state, state->activeLayer);
             break;
         }
         case laDrop: {
@@ -46,9 +40,8 @@ static void CommitLayerOp(AppState* state, d_LAction* lact) {
             break;
         }
         case laMove: {
-            Canvas_MoveLayer(&state->canvas, lact->layer, lact->layerto);
+            LayerStack_MoveLayer(lact->layer, lact->layerto);
             state->activeLayer = lact->layerto;
-            SyncAllRTs(state);
             break;
         }
         default: break;
