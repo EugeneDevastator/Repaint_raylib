@@ -257,11 +257,6 @@ static void MatInvMul(const float below[6], const float top[6], float out[6]) {
     out[3]=ic*ta+id_*tc; out[4]=ic*tb+id_*td; out[5]=ic*ttx+id_*tty+ity;
 }
 
-static bool IsIdentityMat(const float mat[6]) {
-    return mat[0]==1.0f && mat[1]==0.0f && mat[2]==0.0f &&
-           mat[3]==0.0f && mat[4]==1.0f && mat[5]==0.0f;
-}
-
 // ── BakeTransformLooped ──────────────────────────────────────────────
 static void BakeTransformLooped(RenderTexture2D dst, Texture2D src, const float mat[6], int w, int h) {
     float m[16]; BuildMatrix16(mat, m);
@@ -318,7 +313,7 @@ static void FinalizeMerge(AppState* state, int idx, RenderTexture2D mergedRT) {
 static Texture2D GetTransformedTop(RenderTexture2D* rts, sLayerProps* props, int idx, bool looped) {
     float relMat[6];
     MatInvMul(props[idx-1].mat, props[idx].mat, relMat);
-    if (IsIdentityMat(relMat) || LS.layerTransRT.id == 0)
+    if (LS.layerTransRT.id == 0)
         return rts[idx].texture;
     if (looped)
         BakeTransformLooped(LS.layerTransRT, rts[idx].texture, props[idx].mat, CW(), CH());
@@ -379,7 +374,7 @@ RenderTexture2D* LayerStack_Composite(void) {
             if (!props[i].visible || rts[i].id == 0) continue;
 
             Texture2D layerTex = rts[i].texture;
-            if (!IsIdentityMat(props[i].mat) && LS.layerTransRT.id > 0) {
+            if (LS.layerTransRT.id > 0) {
                 BakeTransform(LS.layerTransRT, rts[i].texture, props[i].mat, w, h);
                 layerTex = LS.layerTransRT.texture;
             }
@@ -423,10 +418,8 @@ Image LayerStack_CompositeWithDither(void) {
     for (int i = 0; i < layerCount; i++) {
         if (!props[i].visible || rts[i].id == 0) continue;
         sLayerProps* p = &props[i];
-        bool hasTransform = (p->mat[0] != 1.0f || p->mat[1] != 0.0f || p->mat[2] != 0.0f ||
-                             p->mat[3] != 0.0f || p->mat[4] != 1.0f || p->mat[5] != 0.0f);
         Texture2D layerTex = rts[i].texture;
-        if (hasTransform && LS.layerTransRT.id > 0) {
+        if (LS.layerTransRT.id > 0) {
             BakeTransform(LS.layerTransRT, rts[i].texture, p->mat, w, h);
             layerTex = LS.layerTransRT.texture;
         }
