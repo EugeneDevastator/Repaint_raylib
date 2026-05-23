@@ -328,7 +328,7 @@ void App_Init(AppState* state) {
 
     state->canvas = Canvas_Create(800, 600, WHITE);
     state->activeLayer = 0;
-    LayerStack_Init(800, 600);
+    LayerStack_Init();
     LayerStack_Bind(state);
 
     Rectangle viewportBounds = {

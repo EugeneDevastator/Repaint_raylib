@@ -4,7 +4,6 @@
 #include <string.h>
 
 static struct {
-    int cw, ch;
     AppState* app;
     RenderTexture2D accumA, accumB, layerTransRT;
     bool accumInited;
@@ -19,6 +18,9 @@ static struct {
     RenderTexture2D* finalAcc;
     bool dirty;
 } LS = {0};
+
+static int CW(void) { return LS.app ? LS.app->canvas.width  : 0; }
+static int CH(void) { return LS.app ? LS.app->canvas.height : 0; }
 
 // ── RT helpers ───────────────────────────────────────────────────────
 RenderTexture2D Load16BitRT(int w, int h) {
@@ -93,18 +95,16 @@ static void BakeTransform(RenderTexture2D dst, Texture2D src, const float mat[6]
 }
 
 // ── Init / shutdown ──────────────────────────────────────────────────
-void LayerStack_Init(int canvasW, int canvasH) {
-    LS.cw = canvasW; LS.ch = canvasH;
+void LayerStack_Init(void) {
     LS.app = NULL;
     LS.accumInited = LS.checkerValid = LS.shaderInited = LS.presentInited = false;
     LS.finalAcc = NULL;
     LS.dirty = true;
+    LS.curCanvasW = LS.curCanvasH = 0;
 }
 
 void LayerStack_Bind(AppState* state) {
     LS.app = state;
-    LS.cw = state->canvas.width;
-    LS.ch = state->canvas.height;
     LS.dirty = true;
 }
 
@@ -188,8 +188,6 @@ static void EnsureChecker(int w, int h) {
 }
 
 // ── Query ────────────────────────────────────────────────────────────
-int    LayerStack_Width(void)            { return LS.cw; }
-int    LayerStack_Height(void)           { return LS.ch; }
 bool   LayerStack_PresentInited(void)    { return LS.presentInited; }
 Shader LayerStack_GetPresentShader(void) { return LS.presentShader; }
 
@@ -323,9 +321,9 @@ static Texture2D GetTransformedTop(RenderTexture2D* rts, sLayerProps* props, int
     if (IsIdentityMat(relMat) || LS.layerTransRT.id == 0)
         return rts[idx].texture;
     if (looped)
-        BakeTransformLooped(LS.layerTransRT, rts[idx].texture, props[idx].mat, LS.cw, LS.ch);
+        BakeTransformLooped(LS.layerTransRT, rts[idx].texture, props[idx].mat, CW(), CH());
     else
-        BakeTransform(LS.layerTransRT, rts[idx].texture, relMat, LS.cw, LS.ch);
+        BakeTransform(LS.layerTransRT, rts[idx].texture, relMat, CW(), CH());
     return LS.layerTransRT.texture;
 }
 
@@ -342,9 +340,10 @@ static void MergeDownImpl(int idx, bool seamless) {
     Texture2D topTex = GetTransformedTop(rts, props, idx, seamless);
     if (seamless) SetTextureWrap(topTex, TEXTURE_WRAP_REPEAT);
 
-    RenderTexture2D mergedRT = Load16BitRT(LS.cw, LS.ch);
+    int cw = CW(), ch = CH();
+    RenderTexture2D mergedRT = Load16BitRT(cw, ch);
     sLayerProps* p = &props[idx];
-    ApplyBlendShader(mergedRT, rts[idx-1].texture, topTex, p->op, p->blendmode, p->threshold, p->feather, LS.cw, LS.ch);
+    ApplyBlendShader(mergedRT, rts[idx-1].texture, topTex, p->op, p->blendmode, p->threshold, p->feather, cw, ch);
     FinalizeMerge(state, idx, mergedRT);
 }
 
@@ -353,7 +352,8 @@ void LayerStack_MergeDownSeamless(int idx) { MergeDownImpl(idx, true);  }
 
 // ── Compositing ──────────────────────────────────────────────────────
 RenderTexture2D* LayerStack_Composite(void) {
-    int w = LS.cw, h = LS.ch;
+    if (!LS.app) return NULL;
+    int w = CW(), h = CH();
     if (w < 1 || h < 1) return NULL;
     EnsureAccumulators(w, h);
     EnsureChecker(w, h);
@@ -404,10 +404,11 @@ RenderTexture2D* LayerStack_Composite(void) {
 
 // ── Export ───────────────────────────────────────────────────────────
 Image LayerStack_CompositeWithDither(void) {
+    if (!LS.app) return (Image){0};
     EnsureShader();
     EnsurePresentShader();
-    int w = LS.cw, h = LS.ch;
-    if (w < 1 || h < 1 || !LS.app) return (Image){0};
+    int w = CW(), h = CH();
+    if (w < 1 || h < 1) return (Image){0};
 
     int layerCount = LS.app->canvas.layerCount;
     RenderTexture2D* rts  = LS.app->layerRTs;

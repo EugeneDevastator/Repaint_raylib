@@ -3,13 +3,10 @@
 
 #include "repaint.h"
 
-void LayerStack_Init(int canvasW, int canvasH);
+void LayerStack_Init(void);
 void LayerStack_Shutdown(void);
 void LayerStack_ReloadShader(void);
 void LayerStack_Bind(AppState* state);
-
-int  LayerStack_Width(void);
-int  LayerStack_Height(void);
 
 int  LayerStack_InsertLayer(int afterIdx);
 void LayerStack_DeleteLayer(int idx);
