@@ -368,57 +368,38 @@ void StrokeEngine_ApplyDabs(RenderTexture2D dstRT, Texture2D brushTex,
 void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex,
                               const d_RealBrush* baseBrush, float cx, float cy) {
     float sizeMulFactor = powf(16.0f, BParam_GetValue(&bpSizeMul) / 128.0f - 1.0f);
-    float spacingBaseRad = BParam_GetValue(&bpSize) * sizeMulFactor;
+    float radOut = baseBrush->rad_out;
     float spacingVal = BParam_GetValue(&bpSpacing);
-    float minPxSpacing = fmaxf(spacingBaseRad * 2.0f * spacingVal, 1.0f);
-
-    float segLen = fminf(baseBrush->rad_out * 4.0f, 300.0f);
-    if (segLen < minPxSpacing) segLen = minPxSpacing;
+    float segLen = radOut * 3.0f;          // length = 3 brush radii
+    if (segLen < 2.0f) segLen = 2.0f;
 
     float dirX = 1.0f, dirY = -1.0f;
     float dirLen = sqrtf(dirX * dirX + dirY * dirY);
     dirX /= dirLen; dirY /= dirLen;
 
     Vector2 start = {cx, cy};
+    Vector2 end   = {cx + segLen * dirX, cy + segLen * dirY};
 
-    CollapsedBrush cb = CollapseBrushParams(*baseBrush, 0.0f, eBrush);
-    cb.jitRadOut = cb.jitRadIn = cb.jitOpacity = cb.jitCrv = cb.jitX2y = 0;
-    cb.jitHue = cb.jitSat = cb.jitLit = cb.jitCloneOp = 0;
-    cb.baseSeed = 0;
+    CollapsedBrush cbFull = CollapseBrushParams(*baseBrush, 0.0f, eBrush);
+    cbFull.jitRadOut = cbFull.jitRadIn = cbFull.jitOpacity = cbFull.jitCrv = cbFull.jitX2y = 0;
+    cbFull.jitHue = cbFull.jitSat = cbFull.jitLit = cbFull.jitCloneOp = 0;
+    cbFull.baseSeed = 0;
 
-    CollapsedBrush cbSmall = cb;
-    cbSmall.rad_out_px = 1.0f;
+    CollapsedBrush cbTiny = cbFull;
+    cbTiny.rad_out_px = 1.0f;
 
     DrawDab dabs[512];
     SegResult r;
-    int total = 0;
 
-    // Segment 1: constant brush, long enough for several dabs
-    Vector2 mid = {cx + segLen * dirX, cy + segLen * dirY};
-    DrawSegment s1;
-    memset(&s1, 0, sizeof(s1));
-    s1.pos1 = start; s1.pos2 = mid;
-    s1.brushFrom = cb; s1.brush = cb;
-    s1.spacing = spacingVal;
-    s1.seed = baseBrush->seed;
+    // Single segment: radius shrinks from full to 1px over 3×rad_out length
+    DrawSegment s;
+    memset(&s, 0, sizeof(s));
+    s.pos1 = start; s.pos2 = end;
+    s.brushFrom = cbFull; s.brush = cbTiny;
+    s.spacing = spacingVal;
+    s.seed = baseBrush->seed;
 
-    int n1 = DrawLinear(&s1, 0, 0.0f, dabs + total, 256, &r);
-    total += n1;
+    int n = DrawLinear(&s, 0, 0.0f, dabs, 256, &r);
 
-    // Segment 2: goes left from where segment 1 ended, radius shrinks to 1
-    Vector2 seg2start = (n1 > 0) ? r.lastDabPos : mid;
-    float seg2Len = segLen * 0.7f;
-    Vector2 seg2end = {seg2start.x - seg2Len, seg2start.y};
-    DrawSegment s2;
-    memset(&s2, 0, sizeof(s2));
-    s2.pos1 = seg2start; s2.pos2 = seg2end;
-    s2.brushFrom = cb; s2.brush = cbSmall;
-    s2.spacing = spacingVal;
-    s2.seed = baseBrush->seed;
-
-    int n2 = DrawLinear(&s2, 0, (n1 > 0) ? r.lastRadOut : cb.rad_out_px,
-                        dabs + total, 256, &r);
-    total += n2;
-
-    StrokeEngine_ApplyDabs(dstRT, brushTex, dabs, total);
+    StrokeEngine_ApplyDabs(dstRT, brushTex, dabs, n);
 }
