@@ -1,4 +1,5 @@
 #include "repaint.h"
+#include "layerstack.h"
 #include "rlgl.h"
 #include "stroke_engine.h"
 
@@ -171,7 +172,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             float mdy = canvasPos.y - dragStart.y;
             memcpy(lp->mat, savedMat, sizeof(savedMat));
             float tmat[6] = {1, 0, mdx, 0, 1, mdy};
-            Layer_ApplyTransform(lp, tmat);
+            LayerStack_ApplyTransform(state->activeLayer, tmat);
             layersDirty = true;
         }
 
@@ -192,8 +193,6 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             float deltaDeg = (curAng - startAng) * (180.0f / (float)M_PI);
             if (deltaDeg > 180.0f) deltaDeg -= 360.0f;
             else if (deltaDeg < -180.0f) deltaDeg += 360.0f;
-            // Reset to drag-start state, then apply rotation around pivot
-            memcpy(lp->mat, savedMat, sizeof(savedMat));
             float cosD = cosf(deltaDeg * (float)M_PI / 180.0f);
             float sinD = sinf(deltaDeg * (float)M_PI / 180.0f);
             float pivX = g_pivotCursorX, pivY = g_pivotCursorY;
@@ -201,7 +200,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                 cosD, -sinD, pivX - pivX * cosD + pivY * sinD,
                 sinD,  cosD, pivY - pivX * sinD - pivY * cosD
             };
-            Layer_ApplyTransform(lp, mat);
+            LayerStack_ApplyTransform(state->activeLayer, mat);
             layersDirty = true;
         }
 

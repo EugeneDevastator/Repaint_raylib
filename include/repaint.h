@@ -88,6 +88,7 @@ typedef struct {
     float feather;
     char layerName[256];
     float mat[6];        // 2×3 affine matrix (row-major: [a,b,tx, c,d,ty])
+    int layerW, layerH;  // native resolution of this layer (may differ from canvas)
 } sLayerProps;
 
 #define MAX_BRUSH_TEX 32
@@ -354,20 +355,13 @@ float Dist2D(Vector2 pos1, Vector2 pos2);
 float AtanXY(float x, float y);
 float RngConv(float inval, float inmin, float inmax, float outmin, float outmax);
 
-Canvas Canvas_Create(int width, int height, Color bgColor);
+Canvas Canvas_NewDocument(int width, int height);
 void Canvas_Destroy(Canvas* canvas);
-
-void Canvas_AddLayer(Canvas* canvas);
-void Canvas_InsertLayer(Canvas* canvas, int idx);
-void Canvas_DeleteLayer(Canvas* canvas, int index);
 void Canvas_SetLayerOpacity(Canvas* canvas, int layer, float op);
 void Canvas_SetLayerBlendMode(Canvas* canvas, int layer, int bm);
 void Canvas_SetLayerVisible(Canvas* canvas, int layer, bool visible);
 void Canvas_SetLayerThreshold(Canvas* canvas, int layer, float threshold);
 void Canvas_SetLayerFeather(Canvas* canvas, int layer, float feather);
-void Canvas_MoveLayer(Canvas* canvas, int from, int to);
-void Canvas_DuplicateLayer(Canvas* canvas, int idx);
-void Layer_ApplyTransform(sLayerProps* lp, const float mat[6]);
 void LayerStack_SetDirty(void);
 void LayerStack_ReloadShader(void);
 bool LayerStack_PresentInited(void);

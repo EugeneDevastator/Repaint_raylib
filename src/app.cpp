@@ -200,12 +200,26 @@ static void DoCreateNew(void) {
     free(g_state->texDirty);     g_state->texDirty = NULL;
     g_state->texCount = 0;
 
-    g_state->canvas = Canvas_Create(g_newW, g_newH, WHITE);
+    g_state->canvas = Canvas_NewDocument(g_newW, g_newH);
     g_state->activeLayer = 0;
     g_state->camera.target = Vector2{(float)g_newW * 0.5f, (float)g_newH * 0.5f};
     g_state->camera.zoom = 1.0f;
-    SyncAllRTs(g_state);
+    g_state->texCount = 0;
     LayerStack_Bind(g_state);
+    LayerStack_AddNew(g_newW, g_newH);
+    // Fill first layer with white
+    UnloadImage(g_state->canvas.layerImages[0]);
+    g_state->canvas.layerImages[0] = GenImageColor(g_newW, g_newH, WHITE);
+    ImageFormat(&g_state->canvas.layerImages[0], PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
+    Texture2D tmp = LoadTextureFromImage(g_state->canvas.layerImages[0]);
+    BeginTextureMode(g_state->layerRTs[0]);
+    ClearBackground(BLANK);
+    rlSetBlendMode(RL_BLEND_CUSTOM);
+    rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+    DrawTexture(tmp, 0, 0, WHITE);
+    rlSetBlendMode(RL_BLEND_ALPHA);
+    EndTextureMode();
+    UnloadTexture(tmp);
     layersDirty = true;
     g_currentFilePath[0] = '\0';
     g_newCanvasActive = false;
@@ -326,10 +340,25 @@ void App_Init(AppState* state) {
     Changelog_Init();
     DrawSplash("Creating canvas...");
 
-    state->canvas = Canvas_Create(800, 600, WHITE);
+    state->canvas = Canvas_NewDocument(800, 600);
     state->activeLayer = 0;
     LayerStack_Init();
     LayerStack_Bind(state);
+    LayerStack_AddNew(800, 600);
+    // First layer is the canvas background — fill with white instead of transparent
+    UnloadImage(state->canvas.layerImages[0]);
+    state->canvas.layerImages[0] = GenImageColor(800, 600, WHITE);
+    ImageFormat(&state->canvas.layerImages[0], PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
+    // Sync the white background to the GPU RT
+    Texture2D tmp = LoadTextureFromImage(state->canvas.layerImages[0]);
+    BeginTextureMode(state->layerRTs[0]);
+    ClearBackground(BLANK);
+    rlSetBlendMode(RL_BLEND_CUSTOM);
+    rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+    DrawTexture(tmp, 0, 0, WHITE);
+    rlSetBlendMode(RL_BLEND_ALPHA);
+    EndTextureMode();
+    UnloadTexture(tmp);
 
     Rectangle viewportBounds = {
         (float)uiPanelWidth, 0,

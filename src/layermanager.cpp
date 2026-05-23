@@ -12,7 +12,11 @@ void EnsureRTs(AppState* state) {
         memset(&state->layerRTs[old], 0, (newCount - old) * sizeof(RenderTexture2D));
         memset(&state->layerTextures[old], 0, (newCount - old) * sizeof(Texture2D));
         for (int i = old; i < newCount; i++) {
-            state->layerRTs[i] = Load16BitRT(state->canvas.width, state->canvas.height);
+            int lw = state->canvas.layerProps[i].layerW;
+            int lh = state->canvas.layerProps[i].layerH;
+            if (lw < 1) lw = state->canvas.width;
+            if (lh < 1) lh = state->canvas.height;
+            state->layerRTs[i] = Load16BitRT(lw, lh);
             SetTextureWrap(state->layerRTs[i].texture, TEXTURE_WRAP_REPEAT);
             BeginTextureMode(state->layerRTs[i]);
             ClearBackground(BLANK);
@@ -40,11 +44,29 @@ void SyncRTFromImage(AppState* state, int layer) {
 }
 
 
+// ── SyncImageFromRT ────────────────────────────────────────────────
+// Read GPU render-target back to a CPU image (16-bit).
+// raylib's LoadImageFromTexture may return R8G8B8A8 for any RT format,
+// so we explicitly upscale back to R16G16B16A16 via ×257 if needed.
 void SyncImageFromRT(AppState* state, int layer) {
     if (layer < 0 || layer >= state->texCount) return;
     if (state->layerRTs[layer].id == 0) return;
     Image cap = LoadImageFromTexture(state->layerRTs[layer].texture);
     ImageFlipVertical(&cap);
+    if (cap.format != PIXELFORMAT_UNCOMPRESSED_R16G16B16A16) {
+        int px = cap.width * cap.height;
+        uint8_t* src8 = (uint8_t*)cap.data;
+        uint16_t* dst16 = (uint16_t*)malloc(px * 4 * sizeof(uint16_t));
+        for (int i = 0; i < px; i++) {
+            dst16[i*4]     = (uint16_t)src8[i*4]   * 257;
+            dst16[i*4 + 1] = (uint16_t)src8[i*4+1] * 257;
+            dst16[i*4 + 2] = (uint16_t)src8[i*4+2] * 257;
+            dst16[i*4 + 3] = (uint16_t)src8[i*4+3] * 257;
+        }
+        free(cap.data);
+        cap.data = dst16;
+        cap.format = PIXELFORMAT_UNCOMPRESSED_R16G16B16A16;
+    }
     Image* dst = &state->canvas.layerImages[layer];
     UnloadImage(*dst);
     *dst = cap;
