@@ -63,6 +63,9 @@ void LeftPanel_Draw(AppState* state) {
     }
 
     ImGui::Spacing();
+    ImGui::Checkbox("Seamless", &g_seamlessPaint);
+
+    ImGui::Spacing();
     int preserve = state->currentBrush.Realb.preserveop;
     ImGui::Checkbox("Preserve Layer Alpha", (bool*)&preserve);
     state->currentBrush.Realb.preserveop = (uint8_t)preserve;

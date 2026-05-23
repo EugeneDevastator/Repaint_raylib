@@ -52,6 +52,31 @@ static inline float clampf(float v, float lo, float hi) {
 static inline int pool_index(int bucket) {
     return (bucket / 32) - 1;
 }
+static void DrawTextureLooped(
+    Texture2D src, Rectangle srcRect,
+    float x0, float y0, float w, float h,
+    int canvasW, int canvasH,
+    bool loop)
+{
+    if (!loop) {
+        DrawTexturePro(src, srcRect,
+            (Rectangle){x0, y0, w, h},
+            (Vector2){0, 0}, 0.0f, WHITE);
+        return;
+    }
+
+    for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            float tx = x0 + dx * canvasW;
+            float ty = y0 + dy * canvasH;
+            if (tx >= canvasW || ty >= canvasH) continue;
+            if (tx + w <= 0   || ty + h <= 0)  continue;
+            DrawTexturePro(src, srcRect,
+                (Rectangle){tx, ty, w, h},
+                (Vector2){0, 0}, 0.0f, WHITE);
+        }
+    }
+}
 
 void BrushBlend_Init(void) {
     if (inited) return;
@@ -150,8 +175,10 @@ void BrushBlend_ApplyStamp(
         if (canvasCopyRT.id > 0) UnloadRenderTexture(canvasCopyRT);
         canvasCopyRT = Load16BitRT(W, H);
         SetTextureFilter(canvasCopyRT.texture, TEXTURE_FILTER_BILINEAR);
-        canvasCopyW  = W;
-        canvasCopyH  = H;
+        // need to toggle this when changing draw modes.
+        SetTextureWrap(canvasCopyRT.texture, TEXTURE_WRAP_REPEAT);  // <-- ADD
+        canvasCopyW = W;
+        canvasCopyH = H;
     }
     BeginTextureMode(canvasCopyRT);
     rlSetBlendMode(RL_BLEND_CUSTOM);
@@ -314,6 +341,12 @@ void BrushBlend_ApplyStamp(
     SetShaderValue(brushBlendShader, locEraseMode, &eraseMode, SHADER_UNIFORM_INT);
 
     // ------------- final blit
+    // Set wrap on canvas copy — fragment shader uses fract(gl_FragCoord / canvasSize)
+    // to wrap UVs seamlessly, but also set the hardware wrap for safety.
+    // user: this is not the way, it breaks drawing.
+  //  SetTextureWrap(canvasCopyRT.texture,
+  //      g_seamlessPaint ? TEXTURE_WRAP_REPEAT : TEXTURE_WRAP_CLAMP);
+
     BeginTextureMode(dstRT);
     rlSetBlendMode(RL_BLEND_CUSTOM);
     rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
@@ -325,11 +358,11 @@ void BrushBlend_ApplyStamp(
     rlActiveTextureSlot(0);
 
     BeginShaderMode(brushBlendShader);
-
-    DrawTexturePro(geoRT->texture,
+    bool looped = true;
+    DrawTextureLooped(geoRT->texture,
         (Rectangle){0, 0, (float)drawSz, (float)-drawSz},
-        (Rectangle){x0, y0, stampSizePx, stampSizePx},
-        (Vector2){0, 0}, 0.0f, WHITE);
+        x0, y0, stampSizePx, stampSizePx,
+        W, H, looped);
 
     EndShaderMode();
 

@@ -22,6 +22,7 @@ Viewport viewport;
 float g_splashAlpha = 1.0f;
 static Texture2D g_splashTex = {0};
 int g_activeHud = HUD_NONE;
+bool g_seamlessPaint = false;
 float g_pivotCursorX = 0.0f, g_pivotCursorY = 0.0f;
 
 static void DrawSplash(const char* msg) {

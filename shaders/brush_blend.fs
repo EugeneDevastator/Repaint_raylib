@@ -150,13 +150,18 @@ void main() {
     vec2 uv       = fragTexCoord;
     vec2 sampleUV = vec2(uv.x, 1.0 - uv.y);
     vec4 geouv    = texture(texture0, sampleUV);
+    bool looped = true;
 
     vec2 canvasUV = canvasFragUV;
+    vec4 canvas;
     canvasUV.y *= -1;
-    vec4 canvas = texture(canvasTex, canvasUV);
+    if(!looped) // if clipped
+        canvas = texture(canvasTex, canvasUV);
+    else
+        canvas = texture(canvasTex, fract(canvasUV));  // was: texture(canvasTex, canvasUV) - for clipped.
 
     if (geouv.a < 0.01) {
-        finalColor = texture(canvasTex, canvasUV);
+        finalColor = canvas;
         return;
     }
 
@@ -252,8 +257,16 @@ void main() {
 
 float cloneOpacity = smudgeStrength;
     if (cloneOpacity > 0.000001) {
-        vec2 smudgeUV = clamp(canvasFragUV - smudgeOffsetUV, 0.001, 0.999);
+
+    vec2 smudgeUV;
+
+if(!looped) // clipped
+    smudgeUV = clamp(canvasFragUV - smudgeOffsetUV, 0.001, 0.999);
+else
+    smudgeUV = fract(canvasFragUV - smudgeOffsetUV);  // was: clamp(..., 0.001, 0.999)
+
         smudgeUV.y *= -1;
+        smudgeUV = fract(smudgeUV);
         vec4 smudgeSample = texture(canvasTex, smudgeUV);
         float smudgeA = smudgeSample.a;
 
