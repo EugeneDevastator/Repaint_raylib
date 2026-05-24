@@ -64,6 +64,7 @@ void LeftPanel_Draw(AppState* state) {
 
     ImGui::Spacing();
     ImGui::Checkbox("Seamless", &g_seamlessPaint);
+    ImGui::Checkbox("Seamless Preview", &g_seamlessPreview);
 
     ImGui::Spacing();
     int preserve = state->currentBrush.Realb.preserveop;

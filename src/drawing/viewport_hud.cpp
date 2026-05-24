@@ -7,6 +7,7 @@
 
 extern Viewport viewport;
 extern bool layersDirty;
+extern bool g_seamlessPreview;
 
 static RenderTexture2D g_previewRT = {0};   // brush preview (strokes on transparent bg)
 static int g_frameCounter = 0;
@@ -95,9 +96,20 @@ void ViewportHUD_Draw(AppState* state) {
     Rectangle dstRect = {dstX, dstY, dstW, dstH};
 
     bool usePresent = GetPresentInited();
-    if (usePresent) BeginShaderMode(GetPresentShader());
-    DrawTexturePro(docBlendTex->texture, srcRect, dstRect, Vector2{0, 0}, 0.0f, WHITE);
-    if (usePresent) EndShaderMode();
+    if (g_seamlessPreview) {
+        SetTextureWrap(docBlendTex->texture, TEXTURE_WRAP_REPEAT);
+        if (usePresent) BeginShaderMode(GetPresentShader());
+        for (int dy = -1; dy <= 1; dy++)
+            for (int dx = -1; dx <= 1; dx++)
+                DrawTexturePro(docBlendTex->texture, srcRect,
+                    Rectangle{dstX + dx * dstW, dstY + dy * dstH, dstW, dstH},
+                    Vector2{0, 0}, 0.0f, WHITE);
+        if (usePresent) EndShaderMode();
+    } else {
+        if (usePresent) BeginShaderMode(GetPresentShader());
+        DrawTexturePro(docBlendTex->texture, srcRect, dstRect, Vector2{0, 0}, 0.0f, WHITE);
+        if (usePresent) EndShaderMode();
+    }
 
     // ── Brush preview overlay (quick HUD) ────────────────────────────
     if (g_activeHud == HUD_QUICK) {

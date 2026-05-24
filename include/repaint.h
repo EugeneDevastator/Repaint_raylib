@@ -234,6 +234,7 @@ extern bool g_colorPicking;
 extern Color g_colorPickGrid[25];
 extern float g_pivotCursorX, g_pivotCursorY;
 extern bool g_seamlessPaint;
+extern bool g_seamlessPreview;
 #define HUD_NONE 0
 #define HUD_QUICK 1
 #define HUD_LAYER_XFORM 2
