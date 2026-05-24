@@ -1,0 +1,276 @@
+```cpp
+#include "raylib.h"
+#include "rlImGui.h"
+#include "imgui.h"
+#include <vector>
+#include <memory>
+#include <string>
+
+// ─── input state ─────────────────────────────────────────────────────────────
+// passed top-down through HandleInput chain.
+// once captured, lower modules should not act on it.
+
+struct InputState {
+    bool mouseCaptured    = false;
+    bool keyboardCaptured = false;
+
+    Vector2 MousePos()          const { return GetMousePosition(); }
+    bool    MousePressed(int b) const { return IsMouseButtonPressed(b); }
+    bool    MouseDown(int b)    const { return IsMouseButtonDown(b); }
+    bool    MouseReleased(int b)const { return IsMouseButtonReleased(b); }
+    float   ScrollDelta()       const { return GetMouseWheelMove(); }
+    bool    KeyPressed(int k)   const { return IsKeyPressed(k); }
+};
+
+// ─── draw rect ───────────────────────────────────────────────────────────────
+// assigned by layout, passed into every module call.
+// module does not own or store this - it is always authoritative from outside.
+
+struct DrawRect {
+    float x, y, w, h;
+
+    bool Contains(Vector2 p) const {
+        return p.x >= x && p.x <= x + w
+            && p.y >= y && p.y <= y + h;
+    }
+
+    Rectangle ToRaylib() const { return { x, y, w, h }; }
+};
+
+// ─── module interface ─────────────────────────────────────────────────────────
+//
+// rules:
+//   - module does not own its rect. rect is passed in every call.
+//   - module does not exchange state through this interface.
+//     if it needs external data it receives it at construction time.
+//   - HandleInput returns true only if input was consumed.
+//   - DrawGL  : raw opengl / raylib draws. no imgui calls here.
+//   - DrawGUI : imgui calls only. always renders on top of DrawGL.
+//   - OnResize: called when assigned rect changes. use to rebuild
+//               render targets, reflow internal layout, etc.
+
+struct IModule {
+    virtual ~IModule() = default;
+
+    virtual const char* Name() const = 0;
+
+    virtual bool HandleInput(InputState& input, const DrawRect& rect) { return false; }
+    virtual void DrawGL     (const DrawRect& rect)                    {}
+    virtual void DrawGUI    (const DrawRect& rect)                    {}
+    virtual void OnResize   (const DrawRect& rect)                    {}
+};
+
+// ─── module stack ─────────────────────────────────────────────────────────────
+// add order = visual order, bottom to top.
+// last added = top layer = first to receive input.
+// rects are owned here, not in modules.
+
+struct ModuleStack {
+    struct Slot {
+        std::unique_ptr<IModule> module;
+        DrawRect                 rect;
+    };
+
+    std::vector<Slot> slots;
+
+    void Add(std::unique_ptr<IModule> m, DrawRect rect) {
+        m->OnResize(rect);
+        slots.push_back({ std::move(m), rect });
+    }
+
+    void SetRect(const char* name, DrawRect rect) {
+        for (auto& s : slots) {
+            if (strcmp(s.module->Name(), name) == 0) {
+                s.rect = rect;
+                s.module->OnResize(rect);
+                return;
+            }
+        }
+    }
+
+    // top-down: last added gets input first
+    void HandleInput(InputState& input) {
+        for (auto it = slots.rbegin(); it != slots.rend(); ++it)
+            if (it->module->HandleInput(input, it->rect)) break;
+    }
+
+    // bottom-up: first added draws first, top layer renders last
+    void DrawGL() {
+        for (auto& s : slots)
+            s.module->DrawGL(s.rect);
+    }
+
+    void DrawGUI() {
+        for (auto& s : slots)
+            s.module->DrawGUI(s.rect);
+    }
+};
+
+// ─── example: viewport ───────────────────────────────────────────────────────
+// full-screen painting surface.
+// receives brush and color at construction - no state passed through interface.
+// only consumes input if it actually does something with it.
+
+struct BrushSettings {
+    float radius = 10.f;
+    Color color  = RED;
+};
+
+struct ViewportModule : IModule {
+    // initialized at construction, not through interface
+    const BrushSettings& brush;
+
+    explicit ViewportModule(const BrushSettings& brush) : brush(brush) {}
+
+    const char* Name() const override { return "Viewport"; }
+
+    bool HandleInput(InputState& input, const DrawRect& rect) override {
+        if (input.mouseCaptured)           return false;
+        if (!rect.Contains(input.MousePos())) return false;
+
+        if (input.MouseDown(MOUSE_LEFT_BUTTON)) {
+            // consume - we are painting
+            input.mouseCaptured = true;
+            return true;
+        }
+
+        return false; // mouse is here but we did nothing - don't block scroll etc
+    }
+
+    void DrawGL(const DrawRect& rect) override {
+        DrawRectangleRec(rect.ToRaylib(), DARKGRAY);
+
+        if (IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
+            Vector2 p = GetMousePosition();
+            DrawCircleV(p, brush.radius, brush.color);
+        }
+    }
+
+    void OnResize(const DrawRect& rect) override {
+        // rebuild render texture here if needed
+        TraceLog(LOG_INFO, "Viewport resized to %.0fx%.0f", rect.w, rect.h);
+    }
+};
+
+// ─── example: toolbar overlay ────────────────────────────────────────────────
+// imgui panel that floats over the viewport.
+// writes back to BrushSettings it received at construction.
+// no state flows through HandleInput / DrawGUI signatures.
+
+struct ToolbarModule : IModule {
+    BrushSettings& brush; // reference to shared settings, set at construction
+
+    explicit ToolbarModule(BrushSettings& brush) : brush(brush) {}
+
+    const char* Name() const override { return "Toolbar"; }
+
+    bool HandleInput(InputState& input, const DrawRect& rect) override {
+        if (input.mouseCaptured)              return false;
+        if (!rect.Contains(input.MousePos())) return false;
+
+        // toolbar rect is hovered - imgui owns it, block everything below
+        input.mouseCaptured = true;
+        return true;
+    }
+
+    void DrawGUI(const DrawRect& rect) override {
+        ImGui::SetNextWindowPos ({ rect.x, rect.y });
+        ImGui::SetNextWindowSize({ rect.w, rect.h });
+        ImGui::Begin(Name(), nullptr,
+            ImGuiWindowFlags_NoMove        |
+            ImGuiWindowFlags_NoResize      |
+            ImGuiWindowFlags_NoTitleBar);
+
+        ImGui::Text("Brush");
+        ImGui::SliderFloat("Radius", &brush.radius, 1.f, 50.f);
+
+        ImGui::Spacing();
+        if (ImGui::Button("Red"))   brush.color = RED;
+        if (ImGui::Button("Blue"))  brush.color = BLUE;
+        if (ImGui::Button("Green")) brush.color = GREEN;
+
+        ImGui::End();
+    }
+};
+
+// ─── example: status bar ─────────────────────────────────────────────────────
+// pure GL draw, no input, no imgui.
+// shows how a module can implement only what it needs.
+
+struct StatusBarModule : IModule {
+    const char* Name() const override { return "StatusBar"; }
+
+    void DrawGL(const DrawRect& rect) override {
+        DrawRectangleRec(rect.ToRaylib(), BLACK);
+        DrawText(TextFormat("mouse: %.0f %.0f",
+            GetMousePosition().x, GetMousePosition().y),
+            (int)rect.x + 8, (int)rect.y + 6, 16, LIGHTGRAY);
+    }
+};
+
+// ─── main ─────────────────────────────────────────────────────────────────────
+
+int main() {
+    const int W = 800;
+    const int H = 600;
+
+    InitWindow(W, H, "module demo");
+    rlImGuiSetup(true);
+
+    // shared data - initialized here, passed into modules at construction.
+    // never flows through the module interface after this point.
+    BrushSettings brush;
+
+    // layout - owned in main, assigned to stack slots.
+    // change these to reflow the whole app.
+    const float toolbarW  = 160.f;
+    const float statusH   = 28.f;
+    const DrawRect viewportRect { toolbarW, 0,        W - toolbarW, H - statusH };
+    const DrawRect toolbarRect  { 0,        0,        toolbarW,     H - statusH };
+    const DrawRect statusRect   { 0,        H - statusH, (float)W,  statusH     };
+
+    // construction: modules receive their dependencies here.
+    // add order = visual order bottom to top.
+    ModuleStack stack;
+    stack.Add(std::make_unique<ViewportModule>(brush), viewportRect);
+    stack.Add(std::make_unique<StatusBarModule>(),     statusRect);
+    stack.Add(std::make_unique<ToolbarModule>(brush),  toolbarRect);
+
+    while (!WindowShouldClose()) {
+
+        // input: top-down (toolbar first, viewport last)
+        InputState input;
+        stack.HandleInput(input);
+
+        // draw: bottom-up (viewport first, toolbar on top)
+        BeginDrawing();
+        ClearBackground(BLACK);
+
+            stack.DrawGL();
+
+            rlImGuiBegin();
+                stack.DrawGUI();
+            rlImGuiEnd();
+
+        EndDrawing();
+    }
+
+    rlImGuiShutdown();
+    CloseWindow();
+}
+```
+
+---
+
+Key points summarized:
+
+| Rule | Where enforced |
+|---|---|
+| Module does not own its rect | Rect lives in stack slot, passed per-call |
+| No state through interface | Dependencies injected at construction only |
+| Input consumed = return true | Each module decides, stack stops on first true |
+| Input order top-down | Stack iterates `rbegin` → `rend` |
+| Draw order bottom-up | Stack iterates `begin` → `end` |
+| Overlapping rects work | Overlay added last, gets input first, blocks below |
+| imgui always above GL | `DrawGUI` called after `DrawGL` in main loop |
+| Module implements only what it needs | All interface methods have default no-op bodies |
