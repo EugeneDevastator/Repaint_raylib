@@ -260,17 +260,14 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                 float grabLx = (gc == 0 || gc == 3) ? 0.0f : lw;
                 float grabLy = (gc == 0 || gc == 1) ? 0.0f : lh;
 
-                // These are already in local space, relative to origin
-                // initD = corner pos relative to pivot (local)
                 float initDx = grabLx - pcx;
                 float initDy = grabLy - pcy;
 
-                // lx/ly is mouse offset from pivot in local space — so newD = lx, ly directly
                 float newDx = lx;
                 float newDy = ly;
 
-                float sx = (fabsf(initDx) > 0.001f) ? lx / initDx : 1.0f;
-                float sy = (fabsf(initDy) > 0.001f) ? ly / initDy : 1.0f;
+                float sx = (fabsf(initDx) > 0.001f) ? newDx / initDx : 1.0f;
+                float sy = (fabsf(initDy) > 0.001f) ? newDy / initDy : 1.0f;
                 if (sx < 0.01f) sx = 0.01f;
                 if (sy < 0.01f) sy = 0.01f;
 

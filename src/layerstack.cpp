@@ -248,7 +248,7 @@ static Texture2D GetTransformedTop(int idx, bool looped) {
     float relMat[6]; MatInvMul(LS.prop[idx-1].mat, LS.prop[idx].mat, relMat);
     if(LS.layerTransRT.id==0) return LS.rt[idx].texture;
     int cw=CW(),ch=CH(),lw=LS.prop[idx].layerW,lh=LS.prop[idx].layerH;
-    if(looped) BakeTransformLooped(LS.layerTransRT,LS.rt[idx].texture,LS.prop[idx].mat,lw,lh,cw,ch);
+    if(looped) BakeTransformLooped(LS.layerTransRT,LS.rt[idx].texture,LS.prop[idx].mat,lw,lh,lw,lh);
     else BakeTransform(LS.layerTransRT,LS.rt[idx].texture,relMat,lw,lh,cw,ch);
     return LS.layerTransRT.texture;
 }
