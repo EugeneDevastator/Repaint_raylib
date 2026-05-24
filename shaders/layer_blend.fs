@@ -116,7 +116,7 @@ void main() {
     }
 
     if (layerA < 0.0001) { finalColor = underLayer; return; }
-
+			  layerA     *= layerAlpha;
     finalColor = applyBlend(bmidx, underLayer, thisLayer.rgb, layerA);
-	finalColor.a *= layerAlpha;
+
 }
