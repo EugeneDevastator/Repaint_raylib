@@ -261,12 +261,55 @@ static void RemoveLayerSlot(int idx) {
 
 static void MergeDownImpl(int idx, bool seamless) {
     if(!LS.shaderInited||idx<=0||idx>=LS.count||LS.rt[idx].id==0||LS.rt[idx-1].id==0) return;
-    Texture2D topTex=GetTransformedTop(idx,seamless);
-    if(seamless) SetTextureWrap(topTex,TEXTURE_WRAP_REPEAT);
     int cw=CW(),ch=CH(),bw=LS.prop[idx-1].layerW,bh=LS.prop[idx-1].layerH;
-    RenderTexture2D mergedRT=Load16BitRT(bw,bh);
+    int lw=LS.prop[idx].layerW,lh=LS.prop[idx].layerH;
     sLayerProps*p=&LS.prop[idx];
-    ApplyBlendShader(mergedRT,LS.rt[idx-1].texture,topTex,p->op,p->blendmode,p->threshold,p->feather,bw,bh);
+
+    if(!seamless) {
+        Texture2D topTex=GetTransformedTop(idx,false);
+        RenderTexture2D mergedRT=Load16BitRT(bw,bh);
+        ApplyBlendShader(mergedRT,LS.rt[idx-1].texture,topTex,p->op,p->blendmode,p->threshold,p->feather,bw,bh);
+        RenderTexture2D oldRT=LS.rt[idx-1]; LS.rt[idx-1]=mergedRT;
+        Texture2D oldTex=LS.tex[idx-1]; LS.tex[idx-1]=mergedRT.texture;
+        Image cap=LoadImageFromTexture(mergedRT.texture); ImageFlipVertical(&cap);
+        UnloadImage(LS.img[idx-1]); LS.img[idx-1]=cap;
+        UnloadRenderTexture(oldRT); if(oldTex.id>0)UnloadTexture(oldTex);
+        RemoveLayerSlot(idx);
+        return;
+    }
+
+    // ── Seamless: blend each tile individually for proper overlap ─────
+    float relMat[6]; MatInvMul(LS.prop[idx-1].mat, LS.prop[idx].mat, relMat);
+    Texture2D topTex=LS.rt[idx].texture;
+    SetTextureWrap(topTex,TEXTURE_WRAP_REPEAT);
+
+    RenderTexture2D bufA=Load16BitRT(bw,bh), bufB=Load16BitRT(bw,bh);
+    if(bufA.id==0||bufB.id==0){ if(bufA.id>0)UnloadRenderTexture(bufA); if(bufB.id>0)UnloadRenderTexture(bufB); return; }
+
+    // Seed bufA with the bottom layer
+    BeginTextureMode(bufA);
+    rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE,RL_ZERO,RL_FUNC_ADD);
+    ClearBackground(BLANK);
+    DrawTextureRec(LS.rt[idx-1].texture,FullRect(bw,bh),Vector2{0,0},WHITE);
+    EndTextureMode();
+
+    RenderTexture2D*src=&bufA,*dst=&bufB;
+    for(int dy=-1;dy<=1;dy++){
+        for(int dx=-1;dx<=1;dx++){
+            float tileMat[6];
+            memcpy(tileMat,relMat,6*sizeof(float));
+            tileMat[2]+=dx*(float)lw; tileMat[5]+=dy*(float)lh;
+
+            BakeTransform(LS.layerTransRT,topTex,tileMat,lw,lh,cw,ch);
+
+            ApplyBlendShader(*dst,src->texture,LS.layerTransRT.texture,p->op,p->blendmode,p->threshold,p->feather,bw,bh);
+            RenderTexture2D*tmp=src; src=dst; dst=tmp;
+        }
+    }
+
+    // src holds the final blended result
+    RenderTexture2D mergedRT=*src;
+    UnloadRenderTexture(*dst);
     RenderTexture2D oldRT=LS.rt[idx-1]; LS.rt[idx-1]=mergedRT;
     Texture2D oldTex=LS.tex[idx-1]; LS.tex[idx-1]=mergedRT.texture;
     Image cap=LoadImageFromTexture(mergedRT.texture); ImageFlipVertical(&cap);
