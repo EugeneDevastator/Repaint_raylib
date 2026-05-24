@@ -333,3 +333,17 @@ void LayerPanel_Draw(AppState* state) {
 
     ImGui::End();
 }
+
+// ── RightPanelModule ──────────────────────────────────────────────────────
+
+bool RightPanelModule::HandleInput(InputState& input, const DrawRect& rect) {
+    if (input.mouseCaptured) return false;
+    if (!rect.Contains(input.MousePos())) return false;
+    input.mouseCaptured = true;
+    return true;
+}
+
+void RightPanelModule::DrawGUI(const DrawRect& rect) {
+    (void)rect;
+    LayerPanel_Draw(state);
+}

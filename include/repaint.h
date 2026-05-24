@@ -3,6 +3,7 @@
 
 #include "raylib.h"
 #include "ui_style.h"
+#include "ui_rect.h"
 #include <cstdint>
 #include <math.h>
 #include <string.h>
@@ -327,5 +328,33 @@ void App_FileNew(void); void App_FileOpen(void); void App_FileSave(void);
 void App_FileSaveAs(void); void App_FileReload(void); void App_FileSnap(void);
 
 RenderTexture2D Load16BitRT(int width, int height);
+
+// ── Module-based top-level components ──────────────────────────────────────
+
+struct LeftPanelModule : IModule {
+    AppState* state;
+    explicit LeftPanelModule(AppState* s) : state(s) {}
+    const char* Name() const override { return "LeftPanel"; }
+    bool HandleInput(InputState& input, const DrawRect& rect) override;
+    void DrawGUI(const DrawRect& rect) override;
+};
+
+struct ViewportModule : IModule {
+    AppState* state;
+    explicit ViewportModule(AppState* s) : state(s) {}
+    const char* Name() const override { return "Viewport"; }
+    bool HandleInput(InputState& input, const DrawRect& rect) override;
+    void DrawGL(const DrawRect& rect) override;
+};
+
+struct RightPanelModule : IModule {
+    AppState* state;
+    explicit RightPanelModule(AppState* s) : state(s) {}
+    const char* Name() const override { return "RightPanel"; }
+    bool HandleInput(InputState& input, const DrawRect& rect) override;
+    void DrawGUI(const DrawRect& rect) override;
+};
+
+extern ModuleStack g_moduleStack;
 
 #endif

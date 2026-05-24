@@ -19,6 +19,8 @@ bool g_panelsVisible = true;
 
 Viewport viewport;
 
+ModuleStack g_moduleStack;
+
 float g_splashAlpha = 1.0f;
 static Texture2D g_splashTex = {0};
 int g_activeHud = HUD_NONE;
@@ -347,6 +349,16 @@ void App_Init(AppState* state) {
     state->camera = Camera2D{};
     state->camera.target = Vector2{(float)state->doc.width * 0.5f, (float)state->doc.height * 0.5f};
     state->camera.offset = Vector2{viewportBounds.x + viewportBounds.width * 0.5f, viewportBounds.y + viewportBounds.height * 0.5f};
+
+    // ── Module stack ──
+    // Add order = bottom-up for DrawGL; reverse for HandleInput
+    int sw = GetScreenWidth(), sh = GetScreenHeight();
+    g_moduleStack.Add(std::unique_ptr<IModule>(new ViewportModule(state)),
+        DrawRect{(float)uiPanelWidth, 0, (float)(sw - uiPanelWidth - RIGHT_PANEL_WIDTH), (float)sh});
+    g_moduleStack.Add(std::unique_ptr<IModule>(new RightPanelModule(state)),
+        DrawRect{(float)(sw - RIGHT_PANEL_WIDTH), 0, (float)RIGHT_PANEL_WIDTH, (float)sh});
+    g_moduleStack.Add(std::unique_ptr<IModule>(new LeftPanelModule(state)),
+        DrawRect{0, 0, (float)uiPanelWidth, (float)sh});
     state->camera.rotation = 0.0f;
     state->camera.zoom = 1.0f;
 
@@ -405,21 +417,20 @@ void App_Draw(AppState* state) {
     int sw = GetScreenWidth();
     int sh = GetScreenHeight();
 
-    Rectangle viewportBounds;
+    // ── Compute module rects ──
+    DrawRect leftRect, vpRect, rightRect;
     if (g_panelsVisible) {
-        viewportBounds = {
-            (float)uiPanelWidth, 0,
-            (float)(sw - uiPanelWidth - RIGHT_PANEL_WIDTH),
-            (float)sh
-        };
+        leftRect  = DrawRect{0, 0, (float)uiPanelWidth, (float)sh};
+        vpRect    = DrawRect{(float)uiPanelWidth, 0, (float)(sw - uiPanelWidth - RIGHT_PANEL_WIDTH), (float)sh};
+        rightRect = DrawRect{(float)(sw - RIGHT_PANEL_WIDTH), 0, (float)RIGHT_PANEL_WIDTH, (float)sh};
     } else {
-        viewportBounds = {0, 0, (float)sw, (float)sh};
+        leftRect  = DrawRect{0, 0, 0, 0};
+        vpRect    = DrawRect{0, 0, (float)sw, (float)sh};
+        rightRect = DrawRect{0, 0, 0, 0};
     }
-    viewport.bounds = viewportBounds;
-    state->camera.offset = Vector2{
-        viewportBounds.x + viewportBounds.width * 0.5f,
-        viewportBounds.y + viewportBounds.height * 0.5f
-    };
+    g_moduleStack.SetRect("LeftPanel",   leftRect);
+    g_moduleStack.SetRect("Viewport",    vpRect);
+    g_moduleStack.SetRect("RightPanel",  rightRect);
 
     BeginDrawing();
     ClearBackground(Color{220, 220, 220, 255});
@@ -445,11 +456,8 @@ void App_Draw(AppState* state) {
         viewport.strokeEnded = false;
     }
 
-    // ── Draw viewport: composite layers → stamp preview → screen ──
-    ViewportHUD_Draw(state);
-
-    // Debug stamp overlays (after canvas, before UI)
-    Viewport_DrawDebugOverlays(&viewport, state);
+    // ── Module GL draws (viewport canvas + overlays) ──
+    g_moduleStack.DrawGL();
 
     // Gizmo visual drawn early (raylib XOR, before ImGui)
     XORgizmo_DrawVisual(state);
@@ -507,12 +515,9 @@ void App_Draw(AppState* state) {
         networkBroker.DrawConnectionUI();
     rlSetBlendMode(RL_BLEND_ALPHA);
     QuickPanel_DrawUI(state);
-    if (g_panelsVisible) {
-        rlSetBlendMode(RL_BLEND_ALPHA);
-        LeftPanel_Draw(state);
-        rlSetBlendMode(RL_BLEND_ALPHA);
-        LayerPanel_Draw(state);
-    }
+
+    // Module GUI draws (left + right panels)
+    g_moduleStack.DrawGUI();
     rlSetBlendMode(RL_BLEND_ALPHA);
     Changelog_Draw();
 

@@ -54,7 +54,8 @@ int main() {
             viewport.broker = g_useTestBroker
                 ? (ICommandBroker*)&g_testBroker
                 : (ICommandBroker*)&networkBroker;
-            Viewport_HandleInput(&viewport, &state);
+            InputState input;
+            g_moduleStack.HandleInput(input);
         }
         App_Draw(&state);
     }

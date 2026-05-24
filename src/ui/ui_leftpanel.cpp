@@ -143,3 +143,17 @@ void LeftPanel_Draw(AppState* state) {
 
     ImGui::End();
 }
+
+// ── LeftPanelModule ───────────────────────────────────────────────────────
+
+bool LeftPanelModule::HandleInput(InputState& input, const DrawRect& rect) {
+    if (input.mouseCaptured) return false;
+    if (!rect.Contains(input.MousePos())) return false;
+    input.mouseCaptured = true;
+    return true;
+}
+
+void LeftPanelModule::DrawGUI(const DrawRect& rect) {
+    (void)rect;
+    LeftPanel_Draw(state);
+}

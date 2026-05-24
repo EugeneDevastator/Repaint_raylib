@@ -569,3 +569,36 @@ void Viewport_DrawDebugOverlays(Viewport* vp, AppState* state) {
     DrawText("DEBUG: input pos (F1 toggle)", 10, 10, 14, BLUE);
     EndMode2D();
 }
+
+// ── ViewportModule ────────────────────────────────────────────────────────
+
+bool ViewportModule::HandleInput(InputState& input, const DrawRect& rect) {
+    viewport.bounds = rect.ToRaylib();
+    state->camera.offset = Vector2{
+        rect.x + rect.w * 0.5f,
+        rect.y + rect.h * 0.5f
+    };
+
+    // Continue stroke even if mouse leaves viewport bounds
+    if (viewport.wasMouseDown) {
+        Viewport_HandleInput(&viewport, state);
+        return true;
+    }
+
+    if (input.mouseCaptured) return false;
+    if (!rect.Contains(input.MousePos())) return false;
+
+    Viewport_HandleInput(&viewport, state);
+    return true;
+}
+
+void ViewportModule::DrawGL(const DrawRect& rect) {
+    viewport.bounds = rect.ToRaylib();
+    state->camera.offset = Vector2{
+        rect.x + rect.w * 0.5f,
+        rect.y + rect.h * 0.5f
+    };
+
+    ViewportHUD_Draw(state);
+    Viewport_DrawDebugOverlays(&viewport, state);
+}
