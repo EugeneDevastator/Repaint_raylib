@@ -13,6 +13,13 @@ static int g_frameCounter = 0;
 static const int g_previewUpdateInterval = 10;
 static unsigned int g_lastPreviewHash = 0;
 
+// Cached checkerboard texture for edit-texture backdrop.
+// Created on demand, reused across frames — avoids creating + destroying
+// a texture inside the draw loop, which could free the GL name before
+// the batch flushes and cause the next draw to target a stale slot.
+static Texture2D g_editCheckerTex = {0};
+static int g_editCheckerW = 0, g_editCheckerH = 0;
+
 static unsigned int ComputeBrushHash(d_Brush* b) {
     unsigned int h = 0;
     h ^= (unsigned int)(b->Realb.rad_out * 100);
@@ -54,8 +61,9 @@ void ViewportHUD_Draw(AppState* state) {
         float dstH = th * state->camera.zoom;
         Rectangle dstRect = {dstX, dstY, dstW, dstH};
 
-        Texture2D checker = {0};
-        {
+        // Cached checker backdrop — rebuild only if size changed
+        if (g_editCheckerTex.id == 0 || g_editCheckerW != tw || g_editCheckerH != th) {
+            if (g_editCheckerTex.id > 0) UnloadTexture(g_editCheckerTex);
             Image img = GenImageColor(tw, th, BLANK);
             for (int y = 0; y < th; y += 8)
                 for (int x = 0; x < tw; x += 8) {
@@ -63,11 +71,13 @@ void ViewportHUD_Draw(AppState* state) {
                     Color col = light ? Color{70, 70, 75, 255} : Color{55, 55, 60, 255};
                     ImageDrawRectangle(&img, x, y, 8, 8, col);
                 }
-            checker = LoadTextureFromImage(img);
+            g_editCheckerTex = LoadTextureFromImage(img);
             UnloadImage(img);
+            g_editCheckerW = tw;
+            g_editCheckerH = th;
         }
-        DrawTexturePro(checker, Rectangle{0, 0, (float)tw, (float)th}, dstRect, Vector2{0, 0}, 0.0f, WHITE);
-        UnloadTexture(checker);
+        DrawTexturePro(g_editCheckerTex, Rectangle{0, 0, (float)tw, (float)th},
+            dstRect, Vector2{0, 0}, 0.0f, WHITE);
         DrawTexturePro(state->brushTex[state->activeBrushTex].rt.texture,
             Rectangle{0, 0, (float)tw, (float)-th}, dstRect, Vector2{0, 0}, 0.0f, WHITE);
         return;
@@ -146,6 +156,7 @@ void ViewportHUD_Draw(AppState* state) {
 
 void ViewportHUD_Shutdown(void) {
     if (g_previewRT.id > 0) { UnloadRenderTexture(g_previewRT); g_previewRT = RenderTexture2D{0}; }
+    if (g_editCheckerTex.id > 0) { UnloadTexture(g_editCheckerTex); g_editCheckerTex = Texture2D{0}; }
     g_lastPreviewHash = 0;
     g_frameCounter = 0;
 }

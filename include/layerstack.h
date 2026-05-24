@@ -38,6 +38,9 @@ int            LayerStack_RenderH(void);
 void LayerStack_SyncImageFromRT(int idx);
 void LayerStack_SyncLayerTex(int idx);
 
+// Upload the CPU image to the GPU render target (CPU → GPU)
+void LayerStack_SyncRTFromImage(int idx);
+
 // ── Compositing ─────────────────────────────────────────────────────
 RenderTexture2D* LayerStack_Composite(void);
 Image LayerStack_CompositeWithDither(void);

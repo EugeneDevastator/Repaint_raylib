@@ -192,6 +192,23 @@ void LayerStack_SyncLayerTex(int idx) {
     LS.tex[idx]=LoadTextureFromImage(LS.img[idx]);
 }
 
+void LayerStack_SyncRTFromImage(int idx) {
+    if(idx<0||idx>=LS.count||LS.rt[idx].id==0||!LS.img[idx].data) return;
+    Texture2D tmp = LoadTextureFromImage(LS.img[idx]);
+    BeginTextureMode(LS.rt[idx]);
+    ClearBackground(BLANK);
+    rlSetBlendMode(RL_BLEND_CUSTOM);
+    rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+    DrawTexture(tmp, 0, 0, WHITE);
+    rlSetBlendMode(RL_BLEND_ALPHA);
+    EndTextureMode();
+    UnloadTexture(tmp);
+    if(LS.tex[idx].id>0 && LS.tex[idx].id != LS.rt[idx].texture.id)
+        UnloadTexture(LS.tex[idx]);
+    LS.tex[idx]=LoadTextureFromImage(LS.img[idx]);
+    LS.dirty=true;
+}
+
 // ── Bake / blend helpers ────────────────────────────────────────────
 static void BakeTransform(RenderTexture2D dst, Texture2D src, const float mat[6], int lw, int lh, int cw, int ch) {
     rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE,RL_ZERO,RL_FUNC_ADD);

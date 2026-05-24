@@ -247,13 +247,12 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
             }
             free(preview.data); preview.data = d16; preview.format = PIXELFORMAT_UNCOMPRESSED_R16G16B16A16;
             int idx = LayerStack_Add((int)w, (int)h);
-            LayerStack_SyncImageFromRT(idx);
-            // Replace auto-generated blank image with the preview
             UnloadImage(*LayerStack_GetImage(idx));
             *LayerStack_GetImage(idx) = preview;
             sLayerProps* lp = LayerStack_GetProps(idx);
             lp->op = 1; lp->visible = true; lp->blendmode = bmGamma;
             lp->mat[0] = 1; lp->mat[4] = 1; lp->layerW = (int)w; lp->layerH = (int)h;
+            LayerStack_SyncRTFromImage(idx);
         }
     } else {
         // v5+: load each layer at its native resolution
@@ -293,10 +292,11 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
             }
 
             int idx = LayerStack_Add(lw, lh);
-            LayerStack_SyncImageFromRT(idx);
             *LayerStack_GetImage(idx) = layerImg;
             *LayerStack_GetProps(idx) = tempProps;
             LayerStack_GetProps(idx)->layerW = lw; LayerStack_GetProps(idx)->layerH = lh;
+            // Upload the loaded CPU image to the GPU render target
+            LayerStack_SyncRTFromImage(idx);
         }
     }
 
