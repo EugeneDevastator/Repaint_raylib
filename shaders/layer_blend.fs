@@ -105,7 +105,7 @@ vec4 applyBlend(int mode, vec4 underLayer, vec3 layerRGB, float layerA) {
 void main() {
     vec4 underLayer = texture(texture0, fragTexCoord);
     vec4 thisLayer  = texture(layerTex, fract(fragTexCoord));
-    float layerA    = thisLayer.a * layerAlpha;
+    float layerA    = thisLayer.a;
 
     // Apply threshold and feather
     if (layerThreshold > 0.0 || layerFeather < 1.0) {
@@ -115,7 +115,8 @@ void main() {
         layerA = clamp(edgeDist / f, 0.0, 1.0);
     }
 
-    if (layerA < 0.001) { finalColor = underLayer; return; }
+    if (layerA < 0.0001) { finalColor = underLayer; return; }
 
     finalColor = applyBlend(bmidx, underLayer, thisLayer.rgb, layerA);
+	finalColor.a *= layerAlpha;
 }
