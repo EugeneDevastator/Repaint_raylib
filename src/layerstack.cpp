@@ -38,6 +38,89 @@ RenderTexture2D Load16BitRT(int w, int h) {
     } return t;
 }
 
+// ── Helper: load blend shader (extracted — used by ReloadShader + EnsureShader) ──
+static bool LoadBlendShader(void) {
+    const char* ad=GetApplicationDirectory(); char fs[512];
+    snprintf(fs,sizeof(fs),"%sshaders/layer_blend.fs",ad);
+    LS.blendShader=LoadShader(0,fs);
+    if(LS.blendShader.id==0){ TraceLog(LOG_ERROR,"layer_blend.fs failed"); return false; }
+    LS.locLayerTex=GetShaderLocation(LS.blendShader,"layerTex");
+    LS.locLayerAlpha=GetShaderLocation(LS.blendShader,"layerAlpha");
+    LS.locBmIdx=GetShaderLocation(LS.blendShader,"bmidx");
+    LS.locLayerThreshold=GetShaderLocation(LS.blendShader,"layerThreshold");
+    LS.locLayerFeather=GetShaderLocation(LS.blendShader,"layerFeather");
+    LS.shaderInited=true; return true;
+}
+
+// ── Helper: unload a single slot's GPU/CPU resources (no array shift) ──
+static void UnloadLayerSlotResources(int idx) {
+    if(LS.rt[idx].id>0)UnloadRenderTexture(LS.rt[idx]);
+    if(LS.tex[idx].id>0)UnloadTexture(LS.tex[idx]);
+    UnloadImage(LS.img[idx]);
+}
+
+// ── Helper: copy one RT's content into another with (ONE, ZERO, ADD) ──
+static void CopyRT(RenderTexture2D dst, RenderTexture2D src, int w, int h) {
+    BeginTextureMode(dst);
+    rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE,RL_ZERO,RL_FUNC_ADD);
+    ClearBackground(BLANK);
+    DrawTextureRec(src.texture,FullRect(w,h),Vector2{0,0},WHITE);
+    rlSetBlendMode(RL_BLEND_ALPHA);
+    EndTextureMode();
+}
+
+// ── Helper: shift slot array entries up (make room at `to`) ──
+static void ShiftLayersUp(int from, int to) {
+    for(int i=from;i>to;i--){
+        LS.img[i]=LS.img[i-1]; LS.prop[i]=LS.prop[i-1];
+        LS.rt[i]=LS.rt[i-1]; LS.tex[i]=LS.tex[i-1];
+    }
+}
+
+// ── Helper: shift slot array entries down (close gap at `from`) ──
+static void ShiftLayersDown(int from, int to) {
+    for(int i=from;i<to;i++){
+        LS.img[i]=LS.img[i+1]; LS.prop[i]=LS.prop[i+1];
+        LS.rt[i]=LS.rt[i+1]; LS.tex[i]=LS.tex[i+1];
+    }
+}
+
+// ── Helper: init a new slot with a blank image/RT at the given size ──
+static void InitLayerSlot(int idx, int w, int h) {
+    LS.img[idx]=GenImageColor(w,h,BLANK);
+    ImageFormat(&LS.img[idx],PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
+    LS.rt[idx]=Load16BitRT(w,h);
+    BeginTextureMode(LS.rt[idx]); ClearBackground(BLANK); EndTextureMode();
+    LS.tex[idx]=LoadTextureFromImage(LS.img[idx]);
+    LS.prop[idx]={}; LS.prop[idx].op=1; LS.prop[idx].visible=true;
+    LS.prop[idx].blendmode=bmGamma; LS.prop[idx].mat[0]=1; LS.prop[idx].mat[4]=1;
+    LS.prop[idx].threshold=0; LS.prop[idx].feather=1;
+    LS.prop[idx].layerW=w; LS.prop[idx].layerH=h;
+}
+
+// ── Helper: rebuild tex[idx] from img[idx] with aliasing guard ──
+static void RebuildTex(int idx) {
+    if(LS.tex[idx].id>0 && LS.tex[idx].id!=LS.rt[idx].texture.id)
+        UnloadTexture(LS.tex[idx]);
+    else if(LS.tex[idx].id==LS.rt[idx].texture.id)
+        LS.tex[idx]=Texture2D{0};
+    LS.tex[idx]=LoadTextureFromImage(LS.img[idx]);
+}
+
+// ── Helper: capture an RT, store into img[idx], rebuild tex[idx] ──
+static void RebuildLayerImageAndTex(int idx, RenderTexture2D srcRT) {
+    Image cap=LoadImageFromTexture(srcRT.texture); ImageFlipVertical(&cap);
+    UnloadImage(LS.img[idx]); LS.img[idx]=cap;
+    RebuildTex(idx);
+}
+
+// ── Helper: remove a layer slot (unload resources + shift down) ──
+static void RemoveLayerSlot(int idx) {
+    UnloadLayerSlotResources(idx);
+    ShiftLayersDown(idx,LS.count-1);
+    LS.count--; LS.dirty=true;
+}
+
 // ── Init / shutdown ──────────────────────────────────────────────────
 void LayerStack_Init(void) { LS = {0}; }
 
@@ -46,23 +129,14 @@ void LayerStack_Shutdown(void) {
     if(LS.checkerValid){ UnloadTexture(LS.checkerTex); LS.checkerValid=false; }
     if(LS.shaderInited){ UnloadShader(LS.blendShader); LS.shaderInited=false; }
     if(LS.presentInited){ UnloadShader(LS.presentShader); LS.presentInited=false; }
-    for(int i=0;i<LS.count;i++){ if(LS.rt[i].id>0)UnloadRenderTexture(LS.rt[i]); if(LS.tex[i].id>0)UnloadTexture(LS.tex[i]); }
+    for(int i=0;i<LS.count;i++) UnloadLayerSlotResources(i);
     free(LS.img); free(LS.prop); free(LS.rt); free(LS.tex);
     LS={0};
 }
 
 void LayerStack_ReloadShader(void) {
     if(LS.shaderInited){ UnloadShader(LS.blendShader); LS.shaderInited=false; LS.dirty=true; }
-    const char* ad=GetApplicationDirectory(); char fs[512];
-    snprintf(fs,sizeof(fs),"%sshaders/layer_blend.fs",ad);
-    LS.blendShader=LoadShader(0,fs);
-    if(LS.blendShader.id==0){ TraceLog(LOG_ERROR,"layer_blend.fs failed"); return; }
-    LS.locLayerTex=GetShaderLocation(LS.blendShader,"layerTex");
-    LS.locLayerAlpha=GetShaderLocation(LS.blendShader,"layerAlpha");
-    LS.locBmIdx=GetShaderLocation(LS.blendShader,"bmidx");
-    LS.locLayerThreshold=GetShaderLocation(LS.blendShader,"layerThreshold");
-    LS.locLayerFeather=GetShaderLocation(LS.blendShader,"layerFeather");
-    LS.shaderInited=true;
+    LoadBlendShader();
 }
 
 void LayerStack_SetRenderWindow(int w, int h) { LS.renderW=w; LS.renderH=h; LS.dirty=true; }
@@ -92,15 +166,7 @@ static void ReallocArrays(int n) {
 int LayerStack_Add(int w, int h) {
     int idx=LS.count;
     ReallocArrays(idx+1);
-    LS.img[idx]=GenImageColor(w,h,BLANK);
-    ImageFormat(&LS.img[idx],PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
-    LS.rt[idx]=Load16BitRT(w,h);
-    BeginTextureMode(LS.rt[idx]); ClearBackground(BLANK); EndTextureMode();
-    LS.tex[idx]=LoadTextureFromImage(LS.img[idx]);
-    LS.prop[idx]={}; LS.prop[idx].op=1; LS.prop[idx].visible=true;
-    LS.prop[idx].blendmode=bmGamma; LS.prop[idx].mat[0]=1; LS.prop[idx].mat[4]=1;
-    LS.prop[idx].threshold=0; LS.prop[idx].feather=1;
-    LS.prop[idx].layerW=w; LS.prop[idx].layerH=h;
+    InitLayerSlot(idx,w,h);
     LS.count++; LS.dirty=true; return idx;
 }
 
@@ -108,43 +174,25 @@ int LayerStack_InsertLayer(int afterIdx) {
     int idx=afterIdx<0?0:afterIdx>LS.count?LS.count:afterIdx;
     int cw=LS.renderW>0?LS.renderW:512, ch=LS.renderH>0?LS.renderH:512;
     ReallocArrays(LS.count+1);
-    for(int i=LS.count;i>idx;i--){
-        LS.img[i]=LS.img[i-1]; LS.prop[i]=LS.prop[i-1];
-        LS.rt[i]=LS.rt[i-1]; LS.tex[i]=LS.tex[i-1];
-    }
-    LS.img[idx]=GenImageColor(cw,ch,BLANK);
-    ImageFormat(&LS.img[idx],PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
-    LS.rt[idx]=Load16BitRT(cw,ch);
-    BeginTextureMode(LS.rt[idx]); ClearBackground(BLANK); EndTextureMode();
-    LS.tex[idx]=LoadTextureFromImage(LS.img[idx]);
-    LS.prop[idx]={}; LS.prop[idx].op=1; LS.prop[idx].visible=true;
-    LS.prop[idx].blendmode=bmGamma; LS.prop[idx].mat[0]=1; LS.prop[idx].mat[4]=1;
-    LS.prop[idx].threshold=0; LS.prop[idx].feather=1;
-    LS.prop[idx].layerW=cw; LS.prop[idx].layerH=ch;
+    ShiftLayersUp(LS.count,idx);
+    InitLayerSlot(idx,cw,ch);
     LS.count++; LS.dirty=true; return idx;
 }
 
 void LayerStack_DeleteLayer(int idx) {
     if(idx<0||idx>=LS.count||LS.count<=1) return;
-    if(LS.rt[idx].id>0)UnloadRenderTexture(LS.rt[idx]);
-    if(LS.tex[idx].id>0)UnloadTexture(LS.tex[idx]);
-    UnloadImage(LS.img[idx]);
-    for(int i=idx;i<LS.count-1;i++){ LS.img[i]=LS.img[i+1]; LS.prop[i]=LS.prop[i+1]; LS.rt[i]=LS.rt[i+1]; LS.tex[i]=LS.tex[i+1]; }
-    LS.count--; LS.dirty=true;
+    RemoveLayerSlot(idx);
 }
 
 void LayerStack_DuplicateLayer(int idx) {
     if(idx<0||idx>=LS.count) return;
     int n=LS.count; ReallocArrays(n+1);
-    for(int i=n;i>idx+1;i--){ LS.img[i]=LS.img[i-1]; LS.prop[i]=LS.prop[i-1]; LS.rt[i]=LS.rt[i-1]; LS.tex[i]=LS.tex[i-1]; }
+    ShiftLayersUp(n,idx+1);
     int di=idx+1;
     LS.img[di]=ImageCopy(LS.img[idx]); LS.prop[di]=LS.prop[idx];
     int lw=LS.prop[idx].layerW, lh=LS.prop[idx].layerH;
     LS.rt[di]=Load16BitRT(lw,lh);
-    BeginTextureMode(LS.rt[di]); ClearBackground(BLANK);
-    rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE,RL_ZERO,RL_FUNC_ADD);
-    DrawTextureRec(LS.rt[idx].texture,FullRect(lw,lh),Vector2{0,0},WHITE);
-    rlSetBlendMode(RL_BLEND_ALPHA); EndTextureMode();
+    CopyRT(LS.rt[di],LS.rt[idx],lw,lh);
     LS.tex[di]=LoadTextureFromImage(LS.img[di]);
     LS.count++; LS.dirty=true;
 }
@@ -153,8 +201,8 @@ void LayerStack_MoveLayer(int from, int to) {
     if(from<0||from>=LS.count||to<0||to>=LS.count||from==to) return;
     RenderTexture2D mvRT=LS.rt[from]; Texture2D mvTex=LS.tex[from];
     Image mvImg=LS.img[from]; sLayerProps mvProp=LS.prop[from];
-    if(from<to){ for(int i=from;i<to;i++){ LS.img[i]=LS.img[i+1]; LS.prop[i]=LS.prop[i+1]; LS.rt[i]=LS.rt[i+1]; LS.tex[i]=LS.tex[i+1]; } }
-    else { for(int i=from;i>to;i--){ LS.img[i]=LS.img[i-1]; LS.prop[i]=LS.prop[i-1]; LS.rt[i]=LS.rt[i-1]; LS.tex[i]=LS.tex[i-1]; } }
+    if(from<to) ShiftLayersDown(from,to);
+    else        ShiftLayersUp(from,to);
     LS.img[to]=mvImg; LS.prop[to]=mvProp; LS.rt[to]=mvRT; LS.tex[to]=mvTex;
     LS.dirty=true;
 }
@@ -184,12 +232,7 @@ void LayerStack_SyncImageFromRT(int idx) {
 void LayerStack_SyncLayerTex(int idx) {
     if(idx<0||idx>=LS.count||LS.rt[idx].id==0) return;
     LayerStack_SyncImageFromRT(idx);
-    // Don't unload tex if it aliases the RT's color attachment
-    if(LS.tex[idx].id>0 && LS.tex[idx].id != LS.rt[idx].texture.id)
-        UnloadTexture(LS.tex[idx]);
-    else if(LS.tex[idx].id == LS.rt[idx].texture.id)
-        LS.tex[idx] = Texture2D{0};
-    LS.tex[idx]=LoadTextureFromImage(LS.img[idx]);
+    RebuildTex(idx);
 }
 
 void LayerStack_SyncRTFromImage(int idx) {
@@ -203,9 +246,7 @@ void LayerStack_SyncRTFromImage(int idx) {
     rlSetBlendMode(RL_BLEND_ALPHA);
     EndTextureMode();
     UnloadTexture(tmp);
-    if(LS.tex[idx].id>0 && LS.tex[idx].id != LS.rt[idx].texture.id)
-        UnloadTexture(LS.tex[idx]);
-    LS.tex[idx]=LoadTextureFromImage(LS.img[idx]);
+    RebuildTex(idx);
     LS.dirty=true;
 }
 
@@ -218,24 +259,6 @@ static void BakeTransform(RenderTexture2D dst, Texture2D src, const float mat[6]
     rlMultMatrixf(m);
     DrawTextureRec(src,Rectangle{0,0,(float)lw,(float)-lh},Vector2{0,0},WHITE);
     rlPopMatrix(); EndTextureMode();
-}
-
-static void BakeTransformLooped(RenderTexture2D dst, Texture2D src, const float mat[6], int lw, int lh, int cw, int ch) {
-    rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE,RL_ZERO,RL_FUNC_ADD);
-    BeginTextureMode(dst); ClearBackground(BLANK);
-    rlPushMatrix();
-    float m[16]={mat[0],mat[3],0,0, mat[1],mat[4],0,0, 0,0,1,0, mat[2],mat[5],0,1};
-    rlMultMatrixf(m);
-    DrawTextureRec(src,Rectangle{0,0,(float)lw,(float)-lh},Vector2{0,0},WHITE);
-    rlPopMatrix();
-    for(int dy=-1;dy<=1;dy++) for(int dx=-1;dx<=1;dx++){
-        if(dx==0&&dy==0)continue;
-        float tm[16]={mat[0],mat[3],0,0, mat[1],mat[4],0,0, 0,0,1,0, mat[2]+dx*cw,mat[5]+dy*ch,0,1};
-        rlPushMatrix(); rlMultMatrixf(tm);
-        DrawTextureRec(src,Rectangle{0,0,(float)lw,(float)-lh},Vector2{0,0},WHITE);
-        rlPopMatrix();
-    }
-    EndTextureMode();
 }
 
 static void ApplyBlendShader(RenderTexture2D dst, Texture2D base, Texture2D layerTex,
@@ -263,23 +286,15 @@ static void MatInvMul(const float below[6], const float top[6], float out[6]) {
     out[3]=ic*ta+id_*tc; out[4]=ic*tb+id_*td; out[5]=ic*ttx+id_*tty+ity;
 }
 
-static Texture2D GetTransformedTop(int idx, bool looped) {
+static Texture2D GetTransformedTop(int idx) {
     float relMat[6]; MatInvMul(LS.prop[idx-1].mat, LS.prop[idx].mat, relMat);
     if(LS.layerTransRT.id==0) return LS.rt[idx].texture;
     int cw=CW(),ch=CH(),lw=LS.prop[idx].layerW,lh=LS.prop[idx].layerH;
-    if(looped) BakeTransformLooped(LS.layerTransRT,LS.rt[idx].texture,LS.prop[idx].mat,lw,lh,cw,ch);
-    else BakeTransform(LS.layerTransRT,LS.rt[idx].texture,relMat,lw,lh,cw,ch);
+    BakeTransform(LS.layerTransRT,LS.rt[idx].texture,relMat,lw,lh,cw,ch);
     return LS.layerTransRT.texture;
 }
 
-static void RemoveLayerSlot(int idx) {
-    if(LS.rt[idx].id>0)UnloadRenderTexture(LS.rt[idx]);
-    if(LS.tex[idx].id>0)UnloadTexture(LS.tex[idx]);
-    UnloadImage(LS.img[idx]);
-    for(int i=idx;i<LS.count-1;i++){ LS.img[i]=LS.img[i+1]; LS.prop[i]=LS.prop[i+1]; LS.rt[i]=LS.rt[i+1]; LS.tex[i]=LS.tex[i+1]; }
-    LS.count--; LS.dirty=true;
-}
-
+// ── Merge down ────────────────────────────────────────────────────────
 static void MergeDownImpl(int idx, bool seamless) {
     if(!LS.shaderInited||idx<=0||idx>=LS.count||LS.rt[idx].id==0||LS.rt[idx-1].id==0) return;
     int cw=CW(),ch=CH(),bw=LS.prop[idx-1].layerW,bh=LS.prop[idx-1].layerH;
@@ -287,14 +302,11 @@ static void MergeDownImpl(int idx, bool seamless) {
     sLayerProps*p=&LS.prop[idx];
 
     if(!seamless) {
-        Texture2D topTex=GetTransformedTop(idx,false);
+        Texture2D topTex=GetTransformedTop(idx);
         RenderTexture2D mergedRT=Load16BitRT(bw,bh);
         ApplyBlendShader(mergedRT,LS.rt[idx-1].texture,topTex,p->op,p->blendmode,p->threshold,p->feather,bw,bh);
         RenderTexture2D oldRT=LS.rt[idx-1]; LS.rt[idx-1]=mergedRT;
-        Image cap=LoadImageFromTexture(mergedRT.texture); ImageFlipVertical(&cap);
-        UnloadImage(LS.img[idx-1]); LS.img[idx-1]=cap;
-        if(LS.tex[idx-1].id>0)UnloadTexture(LS.tex[idx-1]);
-        LS.tex[idx-1]=LoadTextureFromImage(LS.img[idx-1]);
+        RebuildLayerImageAndTex(idx-1,mergedRT);
         UnloadRenderTexture(oldRT);
         RemoveLayerSlot(idx);
         return;
@@ -309,11 +321,7 @@ static void MergeDownImpl(int idx, bool seamless) {
     if(bufA.id==0||bufB.id==0){ if(bufA.id>0)UnloadRenderTexture(bufA); if(bufB.id>0)UnloadRenderTexture(bufB); return; }
 
     // Seed bufA with the bottom layer
-    BeginTextureMode(bufA);
-    rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE,RL_ZERO,RL_FUNC_ADD);
-    ClearBackground(BLANK);
-    DrawTextureRec(LS.rt[idx-1].texture,FullRect(bw,bh),Vector2{0,0},WHITE);
-    EndTextureMode();
+    CopyRT(bufA,LS.rt[idx-1],bw,bh);
 
     RenderTexture2D*src=&bufA,*dst=&bufB;
     for(int dy=-1;dy<=1;dy++){
@@ -333,10 +341,7 @@ static void MergeDownImpl(int idx, bool seamless) {
     RenderTexture2D mergedRT=*src;
     UnloadRenderTexture(*dst);
     RenderTexture2D oldRT=LS.rt[idx-1]; LS.rt[idx-1]=mergedRT;
-    Image cap=LoadImageFromTexture(mergedRT.texture); ImageFlipVertical(&cap);
-    UnloadImage(LS.img[idx-1]); LS.img[idx-1]=cap;
-    if(LS.tex[idx-1].id>0)UnloadTexture(LS.tex[idx-1]);
-    LS.tex[idx-1]=LoadTextureFromImage(LS.img[idx-1]);
+    RebuildLayerImageAndTex(idx-1,mergedRT);
     UnloadRenderTexture(oldRT);
     RemoveLayerSlot(idx);
 }
@@ -364,22 +369,38 @@ static void EnsureChecker(int w, int h) {
 }
 static void EnsureShader(void) {
     if(LS.shaderInited) return;
-    const char* ad=GetApplicationDirectory(); char fs[512];
-    snprintf(fs,sizeof(fs),"%sshaders/layer_blend.fs",ad);
-    LS.blendShader=LoadShader(0,fs);
-    if(LS.blendShader.id==0){ TraceLog(LOG_ERROR,"layer_blend.fs failed"); return; }
-    LS.locLayerTex=GetShaderLocation(LS.blendShader,"layerTex");
-    LS.locLayerAlpha=GetShaderLocation(LS.blendShader,"layerAlpha");
-    LS.locBmIdx=GetShaderLocation(LS.blendShader,"bmidx");
-    LS.locLayerThreshold=GetShaderLocation(LS.blendShader,"layerThreshold");
-    LS.locLayerFeather=GetShaderLocation(LS.blendShader,"layerFeather");
-    LS.shaderInited=true;
+    LoadBlendShader();
 }
 static void EnsurePresentShader(void) {
     if(LS.presentInited) return;
     const char* ad=GetApplicationDirectory(); char fs[512];
     snprintf(fs,sizeof(fs),"%sshaders/present.fs",ad);
     LS.presentShader=LoadShader(0,fs); LS.presentInited=LS.presentShader.id>0;
+}
+
+// ── Helper: run the ping-pong layer blend loop ──
+// Returns pointer to whichever RT holds the final accumulated result.
+static RenderTexture2D* CompositeLayersInto(RenderTexture2D& a, RenderTexture2D& b, int cw, int ch) {
+    RenderTexture2D*src=&a,*dst=&b;
+    for(int i=0;i<LS.count;i++){
+        if(!LS.prop[i].visible||LS.rt[i].id==0) continue;
+        Texture2D layerTex=LS.rt[i].texture;
+        if(LS.layerTransRT.id>0){
+            BakeTransform(LS.layerTransRT,LS.rt[i].texture,LS.prop[i].mat,LS.prop[i].layerW,LS.prop[i].layerH,cw,ch);
+            layerTex=LS.layerTransRT.texture;
+        }
+        sLayerProps*p=&LS.prop[i];
+        if(LS.shaderInited)
+            ApplyBlendShader(*dst,src->texture,layerTex,p->op,p->blendmode,p->threshold,p->feather,cw,ch);
+        else {
+            BeginTextureMode(*dst); ClearBackground(BLANK);
+            DrawTextureRec(src->texture,FullRect(cw,ch),Vector2{0,0},WHITE);
+            DrawTextureRec(layerTex,FullRect(cw,ch),Vector2{0,0},ColorAlpha(WHITE,p->op));
+            EndTextureMode();
+        }
+        RenderTexture2D*tmp=src; src=dst; dst=tmp;
+    }
+    return src;
 }
 
 bool LayerStack_PresentInited(void) { return LS.presentInited; }
@@ -391,21 +412,9 @@ RenderTexture2D* LayerStack_Composite(void) {
     EnsureAccumulators(cw,ch); EnsureChecker(cw,ch); EnsureShader(); EnsurePresentShader();
     if(!(LS.dirty||layersDirty)){ rlSetBlendMode(RL_BLEND_ALPHA); return (LS.accumInited&&LS.finalAcc)?LS.finalAcc:NULL; }
     LS.dirty=false; layersDirty=false;
-    RenderTexture2D*src=&LS.accumA,*dst=&LS.accumB;
-    BeginTextureMode(*src); ClearBackground(BLANK); DrawTexture(LS.checkerTex,0,0,WHITE); EndTextureMode();
-    for(int i=0;i<LS.count;i++){
-        if(!LS.prop[i].visible||LS.rt[i].id==0) continue;
-        Texture2D layerTex=LS.rt[i].texture;
-        if(LS.layerTransRT.id>0){
-            BakeTransform(LS.layerTransRT,LS.rt[i].texture,LS.prop[i].mat,LS.prop[i].layerW,LS.prop[i].layerH,cw,ch);
-            layerTex=LS.layerTransRT.texture;
-        }
-        sLayerProps*p=&LS.prop[i];
-        if(LS.shaderInited) ApplyBlendShader(*dst,src->texture,layerTex,p->op,p->blendmode,p->threshold,p->feather,cw,ch);
-        else { BeginTextureMode(*dst); ClearBackground(BLANK); DrawTextureRec(src->texture,FullRect(cw,ch),Vector2{0,0},WHITE); DrawTextureRec(layerTex,FullRect(cw,ch),Vector2{0,0},ColorAlpha(WHITE,p->op)); EndTextureMode(); }
-        RenderTexture2D*tmp=src; src=dst; dst=tmp;
-    }
-    LS.finalAcc=src; rlSetBlendMode(RL_BLEND_ALPHA);
+    BeginTextureMode(LS.accumA); ClearBackground(BLANK); DrawTexture(LS.checkerTex,0,0,WHITE); EndTextureMode();
+    LS.finalAcc=CompositeLayersInto(LS.accumA,LS.accumB,cw,ch);
+    rlSetBlendMode(RL_BLEND_ALPHA);
     return (LS.accumInited&&LS.finalAcc)?LS.finalAcc:NULL;
 }
 
@@ -413,25 +422,16 @@ Image LayerStack_CompositeWithDither(void) {
     int cw=CW(),ch=CH(); if(cw<1||ch<1) return (Image){0};
     EnsureShader(); EnsurePresentShader();
     RenderTexture2D a=Load16BitRT(cw,ch),b=Load16BitRT(cw,ch);
-    RenderTexture2D*src=&a,*dst=&b;
-    BeginTextureMode(*src); ClearBackground(BLANK); EndTextureMode();
-    for(int i=0;i<LS.count;i++){
-        if(!LS.prop[i].visible||LS.rt[i].id==0) continue;
-        Texture2D layerTex=LS.rt[i].texture;
-        if(LS.layerTransRT.id>0){
-            BakeTransform(LS.layerTransRT,LS.rt[i].texture,LS.prop[i].mat,LS.prop[i].layerW,LS.prop[i].layerH,cw,ch);
-            layerTex=LS.layerTransRT.texture;
-        }
-        sLayerProps*p=&LS.prop[i];
-        if(LS.shaderInited) ApplyBlendShader(*dst,src->texture,layerTex,p->op,p->blendmode,p->threshold,p->feather,cw,ch);
-        RenderTexture2D*tmp=src; src=dst; dst=tmp;
-    }
-    BeginTextureMode(*dst); ClearBackground(BLANK);
+    BeginTextureMode(a); ClearBackground(BLANK); EndTextureMode();
+    RenderTexture2D* finalAcc=CompositeLayersInto(a,b,cw,ch);
+    // Write the other buffer so we never read and write the same RT
+    RenderTexture2D*out=(finalAcc==&a) ? &b : &a;
+    BeginTextureMode(*out); ClearBackground(BLANK);
     if(LS.presentInited)BeginShaderMode(LS.presentShader);
-    DrawTextureRec(src->texture,FullRect(cw,ch),Vector2{0,0},WHITE);
+    DrawTextureRec(finalAcc->texture,FullRect(cw,ch),Vector2{0,0},WHITE);
     if(LS.presentInited)EndShaderMode(); EndTextureMode();
     rlSetBlendMode(RL_BLEND_ALPHA);
-    Image result=LoadImageFromTexture(dst->texture); ImageFlipVertical(&result);
+    Image result=LoadImageFromTexture(out->texture); ImageFlipVertical(&result);
     ImageFormat(&result,PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
     UnloadRenderTexture(a); UnloadRenderTexture(b); return result;
 }

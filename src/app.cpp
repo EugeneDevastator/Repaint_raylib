@@ -404,7 +404,7 @@ void App_Init(AppState* state) {
     snprintf(p, sizeof(p), "%sSnaps", ad); Dialog_MakeDir(p);
 
     /* Load custom dialog font — bilinear filter for smooth OTF rendering */
-    g_dialogFont = LoadFontEx("resources/Cadman_Bold.otf", 28, 0, 0);
+    g_dialogFont = LoadFontEx("resources/Cadman_Roman.otf", 28, 0, 0);
     SetTextureFilter(g_dialogFont.texture, TEXTURE_FILTER_BILINEAR);
     DialogSetFont(&g_fileDlg, g_dialogFont, 26);
 

@@ -9,8 +9,8 @@ void UIStyle::Init() {
 
     ImGuiIO& io = ImGui::GetIO();
     io.Fonts->Clear();
-    if (FileExists("resources/Cadman_Bold.otf"))
-        io.Fonts->AddFontFromFileTTF("resources/Cadman_Bold.otf", 22.0f);
+    if (FileExists("resources/Cadman_Roman.otf"))
+        io.Fonts->AddFontFromFileTTF("resources/Cadman_Roman.otf", 22.0f);
     else
         io.Fonts->AddFontDefault();
 

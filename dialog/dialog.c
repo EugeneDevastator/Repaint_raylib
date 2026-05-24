@@ -80,9 +80,8 @@ static bool _matchFilter(const char* path, const char* filter) {
 
 static bool _itemVisible(DialogState* d, int i) {
     if (DirectoryExists(d->_files.paths[i])) return false;
-    if (!_matchFilter(d->_files.paths[i], d->_filterBuf)) return false;
-    if (d->type == 1) return _matchExt(d->_files.paths[i], d->_filter);
-    return d->type == 2;
+    // Text input IS the filter — no separate extension matching
+    return _matchFilter(d->_files.paths[i], d->_filterBuf);
 }
 
 static void _visPath(DialogState* d, int idx, char* out, int sz) {
@@ -622,6 +621,7 @@ void DialogOpen_Init(DialogState* d, const char* title, const char* filter, Dial
     _initCommon(d);
     if (title)  snprintf(d->_title,  sizeof(d->_title),  "%s", title);
     if (filter) snprintf(d->_filter, sizeof(d->_filter), "%s", filter);
+    d->_filterActive = true;  // focus the text input immediately
     _initDir(d);
 }
 
