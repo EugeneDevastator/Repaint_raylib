@@ -145,9 +145,10 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
     Vector2 canvasPos = GetScreenToWorld2D(mousePos, state->camera);
 
     // ── Layer transform mode (key '1' toggle) ────────────────────────
-    static int dragAction = 0; // 1=drag layer, 2=drag pivot, 3=rotate
+    static int dragAction = 0; // 1=drag layer, 2=drag pivot, 3=rotate, 4=scale
     static Vector2 dragStart = {0, 0};
     static float savedMat[6];
+    static int dragCorner = -1; // corner index for scale drag
     if (g_activeHud != HUD_LAYER_XFORM) {
         dragAction = 0;
         dragStart = Vector2{0,0};
@@ -156,13 +157,39 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
 
     if (g_activeHud == HUD_LAYER_XFORM && vp->inBounds && state->activeLayer >= 0 && !spaceHeld) {
         sLayerProps* lp = &state->canvas.layerProps[state->activeLayer];
+        float lw = (float)lp->layerW, lh = (float)lp->layerH;
+        if (lw < 1) lw = (float)state->canvas.width;
+        if (lh < 1) lh = (float)state->canvas.height;
+
+        // Compute 4 corners of the layer in canvas space
+        float a = lp->mat[0], b = lp->mat[1], tx = lp->mat[2];
+        float c = lp->mat[3], d = lp->mat[4], ty = lp->mat[5];
+        Vector2 corners[4] = {
+            {0*a+0*b+tx, 0*c+0*d+ty},
+            {lw*a+0*b+tx, lw*c+0*d+ty},
+            {lw*a+lh*b+tx, lw*c+lh*d+ty},
+            {0*a+lh*b+tx, 0*c+lh*d+ty}
+        };
 
         float cDist = Dist2D(canvasPos, Vector2{g_pivotCursorX, g_pivotCursorY});
         bool nearCenter = cDist < 12.0f;
 
+        // Check if near any corner (for scaling)
+        int nearCorner = -1;
+        for (int ci = 0; ci < 4; ci++) {
+            if (Dist2D(canvasPos, corners[ci]) < 12.0f) { nearCorner = ci; break; }
+        }
+
         // Any left click on the viewport moves the layer (cursor has priority)
         if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-            dragAction = nearCenter ? 2 : 1;
+            if (nearCenter) {
+                dragAction = 2;
+            } else if (nearCorner >= 0) {
+                dragAction = 4;  // scale
+                dragCorner = nearCorner;
+            } else {
+                dragAction = 1;
+            }
             dragStart = canvasPos;
             memcpy(savedMat, lp->mat, sizeof(savedMat));
         }
@@ -200,9 +227,72 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                 cosD, -sinD, pivX - pivX * cosD + pivY * sinD,
                 sinD,  cosD, pivY - pivX * sinD - pivY * cosD
             };
+            memcpy(lp->mat, savedMat, sizeof(savedMat));
             LayerStack_ApplyTransform(state->activeLayer, mat);
             layersDirty = true;
         }
+
+        // ── Scale layer (drag corner, pivots around g_pivotCursor) ────
+        if (dragAction == 4 && IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
+            memcpy(lp->mat, savedMat, sizeof(savedMat));
+            float as = savedMat[0], bs = savedMat[1], ts = savedMat[2];
+            float cs = savedMat[3], ds = savedMat[4], tys = savedMat[5];
+
+            float fixX = g_pivotCursorX, fixY = g_pivotCursorY;
+            float dx = canvasPos.x - fixX;
+            float dy = canvasPos.y - fixY;
+
+            float det = as * ds - bs * cs;
+            if (fabsf(det) > 0.0001f) {
+                float invDet = 1.0f / det;
+                float ia = ds * invDet, ib = -bs * invDet;
+                float ic = -cs * invDet, id = as * invDet;
+
+                // Pivot in layer-local space
+                float pcx = (fixX - ts) * ia + (fixY - tys) * ib;
+                float pcy = (fixX - ts) * ic + (fixY - tys) * id;
+
+                // Current mouse in layer-local space (relative to pivot world)
+                float lx = dx * ia + dy * ib;
+                float ly = dx * ic + dy * id;
+
+                int gc = dragCorner;
+                float grabLx = (gc == 0 || gc == 3) ? 0.0f : lw;
+                float grabLy = (gc == 0 || gc == 1) ? 0.0f : lh;
+
+                // These are already in local space, relative to origin
+                // initD = corner pos relative to pivot (local)
+                float initDx = grabLx - pcx;
+                float initDy = grabLy - pcy;
+
+                // lx/ly is mouse offset from pivot in local space — so newD = lx, ly directly
+                float newDx = lx;
+                float newDy = ly;
+
+                float sx = (fabsf(initDx) > 0.001f) ? newDx / initDx : 1.0f;
+                float sy = (fabsf(initDy) > 0.001f) ? newDy / initDy : 1.0f;
+                if (sx < 0.01f) sx = 0.01f;
+                if (sy < 0.01f) sy = 0.01f;
+
+                // Extract rotation from savedMat
+                float oldSx = sqrtf(as * as + cs * cs);
+                float cosR = (oldSx > 0.0001f) ? as / oldSx : 1.0f;
+                float sinR = (oldSx > 0.0001f) ? cs / oldSx : 0.0f;
+
+                // New R*S columns
+                float m0 = cosR * sx, m1 = -sinR * sy;
+                float m3 = sinR * sx, m4 =  cosR * sy;
+
+                // Translation: T = pivot_world - (R*S) * pivot_local
+                float m2  = fixX - (m0 * pcx + m1 * pcy);
+                float m5  = fixY - (m3 * pcx + m4 * pcy);
+
+                lp->mat[0] = m0; lp->mat[1] = m1; lp->mat[2] = m2;
+                lp->mat[3] = m3; lp->mat[4] = m4; lp->mat[5] = m5;
+            }
+            layersDirty = true;
+        }
+
 
         if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) {
             if (dragAction == 1) {
@@ -211,6 +301,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                 g_pivotCursorY = canvasPos.y;
             }
             dragAction = 0;
+            dragCorner = -1;
         }
         if (IsMouseButtonReleased(MOUSE_RIGHT_BUTTON))
             dragAction = 0;
@@ -245,6 +336,18 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             // Subtract layer rotation so brush stamps appear upright in world space
             float layerRot = atan2f(lp->mat[3], lp->mat[0]) * (180.0f / (float)M_PI);
             adjustedAngle -= layerRot;
+        }
+    }
+
+    // Compute average layer scale for brush radius adjustment
+    float layerScale = 1.0f;
+    if (!state->editTexMode && active >= 0 && active < state->canvas.layerCount) {
+        sLayerProps* lp = &state->canvas.layerProps[active];
+        if (lp->mat[0] != 1.0f || lp->mat[1] != 0.0f || lp->mat[2] != 0.0f ||
+            lp->mat[3] != 0.0f || lp->mat[4] != 1.0f || lp->mat[5] != 0.0f) {
+            float sx = sqrtf(lp->mat[0] * lp->mat[0] + lp->mat[3] * lp->mat[3]);
+            float sy = sqrtf(lp->mat[1] * lp->mat[1] + lp->mat[4] * lp->mat[4]);
+            layerScale = (sx + sy) * 0.5f;
         }
     }
 
@@ -284,8 +387,10 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                 int n = StrokeEngine_FeedPoint(&vp->strokeEng, sp,
                     &state->currentBrush.Realb, state->initialAngle, state->mode,
                     dabs, 1024);
-                if (n > 0)
+                if (n > 0) {
+                    for (int i = 0; i < n; i++) dabs[i].brush.rad_out_px *= layerScale;
                     StrokeEngine_ApplyDabs(bt->rt, g_activeBrushTex, dabs, n);
+                }
             }
             g_activeBrushTex = savedTex;
         }
@@ -295,6 +400,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                 int fn = StrokeEngine_FlushSmoothing(&vp->strokeEng, &state->currentBrush.Realb,
                                                       state->initialAngle, state->mode, dabs, 1024);
                 if (fn > 0) {
+                    for (int i = 0; i < fn; i++) dabs[i].brush.rad_out_px *= layerScale;
                     StrokeEngine_ApplyDabs(bt->rt, g_activeBrushTex, dabs, fn);
                 } else if (vp->strokeEng.dabIndex == 0) {
                     // Single click — place dab at start point
@@ -302,6 +408,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     DrawDab single = {};
                     single.x = pos.x; single.y = pos.y;
                     single.brush = CollapseBrushParams(state->currentBrush.Realb, state->initialAngle, state->mode);
+                    single.brush.rad_out_px *= layerScale;
                     Texture2D saved = g_activeBrushTex;
                     g_activeBrushTex = g_defaultBrushTex;
                     StrokeEngine_ApplyDabs(bt->rt, g_activeBrushTex, &single, 1);
@@ -335,6 +442,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     int n = StrokeEngine_FeedPoint(&vp->strokeEng, sp,
                         &state->currentBrush.Realb, adjustedAngle, state->mode,
                         dabs, 1024);
+                    for (int i = 0; i < n; i++) dabs[i].brush.rad_out_px *= layerScale;
                     for (int i = 0; i < n; i++) {
                         if (vp->broker) {
                             BrushDab bd = MakeBrushDab(dabs[i].x, dabs[i].y, dabs[i]);
@@ -347,20 +455,23 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             } else {
                 // Disp / Cont
                 float sv = BParam_GetValue(&bpSpacing);
-                float spacing = state->currentBrush.Realb.rad_out * 2.0f * sv;
+                float scaledRad = state->currentBrush.Realb.rad_out * layerScale;
+                float spacing = scaledRad * 2.0f * sv;
                 if (spacing < 2.0f) spacing = 2.0f;
                 if (!vp->wasMouseDown) {
                     if (vp->broker) {
-                        BrushDab ev = {paintPos.x, paintPos.y, paintPos.x, paintPos.y,
-                                       state->currentBrush.Realb};
+                        d_RealBrush scaled = state->currentBrush.Realb;
+                        scaled.rad_out = scaledRad;
+                        BrushDab ev = {paintPos.x, paintPos.y, paintPos.x, paintPos.y, scaled};
                         vp->broker->on_input(ev);
                     }
                     vp->wasMouseDown = true;
                 } else {
                     if (Dist2D(vp->strokeEng.lastDabPos, paintPos) >= spacing) {
                         if (vp->broker) {
-                            BrushDab ev = {paintPos.x, paintPos.y, paintPos.x, paintPos.y,
-                                           state->currentBrush.Realb};
+                            d_RealBrush scaled = state->currentBrush.Realb;
+                            scaled.rad_out = scaledRad;
+                            BrushDab ev = {paintPos.x, paintPos.y, paintPos.x, paintPos.y, scaled};
                             vp->broker->on_input(ev);
                         }
                         vp->strokeEng.lastDabPos = paintPos;
@@ -378,6 +489,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         if (vp->wasMouseDown) {
             int fn = StrokeEngine_FlushSmoothing(&vp->strokeEng, &state->currentBrush.Realb,
                                                    adjustedAngle, state->mode, dabs, 1024);
+            for (int i = 0; i < fn; i++) dabs[i].brush.rad_out_px *= layerScale;
             if (fn == 0 && vp->strokeEng.dabIndex == 0 && vp->broker) {
                 // Single click — no segments produced; place a dab at the start point
                 Vector2 pos = vp->strokeEng.lastDabPos;
@@ -385,6 +497,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                 single.x = pos.x;
                 single.y = pos.y;
                 single.brush = CollapseBrushParams(state->currentBrush.Realb, state->initialAngle, state->mode);
+                single.brush.rad_out_px *= layerScale;
                 BrushDab bd = MakeBrushDab(pos.x, pos.y, single);
                 vp->broker->on_input(bd);
                 if (vp->strokeLen < MAX_STROKE_PTS)

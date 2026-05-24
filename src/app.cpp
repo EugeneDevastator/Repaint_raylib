@@ -484,7 +484,9 @@ void App_Draw(AppState* state) {
     // ── Layer transform XOR gizmo ──────────────────────────────────────
     if (g_activeHud == HUD_LAYER_XFORM && state->activeLayer >= 0) {
         sLayerProps* lp = &state->canvas.layerProps[state->activeLayer];
-        float cw = (float)state->canvas.width, ch = (float)state->canvas.height;
+        float lw = (float)lp->layerW, lh = (float)lp->layerH;
+        if (lw < 1) lw = (float)state->canvas.width;
+        if (lh < 1) lh = (float)state->canvas.height;
 
         auto ws = [&](Vector2 wp) -> Vector2 {
             return GetWorldToScreen2D(wp, state->camera);
@@ -501,12 +503,10 @@ void App_Draw(AppState* state) {
         DrawLine(uip.x, uip.y - chLen, uip.x, uip.y + chLen, WHITE);
         DrawCircle(uip.x, uip.y, 3.0f, WHITE);
 
-        // Layer outline — transform 4 corners through the layer matrix
+        // Layer outline + scale handles — transform 4 corners through layer matrix
         float a = lp->mat[0], b = lp->mat[1], tx = lp->mat[2];
         float c = lp->mat[3], d = lp->mat[4], ty = lp->mat[5];
-        Vector2 pts[4] = {
-            {0, 0}, {cw, 0}, {cw, ch}, {0, ch}
-        };
+        Vector2 pts[4] = {{0,0}, {lw,0}, {lw,lh}, {0,lh}};
         Vector2 corners[5];
         for (int ci = 0; ci < 4; ci++) {
             float rx = pts[ci].x * a + pts[ci].y * b + tx;
@@ -515,6 +515,13 @@ void App_Draw(AppState* state) {
         }
         corners[4] = corners[0];
         DrawLineStrip(corners, 5, WHITE);
+
+        // Scale handle squares at each corner (10px half-size = 20px total)
+        for (int ci = 0; ci < 4; ci++) {
+            float hx = corners[ci].x, hy = corners[ci].y;
+            float hs = 10.0f;
+            DrawRectangleLinesEx(Rectangle{hx - hs, hy - hs, hs * 2, hs * 2}, 2.0f, WHITE);
+        }
 
         rlDrawRenderBatchActive();
         glDisable(GL_COLOR_LOGIC_OP);
