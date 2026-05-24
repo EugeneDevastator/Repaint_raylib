@@ -221,7 +221,7 @@ static void ApplyBlendShader(RenderTexture2D dst, Texture2D base, Texture2D laye
     float alpha, int bmidx, float threshold, float feather, int w, int h) {
     if(dst.id==0||base.id==0||layerTex.id==0||w<1||h<1) return;
     if(!LS.shaderInited||LS.blendShader.id==0) return;
-    BeginTextureMode(dst); rlDisableScissorTest(); rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE,RL_ZERO,RL_FUNC_ADD);
+    BeginTextureMode(dst); rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE,RL_ZERO,RL_FUNC_ADD);
     BeginShaderMode(LS.blendShader);
     SetShaderValueTexture(LS.blendShader,LS.locLayerTex,layerTex);
     SetShaderValue(LS.blendShader,LS.locLayerAlpha,&alpha,SHADER_UNIFORM_FLOAT);
@@ -271,12 +271,12 @@ static void MergeDownImpl(int idx, bool seamless) {
     if(mergedRT.id==0||mergedRT.texture.id==0) return;
     sLayerProps*p=&LS.prop[idx];
     ApplyBlendShader(mergedRT,LS.rt[idx-1].texture,topTex,p->op,p->blendmode,p->threshold,p->feather,bw,bh);
-    rlDrawRenderBatchActive();
     RenderTexture2D oldRT=LS.rt[idx-1]; LS.rt[idx-1]=mergedRT;
-    Texture2D oldTex=LS.tex[idx-1]; LS.tex[idx-1]=mergedRT.texture;
+    if(LS.tex[idx-1].id>0) UnloadTexture(LS.tex[idx-1]);
     Image cap=LoadImageFromTexture(mergedRT.texture); ImageFlipVertical(&cap);
     UnloadImage(LS.img[idx-1]); LS.img[idx-1]=cap;
-    UnloadRenderTexture(oldRT); if(oldTex.id>0)UnloadTexture(oldTex);
+    LS.tex[idx-1]=LoadTextureFromImage(cap);
+    UnloadRenderTexture(oldRT);
     RemoveLayerSlot(idx);
 }
 
