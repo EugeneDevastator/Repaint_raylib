@@ -32,6 +32,51 @@ uniform float pwr;
 uniform int   eraseMode;
 uniform bool  uSeamless;
 in vec2 canvasFragUV;
+						   // sRGB -> OKLab
+vec3 rgbToOklab(vec3 c) {
+    // sRGB to linear
+    vec3 lin = c * c; // fast approx, same as your existing code
+
+    // linear RGB -> LMS (OKLab's cone space)
+    float l = 0.4122214708 * lin.r + 0.5363325363 * lin.g + 0.0514459929 * lin.b;
+    float m = 0.2119034982 * lin.r + 0.6806995451 * lin.g + 0.1073969566 * lin.b;
+    float s = 0.0883024619 * lin.r + 0.2817188376 * lin.g + 0.6299787005 * lin.b;
+
+    // cube root (perceptual compression)
+    float l_ = pow(max(l, 0.0), 1.0/3.0);
+    float m_ = pow(max(m, 0.0), 1.0/3.0);
+    float s_ = pow(max(s, 0.0), 1.0/3.0);
+
+    // LMS -> Lab
+    return vec3(
+        0.2104542553 * l_ + 0.7936177850 * m_ - 0.0040720468 * s_,
+        1.9779984951 * l_ - 2.4285922050 * m_ + 0.4505937099 * s_,
+        0.0259040371 * l_ + 0.7827717662 * m_ - 0.8086757660 * s_
+    );
+}
+
+// OKLab -> sRGB
+vec3 oklabToRgb(vec3 lab) {
+    // Lab -> LMS
+    float l_ = lab.x + 0.3963377774 * lab.y + 0.2158037573 * lab.z;
+    float m_ = lab.x - 0.1055613458 * lab.y - 0.0638541728 * lab.z;
+    float s_ = lab.x - 0.0894841775 * lab.y - 1.2914855480 * lab.z;
+
+    // undo cube root
+    float l = l_ * l_ * l_;
+    float m = m_ * m_ * m_;
+    float s = s_ * s_ * s_;
+
+    // LMS -> linear RGB
+    vec3 lin = vec3(
+        +4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+        -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+        -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s
+    );
+
+    // linear -> sRGB (fast approx)
+    return sqrt(max(lin, 0.0));
+}
 
 float hash2(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
@@ -87,13 +132,25 @@ vec4 applyBlend(int mode, vec4 canvas, vec3 brushRGB, float brushA) {
     if (canvas.a <= 0.00000001) {
         return vec4(clamp(brushRGB, 0.0, 1.0), clamp(brushA, 0.0, 1.0));
     }
+    // older N-gamma, dont delete.
+    //  if (mode == 0) { // N-Gamma
+    //    vec3 brushLin  = brushRGB * brushRGB;
+    //    vec3 canvasLin = canvas.rgb * canvas.rgb;
+    //    outRGB = sqrt(brushLin * brushA + canvasLin * (1.0 - brushA));
+    //    outA   = brushA + canvas.a * (1.0 - brushA);
+    //      }
+if (mode == 0) { // N-OKLab
+    vec3 brushLab  = rgbToOklab(brushRGB);
+    vec3 canvasLab = rgbToOklab(canvas.rgb);
 
-    if (mode == 0) { // N-Gamma
-        vec3 brushLin  = brushRGB * brushRGB;
-        vec3 canvasLin = canvas.rgb * canvas.rgb;
-        outRGB = sqrt(brushLin * brushA + canvasLin * (1.0 - brushA));
-        outA   = brushA + canvas.a * (1.0 - brushA);
-    } else if (mode == 1) { // N-Linear
+    // straight linear blend in Lab space
+    // L blends linearly = perceptually linear luminosity
+    // a,b blend linearly = smooth hue/chroma
+    vec3 blendedLab = brushLab * brushA + canvasLab * (1.0 - brushA);
+
+    outRGB = oklabToRgb(blendedLab);
+    outA   = brushA + canvas.a * (1.0 - brushA);
+} else if (mode == 1) { // N-Linear
         outRGB = brushPremul + canvas.rgb * (1.0 - brushA);
         outA   = brushA + canvas.a * (1.0 - brushA);
     } else if (mode == 2) { // EraseA
