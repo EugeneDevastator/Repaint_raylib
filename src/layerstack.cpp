@@ -184,7 +184,11 @@ void LayerStack_SyncImageFromRT(int idx) {
 void LayerStack_SyncLayerTex(int idx) {
     if(idx<0||idx>=LS.count||LS.rt[idx].id==0) return;
     LayerStack_SyncImageFromRT(idx);
-    if(LS.tex[idx].id>0)UnloadTexture(LS.tex[idx]);
+    // Don't unload tex if it aliases the RT's color attachment
+    if(LS.tex[idx].id>0 && LS.tex[idx].id != LS.rt[idx].texture.id)
+        UnloadTexture(LS.tex[idx]);
+    else if(LS.tex[idx].id == LS.rt[idx].texture.id)
+        LS.tex[idx] = Texture2D{0};
     LS.tex[idx]=LoadTextureFromImage(LS.img[idx]);
 }
 
@@ -270,10 +274,11 @@ static void MergeDownImpl(int idx, bool seamless) {
         RenderTexture2D mergedRT=Load16BitRT(bw,bh);
         ApplyBlendShader(mergedRT,LS.rt[idx-1].texture,topTex,p->op,p->blendmode,p->threshold,p->feather,bw,bh);
         RenderTexture2D oldRT=LS.rt[idx-1]; LS.rt[idx-1]=mergedRT;
-        Texture2D oldTex=LS.tex[idx-1]; LS.tex[idx-1]=mergedRT.texture;
         Image cap=LoadImageFromTexture(mergedRT.texture); ImageFlipVertical(&cap);
         UnloadImage(LS.img[idx-1]); LS.img[idx-1]=cap;
-        UnloadRenderTexture(oldRT); if(oldTex.id>0)UnloadTexture(oldTex);
+        if(LS.tex[idx-1].id>0)UnloadTexture(LS.tex[idx-1]);
+        LS.tex[idx-1]=LoadTextureFromImage(LS.img[idx-1]);
+        UnloadRenderTexture(oldRT);
         RemoveLayerSlot(idx);
         return;
     }
@@ -311,10 +316,11 @@ static void MergeDownImpl(int idx, bool seamless) {
     RenderTexture2D mergedRT=*src;
     UnloadRenderTexture(*dst);
     RenderTexture2D oldRT=LS.rt[idx-1]; LS.rt[idx-1]=mergedRT;
-    Texture2D oldTex=LS.tex[idx-1]; LS.tex[idx-1]=mergedRT.texture;
     Image cap=LoadImageFromTexture(mergedRT.texture); ImageFlipVertical(&cap);
     UnloadImage(LS.img[idx-1]); LS.img[idx-1]=cap;
-    UnloadRenderTexture(oldRT); if(oldTex.id>0)UnloadTexture(oldTex);
+    if(LS.tex[idx-1].id>0)UnloadTexture(LS.tex[idx-1]);
+    LS.tex[idx-1]=LoadTextureFromImage(LS.img[idx-1]);
+    UnloadRenderTexture(oldRT);
     RemoveLayerSlot(idx);
 }
 
