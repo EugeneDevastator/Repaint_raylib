@@ -339,7 +339,11 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         }
     }
 
-    // Compute average layer scale for brush radius adjustment
+    // Compute average layer scale for brush radius adjustment.
+    // The brush radius is in canvas pixels.  When the layer is scaled, the stamp
+    // is applied to the layer RT which has the layer's native resolution, so the
+    // stamp radius must be divided by the layer scale to appear at the correct
+    // visual size on screen.
     float layerScale = 1.0f;
     if (!state->editTexMode && active >= 0 && active < state->canvas.layerCount) {
         sLayerProps* lp = &state->canvas.layerProps[active];
@@ -347,7 +351,8 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             lp->mat[3] != 0.0f || lp->mat[4] != 1.0f || lp->mat[5] != 0.0f) {
             float sx = sqrtf(lp->mat[0] * lp->mat[0] + lp->mat[3] * lp->mat[3]);
             float sy = sqrtf(lp->mat[1] * lp->mat[1] + lp->mat[4] * lp->mat[4]);
-            layerScale = (sx + sy) * 0.5f;
+            float avg = (sx + sy) * 0.5f;
+            if (avg > 0.001f) layerScale = 1.0f / avg;
         }
     }
 
