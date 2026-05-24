@@ -219,8 +219,6 @@ static void BakeTransformLooped(RenderTexture2D dst, Texture2D src, const float 
 
 static void ApplyBlendShader(RenderTexture2D dst, Texture2D base, Texture2D layerTex,
     float alpha, int bmidx, float threshold, float feather, int w, int h) {
-    if(dst.id==0||base.id==0||layerTex.id==0||w<1||h<1) return;
-    if(!LS.shaderInited||LS.blendShader.id==0) return;
     BeginTextureMode(dst); rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE,RL_ZERO,RL_FUNC_ADD);
     BeginShaderMode(LS.blendShader);
     SetShaderValueTexture(LS.blendShader,LS.locLayerTex,layerTex);
@@ -248,7 +246,7 @@ static Texture2D GetTransformedTop(int idx, bool looped) {
     float relMat[6]; MatInvMul(LS.prop[idx-1].mat, LS.prop[idx].mat, relMat);
     if(LS.layerTransRT.id==0) return LS.rt[idx].texture;
     int cw=CW(),ch=CH(),lw=LS.prop[idx].layerW,lh=LS.prop[idx].layerH;
-    if(looped) BakeTransformLooped(LS.layerTransRT,LS.rt[idx].texture,LS.prop[idx].mat,lw,lh,lw,lh);
+    if(looped) BakeTransformLooped(LS.layerTransRT,LS.rt[idx].texture,LS.prop[idx].mat,lw,lh,cw,ch);
     else BakeTransform(LS.layerTransRT,LS.rt[idx].texture,relMat,lw,lh,cw,ch);
     return LS.layerTransRT.texture;
 }
@@ -264,19 +262,16 @@ static void RemoveLayerSlot(int idx) {
 static void MergeDownImpl(int idx, bool seamless) {
     if(!LS.shaderInited||idx<=0||idx>=LS.count||LS.rt[idx].id==0||LS.rt[idx-1].id==0) return;
     Texture2D topTex=GetTransformedTop(idx,seamless);
-    if(topTex.id==0) return;
     if(seamless) SetTextureWrap(topTex,TEXTURE_WRAP_REPEAT);
     int cw=CW(),ch=CH(),bw=LS.prop[idx-1].layerW,bh=LS.prop[idx-1].layerH;
     RenderTexture2D mergedRT=Load16BitRT(bw,bh);
-    if(mergedRT.id==0||mergedRT.texture.id==0) return;
     sLayerProps*p=&LS.prop[idx];
     ApplyBlendShader(mergedRT,LS.rt[idx-1].texture,topTex,p->op,p->blendmode,p->threshold,p->feather,bw,bh);
     RenderTexture2D oldRT=LS.rt[idx-1]; LS.rt[idx-1]=mergedRT;
-    if(LS.tex[idx-1].id>0) UnloadTexture(LS.tex[idx-1]);
+    Texture2D oldTex=LS.tex[idx-1]; LS.tex[idx-1]=mergedRT.texture;
     Image cap=LoadImageFromTexture(mergedRT.texture); ImageFlipVertical(&cap);
     UnloadImage(LS.img[idx-1]); LS.img[idx-1]=cap;
-    LS.tex[idx-1]=LoadTextureFromImage(cap);
-    UnloadRenderTexture(oldRT);
+    UnloadRenderTexture(oldRT); if(oldTex.id>0)UnloadTexture(oldTex);
     RemoveLayerSlot(idx);
 }
 
