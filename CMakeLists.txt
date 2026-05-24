@@ -60,7 +60,6 @@ set(SOURCES
     src/ui/ui_leftpanel.cpp
     src/ui/ui_changelog.cpp
     src/ui/ui_style.cpp
-    src/ui/raygui_impl.cpp
     # ── sensors ───────────────────────────────────────────────────────
     src/sensors/tablet.cpp
     src/sensors/input_filter.cpp
