@@ -12,7 +12,7 @@ TestBroker::TestBroker() {
 void TestBroker::on_input(const BrushDab& e) {
     if (!appState) return;
     int layer = appState->activeLayer;
-    if (layer < 0 || layer >= appState->texCount) return;
+    if (layer < 0 || layer >= LayerStack_Count()) return;
 
     int next = (tail + 1) % CMD_CAPACITY;
     if (next == head) return;
@@ -42,11 +42,11 @@ void TestBroker::poll(AppState* state) {
     while (head != tail) {
         Dab* d = &queue[head];
         int layer = d->activeLayer;
-        if (layer < 0 || layer >= state->texCount) {
+        if (layer < 0 || layer >= LayerStack_Count()) {
             head = (head + 1) % CMD_CAPACITY;
             continue;
         }
-        RenderTexture2D rt = state->layerRTs[layer];
+        RenderTexture2D rt = LayerStack_GetRT(layer);
         if (rt.id > 0) {
             d_Brush brush = {};
             brush.Realb = d->brush;

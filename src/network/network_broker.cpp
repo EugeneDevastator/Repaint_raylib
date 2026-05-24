@@ -224,7 +224,7 @@ void NetworkBroker::on_input(const BrushDab& e) {
     localQueue[localTail].eraseMode   = e.brush.eraseMode;
     localQueue[localTail].perspective = e.brush.perspective;
     localQueue[localTail].activeLayer = layer;
-    localQueue[localTail].targetRT    = appState->layerRTs[layer];
+    localQueue[localTail].targetRT    = LayerStack_GetRT(layer);
 
     localTail = next;
 }
@@ -236,7 +236,7 @@ void NetworkBroker::poll(AppState* st) {
         QueuedNetDab* d = &localQueue[localHead];
         bool applied = false;
 
-        if (d->targetRT.id != 0 && d->activeLayer >= 0 && d->activeLayer < st->texCount) {
+        if (d->targetRT.id != 0 && d->activeLayer >= 0 && d->activeLayer < LayerStack_Count()) {
             d_Brush brush = {};
             brush.Realb.radInRatio = d->radInRatio;
             brush.Realb.rad_out  = d->rad_out;
@@ -263,7 +263,7 @@ void NetworkBroker::poll(AppState* st) {
             brush.Realb.eraseMode  = d->eraseMode;
             brush.Realb.perspective = d->perspective;
 
-            RenderTexture2D rt = st->layerRTs[d->activeLayer];
+            RenderTexture2D rt = LayerStack_GetRT(d->activeLayer);
             if (rt.id > 0) {
                 BrushBlend_ApplyStamp(rt, &brush, g_activeBrushTex, d->x, d->y, d->srcX, d->srcY);
                 applied = true;
@@ -394,16 +394,16 @@ void NetworkBroker::ProcessReceived(uint8_t hid, uint8_t* data, uint32_t size) {
         }
         case laDel: {
             int idx = lact.layer;
-            if (idx < 0 || idx >= appState->canvas.layerCount) break;
+            if (idx < 0 || idx >= LayerStack_Count()) break;
             LayerStack_DeleteLayer(idx);
-            if (appState->activeLayer >= appState->canvas.layerCount)
-                appState->activeLayer = appState->canvas.layerCount - 1;
+            if (appState->activeLayer >= LayerStack_Count())
+                appState->activeLayer = LayerStack_Count() - 1;
             layersDirty = true;
             break;
         }
         case laDup: {
             int idx = lact.layer;
-            if (idx < 0 || idx >= appState->canvas.layerCount) break;
+            if (idx < 0 || idx >= LayerStack_Count()) break;
             LayerStack_DuplicateLayer(idx);
             layersDirty = true;
             break;
@@ -411,8 +411,8 @@ void NetworkBroker::ProcessReceived(uint8_t hid, uint8_t* data, uint32_t size) {
         case laMove: {
             int fromIdx = lact.layer;
             int toIdx   = lact.layerto;
-            if (fromIdx < 0 || fromIdx >= appState->canvas.layerCount) break;
-            if (toIdx   < 0 || toIdx   >= appState->canvas.layerCount) break;
+            if (fromIdx < 0 || fromIdx >= LayerStack_Count()) break;
+            if (toIdx   < 0 || toIdx   >= LayerStack_Count()) break;
             if (fromIdx == toIdx) break;
             LayerStack_MoveLayer(fromIdx, toIdx);
             if (appState->activeLayer == fromIdx)
@@ -422,24 +422,24 @@ void NetworkBroker::ProcessReceived(uint8_t hid, uint8_t* data, uint32_t size) {
         }
         case laDrop: {
             int idx = lact.layer;
-            if (idx <= 0 || idx >= appState->canvas.layerCount) break;
+            if (idx <= 0 || idx >= LayerStack_Count()) break;
             MergeDownLayer(appState, idx);
-            if (appState->activeLayer >= appState->canvas.layerCount)
-                appState->activeLayer = appState->canvas.layerCount - 1;
+            if (appState->activeLayer >= LayerStack_Count())
+                appState->activeLayer = LayerStack_Count() - 1;
             layersDirty = true;
             break;
         }
         case laOp: {
             int idx = lact.layer;
-            if (idx < 0 || idx >= appState->canvas.layerCount) break;
-            Canvas_SetLayerOpacity(&appState->canvas, idx, lact.op);
+            if (idx < 0 || idx >= LayerStack_Count()) break;
+            LayerStack_GetProps(idx)->op = lact.op;
             layersDirty = true;
             break;
         }
         case laBm: {
             int idx = lact.layer;
-            if (idx < 0 || idx >= appState->canvas.layerCount) break;
-            Canvas_SetLayerBlendMode(&appState->canvas, idx, lact.bm);
+            if (idx < 0 || idx >= LayerStack_Count()) break;
+            LayerStack_GetProps(idx)->blendmode = lact.bm;
             layersDirty = true;
             break;
         }
@@ -461,13 +461,13 @@ void NetworkBroker::ProcessReceived(uint8_t hid, uint8_t* data, uint32_t size) {
 void NetworkBroker::EnqueueRemoteDab(const d_Action* act) {
     if (!appState) return;
     int layer = act->layer;
-    if (layer < 0 || layer >= appState->texCount) return;
-    if (appState->layerRTs[layer].id == 0) return;
+    if (layer < 0 || layer >= LayerStack_Count()) return;
+    if (LayerStack_GetRT(layer).id == 0) return;
 
     d_Brush brush = act->Brush;
     Vector2 pos1  = act->Stroke.pos1;
     Vector2 pos2  = act->Stroke.pos2;
-    RenderTexture2D rt = appState->layerRTs[layer];
+    RenderTexture2D rt = LayerStack_GetRT(layer);
     if (rt.id > 0)
         BrushBlend_ApplyStamp(rt, &brush, g_activeBrushTex, pos1.x, pos1.y, pos2.x, pos2.y);
 }

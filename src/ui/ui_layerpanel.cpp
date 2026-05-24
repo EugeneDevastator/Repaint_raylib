@@ -22,8 +22,8 @@ static void CommitLayerOp(AppState* state, d_LAction* lact) {
         case laDel: {
             int idx = lact->layer;
             LayerStack_DeleteLayer(idx);
-            if (state->activeLayer >= state->canvas.layerCount)
-                state->activeLayer = state->canvas.layerCount - 1;
+            if (state->activeLayer >= LayerStack_Count())
+                state->activeLayer = LayerStack_Count() - 1;
             break;
         }
         case laDup: {
@@ -35,8 +35,8 @@ static void CommitLayerOp(AppState* state, d_LAction* lact) {
         case laDrop: {
             int idx = lact->layer;
             MergeDownLayer(state, idx);
-            if (state->activeLayer >= state->canvas.layerCount)
-                state->activeLayer = state->canvas.layerCount - 1;
+            if (state->activeLayer >= LayerStack_Count())
+                state->activeLayer = LayerStack_Count() - 1;
             break;
         }
         case laMove: {
@@ -53,8 +53,6 @@ static void CommitLayerOp(AppState* state, d_LAction* lact) {
 void LayerPanel_Draw(AppState* state) {
     int sw = GetScreenWidth();
     int sh = GetScreenHeight();
-    int layerCount = state->canvas.layerCount;
-
     ImGui::SetNextWindowPos(ImVec2((float)(sw - RIGHT_PANEL_WIDTH), 0), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2((float)RIGHT_PANEL_WIDTH, (float)sh), ImGuiCond_Always);
 
@@ -71,7 +69,7 @@ void LayerPanel_Draw(AppState* state) {
         CommitLayerOp(state, &lact);
     }
     ImGui::SameLine();
-    if (ImGui::Button("Dup", ImVec2(bw, 36)) && layerCount < 64) {
+    if (ImGui::Button("Dup", ImVec2(bw, 36)) && LayerStack_Count() < 64) {
         d_LAction lact = {};
         lact.ActID = laDup;
         lact.layer = (int16_t)state->activeLayer;
@@ -87,12 +85,12 @@ void LayerPanel_Draw(AppState* state) {
     ImGui::SameLine();
     if (ImGui::Button("Seamless", ImVec2(bw, 36)) && state->activeLayer > 0) {
         LayerStack_MergeDownSeamless(state->activeLayer);
-        if (state->activeLayer >= state->canvas.layerCount)
-            state->activeLayer = state->canvas.layerCount - 1;
+        if (state->activeLayer >= LayerStack_Count())
+            state->activeLayer = LayerStack_Count() - 1;
         layersDirty = true;
     }
     ImGui::SameLine();
-    if (ImGui::Button("Del", ImVec2(bw, 36)) && layerCount > 1) {
+    if (ImGui::Button("Del", ImVec2(bw, 36)) && LayerStack_Count() > 1) {
         d_LAction lact = {};
         lact.ActID = laDel;
         lact.layer = (int16_t)state->activeLayer;
@@ -106,7 +104,7 @@ void LayerPanel_Draw(AppState* state) {
             "N-Gamma","N-Linear","Screen","Color Dodge",
             "Lighten","Darken","Burn","Multiply","Overlay","Color"
         };
-        int blend = state->canvas.layerProps[state->activeLayer].blendmode;
+        int blend = LayerStack_GetProps(state->activeLayer)->blendmode;
         if (blend < 0 || blend >= 10) blend = 0;
         if (g_blendIconLoaded)
             ImGui::Image((ImTextureID)(intptr_t)g_blendModeIcon.id, ImVec2(24, 24));
@@ -115,8 +113,7 @@ void LayerPanel_Draw(AppState* state) {
         ImGui::SameLine();
         ImGui::SetNextItemWidth(-1);
         if (ImGui::Combo("##blend", &blend, blendNames, 10, 10)) {
-            Canvas_SetLayerBlendMode(&state->canvas, state->activeLayer, blend);
-            layersDirty = true;
+            LayerStack_GetProps(state->activeLayer)->blendmode = blend; layersDirty = true;
             if (networkBroker.IsConnected()) {
                 d_LAction lact = {};
                 lact.ActID = laBm;
@@ -130,10 +127,10 @@ void LayerPanel_Draw(AppState* state) {
     ImGui::Spacing();
 
     {
-        float op = state->canvas.layerProps[state->activeLayer].op;
+        float op = LayerStack_GetProps(state->activeLayer)->op;
         ImGui::SetNextItemWidth(-1);
         if (ImGui::SliderFloat("##op", &op, 0.0f, 1.0f, "Opacity %.2f")) {
-            Canvas_SetLayerOpacity(&state->canvas, state->activeLayer, op);
+            LayerStack_GetProps(state->activeLayer)->op = op;
             layersDirty = true;
         }
         if (ImGui::IsItemDeactivatedAfterEdit() && networkBroker.IsConnected()) {
@@ -148,19 +145,19 @@ void LayerPanel_Draw(AppState* state) {
     ImGui::Spacing();
 
     {
-        float thresh = state->canvas.layerProps[state->activeLayer].threshold;
+        float thresh = LayerStack_GetProps(state->activeLayer)->threshold;
         ImGui::SetNextItemWidth(-1);
         if (ImGui::SliderFloat("##thresh", &thresh, 0.0f, 1.0f, "Threshold %.2f")) {
-            Canvas_SetLayerThreshold(&state->canvas, state->activeLayer, thresh);
+            LayerStack_GetProps(state->activeLayer)->threshold = thresh;
             layersDirty = true;
         }
     }
 
     {
-        float feather = state->canvas.layerProps[state->activeLayer].feather;
+        float feather = LayerStack_GetProps(state->activeLayer)->feather;
         ImGui::SetNextItemWidth(-1);
         if (ImGui::SliderFloat("##feather", &feather, 0.0f, 1.0f, "Feather %.2f")) {
-            Canvas_SetLayerFeather(&state->canvas, state->activeLayer, feather);
+            LayerStack_GetProps(state->activeLayer)->feather = feather;
             layersDirty = true;
         }
     }
@@ -169,7 +166,7 @@ void LayerPanel_Draw(AppState* state) {
 
     {
         char idxBuf[64];
-        snprintf(idxBuf, sizeof(idxBuf), "Layer %d / %d", state->activeLayer + 1, layerCount);
+        snprintf(idxBuf, sizeof(idxBuf), "Layer %d / %d", state->activeLayer + 1, LayerStack_Count());
         ImGui::Text("%s", idxBuf);
     }
 
@@ -180,28 +177,28 @@ void LayerPanel_Draw(AppState* state) {
         float listH = avail * 0.7f;
         if (listH < 10.0f) listH = 10.0f;
         if (ImGui::BeginChild("LayerList", ImVec2(0, listH), false)) {
-            for (int i = 0; i < layerCount; i++) {
-                int idx = layerCount - 1 - i;
+            for (int i = 0; i < LayerStack_Count(); i++) {
+                int idx = LayerStack_Count() - 1 - i;
                 bool isActive = (idx == state->activeLayer);
 
                 ImGui::PushID(idx);
 
-                bool vis = state->canvas.layerProps[idx].visible;
+                bool vis = LayerStack_GetProps(idx)->visible;
                 if (ImGui::Checkbox("##v", &vis)) {
-                    Canvas_SetLayerVisible(&state->canvas, idx, vis);
+                    LayerStack_GetProps(idx)->visible = vis;
                     layersDirty = true;
                 }
                 ImGui::SameLine();
 
-                if (idx < state->texCount && state->layerRTs[idx].id > 0) {
+                if (idx < LayerStack_Count() && LayerStack_GetRT(idx).id > 0) {
                     float ts = 36.0f;
-                    ImGui::Image((ImTextureID)(intptr_t)state->layerRTs[idx].texture.id,
+                    ImGui::Image((ImTextureID)(intptr_t)LayerStack_GetRT(idx).texture.id,
                         ImVec2(ts, ts), ImVec2(0, 1), ImVec2(1, 0));
                     ImGui::SameLine();
                 }
 
                 char lname[256];
-                const char* ln = state->canvas.layerProps[idx].layerName;
+                const char* ln = LayerStack_GetProps(idx)->layerName;
                 if (ln[0])
                     snprintf(lname, sizeof(lname), "%s", ln);
                 else
@@ -225,7 +222,7 @@ void LayerPanel_Draw(AppState* state) {
                     const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("LAYER_IDX");
                     if (payload) {
                         int fromVis = *(int*)payload->Data;
-                        int fromIdx = layerCount - 1 - fromVis;
+                        int fromIdx = LayerStack_Count() - 1 - fromVis;
                         if (fromIdx != idx) {
                             d_LAction lact = {};
                             lact.ActID = laMove;

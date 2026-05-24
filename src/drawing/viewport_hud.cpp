@@ -34,8 +34,8 @@ static void EnsurePreviewRTs(void) {
 }
 
 void ViewportHUD_Draw(AppState* state) {
-    int cw = state->canvas.width;
-    int ch = state->canvas.height;
+    int cw = state->doc.width;
+    int ch = state->doc.height;
     if (cw < 1 || ch < 1) return;
 
     Rectangle vpBounds = viewport.bounds;

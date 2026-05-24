@@ -33,5 +33,5 @@
 //     pixelDepth=1 store exact 16-bit GPU-precision pixel data with
 //     no 16→8→16 round-trip loss.
 
-bool SaveRePaint(const char* path, Canvas* canvas, AppState* state);
-bool LoadRePaint(const char* path, Canvas* canvas, AppState* state);
+bool SaveRePaint(const char* path, Document* doc, AppState* state);
+bool LoadRePaint(const char* path, Document* doc, AppState* state);

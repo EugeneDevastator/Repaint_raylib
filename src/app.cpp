@@ -97,8 +97,8 @@ void UpdateUI(AppState* state) {
         } else {
             g_activeHud = HUD_LAYER_XFORM;
             if (state->activeLayer >= 0) {
-                g_pivotCursorX = state->canvas.width * 0.5f;
-                g_pivotCursorY = state->canvas.height * 0.5f;
+                g_pivotCursorX = state->doc.width * 0.5f;
+                g_pivotCursorY = state->doc.height * 0.5f;
             }
         }
     }
@@ -159,19 +159,17 @@ bool App_IsDialogActive(void) {
 
 static void OnOpenResult(DialogResult r) {
     if (r.wasClosed && r.success && r.output[0]) {
-        SyncAllImages(g_state);
-        if (LoadRePaint(r.output, &g_state->canvas, g_state)) {
+        LayerStack_Shutdown(); LayerStack_Init();
+        if (LoadRePaint(r.output, &g_state->doc, g_state)) {
             int len = (int)strlen(r.output);
             if (len < (int)sizeof(g_currentFilePath) - 1)
                 memcpy(g_currentFilePath, r.output, len + 1);
             g_state->activeLayer = 0;
-            g_state->texCount = 0;
             g_state->camera.target = Vector2{
-                (float)g_state->canvas.width * 0.5f,
-                (float)g_state->canvas.height * 0.5f
+                (float)g_state->doc.width * 0.5f,
+                (float)g_state->doc.height * 0.5f
             };
-            SyncAllRTs(g_state);
-            LayerStack_Bind(g_state);
+            LayerStack_SetRenderWindow(g_state->doc.width, g_state->doc.height);
             layersDirty = true;
         }
     }
@@ -179,8 +177,7 @@ static void OnOpenResult(DialogResult r) {
 
 static void OnSaveResult(DialogResult r) {
     if (r.wasClosed && r.success && r.output[0]) {
-        SyncAllImages(g_state);
-        if (SaveRePaint(r.output, &g_state->canvas, g_state)) {
+        if (SaveRePaint(r.output, &g_state->doc, g_state)) {
             int len = (int)strlen(r.output);
             if (len < (int)sizeof(g_currentFilePath) - 1)
                 memcpy(g_currentFilePath, r.output, len + 1);
@@ -189,37 +186,26 @@ static void OnSaveResult(DialogResult r) {
 }
 
 static void DoCreateNew(void) {
-    SyncAllImages(g_state);
-    Canvas_Destroy(&g_state->canvas);
-    for (int i = 0; i < g_state->texCount; i++) {
-        if (g_state->layerRTs[i].id > 0) UnloadRenderTexture(g_state->layerRTs[i]);
-        if (g_state->layerTextures[i].id > 0) UnloadTexture(g_state->layerTextures[i]);
-    }
-    free(g_state->layerTextures); g_state->layerTextures = NULL;
-    free(g_state->layerRTs);     g_state->layerRTs = NULL;
-    free(g_state->texDirty);     g_state->texDirty = NULL;
-    g_state->texCount = 0;
-
-    g_state->canvas = Canvas_NewDocument(g_newW, g_newH);
+    LayerStack_Shutdown(); LayerStack_Init();
+    g_state->doc = Doc_New(g_newW, g_newH);
     g_state->activeLayer = 0;
     g_state->camera.target = Vector2{(float)g_newW * 0.5f, (float)g_newH * 0.5f};
     g_state->camera.zoom = 1.0f;
-    g_state->texCount = 0;
-    LayerStack_Bind(g_state);
-    LayerStack_AddNew(g_newW, g_newH);
+    LayerStack_SetRenderWindow(g_newW, g_newH);
+    int idx = LayerStack_Add(g_newW, g_newH);
     // Fill first layer with white
-    UnloadImage(g_state->canvas.layerImages[0]);
-    g_state->canvas.layerImages[0] = GenImageColor(g_newW, g_newH, WHITE);
-    ImageFormat(&g_state->canvas.layerImages[0], PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
-    Texture2D tmp = LoadTextureFromImage(g_state->canvas.layerImages[0]);
-    BeginTextureMode(g_state->layerRTs[0]);
+    Image* img = LayerStack_GetImage(idx);
+    UnloadImage(*img);
+    *img = GenImageColor(g_newW, g_newH, WHITE);
+    ImageFormat(img, PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
+    Texture2D tmp = LoadTextureFromImage(*img);
+    RenderTexture2D rt = LayerStack_GetRT(idx);
+    BeginTextureMode(rt);
     ClearBackground(BLANK);
-    rlSetBlendMode(RL_BLEND_CUSTOM);
-    rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+    rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
     DrawTexture(tmp, 0, 0, WHITE);
     rlSetBlendMode(RL_BLEND_ALPHA);
-    EndTextureMode();
-    UnloadTexture(tmp);
+    EndTextureMode(); UnloadTexture(tmp);
     layersDirty = true;
     g_currentFilePath[0] = '\0';
     g_newCanvasActive = false;
@@ -237,8 +223,7 @@ void App_FileOpen(void) {
 
 void App_FileSave(void) {
     if (g_currentFilePath[0]) {
-        SyncAllImages(g_state);
-        SaveRePaint(g_currentFilePath, &g_state->canvas, g_state);
+        SaveRePaint(g_currentFilePath, &g_state->doc, g_state);
     } else {
         App_FileSaveAs();
     }
@@ -246,41 +231,33 @@ void App_FileSave(void) {
 
 void App_FileSaveAs(void) {
     const char* name = "untitled";
-    if (g_currentFilePath[0]) {
-        name = GetFileNameWithoutExt(g_currentFilePath);
-    }
+    if (g_currentFilePath[0]) name = GetFileNameWithoutExt(g_currentFilePath);
     DialogSaveAs_Init(&g_fileDlg, "Save As", ".re.png", name, OnSaveResult);
 }
 
 void App_FileReload(void) {
     if (!g_currentFilePath[0]) return;
-    SyncAllImages(g_state);
-
-    // Backup current file with random hash
     char backupPath[1048];
-    const char* base = GetFileNameWithoutExt(g_currentFilePath);
-    const char* ext = GetFileExtension(g_currentFilePath);
     unsigned int hash = (unsigned int)time(NULL) ^ (unsigned int)(uintptr_t)g_state;
     hash = hash * 1103515245 + 12345;
     const char* dir = GetDirectoryPath(g_currentFilePath);
     const char* fname = GetFileNameWithoutExt(g_currentFilePath);
     snprintf(backupPath, sizeof(backupPath), "%s/%s_backup_%08x%s",
-             dir, fname, (hash / 65536) % 0xFFFFFFFFu, ext);
-    SaveRePaint(backupPath, &g_state->canvas, g_state);
-
-    // Reload from original
-    if (LoadRePaint(g_currentFilePath, &g_state->canvas, g_state)) {
+             dir, fname, (hash / 65536) % 0xFFFFFFFFu, ".re.png");
+    SaveRePaint(backupPath, &g_state->doc, g_state);
+    LayerStack_Shutdown(); LayerStack_Init();
+    if (LoadRePaint(g_currentFilePath, &g_state->doc, g_state)) {
         g_state->activeLayer = 0;
-        g_state->texCount = 0;
         g_state->camera.target = Vector2{
-            (float)g_state->canvas.width * 0.5f,
-            (float)g_state->canvas.height * 0.5f
+            (float)g_state->doc.width * 0.5f,
+            (float)g_state->doc.height * 0.5f
         };
-        SyncAllRTs(g_state);
-        LayerStack_Bind(g_state);
+        LayerStack_SetRenderWindow(g_state->doc.width, g_state->doc.height);
         layersDirty = true;
     }
 }
+
+
 
 void App_FileSnap(void) {
     /* GPU composite + dither → 8-bit snapshot */
@@ -340,25 +317,24 @@ void App_Init(AppState* state) {
     Changelog_Init();
     DrawSplash("Creating canvas...");
 
-    state->canvas = Canvas_NewDocument(800, 600);
+    state->doc = Doc_New(800, 600);
     state->activeLayer = 0;
     LayerStack_Init();
-    LayerStack_Bind(state);
-    LayerStack_AddNew(800, 600);
-    // First layer is the canvas background — fill with white instead of transparent
-    UnloadImage(state->canvas.layerImages[0]);
-    state->canvas.layerImages[0] = GenImageColor(800, 600, WHITE);
-    ImageFormat(&state->canvas.layerImages[0], PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
-    // Sync the white background to the GPU RT
-    Texture2D tmp = LoadTextureFromImage(state->canvas.layerImages[0]);
-    BeginTextureMode(state->layerRTs[0]);
+    LayerStack_SetRenderWindow(800, 600);
+    int idx = LayerStack_Add(800, 600);
+    // First layer is the canvas background — fill with white
+    Image* img = LayerStack_GetImage(idx);
+    UnloadImage(*img);
+    *img = GenImageColor(800, 600, WHITE);
+    ImageFormat(img, PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
+    Texture2D tmp = LoadTextureFromImage(*img);
+    RenderTexture2D rt = LayerStack_GetRT(idx);
+    BeginTextureMode(rt);
     ClearBackground(BLANK);
-    rlSetBlendMode(RL_BLEND_CUSTOM);
-    rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+    rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
     DrawTexture(tmp, 0, 0, WHITE);
     rlSetBlendMode(RL_BLEND_ALPHA);
-    EndTextureMode();
-    UnloadTexture(tmp);
+    EndTextureMode(); UnloadTexture(tmp);
 
     Rectangle viewportBounds = {
         (float)uiPanelWidth, 0,
@@ -369,7 +345,7 @@ void App_Init(AppState* state) {
     viewport.broker = g_useTestBroker ? (ICommandBroker*)&g_testBroker : (ICommandBroker*)&networkBroker;
 
     state->camera = Camera2D{};
-    state->camera.target = Vector2{(float)state->canvas.width * 0.5f, (float)state->canvas.height * 0.5f};
+    state->camera.target = Vector2{(float)state->doc.width * 0.5f, (float)state->doc.height * 0.5f};
     state->camera.offset = Vector2{viewportBounds.x + viewportBounds.width * 0.5f, viewportBounds.y + viewportBounds.height * 0.5f};
     state->camera.rotation = 0.0f;
     state->camera.zoom = 1.0f;
@@ -408,8 +384,6 @@ void App_Init(AppState* state) {
     colorHue = 0.35f;
     colorSat = 1.0f;
     colorLit = 0.5f;
-
-    SyncAllRTs(state);
 
     /* Create default directories */
     const char* ad = GetApplicationDirectory();
@@ -458,7 +432,6 @@ void App_Draw(AppState* state) {
     }
 
     /* Normal rendering path */
-    EnsureRTs(state);
 
     // toggle network UI
     if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyPressed(KEY_N))
@@ -483,10 +456,10 @@ void App_Draw(AppState* state) {
 
     // ── Layer transform XOR gizmo ──────────────────────────────────────
     if (g_activeHud == HUD_LAYER_XFORM && state->activeLayer >= 0) {
-        sLayerProps* lp = &state->canvas.layerProps[state->activeLayer];
+        sLayerProps* lp = LayerStack_GetProps(state->activeLayer);
         float lw = (float)lp->layerW, lh = (float)lp->layerH;
-        if (lw < 1) lw = (float)state->canvas.width;
-        if (lh < 1) lh = (float)state->canvas.height;
+        if (lw < 1) lw = (float)state->doc.width;
+        if (lh < 1) lh = (float)state->doc.height;
 
         auto ws = [&](Vector2 wp) -> Vector2 {
             return GetWorldToScreen2D(wp, state->camera);
@@ -657,15 +630,7 @@ void App_Draw(AppState* state) {
 void App_Close(AppState* state) {
     networkBroker.SaveConfig();
     networkBroker.Disconnect();
-    SyncAllImages(state);
-    Canvas_Destroy(&state->canvas);
-    for (int i = 0; i < state->texCount; i++) {
-        if (state->layerRTs[i].id > 0) UnloadRenderTexture(state->layerRTs[i]);
-        if (state->layerTextures[i].id > 0) UnloadTexture(state->layerTextures[i]);
-    }
-    free(state->layerTextures);
-    free(state->layerRTs);
-    free(state->texDirty);
+    LayerStack_Shutdown();
 
     LeftPanel_Shutdown();
     UnloadViewportRenderer();

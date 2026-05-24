@@ -42,7 +42,7 @@ void LocalBroker::on_input(const BrushDab& e) {
     queue[tail].eraseMode  = e.brush.eraseMode;
     queue[tail].perspective = e.brush.perspective;
     queue[tail].activeLayer = layer;
-    queue[tail].targetRT   = appState->layerRTs[layer];
+    queue[tail].targetRT   = LayerStack_GetRT(layer);
 
     tail = next;
 }
@@ -51,7 +51,7 @@ void LocalBroker::poll(AppState* state) {
     while (head != tail) {
         QueuedDab* d = &queue[head];
 
-        if (d->targetRT.id != 0 && d->activeLayer >= 0 && d->activeLayer < state->texCount) {
+        if (d->targetRT.id != 0 && d->activeLayer >= 0 && d->activeLayer < LayerStack_Count()) {
             d_Brush brush = {};
             brush.Realb.radInRatio = d->radInRatio;
             brush.Realb.rad_out  = d->rad_out;
@@ -78,7 +78,7 @@ void LocalBroker::poll(AppState* state) {
             brush.Realb.eraseMode  = d->eraseMode;
             brush.Realb.perspective = d->perspective;
 
-            RenderTexture2D rt = state->layerRTs[d->activeLayer];
+            RenderTexture2D rt = LayerStack_GetRT(d->activeLayer);
             if (rt.id > 0)
                 BrushBlend_ApplyStamp(rt, &brush, g_activeBrushTex, d->x, d->y, d->srcX, d->srcY);
         }

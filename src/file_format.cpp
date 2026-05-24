@@ -85,8 +85,8 @@ static void _readProps(const uint8_t** p, sLayerProps* lp, uint32_t ver) {
 
 /* ── Save ──────────────────────────────────────────────────────────────── */
 
-bool SaveRePaint(const char* path, Canvas* canvas, AppState* state) {
-    if (!path || !canvas || canvas->layerCount < 1) return false;
+bool SaveRePaint(const char* path, Document* doc, AppState* state) {
+    if (!path || !doc || LayerStack_Count() < 1) return false;
 
     // 1. GPU composite + dithered 8-bit preview (for file thumbnails)
     Image flat = CompositeLayersWithDither(state);
@@ -96,19 +96,20 @@ bool SaveRePaint(const char* path, Canvas* canvas, AppState* state) {
     if (!compPng || compSize <= 0) return false;
 
     // 2. Serialize each layer's props (pixel data written later from the live image)
-    int lc = canvas->layerCount;
+    int lc = LayerStack_Count();
     size_t totalExtra = 0;
     uint32_t pixelDepth = 1;  // 1 = raw R16G16B16A16
 
     struct { size_t propsSz; uint8_t* propsData; } blobs[256];
     for (int i = 0; i < lc; i++) {
-        blobs[i].propsSz = _propsSize(&canvas->layerProps[i]);
+        sLayerProps* p = LayerStack_GetProps(i);
+        blobs[i].propsSz = _propsSize(p);
         blobs[i].propsData = (uint8_t*)malloc(blobs[i].propsSz);
         if (!blobs[i].propsData) { for (int j = 0; j < i; j++) free(blobs[j].propsData); MemFree(compPng); return false; }
         uint8_t* wp = blobs[i].propsData;
-        _writeProps(&wp, &canvas->layerProps[i]);
+        _writeProps(&wp, p);
 
-        int rawSz = canvas->layerProps[i].layerW * canvas->layerProps[i].layerH * 8;
+        int rawSz = p->layerW * p->layerH * 8;
         totalExtra += 4 + blobs[i].propsSz + 4 + rawSz;
     }
 
@@ -147,18 +148,20 @@ bool SaveRePaint(const char* path, Canvas* canvas, AppState* state) {
     _wcpy(&p, compPng, compSize);
     _wcpy(&p, MAGIC, MAGIC_LEN);
     _wu32(&p, FILE_VER);
-    _wu32(&p, (uint32_t)canvas->width);
-    _wu32(&p, (uint32_t)canvas->height);
+    _wu32(&p, (uint32_t)doc->width);
+    _wu32(&p, (uint32_t)doc->height);
     _wu32(&p, (uint32_t)lc);
     _wu32(&p, pixelDepth);
 
     for (int i = 0; i < lc; i++) {
+        sLayerProps* props = LayerStack_GetProps(i);
+        Image* img = LayerStack_GetImage(i);
         _wu32(&p, (uint32_t)blobs[i].propsSz);
         _wcpy(&p, blobs[i].propsData, blobs[i].propsSz);
         // pixelDepth == 1: write raw R16G16B16A16 pixel data (8 bytes/px)
-        int rawSz = canvas->layerProps[i].layerW * canvas->layerProps[i].layerH * 8;
+        int rawSz = props->layerW * props->layerH * 8;
         _wu32(&p, (uint32_t)rawSz);
-        _wcpy(&p, canvas->layerImages[i].data, rawSz);
+        _wcpy(&p, img->data, rawSz);
     }
 
     /* User texture section (built-in defaults not saved) */
@@ -194,19 +197,16 @@ static uint32_t _ru32(const uint8_t** p) {
 
 /* ── Load ──────────────────────────────────────────────────────────────── */
 
-bool LoadRePaint(const char* path, Canvas* canvas, AppState* state) {
-    if (!path || !canvas) return false;
+bool LoadRePaint(const char* path, Document* doc, AppState* state) {
+    if (!path || !doc) return false;
 
     int fileSz = 0;
     unsigned char* fileData = LoadFileData(path, &fileSz);
     if (!fileData || fileSz < 32) { UnloadFileData(fileData); return false; }
 
     const uint8_t iendSig[8] = { 0, 0, 0, 0, 'I', 'E', 'N', 'D' };
-    int offset = 0;
-    int found = 0;
-    for (; offset < fileSz - 8; offset++) {
-        if (memcmp(fileData + offset, iendSig, 8) == 0) { found = 1; break; }
-    }
+    int offset = 0; int found = 0;
+    for (; offset < fileSz - 8; offset++) { if (memcmp(fileData + offset, iendSig, 8) == 0) { found = 1; break; } }
     if (!found) { UnloadFileData(fileData); return false; }
     offset += 12;
     if (offset + (int)MAGIC_LEN + 16 > fileSz) { UnloadFileData(fileData); return false; }
@@ -216,72 +216,52 @@ bool LoadRePaint(const char* path, Canvas* canvas, AppState* state) {
     p += MAGIC_LEN;
 
     uint32_t ver = _ru32(&p);
-    uint32_t w = _ru32(&p);
-    uint32_t h = _ru32(&p);
+    uint32_t w = _ru32(&p), h = _ru32(&p);
     if (w < 1 || w > 32768 || h < 1 || h > 32768) { UnloadFileData(fileData); return false; }
-
     uint32_t lc = _ru32(&p);
     if (lc < 1 || lc > 256) { UnloadFileData(fileData); return false; }
 
-    // pixelDepth: 0 = legacy 8-bit PNG, 1 = raw R16G16B16A16 (v5+)
     uint32_t pixelDepth = 0;
     if (ver >= 5) pixelDepth = _ru32(&p);
 
-    Canvas_Destroy(canvas);
-    canvas->width = (int)w;
-    canvas->height = (int)h;
-    canvas->backgroundColor = WHITE;
-    canvas->layerCount = 0;
-    canvas->layerImages = NULL;
-    canvas->layerProps = NULL;
+    doc->width = (int)w; doc->height = (int)h;
 
     if (ver < 5) {
-        // ── v3/v4: skip per-layer blobs, load composite preview as single layer ──
+        // v3/v4: skip per-layer blobs, load composite preview as single layer
         for (uint32_t i = 0; i < lc; i++) {
-            if ((int)(p - fileData) + 8 > fileSz) { Canvas_Destroy(canvas); UnloadFileData(fileData); return false; }
-            uint32_t propSz = _ru32(&p);
-            if ((int)(p - fileData) + (int)propSz > fileSz) { Canvas_Destroy(canvas); UnloadFileData(fileData); return false; }
+            if ((int)(p - fileData) + 8 > fileSz) { UnloadFileData(fileData); return false; }
+            uint32_t propSz = _ru32(&p); if ((int)(p - fileData) + (int)propSz > fileSz) { UnloadFileData(fileData); return false; }
             p += propSz;
-            uint32_t pngSz = _ru32(&p);
-            if ((int)(p - fileData) + (int)pngSz > fileSz) { Canvas_Destroy(canvas); UnloadFileData(fileData); return false; }
+            uint32_t pngSz = _ru32(&p); if ((int)(p - fileData) + (int)pngSz > fileSz) { UnloadFileData(fileData); return false; }
             p += pngSz;
         }
-        // Extract the embedded composite preview (before MAGIC) as a canvas-sized layer
         Image preview = LoadImageFromMemory(".png", fileData, (int)(offset + 12));
         if (preview.data) {
-            int idx = canvas->layerCount++;
-            canvas->layerImages = (Image*)realloc(canvas->layerImages, canvas->layerCount * sizeof(Image));
-            canvas->layerProps  = (sLayerProps*)realloc(canvas->layerProps,  canvas->layerCount * sizeof(sLayerProps));
-            if (preview.width != (int)w || preview.height != (int)h)
-                ImageResize(&preview, (int)w, (int)h);
-            // Manual 8→16-bit ×257 conversion (avoids raylib ImageFormat alpha bugs)
+            if (preview.width != (int)w || preview.height != (int)h) ImageResize(&preview, (int)w, (int)h);
             int pxCount = preview.width * preview.height;
-            uint16_t* dst16 = (uint16_t*)malloc(pxCount * 4 * sizeof(uint16_t));
-            uint8_t* src8 = (uint8_t*)preview.data;
+            uint16_t* d16 = (uint16_t*)malloc(pxCount * 4 * sizeof(uint16_t));
+            uint8_t* s8 = (uint8_t*)preview.data;
             for (int pi = 0; pi < pxCount; pi++) {
-                dst16[pi*4]   = (uint16_t)src8[pi*4]   * 257;
-                dst16[pi*4+1] = (uint16_t)src8[pi*4+1] * 257;
-                dst16[pi*4+2] = (uint16_t)src8[pi*4+2] * 257;
-                dst16[pi*4+3] = (uint16_t)src8[pi*4+3] * 257;
+                d16[pi*4] = (uint16_t)s8[pi*4]*257; d16[pi*4+1] = (uint16_t)s8[pi*4+1]*257;
+                d16[pi*4+2] = (uint16_t)s8[pi*4+2]*257; d16[pi*4+3] = (uint16_t)s8[pi*4+3]*257;
             }
-            free(preview.data); preview.data = dst16;
-            preview.format = PIXELFORMAT_UNCOMPRESSED_R16G16B16A16;
-            canvas->layerImages[idx] = preview;
-            memset(&canvas->layerProps[idx], 0, sizeof(sLayerProps));
-            canvas->layerProps[idx].op = 1; canvas->layerProps[idx].visible = true;
-            canvas->layerProps[idx].blendmode = bmGamma;
-            canvas->layerProps[idx].mat[0] = 1; canvas->layerProps[idx].mat[4] = 1;
-            canvas->layerProps[idx].layerW = (int)w;
-            canvas->layerProps[idx].layerH = (int)h;
+            free(preview.data); preview.data = d16; preview.format = PIXELFORMAT_UNCOMPRESSED_R16G16B16A16;
+            int idx = LayerStack_Add((int)w, (int)h);
+            LayerStack_SyncImageFromRT(idx);
+            // Replace auto-generated blank image with the preview
+            UnloadImage(*LayerStack_GetImage(idx));
+            *LayerStack_GetImage(idx) = preview;
+            sLayerProps* lp = LayerStack_GetProps(idx);
+            lp->op = 1; lp->visible = true; lp->blendmode = bmGamma;
+            lp->mat[0] = 1; lp->mat[4] = 1; lp->layerW = (int)w; lp->layerH = (int)h;
         }
     } else {
-        // ── v5+: load each layer at its native resolution ──
+        // v5+: load each layer at its native resolution
         for (uint32_t i = 0; i < lc; i++) {
-            if ((int)(p - fileData) + 8 > fileSz) { Canvas_Destroy(canvas); UnloadFileData(fileData); return false; }
+            if ((int)(p - fileData) + 8 > fileSz) { UnloadFileData(fileData); return false; }
             uint32_t propSz = _ru32(&p);
-            if ((int)(p - fileData) + (int)propSz > fileSz) { Canvas_Destroy(canvas); UnloadFileData(fileData); return false; }
-            sLayerProps tempProps;
-            memset(&tempProps, 0, sizeof(tempProps));
+            if ((int)(p - fileData) + (int)propSz > fileSz) { UnloadFileData(fileData); return false; }
+            sLayerProps tempProps; memset(&tempProps, 0, sizeof(tempProps));
             const uint8_t* propStart = p;
             _readProps(&p, &tempProps, ver);
             p = propStart + propSz;
@@ -289,49 +269,34 @@ bool LoadRePaint(const char* path, Canvas* canvas, AppState* state) {
             int lh = tempProps.layerH > 0 ? tempProps.layerH : (int)h;
 
             uint32_t dataSz = _ru32(&p);
-            if ((int)(p - fileData) + (int)dataSz > fileSz) { Canvas_Destroy(canvas); UnloadFileData(fileData); return false; }
+            if ((int)(p - fileData) + (int)dataSz > fileSz) { UnloadFileData(fileData); return false; }
 
-            Image layerImg;
-            memset(&layerImg, 0, sizeof(layerImg));
+            Image layerImg; memset(&layerImg, 0, sizeof(layerImg));
             if (pixelDepth == 1) {
-                // Raw R16G16B16A16 — exact GPU-precision data, no precision loss
                 layerImg.width = lw; layerImg.height = lh;
-                layerImg.format = PIXELFORMAT_UNCOMPRESSED_R16G16B16A16;
-                layerImg.mipmaps = 1;
+                layerImg.format = PIXELFORMAT_UNCOMPRESSED_R16G16B16A16; layerImg.mipmaps = 1;
                 layerImg.data = malloc(dataSz);
-                if (!layerImg.data) { Canvas_Destroy(canvas); UnloadFileData(fileData); return false; }
-                memcpy(layerImg.data, p, dataSz);
-                p += dataSz;
+                if (!layerImg.data) { UnloadFileData(fileData); return false; }
+                memcpy(layerImg.data, p, dataSz); p += dataSz;
             } else {
-                // Legacy 8-bit PNG
-                layerImg = LoadImageFromMemory(".png", p, (int)dataSz);
-                p += dataSz;
-                if (layerImg.data == NULL) { Canvas_Destroy(canvas); UnloadFileData(fileData); return false; }
-                if (layerImg.width != lw || layerImg.height != lh)
-                    ImageResize(&layerImg, lw, lh);
-                // Manual 8→16-bit ×257 conversion
+                layerImg = LoadImageFromMemory(".png", p, (int)dataSz); p += dataSz;
+                if (layerImg.data == NULL) { UnloadFileData(fileData); return false; }
+                if (layerImg.width != lw || layerImg.height != lh) ImageResize(&layerImg, lw, lh);
                 int pxCount = lw * lh;
-                uint16_t* dst16 = (uint16_t*)malloc(pxCount * 4 * sizeof(uint16_t));
-                uint8_t* src8 = (uint8_t*)layerImg.data;
+                uint16_t* d16 = (uint16_t*)malloc(pxCount * 4 * sizeof(uint16_t));
+                uint8_t* s8 = (uint8_t*)layerImg.data;
                 for (int pi = 0; pi < pxCount; pi++) {
-                    dst16[pi*4]   = (uint16_t)src8[pi*4]   * 257;
-                    dst16[pi*4+1] = (uint16_t)src8[pi*4+1] * 257;
-                    dst16[pi*4+2] = (uint16_t)src8[pi*4+2] * 257;
-                    dst16[pi*4+3] = (uint16_t)src8[pi*4+3] * 257;
+                    d16[pi*4] = (uint16_t)s8[pi*4]*257; d16[pi*4+1] = (uint16_t)s8[pi*4+1]*257;
+                    d16[pi*4+2] = (uint16_t)s8[pi*4+2]*257; d16[pi*4+3] = (uint16_t)s8[pi*4+3]*257;
                 }
-                free(layerImg.data);
-                layerImg.data = dst16;
-                layerImg.format = PIXELFORMAT_UNCOMPRESSED_R16G16B16A16;
+                free(layerImg.data); layerImg.data = d16; layerImg.format = PIXELFORMAT_UNCOMPRESSED_R16G16B16A16;
             }
 
-            // Add to canvas
-            int idx = canvas->layerCount++;
-            canvas->layerImages = (Image*)realloc(canvas->layerImages, canvas->layerCount * sizeof(Image));
-            canvas->layerProps  = (sLayerProps*)realloc(canvas->layerProps,  canvas->layerCount * sizeof(sLayerProps));
-            canvas->layerImages[idx] = layerImg;
-            canvas->layerProps[idx]  = tempProps;
-            canvas->layerProps[idx].layerW = lw;
-            canvas->layerProps[idx].layerH = lh;
+            int idx = LayerStack_Add(lw, lh);
+            LayerStack_SyncImageFromRT(idx);
+            *LayerStack_GetImage(idx) = layerImg;
+            *LayerStack_GetProps(idx) = tempProps;
+            LayerStack_GetProps(idx)->layerW = lw; LayerStack_GetProps(idx)->layerH = lh;
         }
     }
 

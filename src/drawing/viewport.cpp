@@ -102,11 +102,11 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             for (int dx = -2; dx <= 2; dx++) {
                 int px = cx + dx, py = cy + dy;
                 Color c = {0, 0, 0, 0};
-                if (px >= 0 && px < state->canvas.width && py >= 0 && py < state->canvas.height) {
-                    for (int li = 0; li < state->canvas.layerCount; li++) {
-                        if (!state->canvas.layerProps[li].visible) continue;
-                        Color sp = GetImageColor(state->canvas.layerImages[li], px, py);
-                        float sa = sp.a / 255.0f * state->canvas.layerProps[li].op;
+                if (px >= 0 && px < state->doc.width && py >= 0 && py < state->doc.height) {
+                    for (int li = 0; li < LayerStack_Count(); li++) {
+                        if (!LayerStack_GetProps(li)->visible) continue;
+                        Color sp = GetImageColor(*LayerStack_GetImage(li), px, py);
+                        float sa = sp.a / 255.0f * LayerStack_GetProps(li)->op;
                         float da = c.a / 255.0f;
                         float outa = sa + da * (1.0f - sa);
                         if (outa > 0.0f) {
@@ -155,11 +155,11 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         memset(savedMat, 0, sizeof(savedMat));
     }
 
-    if (g_activeHud == HUD_LAYER_XFORM && vp->inBounds && state->activeLayer >= 0 && !spaceHeld) {
-        sLayerProps* lp = &state->canvas.layerProps[state->activeLayer];
+    if (g_activeHud == HUD_LAYER_XFORM && vp->inBounds && state->activeLayer >= 0 && state->activeLayer < LayerStack_Count() && !spaceHeld) {
+        sLayerProps* lp = LayerStack_GetProps(state->activeLayer);
         float lw = (float)lp->layerW, lh = (float)lp->layerH;
-        if (lw < 1) lw = (float)state->canvas.width;
-        if (lh < 1) lh = (float)state->canvas.height;
+        if (lw < 1) lw = (float)state->doc.width;
+        if (lh < 1) lh = (float)state->doc.height;
 
         // Compute 4 corners of the layer in canvas space
         float a = lp->mat[0], b = lp->mat[1], tx = lp->mat[2];
@@ -318,8 +318,8 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
 
     // Transform brush position if the active layer has a transform
     Vector2 paintPos = canvasPos;
-    if (!state->editTexMode && active >= 0 && active < state->canvas.layerCount) {
-        sLayerProps* lp = &state->canvas.layerProps[active];
+    if (!state->editTexMode && active >= 0 && active < LayerStack_Count()) {
+        sLayerProps* lp = LayerStack_GetProps(active);
         if (lp->mat[0] != 1.0f || lp->mat[1] != 0.0f || lp->mat[2] != 0.0f ||
             lp->mat[3] != 0.0f || lp->mat[4] != 1.0f || lp->mat[5] != 0.0f) {
             // Inverse of 2x3 affine matrix: [a,b,tx, c,d,ty]
@@ -345,8 +345,8 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
     // stamp radius must be divided by the layer scale to appear at the correct
     // visual size on screen.
     float layerScale = 1.0f;
-    if (!state->editTexMode && active >= 0 && active < state->canvas.layerCount) {
-        sLayerProps* lp = &state->canvas.layerProps[active];
+    if (!state->editTexMode && active >= 0 && active < LayerStack_Count()) {
+        sLayerProps* lp = LayerStack_GetProps(active);
         if (lp->mat[0] != 1.0f || lp->mat[1] != 0.0f || lp->mat[2] != 0.0f ||
             lp->mat[3] != 0.0f || lp->mat[4] != 1.0f || lp->mat[5] != 0.0f) {
             float sx = sqrtf(lp->mat[0] * lp->mat[0] + lp->mat[3] * lp->mat[3]);
@@ -429,7 +429,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
     if (!state->editTexMode && (vp->inBounds || vp->wasMouseDown) && leftDown &&
         (state->mode == eBrush || state->mode == eSmudge || state->mode == eDisp || state->mode == eCont))
     {
-        if (active >= 0 && active < state->texCount && state->layerRTs[active].id > 0) {
+        if (active >= 0 && active < LayerStack_Count() && LayerStack_GetRT(active).id > 0) {
             if (state->mode == eBrush || state->mode == eSmudge) {
                 if (!vp->wasMouseDown) {
                     Modulators_SnapRunState();
@@ -527,7 +527,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
     }
 
     // Line tool
-    if (state->mode == eLine && vp->inBounds && leftDown && active >= 0 && active < state->texCount && state->layerRTs[active].id > 0) {
+    if (state->mode == eLine && vp->inBounds && leftDown && active >= 0 && active < LayerStack_Count() && LayerStack_GetRT(active).id > 0) {
         if (!vp->wasMouseDown) {
             vp->lineLastDabPos = paintPos;
             vp->wasMouseDown = true;
