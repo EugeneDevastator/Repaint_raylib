@@ -1,6 +1,7 @@
 #include "repaint.h"
 #include "brush_preset.h"
 #include "rlgl.h"
+#include "imgui.h"
 #include "stroke.h"
 #include "tablet.h"
 #include "rlImGui.h"
@@ -25,6 +26,18 @@ ModuleStack g_moduleStack;
 void DisplayInfoText(const char* text) {
     (void)text;
     // TODO: implement on-screen notification display
+}
+
+void SyncImGuiInput(void) {
+    ImGuiIO& io = ImGui::GetIO();
+    io.MousePos = ImVec2(GetMousePosition().x, GetMousePosition().y);
+    for (int b = 0; b < 3; b++) {
+        int mb = (b == 0) ? MOUSE_BUTTON_LEFT : (b == 1) ? MOUSE_BUTTON_RIGHT : MOUSE_BUTTON_MIDDLE;
+        if (IsMouseButtonPressed(mb))
+            io.AddMouseButtonEvent(b, true);
+        if (IsMouseButtonReleased(mb))
+            io.AddMouseButtonEvent(b, false);
+    }
 }
 
 float g_splashAlpha = 1.0f;
@@ -517,6 +530,7 @@ void App_Draw(AppState* state) {
     }
 
     rlImGuiBegin();
+    SyncImGuiInput();
 
     rlSetBlendMode(RL_BLEND_ALPHA);
     if (g_panelsVisible)

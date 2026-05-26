@@ -334,6 +334,11 @@ RenderTexture2D Load16BitRT(int width, int height);
 // Stub — implement to show transient on-screen messages (brush saved, etc.)
 void DisplayInfoText(const char* text);
 
+// ── Input ─────────────────────────────────────────────────────────────────
+// Forwards raylib mouse state to ImGui (captures tablet/touch that raylib
+// sees but GLFW callbacks might miss).
+void SyncImGuiInput(void);
+
 // ── Module-based top-level components ──────────────────────────────────────
 
 struct LeftPanelModule : IModule {

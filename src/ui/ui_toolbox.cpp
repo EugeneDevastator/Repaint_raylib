@@ -71,19 +71,24 @@ void ToolBox_Draw(AppState* state, Rectangle vp) {
             }
         };
 
+        bool isActive = false;
+        if (i == 3)
+            isActive = (state->eraseMode != eEraseNone);
+        else
+            isActive = (state->mode == gizmoToolModes[i]);
+
+        if (isActive) {
+            ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.2f, 0.6f, 1.0f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.9f, 1.0f, 1.0f));
+        }
         if (tid) {
-            bool isActive = (i == 3 && state->eraseMode != eEraseNone);
-            if (isActive) {
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.9f, 0.3f, 0.3f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 0.4f, 0.4f, 1.0f));
-            }
             if (ImGui::ImageButton("##ti", tid, ImVec2(btnSz, btnSz)))
                 handleClick();
-            if (isActive) ImGui::PopStyleColor(2);
         } else {
             if (ImGui::Button(gizmoToolLabels[i], ImVec2(btnSz, btnSz)))
                 handleClick();
         }
+        if (isActive) ImGui::PopStyleColor(isActive ? 2 : 0);
 
         ImGui::PopID();
     }
