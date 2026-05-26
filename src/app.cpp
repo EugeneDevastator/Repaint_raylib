@@ -86,6 +86,7 @@ static Texture2D g_splashTex = {0};
 int g_activeHud = HUD_NONE;
 bool g_seamlessPaint = false;
 bool g_seamlessPreview = false;
+int g_texScaleMode = 0;
 float g_pivotCursorX = 0.0f, g_pivotCursorY = 0.0f;
 
 static void DrawSplash(const char* msg) {
@@ -194,7 +195,14 @@ void UpdateUI(AppState* state) {
     state->currentBrush.Realb.cop = (state->mode == eSmudge)
         ? GetModVal(&bpCloneOpacity) : 0.0f;
 
-    state->currentBrush.Realb.texScale   = GetModVal(&bpTexScale);
+    if (g_texScaleMode == 1) {
+        // Global scale: 1 UV = 256 canvas px (stamp diameter / 256 = base texScale)
+        float s = GetModVal(&bpTexScale);
+        float r = state->currentBrush.Realb.rad_out;
+        state->currentBrush.Realb.texScale = s * r / 128.0f;
+    } else {
+        state->currentBrush.Realb.texScale = GetModVal(&bpTexScale);
+    }
     state->currentBrush.Realb.texFeather = GetModVal(&bpTexFeather);
     state->currentBrush.Realb.texThresh  = GetModVal(&bpTexThresh);
     state->currentBrush.Realb.texBlendVal = GetModVal(&bpTexBlendVal);

@@ -240,8 +240,8 @@ void main() {
         vec2 stUV = geouv.rg;
 
         if (texNoisemode == 0) {
-            // STENCIL (0): canvas-absolute UV, texture locked to canvas world space
-            stUV = canvasFragUV;
+            // STENCIL (0): 256 canvas px = 1 UV, uniform regardless of canvas size
+            stUV = canvasFragUV * canvasSize / 256.0;
         } else if (texNoisemode == 1) {
             // RANDOM (1): stamp-local + per-stamp random offset via texOffset
             stUV = geouv.rg + texOffset;

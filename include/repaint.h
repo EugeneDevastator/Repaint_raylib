@@ -235,6 +235,7 @@ extern Color g_colorPickGrid[25];
 extern float g_pivotCursorX, g_pivotCursorY;
 extern bool g_seamlessPaint;
 extern bool g_seamlessPreview;
+extern int g_texScaleMode;  // 0 = brush scale, 1 = global scale
 #define HUD_NONE 0
 #define HUD_QUICK 1
 #define HUD_LAYER_XFORM 2

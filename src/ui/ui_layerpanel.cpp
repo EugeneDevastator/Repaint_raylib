@@ -240,57 +240,6 @@ void LayerPanel_Draw(AppState* state) {
         ImGui::EndChild();
     }
 
-    // ── Brush textures ────────────────────────────────────────────────
-    {
-        ImGui::Separator();
-        float aw2 = ImGui::GetContentRegionAvail().x;
-        ImGui::Text("Textures");
-        ImGui::PushID("tex");
-        ImGui::SameLine(aw2 - 72);
-        if (ImGui::SmallButton("+Add") && state->brushTexCount < MAX_BRUSH_TEX) {
-            char name[64];
-            snprintf(name, sizeof(name), "Texture %d", state->brushTexCount + 1);
-            int idx = BrushTex_Add(state, name, 512, 512);
-            if (idx >= 0) { state->editTexMode = 1; state->activeBrushTex = idx; }
-        }
-        ImGui::SameLine(0, 4);
-        if (ImGui::SmallButton(" -Del") && state->activeBrushTex >= BUILTIN_TEX_COUNT) {
-            BrushTex_Delete(state, state->activeBrushTex);
-            if (state->brushTexCount <= BUILTIN_TEX_COUNT) { state->editTexMode = 0; state->activeBrushTex = -1; }
-        }
-
-        int texCols = (int)(aw2 / 70.0f);
-        if (texCols < 2) texCols = 2;
-        int texSz = (int)((aw2 - (texCols - 1) * 4) / texCols);
-        if (texSz > 64) texSz = 64;
-        if (texSz < 32) texSz = 32;
-
-        bool isNone = (state->activeBrushTex < 0 && state->editTexMode == 0);
-        if (isNone) { ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(1,1,1,1)); ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.4f,0.4f,0.4f,1)); }
-        if (ImGui::Button("Canvas", ImVec2(texSz, texSz))) {
-            state->editTexMode = 0;
-            state->activeBrushTex = -1;
-        }
-        if (isNone) { ImGui::PopStyleColor(2); }
-
-        for (int ti = BUILTIN_TEX_COUNT; ti < state->brushTexCount; ti++) {
-            if ((ti - BUILTIN_TEX_COUNT + 1) % texCols != 0) ImGui::SameLine(0, 4);
-            ImGui::PushID(600 + ti);
-            Texture2D thumb = BrushTex_GetThumb(state, ti);
-            bool isSel = (state->activeBrushTex == ti && state->editTexMode == 1);
-            if (isSel) ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.2f,1.0f,0.2f,1));
-            if (thumb.id > 0) {
-                if (ImGui::ImageButton("##bt", (ImTextureID)(intptr_t)thumb.id, ImVec2(texSz, texSz))) {
-                    state->editTexMode = 1;
-                    state->activeBrushTex = ti;
-                }
-            }
-            if (isSel) ImGui::PopStyleColor();
-            ImGui::PopID();
-        }
-        ImGui::PopID();
-    }
-
     // Network lobby panel (bottom of layers)
     {
         ImGui::Separator();

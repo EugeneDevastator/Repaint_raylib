@@ -97,6 +97,7 @@ void Modulators_Init(void) {
 
     BParam_Init(&bpTexScale, 30, "Scale", 0.1f, 5.0f, 1.0f);
     strncpy(bpTexScale.tooltip, "Texture pattern scale multiplier", sizeof(bpTexScale.tooltip) - 1);
+    BParam_SetIcon(&bpTexScale, "ctlscale");
 
     BParam_Init(&bpTexFeather, 31, "Feather", 0.0f, 0.5f, 0.05f);
     strncpy(bpTexFeather.tooltip, "Softness of the threshold mask edge", sizeof(bpTexFeather.tooltip) - 1);
@@ -120,12 +121,14 @@ void Modulators_Init(void) {
 
     BParam_Init(&bpSizeMul, 42, "SizeMul", 0.0f, 256.0f, 128.0f);
     strncpy(bpSizeMul.tooltip, "Size multiplier: 0=÷16, 128=×1, 256=×16", sizeof(bpSizeMul.tooltip) - 1);
+    BParam_SetIcon(&bpSizeMul, "ctlradmul");
 
     BParam_Init(&bpPower, 43, "Power", 0.0f, 1.0f, 0.0f);
     strncpy(bpPower.tooltip, "Displacement power for the Disp tool (0=no displacement, 1=max)", sizeof(bpPower.tooltip) - 1);
 
     BParam_Init(&bpPerspective, 44, "Perspective", 0.0f, 1.0f, 0.0f);
     strncpy(bpPerspective.tooltip, "Perspective distortion: rotates brush along Y axis before in-plane rotation", sizeof(bpPerspective.tooltip) - 1);
+    BParam_SetIcon(&bpPerspective, "ctlpersp");
 
     // Init global modulator defaults
     for (int i = 0; i < csSTOP; i++) g_modPars.Pars[i] = 1.0f;

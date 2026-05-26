@@ -54,6 +54,10 @@ void BrushTex_Init(AppState* state) {
         closedir(d);
     }
 
+    // Mark all textures loaded from Noise/ as bundled
+    for (int i = 0; i < state->brushTexCount; i++)
+        state->brushTex[i].builtIn = true;
+
     BrushTex_SyncAll(state);
 }
 
