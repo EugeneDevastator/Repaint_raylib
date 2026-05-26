@@ -143,13 +143,21 @@ if (mode == 0) { // N-OKLab
     vec3 brushLab  = rgbToOklab(brushRGB);
     vec3 canvasLab = rgbToOklab(canvas.rgb);
 
-    // straight linear blend in Lab space
-    // L blends linearly = perceptually linear luminosity
-    // a,b blend linearly = smooth hue/chroma
-    vec3 blendedLab = brushLab * brushA + canvasLab * (1.0 - brushA);
+    // Correct Porter-Duff weights
+    float wBrush  = brushA;
+    float wCanvas = canvas.a * (1.0 - brushA);
+    float wTotal  = wBrush + wCanvas; // same as outA
+
+    vec3 blendedLab;
+    if (wTotal > 0.00001) {
+        // Weighted blend in Lab space, normalized by total coverage
+        blendedLab = (brushLab * wBrush + canvasLab * wCanvas) / wTotal;
+    } else {
+        blendedLab = brushLab;
+    }
 
     outRGB = oklabToRgb(blendedLab);
-    outA   = brushA + canvas.a * (1.0 - brushA);
+    outA   = wTotal; // brushA + canvas.a * (1.0 - brushA)
 } else if (mode == 1) { // N-Linear
         outRGB = brushPremul + canvas.rgb * (1.0 - brushA);
         outA   = brushA + canvas.a * (1.0 - brushA);
