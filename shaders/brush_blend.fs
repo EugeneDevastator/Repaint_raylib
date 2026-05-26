@@ -241,14 +241,14 @@ void main() {
 
         if (texNoisemode == 0) {
             // STENCIL (0): 256 canvas px = 1 UV, uniform regardless of canvas size
-            stUV = canvasFragUV * canvasSize / 256.0;
+            stUV = canvasFragUV * canvasSize / 256.0 * texScale;
         } else if (texNoisemode == 1) {
-            // RANDOM (1): stamp-local + per-stamp random offset via texOffset
-            stUV = geouv.rg + texOffset;
+            // RANDOM (1): stamp-local UV scaled, then offset in texture-repeat space
+            stUV = geouv.rg * texScale + texOffset;
+        } else {
+            // CONST (2): stUV = geouv.rg, scaled, no offset, identical every stamp
+            stUV = geouv.rg * texScale;
         }
-        // CONST (2): stUV = geouv.rg, no offset, identical every stamp
-
-        stUV = stUV * texScale;
         texel = texture(brushTex, stUV);
     }
 
