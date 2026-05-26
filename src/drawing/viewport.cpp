@@ -59,7 +59,6 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
     static DrawDab dabs[1024];
 
     if (IsKeyPressed(KEY_F1)) vp->debugShowStamps = !vp->debugShowStamps;
-    if (g_activeHud == HUD_QUICK) return;
 
     Vector2 mousePos = GetMousePosition();
 

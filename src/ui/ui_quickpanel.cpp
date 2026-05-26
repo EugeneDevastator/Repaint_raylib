@@ -64,6 +64,30 @@ void QuickPanel_DrawUI(AppState* state) {
     int slY = penBtnY + dCtrl + dSpacing;
     int iconY = slY + (int)dLen + dSpacing;
 
+    // ── Brush presets panel (left of Op/Sp/Sc column) ──
+    {
+        int pCols = 4, pRows = 2;
+        int presetW = pCols * dCtrl + (pCols - 1) * dGap;
+        int presetH = pRows * dCtrl + (pRows - 1) * dGap;
+        int presetX = sliderLeftX - dGap - presetW;
+        int presetY = gcy - presetH / 2;
+
+        dl->AddText(ImVec2(presetX, presetY - 14), IM_COL32(211, 211, 211, 230), "Presets");
+        ImU32 presetColors[8] = {
+            IM_COL32(180, 80,  80,  255), IM_COL32(80,  140, 180, 255),
+            IM_COL32(80,  160, 100, 255), IM_COL32(200, 180, 80,  255),
+            IM_COL32(160, 100, 160, 255), IM_COL32(200, 120, 60,  255),
+            IM_COL32(60,  60,  60,  255), IM_COL32(200, 200, 200, 255),
+        };
+        for (int pi = 0; pi < pCols * pRows; pi++) {
+            int cx = pi % pCols, cy = pi / pCols;
+            int bx = presetX + cx * (dCtrl + dGap);
+            int by = presetY + cy * (dCtrl + dGap);
+            dl->AddRectFilled(ImVec2(bx, by), ImVec2(bx + dCtrl, by + dCtrl), presetColors[pi], 3);
+            dl->AddRect(ImVec2(bx, by), ImVec2(bx + dCtrl, by + dCtrl), IM_COL32(160, 160, 160, 255), 3);
+        }
+    }
+
     BParam* bps[6] = {&bpOpacity, &bpSpacing, &bpScatter, &bpQuickHue, &bpQuickSat, &bpQuickLit};
     const char* labels[6] = {"Op", "Sp", "Sc", "H", "S", "L"};
 

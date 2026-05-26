@@ -59,6 +59,7 @@ set(SOURCES
     src/ui/ui_layerpanel.cpp
     src/ui/ui_leftpanel.cpp
     src/ui/ui_changelog.cpp
+    src/ui/ui_quickhud.cpp
     src/ui/ui_style.cpp
     # ── sensors ───────────────────────────────────────────────────────
     src/sensors/tablet.cpp

@@ -354,8 +354,9 @@ void App_Init(AppState* state) {
     // ── Module stack ──
     // Add order = bottom-up for DrawGL; reverse for HandleInput
     int sw = GetScreenWidth(), sh = GetScreenHeight();
-    g_moduleStack.Add(std::unique_ptr<IModule>(new ViewportModule(state)),
-        DrawRect{(float)uiPanelWidth, 0, (float)(sw - uiPanelWidth - RIGHT_PANEL_WIDTH), (float)sh});
+    DrawRect vpRect{(float)uiPanelWidth, 0, (float)(sw - uiPanelWidth - RIGHT_PANEL_WIDTH), (float)sh};
+    g_moduleStack.Add(std::unique_ptr<IModule>(new ViewportModule(state)), vpRect);
+    g_moduleStack.Add(std::unique_ptr<IModule>(new QuickHudModule(state)), vpRect);
     g_moduleStack.Add(std::unique_ptr<IModule>(new RightPanelModule(state)),
         DrawRect{(float)(sw - RIGHT_PANEL_WIDTH), 0, (float)RIGHT_PANEL_WIDTH, (float)sh});
     g_moduleStack.Add(std::unique_ptr<IModule>(new LeftPanelModule(state)),
@@ -460,9 +461,6 @@ void App_Draw(AppState* state) {
     // ── Module GL draws (viewport canvas + overlays) ──
     g_moduleStack.DrawGL();
 
-    // Gizmo visual drawn early (raylib XOR, before ImGui)
-    XORgizmo_DrawVisual(state);
-
     // ── Layer transform XOR gizmo ──────────────────────────────────────
     if (g_activeHud == HUD_LAYER_XFORM && state->activeLayer >= 0) {
         sLayerProps* lp = LayerStack_GetProps(state->activeLayer);
@@ -515,15 +513,11 @@ void App_Draw(AppState* state) {
     if (g_panelsVisible)
         networkBroker.DrawConnectionUI();
     rlSetBlendMode(RL_BLEND_ALPHA);
-    QuickPanel_DrawUI(state);
-
-    // Module GUI draws (left + right panels)
+    // Module GUI draws (quick HUD, then left + right panels)
     g_moduleStack.DrawGUI();
+
     rlSetBlendMode(RL_BLEND_ALPHA);
     Changelog_Draw();
-
-    // Gizmo input handled last — after UI consumed its own clicks
-    XORgizmo_HandleInput(state);
 
     // ── Color picker 3×3 magnifier ──────────────────────────────────
     if (g_colorPicking) {

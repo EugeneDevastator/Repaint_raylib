@@ -356,6 +356,15 @@ struct RightPanelModule : IModule {
     void DrawGUI(const DrawRect& rect) override;
 };
 
+struct QuickHudModule : IModule {
+    AppState* state;
+    explicit QuickHudModule(AppState* s) : state(s) {}
+    const char* Name() const override { return "QuickHud"; }
+    bool HandleInput(InputState& input, const DrawRect& rect) override;
+    void DrawGL(const DrawRect& rect) override;
+    void DrawGUI(const DrawRect& rect) override;
+};
+
 extern ModuleStack g_moduleStack;
 
 #endif
