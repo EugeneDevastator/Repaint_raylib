@@ -100,13 +100,11 @@ void Preset_ApplyToCurrent(const BrushPreset* p, AppState* state) {
         for (int ti = 0; ti < state->brushTexCount; ti++) {
             if (strcmp(state->brushTex[ti].name, p->texName) == 0) {
                 state->activeBrushTex = ti;
-                state->editTexMode = 1;
                 break;
             }
         }
     } else {
         state->activeBrushTex = -1;
-        state->editTexMode = 0;
     }
 
     extern bool g_seamlessPaint;
