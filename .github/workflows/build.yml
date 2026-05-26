@@ -55,16 +55,16 @@ jobs:
         run: cmake --build build/win64-release --parallel
 
       - name: Package
-        shell: pwsh
+        shell: msys2 {0}
         run: |
-          New-Item -ItemType Directory -Force dist/repaint-windows
-          Copy-Item build/win64-release/bin/repaint.exe dist/repaint-windows/
-          Copy-Item C:/msys64/mingw64/bin/libwinpthread-1.dll dist/repaint-windows/
-          Copy-Item C:/msys64/mingw64/bin/libgcc_s_seh-1.dll dist/repaint-windows/
-          Copy-Item C:/msys64/mingw64/bin/libstdc++-6.dll dist/repaint-windows/
-          if (Test-Path shaders)   { Copy-Item -Recurse shaders   dist/repaint-windows/ }
-          if (Test-Path resources) { Copy-Item -Recurse resources dist/repaint-windows/ }
-          Compress-Archive -Path dist/repaint-windows -DestinationPath repaint-windows.zip
+          mkdir -p dist/repaint-windows
+          cp build/win64-release/bin/repaint.exe dist/repaint-windows/
+          cp "$MINGW_PREFIX/bin/libwinpthread-1.dll"  dist/repaint-windows/
+          cp "$MINGW_PREFIX/bin/libgcc_s_seh-1.dll"   dist/repaint-windows/
+          cp "$MINGW_PREFIX/bin/libstdc++-6.dll"       dist/repaint-windows/
+          cp -r shaders   dist/repaint-windows/ 2>/dev/null || true
+          cp -r resources dist/repaint-windows/ 2>/dev/null || true
+          cd dist && zip -r ../repaint-windows.zip repaint-windows
 
       - uses: actions/upload-artifact@v4
         with:
