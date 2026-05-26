@@ -159,8 +159,13 @@ if (mode == 0) { // N-OKLab
     outRGB = oklabToRgb(blendedLab);
     outA   = wTotal; // brushA + canvas.a * (1.0 - brushA)
 } else if (mode == 1) { // N-Linear
-        outRGB = brushPremul + canvas.rgb * (1.0 - brushA);
-        outA   = brushA + canvas.a * (1.0 - brushA);
+		vec3 brushPremul  = brushRGB * brushA;
+		vec3 canvasPremul = canvas.rgb * canvas.a;
+
+		outA   = brushA + canvas.a * (1.0 - brushA);
+		outRGB = (outA > 0.00001) 
+			? (brushPremul + canvasPremul * (1.0 - brushA)) / outA 
+			: brushRGB;
     } else if (mode == 2) { // EraseA
         outRGB = canvas.rgb;
         outA   = canvas.a * (1.0 - brushA);
