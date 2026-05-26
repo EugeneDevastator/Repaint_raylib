@@ -331,8 +331,8 @@ void App_FileSaveAs(void); void App_FileReload(void); void App_FileSnap(void);
 RenderTexture2D Load16BitRT(int width, int height);
 
 // ── Notifications ──────────────────────────────────────────────────────────
-// Stub — implement to show transient on-screen messages (brush saved, etc.)
 void DisplayInfoText(const char* text);
+void ShowNotification(const char* text, float duration);
 
 // ── Input ─────────────────────────────────────────────────────────────────
 // Forwards raylib mouse state to ImGui (captures tablet/touch that raylib

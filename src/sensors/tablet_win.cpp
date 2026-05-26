@@ -52,6 +52,10 @@ static LRESULT CALLBACK TabletMsgHook(int code, WPARAM wParam, LPARAM lParam) {
                     g_penState.rotation = penInfo.rotation / 360.0f;
                     g_penState.active = (penInfo.pointerInfo.pointerFlags & POINTER_FLAG_INRANGE) != 0;
                     g_penState.touching = (penInfo.pointerInfo.pointerFlags & POINTER_FLAG_INCONTACT) != 0;
+                    g_penState.buttons = 0;
+                    if (g_penState.touching) g_penState.buttons |= 1;
+                    if (penInfo.penFlags & PEN_FLAG_BARREL)   g_penState.buttons |= 2;
+                    if (penInfo.penFlags & PEN_FLAG_INVERTED) g_penState.buttons |= 4;
                     LeaveCriticalSection(&g_penLock);
                 }
             }

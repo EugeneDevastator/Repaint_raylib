@@ -23,14 +23,42 @@ Viewport viewport;
 
 ModuleStack g_moduleStack;
 
+// ── Notification state ─────────────────────────────────────────────────
+static struct {
+    char text[256];
+    double endTime;
+} g_notif = {};
+
+void ShowNotification(const char* text, float duration) {
+    snprintf(g_notif.text, sizeof(g_notif.text), "%s", text ? text : "");
+    g_notif.endTime = GetTime() + duration;
+}
+
 void DisplayInfoText(const char* text) {
-    (void)text;
-    // TODO: implement on-screen notification display
+    ShowNotification(text, 2.0f);
+}
+
+static void DrawNotification(void) {
+    if (g_notif.text[0] == '\0' || GetTime() >= g_notif.endTime) {
+        g_notif.text[0] = '\0';
+        return;
+    }
+    int sw = GetScreenWidth();
+    Font f = GetFontDefault();
+    int sz = 24;
+    float tw = MeasureTextEx(f, g_notif.text, (float)sz, 2).x;
+    float tx = (sw - tw) * 0.5f;
+    float ty = 16.0f;
+    // Shadow (offset by 1px)
+    DrawTextEx(f, g_notif.text, (Vector2){tx + 1, ty + 1}, (float)sz, 2, BLACK);
+    DrawTextEx(f, g_notif.text, (Vector2){tx, ty}, (float)sz, 2, WHITE);
 }
 
 void SyncImGuiInput(void) {
     ImGuiIO& io = ImGui::GetIO();
     io.MousePos = ImVec2(GetMousePosition().x, GetMousePosition().y);
+
+    // Forward raylib mouse events that GLFW callbacks might have missed
     for (int b = 0; b < 3; b++) {
         int mb = (b == 0) ? MOUSE_BUTTON_LEFT : (b == 1) ? MOUSE_BUTTON_RIGHT : MOUSE_BUTTON_MIDDLE;
         if (IsMouseButtonPressed(mb))
@@ -38,6 +66,19 @@ void SyncImGuiInput(void) {
         if (IsMouseButtonReleased(mb))
             io.AddMouseButtonEvent(b, false);
     }
+
+    // Forward tablet pen buttons to ImGui (XInput2 doesn't reach GLFW callbacks)
+    // bit 0 = tip → ImGui left (0), bit 1 = BTN_STYLUS → ImGui middle (2), bit 2 = BTN_STYLUS2 → ImGui right (1)
+    static int g_prevButtons = 0;
+    static const int btnMap[3] = {0, 2, 1};
+    int buttons = Tablet_GetButtons();
+    for (int b = 0; b < 3; b++) {
+        bool down = (buttons >> b) & 1;
+        bool prev = (g_prevButtons >> b) & 1;
+        if (down && !prev) io.AddMouseButtonEvent(btnMap[b], true);
+        else if (!down && prev) io.AddMouseButtonEvent(btnMap[b], false);
+    }
+    g_prevButtons = buttons;
 }
 
 float g_splashAlpha = 1.0f;
@@ -641,6 +682,8 @@ void App_Draw(AppState* state) {
             if (g_splashTex.id > 0) { UnloadTexture(g_splashTex); g_splashTex = Texture2D{0}; }
         }
     }
+
+    DrawNotification();
 
     EndDrawing();
 

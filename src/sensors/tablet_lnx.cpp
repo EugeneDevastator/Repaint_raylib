@@ -111,12 +111,19 @@ bool TabletPlatform_Poll(TabletState* state) {
                 switch (ev.code) {
                 case BTN_TOUCH:
                     state->touching = (ev.value != 0);
+                    if (state->touching) state->buttons |= 1;
+                    else                 state->buttons &= ~1;
                     break;
                 case BTN_TOOL_PEN:
                     state->active = (ev.value != 0);
                     break;
                 case BTN_STYLUS:
+                    if (ev.value) state->buttons |= 2;
+                    else          state->buttons &= ~2;
+                    break;
                 case BTN_STYLUS2:
+                    if (ev.value) state->buttons |= 4;
+                    else          state->buttons &= ~4;
                     break;
                 }
                 break;
