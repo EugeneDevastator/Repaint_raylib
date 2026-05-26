@@ -155,6 +155,6 @@ bool LeftPanelModule::HandleInput(InputState& input, const DrawRect& rect) {
 }
 
 void LeftPanelModule::DrawGUI(const DrawRect& rect) {
-    (void)rect;
+    if (rect.w < 1 || rect.h < 1) return;
     LeftPanel_Draw(state);
 }

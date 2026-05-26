@@ -344,6 +344,6 @@ bool RightPanelModule::HandleInput(InputState& input, const DrawRect& rect) {
 }
 
 void RightPanelModule::DrawGUI(const DrawRect& rect) {
-    (void)rect;
+    if (rect.w < 1 || rect.h < 1) return;
     LayerPanel_Draw(state);
 }
