@@ -42,6 +42,7 @@ set(SOURCES
     src/main.cpp
     src/app.cpp
     src/modulators.cpp
+    src/brush_preset.cpp
     src/layermanager.cpp
     src/layerstack.cpp
     src/repaint_core.cpp

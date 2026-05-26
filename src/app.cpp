@@ -1,4 +1,5 @@
 #include "repaint.h"
+#include "brush_preset.h"
 #include "rlgl.h"
 #include "stroke.h"
 #include "tablet.h"
@@ -20,6 +21,11 @@ bool g_panelsVisible = true;
 Viewport viewport;
 
 ModuleStack g_moduleStack;
+
+void DisplayInfoText(const char* text) {
+    (void)text;
+    // TODO: implement on-screen notification display
+}
 
 float g_splashAlpha = 1.0f;
 static Texture2D g_splashTex = {0};
@@ -411,6 +417,9 @@ void App_Init(AppState* state) {
     DialogSetFont(&g_fileDlg, g_dialogFont, 26);
 
     g_currentFilePath[0] = '\0';
+
+    /* Load default brush preset */
+    Preset_ApplyDefault(state);
 }
 
 /* ── App_Draw ──────────────────────────────────────────────────────────── */

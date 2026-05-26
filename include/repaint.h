@@ -330,6 +330,10 @@ void App_FileSaveAs(void); void App_FileReload(void); void App_FileSnap(void);
 
 RenderTexture2D Load16BitRT(int width, int height);
 
+// ── Notifications ──────────────────────────────────────────────────────────
+// Stub — implement to show transient on-screen messages (brush saved, etc.)
+void DisplayInfoText(const char* text);
+
 // ── Module-based top-level components ──────────────────────────────────────
 
 struct LeftPanelModule : IModule {

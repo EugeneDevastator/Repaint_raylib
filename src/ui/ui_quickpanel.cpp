@@ -1,7 +1,9 @@
 #include "repaint.h"
+#include "brush_preset.h"
 #include "rlgl.h"
 #include "imgui.h"
 #include <math.h>
+#include <algorithm>
 
 void FilePanel_Draw(AppState* state, Rectangle vp);
 void ToolBox_Draw(AppState* state, Rectangle vp);
@@ -12,6 +14,54 @@ Color g_colorPickGrid[25] = {};
 
 // Debug logging - first open flag
 static bool g_quickPanelTexLogged = false;
+
+// ── Brush presets state ───────────────────────────────────────────────
+static BrushPreset g_presetUser[BRUSH_PRESET_MAX];
+static BrushPreset g_presetDefault[BRUSH_PRESET_MAX];
+static int g_presetUserCount = 0;
+static int g_presetDefaultCount = 0;
+static bool g_presetLoaded = false;
+static char g_presetNameBuf[BRUSH_PRESET_NAME_MAX] = "";
+static int g_presetSelected = -1;
+
+static int _sortPresetByName(const void* a, const void* b) {
+    return strcmp(((const BrushPreset*)a)->name, ((const BrushPreset*)b)->name);
+}
+
+static void _loadPresets(void) {
+    if (g_presetLoaded) return;
+    g_presetLoaded = true;
+    int u = Preset_LoadUser(g_presetUser, BRUSH_PRESET_MAX);
+    g_presetUserCount = (u > BRUSH_PRESET_MAX) ? BRUSH_PRESET_MAX : u;
+    qsort(g_presetUser, g_presetUserCount, sizeof(BrushPreset), _sortPresetByName);
+
+    int d = Preset_LoadDefault(g_presetDefault, BRUSH_PRESET_MAX);
+    g_presetDefaultCount = (d > BRUSH_PRESET_MAX) ? BRUSH_PRESET_MAX : d;
+    qsort(g_presetDefault, g_presetDefaultCount, sizeof(BrushPreset), _sortPresetByName);
+}
+
+static void _saveUserPresets(void) {
+    Preset_SaveUser(g_presetUser, g_presetUserCount);
+}
+
+// ── Preset list helpers ──
+// List layout: [0 = Last Unsaved] [1..U = user sorted] [---] [U+1..U+D = default sorted]
+static int _userStart(void) { return 1; }
+static int _separatorLine(void) { return 1 + g_presetUserCount; }
+static int _defaultStart(void) { return _separatorLine() + 1; }
+static int _totalListItems(void) {
+    // Last unsaved + user count + separator + default count
+    return 1 + g_presetUserCount + 1 + g_presetDefaultCount;
+}
+
+static bool _isUserIndex(int listIdx) {
+    return listIdx >= _userStart() && listIdx < _separatorLine();
+}
+static bool _isDefaultIndex(int listIdx) {
+    return listIdx >= _defaultStart() && listIdx < _totalListItems();
+}
+static int _listToUser(int listIdx) { return listIdx - _userStart(); }
+static int _listToDefault(int listIdx) { return listIdx - _defaultStart(); }
 
 void QuickPanel_Init(void) {
     FilePanel_Init();
@@ -64,28 +114,135 @@ void QuickPanel_DrawUI(AppState* state) {
     int slY = penBtnY + dCtrl + dSpacing;
     int iconY = slY + (int)dLen + dSpacing;
 
-    // ── Brush presets panel (left of Op/Sp/Sc column) ──
+    // ── Brush presets panel ──
     {
-        int pCols = 4, pRows = 2;
-        int presetW = pCols * dCtrl + (pCols - 1) * dGap;
-        int presetH = pRows * dCtrl + (pRows - 1) * dGap;
-        int presetX = sliderLeftX - dGap - presetW;
-        int presetY = gcy - presetH / 2;
+        _loadPresets();
+        // Fit between viewport left edge and left slider column, capped at 180px
+        int panelW = sliderLeftX - (int)vp.x - dGap * 2;
+        if (panelW > 180) panelW = 180;
+        if (panelW < 80)  panelW = 80;
+        int panelX = sliderLeftX - dGap - panelW;
+        int panelTop = penBtnY - 14;
+        int panelBot = iconY + dCtrl;
+        int panelH = panelBot - panelTop;
 
-        dl->AddText(ImVec2(presetX, presetY - 14), IM_COL32(211, 211, 211, 230), "Presets");
-        ImU32 presetColors[8] = {
-            IM_COL32(180, 80,  80,  255), IM_COL32(80,  140, 180, 255),
-            IM_COL32(80,  160, 100, 255), IM_COL32(200, 180, 80,  255),
-            IM_COL32(160, 100, 160, 255), IM_COL32(200, 120, 60,  255),
-            IM_COL32(60,  60,  60,  255), IM_COL32(200, 200, 200, 255),
-        };
-        for (int pi = 0; pi < pCols * pRows; pi++) {
-            int cx = pi % pCols, cy = pi / pCols;
-            int bx = presetX + cx * (dCtrl + dGap);
-            int by = presetY + cy * (dCtrl + dGap);
-            dl->AddRectFilled(ImVec2(bx, by), ImVec2(bx + dCtrl, by + dCtrl), presetColors[pi], 3);
-            dl->AddRect(ImVec2(bx, by), ImVec2(bx + dCtrl, by + dCtrl), IM_COL32(160, 160, 160, 255), 3);
+        ImGui::SetCursorScreenPos(ImVec2(panelX, panelTop));
+        ImGui::BeginChild("##presets", ImVec2((float)panelW, (float)panelH), true,
+            ImGuiWindowFlags_NoScrollbar);
+
+        // ── Button bar (top) ──
+        float btnW = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x * 2) / 3.0f;
+        if (btnW < 20) btnW = 20;
+
+        if (ImGui::Button("Add", ImVec2(btnW, 0))) {
+            if (g_presetNameBuf[0]) {
+                BrushPreset tmp;
+                Preset_CaptureFromCurrent(&tmp, state);
+                snprintf(tmp.name, sizeof(tmp.name), "%s", g_presetNameBuf);
+                bool exists = false;
+                for (int i = 0; i < g_presetUserCount; i++) {
+                    if (strcmp(g_presetUser[i].name, tmp.name) == 0) { exists = true; break; }
+                }
+                if (exists) {
+                    int suffix = 2;
+                    char tryName[BRUSH_PRESET_NAME_MAX];
+                    for (; suffix < 9999; suffix++) {
+                        snprintf(tryName, sizeof(tryName), "%.48s %d", g_presetNameBuf, suffix);
+                        bool found = false;
+                        for (int i = 0; i < g_presetUserCount; i++) {
+                            if (strcmp(g_presetUser[i].name, tryName) == 0) { found = true; break; }
+                        }
+                        if (!found) break;
+                    }
+                    memcpy(tmp.name, tryName, BRUSH_PRESET_NAME_MAX);
+                    memcpy(g_presetNameBuf, tryName, BRUSH_PRESET_NAME_MAX);
+                }
+                if (g_presetUserCount < BRUSH_PRESET_MAX) {
+                    g_presetUser[g_presetUserCount++] = tmp;
+                    qsort(g_presetUser, g_presetUserCount, sizeof(BrushPreset), _sortPresetByName);
+                    _saveUserPresets();
+                    DisplayInfoText("Added");
+                }
+            }
         }
+        ImGui::SameLine();
+        if (ImGui::Button("Write", ImVec2(btnW, 0))) {
+            if (g_presetSelected > 0 && _isUserIndex(g_presetSelected)) {
+                int ui = _listToUser(g_presetSelected);
+                Preset_CaptureFromCurrent(&g_presetUser[ui], state);
+                snprintf(g_presetUser[ui].name, sizeof(g_presetUser[ui].name), "%s", g_presetNameBuf);
+                qsort(g_presetUser, g_presetUserCount, sizeof(BrushPreset), _sortPresetByName);
+                _saveUserPresets();
+                DisplayInfoText("Written");
+            } else {
+                DisplayInfoText("Cannot overwrite");
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Del", ImVec2(btnW, 0))) {
+            if (g_presetSelected > 0 && _isUserIndex(g_presetSelected)) {
+                int ui = _listToUser(g_presetSelected);
+                for (int i = ui; i < g_presetUserCount - 1; i++)
+                    g_presetUser[i] = g_presetUser[i + 1];
+                g_presetUserCount--;
+                g_presetSelected = -1;
+                g_presetNameBuf[0] = '\0';
+                _saveUserPresets();
+                DisplayInfoText("Deleted");
+            } else {
+                DisplayInfoText("Cannot delete");
+            }
+        }
+
+        // ── Name text field ──
+        ImGui::SetNextItemWidth(-1);
+        ImGui::InputText("##pname", g_presetNameBuf, BRUSH_PRESET_NAME_MAX);
+
+        // ── Preset list ──
+        int total = _totalListItems();
+        float listH = ImGui::GetContentRegionAvail().y;
+        if (listH < 20) listH = 20;
+
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(1, 1, 1, 1));
+        ImGui::BeginChild("##plist", ImVec2(0, listH), ImGuiChildFlags_Borders);
+        for (int li = 0; li < total; li++) {
+            if (li == _separatorLine()) {
+                ImGui::Separator();
+                continue;
+            }
+            const char* label = NULL;
+            if (li == 0) {
+                label = "Last Unsaved";
+            } else if (_isUserIndex(li)) {
+                label = g_presetUser[_listToUser(li)].name;
+            } else if (_isDefaultIndex(li)) {
+                label = g_presetDefault[_listToDefault(li)].name;
+            }
+            if (!label) continue;
+
+            ImGui::PushID(li);
+            bool isSel = (li == g_presetSelected);
+            if (ImGui::Selectable(label, isSel, ImGuiSelectableFlags_AllowDoubleClick)) {
+                g_presetSelected = li;
+                if (ImGui::IsMouseDoubleClicked(0) && li > 0) {
+                    if (_isUserIndex(li))
+                        Preset_ApplyToCurrent(&g_presetUser[_listToUser(li)], state);
+                    else if (_isDefaultIndex(li))
+                        Preset_ApplyToCurrent(&g_presetDefault[_listToDefault(li)], state);
+                    snprintf(g_presetNameBuf, sizeof(g_presetNameBuf), "%s", label);
+                    DisplayInfoText("Applied");
+                } else if (li > 0) {
+                    snprintf(g_presetNameBuf, sizeof(g_presetNameBuf), "%s", label);
+                } else {
+                    g_presetNameBuf[0] = '\0';
+                }
+            }
+            ImGui::PopID();
+        }
+        ImGui::EndChild();
+        ImGui::PopStyleColor();
+
+        ImGui::EndChild();
     }
 
     BParam* bps[6] = {&bpOpacity, &bpSpacing, &bpScatter, &bpQuickHue, &bpQuickSat, &bpQuickLit};
