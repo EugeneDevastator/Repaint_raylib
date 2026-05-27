@@ -495,6 +495,8 @@ void App_Draw(AppState* state) {
     }
     g_moduleStack.SetRect("LeftPanel",   leftRect);
     g_moduleStack.SetRect("Viewport",    vpRect);
+    g_moduleStack.SetRect("QuickHud",    vpRect);
+    g_moduleStack.SetRect("LayerXform",  vpRect);
     g_moduleStack.SetRect("RightPanel",  rightRect);
 
     BeginDrawing();
