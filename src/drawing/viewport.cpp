@@ -274,8 +274,8 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
 
                 float sx = (fabsf(initDx) > 0.001f) ? lx / initDx : 1.0f;
                 float sy = (fabsf(initDy) > 0.001f) ? ly / initDy : 1.0f;
-                if (sx < 0.01f) sx = 0.01f;
-                if (sy < 0.01f) sy = 0.01f;
+                if (fabsf(sx) < 0.01f) sx = (sx < 0) ? -0.01f : 0.01f;
+                if (fabsf(sy) < 0.01f) sy = (sy < 0) ? -0.01f : 0.01f;
 
                 // Extract rotation + scale from savedMat
                 float oldSx = sqrtf(as * as + cs * cs);
