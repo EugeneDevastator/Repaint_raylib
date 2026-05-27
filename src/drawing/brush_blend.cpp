@@ -24,6 +24,7 @@ static int locStampOffset = -1;
 static int locPwr = -1;
 static int locEraseMode = -1;
 static int locSeamless = -1;
+static int locCopyOrigin = -1, locCopySize = -1;
 static bool inited = false;
 
 static RenderTexture2D canvasCopyRT = {0};
@@ -127,6 +128,8 @@ void BrushBlend_Init(void) {
     locPwr            = GetShaderLocation(brushBlendShader, "pwr");
     locEraseMode      = GetShaderLocation(brushBlendShader, "eraseMode");
     locSeamless       = GetShaderLocation(brushBlendShader, "uSeamless");
+    locCopyOrigin     = GetShaderLocation(brushBlendShader, "copyOrigin");
+    locCopySize       = GetShaderLocation(brushBlendShader, "copySize");
 
     if (locCanvasTex >= 0) { int u = 1; SetShaderValue(brushBlendShader, locCanvasTex, &u, SHADER_UNIFORM_INT); }
     if (locBrushTex  >= 0) { int u = 2; SetShaderValue(brushBlendShader, locBrushTex,  &u, SHADER_UNIFORM_INT); }
@@ -172,36 +175,67 @@ void BrushBlend_ApplyStamp(
     float angleRad = (float)brush->Realb.resangle * (float)(M_PI / 180.0);
     float squish   = fmaxf((float)brush->Realb.x2y, 0.01f);
 
-    // -------- Pass 0: full canvas copy
-    if (canvasCopyRT.id == 0 || canvasCopyW != W || canvasCopyH != H) {
-        if (canvasCopyRT.id > 0) UnloadRenderTexture(canvasCopyRT);
-        canvasCopyRT = Load16BitRT(W, H);
-        SetTextureFilter(canvasCopyRT.texture, TEXTURE_FILTER_BILINEAR);
-        // need to toggle this when changing draw modes.
-        SetTextureWrap(canvasCopyRT.texture, TEXTURE_WRAP_REPEAT);  // <-- ADD
-        canvasCopyW = W;
-        canvasCopyH = H;
+    // ---- Pre-compute stamp rect (needed before Pass 0) ----
+    float radOutForGeo = brush->Realb.rad_out;
+    if (radOutForGeo < 1.0f) radOutForGeo = 1.0f;
+
+    float bboxHalf = radOutForGeo * 1.41421356f;
+    int sz = (int)ceilf(bboxHalf * 2.0f);
+    if (sz < 4) sz = 4;
+    int bucket = next_mult32(sz);
+    if (bucket > 2048) bucket = 2048;
+    int drawSz = bucket;
+
+    float stampSizePx = (float)drawSz;
+    float actualRadOut = brush->Realb.rad_out;
+    if (actualRadOut <= 1.0f && actualRadOut > 0.0f) {
+        float ratio = actualRadOut / radOutForGeo;
+        stampSizePx = (float)drawSz * ratio;
+        if (stampSizePx < 1.0f) stampSizePx = 1.0f;
     }
+
+    float x0 = stampX - stampSizePx * 0.5f;
+    float y0 = stampY - stampSizePx * 0.5f;
+
+    // Dirty rect (clamped to canvas)
+    int rx0 = (int)floorf(x0);
+    int ry0 = (int)floorf(y0);
+    int rx1 = (int)ceilf(x0 + stampSizePx);
+    int ry1 = (int)ceilf(y0 + stampSizePx);
+    if (rx0 < 0) rx0 = 0;
+    if (ry0 < 0) ry0 = 0;
+    if (rx1 > W) rx1 = W;
+    if (ry1 > H) ry1 = H;
+    int rW = rx1 - rx0;
+    int rH = ry1 - ry0;
+    if (rW <= 0 || rH <= 0) return;
+
+    // -------- Pass 0: partial canvas copy (stamp region only) --------
+    if (canvasCopyRT.id == 0 || canvasCopyW != rW || canvasCopyH != rH) {
+        if (canvasCopyRT.id > 0) UnloadRenderTexture(canvasCopyRT);
+        canvasCopyRT = Load16BitRT(rW, rH);
+        SetTextureFilter(canvasCopyRT.texture, TEXTURE_FILTER_BILINEAR);
+        SetTextureWrap(canvasCopyRT.texture, TEXTURE_WRAP_REPEAT);
+        canvasCopyW = rW;
+        canvasCopyH = rH;
+    }
+
+    // Source: dstRT is OpenGL upside-down, flip Y for texture rect
+    float srcTexY = (float)(H - ry1); // flip to GL tex coord space
+
     BeginTextureMode(canvasCopyRT);
     rlSetBlendMode(RL_BLEND_CUSTOM);
     rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
     ClearBackground((Color){0,0,0,0});
     DrawTexturePro(
         dstRT.texture,
-        (Rectangle){0, 0, (float)W, (float)H},
-        (Rectangle){0, 0, (float)W, (float)H},
+        (Rectangle){(float)rx0, srcTexY, (float)rW, (float)rH},
+        (Rectangle){0, 0, (float)rW, (float)rH},
         (Vector2){0, 0}, 0.0f, WHITE);
     EndTextureMode();
 
     // -------- Pass 1: geo UV (pool, lazy alloc, never freed until shutdown)
-    float radOutForGeo = brush->Realb.rad_out;
-    if (radOutForGeo < 1.0f) radOutForGeo = 1.0f;
-
-    float bboxHalf = radOutForGeo * 1.41421356f;
-    int sz = (int)ceilf(bboxHalf * 2.0f);
-    if (sz < 32) sz = 32;
-    int bucket = next_mult32(sz);
-    if (bucket > 2048) bucket = 2048;
+    // Use the already-computed bucket/drawSz from above
 
     int pidx = pool_index(bucket);
     if (geoPool[pidx].id == 0) {
@@ -225,7 +259,6 @@ void BrushBlend_ApplyStamp(
     }
     RenderTexture2D* geoRT = &geoPool[pidx];
 
-    int drawSz = bucket;
     float drawBboxHalf = (float)drawSz * 0.5f;
     float size = radOutForGeo / drawBboxHalf;
 
@@ -311,24 +344,19 @@ void BrushBlend_ApplyStamp(
     float csz[2] = { (float)W, (float)H };
     SetShaderValue(brushBlendShader, locCanvasSize, csz, SHADER_UNIFORM_VEC2);
 
-    float actualRadOut = brush->Realb.rad_out;
-    float stampSizePx = (float)drawSz;
+    // Copy sub-region info for the shader
+    float co[2] = { (float)rx0, (float)ry0 };
+    SetShaderValue(brushBlendShader, locCopyOrigin, co, SHADER_UNIFORM_VEC2);
+    float cs[2] = { (float)rW, (float)rH };
+    SetShaderValue(brushBlendShader, locCopySize,  cs, SHADER_UNIFORM_VEC2);
 
+    // Small-brush opacity adjustment (uses actualRadOut, need it here)
     if (actualRadOut <= 1.0f && actualRadOut > 0.0f) {
-        float ratio = actualRadOut / radOutForGeo;
-        stampSizePx = (float)drawSz * ratio;
-        float minStamp = 1.0f;
         if (actualRadOut < 0.5f) {
-            minStamp = actualRadOut * 2.0f; // 0.5 → 1px, 0.25 → 0.5px → clamp to 1
-            if (minStamp < 1.0f) minStamp = 1.0f;
             float adjustedOpacity = brush->Realb.opacity * actualRadOut * 2.0f;
             SetShaderValue(brushBlendShader, locOpacity, &adjustedOpacity, SHADER_UNIFORM_FLOAT);
         }
-        if (stampSizePx < minStamp) stampSizePx = minStamp;
     }
-
-    float x0 = stampX - stampSizePx * 0.5f;
-    float y0 = stampY - stampSizePx * 0.5f;
 
     float so[2] = { x0, y0 };
     SetShaderValue(brushBlendShader, locStampOffset, so, SHADER_UNIFORM_VEC2);

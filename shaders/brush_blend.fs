@@ -7,6 +7,8 @@ uniform sampler2D texture0;
 uniform sampler2D canvasTex;
 uniform sampler2D brushTex;
 
+uniform vec2  copyOrigin;
+uniform vec2  copySize;
 uniform float opacity;
 uniform float sol;
 uniform float sol2op;
@@ -216,12 +218,19 @@ if (mode == 0) { // N-OKLab
     return vec4(clamp(outRGB, 0.0, 1.0), clamp(outA, 0.0, 1.0));
 }
 
+// Convert canvas-normalised UV (canvasFragUV) to the stamp-region copy UV
+vec2 toCopyUV(vec2 cuv) {
+    vec2 px;
+    px.x = cuv.x * canvasSize.x;
+    px.y = (1.0 - cuv.y) * canvasSize.y;
+    return (px - copyOrigin) / copySize;
+}
+
 void main() {
     vec2 uv       = fragTexCoord;
     vec2 sampleUV = vec2(uv.x, 1.0 - uv.y);
     vec4 geouv    = texture(texture0, sampleUV);
-    vec2 canvasUV = canvasFragUV;
-    canvasUV.y *= -1;
+    vec2 canvasUV = toCopyUV(canvasFragUV);
     vec4 canvas = uSeamless 
         ? texture(canvasTex, fract(canvasUV))
         : texture(canvasTex, canvasUV);
@@ -328,9 +337,7 @@ float cloneOpacity = smudgeStrength;
         ? fract(canvasFragUV - smudgeOffsetUV)
         : clamp(canvasFragUV - smudgeOffsetUV, 0.001, 0.999);
 
-        smudgeUV.y *= -1;
-        smudgeUV = fract(smudgeUV);
-        vec4 smudgeSample = texture(canvasTex, smudgeUV);
+        vec4 smudgeSample = texture(canvasTex, toCopyUV(smudgeUV));
         float smudgeA = smudgeSample.a;
 
 // gracefully handle transparent layers to not mix with blacks.
