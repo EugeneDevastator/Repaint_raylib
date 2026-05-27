@@ -254,11 +254,19 @@ void LayerStack_SyncRTFromImage(int idx) {
 static void BakeTransform(RenderTexture2D dst, Texture2D src, const float mat[6], int lw, int lh, int cw, int ch) {
     rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE,RL_ZERO,RL_FUNC_ADD);
     BeginTextureMode(dst); ClearBackground(BLANK);
+    // Negative determinant = flip → triangle winding inverts → disable culling.
+    // Must flush batch while culling is off — raylib batches draw calls and only
+    // executes them on flush, so re-enabling before EndTextureMode's flush would
+    // use the wrong state.
+    bool flip = (mat[0]*mat[4] - mat[1]*mat[3]) < 0.0f;
+    if (flip) { rlDisableBackfaceCulling(); rlDrawRenderBatchActive(); }
     rlPushMatrix();
     float m[16]={mat[0],mat[3],0,0, mat[1],mat[4],0,0, 0,0,1,0, mat[2],mat[5],0,1};
     rlMultMatrixf(m);
     DrawTextureRec(src,Rectangle{0,0,(float)lw,(float)-lh},Vector2{0,0},WHITE);
-    rlPopMatrix(); EndTextureMode();
+    rlPopMatrix();
+    if (flip) { rlDrawRenderBatchActive(); rlEnableBackfaceCulling(); }
+    EndTextureMode();
 }
 
 static void ApplyBlendShader(RenderTexture2D dst, Texture2D base, Texture2D layerTex,
