@@ -42,12 +42,24 @@ void LayerStack_SyncLayerTex(int idx);
 void LayerStack_SyncRTFromImage(int idx);
 
 // ── Compositing ─────────────────────────────────────────────────────
+// Legacy — renders into internal accumulators at SetRenderWindow resolution
 RenderTexture2D* LayerStack_Composite(void);
 Image LayerStack_CompositeWithDither(void);
+
+// New — render at arbitrary resolution with caller-owned destination
+// viewMat: 2×3 affine (NULL = identity). dst is written in-place.
+void LayerStack_ProduceCompositeView(RenderTexture2D dst, const float viewMat[6], int w, int h);
+void LayerStack_ProduceCompositeDitherView8b(Image* dst, const float viewMat[6], int w, int h);
+void LayerStack_ProduceComposite(RenderTexture2D dst, int w, int h);
+void LayerStack_ProduceCompositeDither8b(Image* dst, int w, int h);
 
 // ── For viewport/renderer access ─────────────────────────────────────
 bool   LayerStack_PresentInited(void);
 Shader LayerStack_GetPresentShader(void);
+Texture2D LayerStack_GetCheckerTex(void);
 void   LayerStack_SetDirty(void);
+
+// ── Viewport resolution toggle ──
+extern bool g_useViewRes;
 
 #endif

@@ -87,6 +87,7 @@ int g_activeHud = HUD_NONE;
 bool g_seamlessPaint = false;
 bool g_seamlessPreview = false;
 int g_texScaleMode = 0;
+bool g_useViewRes = false;
 float g_pivotCursorX = 0.0f, g_pivotCursorY = 0.0f;
 
 static void DrawSplash(const char* msg) {

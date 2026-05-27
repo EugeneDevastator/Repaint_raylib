@@ -8,6 +8,10 @@
 extern Viewport viewport;
 extern bool layersDirty;
 extern bool g_seamlessPreview;
+extern bool g_useViewRes;
+
+// Cached viewport-resolution render target for "Use screen res" mode
+static RenderTexture2D g_viewResRT = {0};
 
 static RenderTexture2D g_previewRT = {0};   // brush preview (strokes on transparent bg)
 static int g_frameCounter = 0;
@@ -84,31 +88,55 @@ void ViewportHUD_Draw(AppState* state) {
         return;
     }
 
-    // Draw the canvas first (always)
-    RenderTexture2D* docBlendTex = DocBlender_Composite(state);
-    if (!docBlendTex || docBlendTex->id == 0) return;
-
-    float dstX = -state->camera.target.x * state->camera.zoom + state->camera.offset.x;
-    float dstY = -state->camera.target.y * state->camera.zoom + state->camera.offset.y;
-    float dstW = cw * state->camera.zoom;
-    float dstH = ch * state->camera.zoom;
-    Rectangle srcRect = {0, 0, (float)cw, (float)-ch};
-    Rectangle dstRect = {dstX, dstY, dstW, dstH};
-
     bool usePresent = GetPresentInited();
-    if (g_seamlessPreview) {
-        SetTextureWrap(docBlendTex->texture, TEXTURE_WRAP_REPEAT);
+    RenderTexture2D* docBlendTex = NULL;
+
+    if (g_useViewRes) {
+        // Viewport-sized RT — recreate only when viewport changes size
+        int vpW = (int)vpBounds.width, vpH = (int)vpBounds.height;
+        if (g_viewResRT.id == 0 || g_viewResRT.texture.width != (unsigned)vpW || g_viewResRT.texture.height != (unsigned)vpH)
+            g_viewResRT = Load16BitRT(vpW, vpH);
+        if (vpW < 1 || vpH < 1) return;
+
+        float vOffX = state->camera.offset.x - vpBounds.x;
+        float vOffY = state->camera.offset.y - vpBounds.y;
+        float vMat[6] = {state->camera.zoom, 0,
+            -state->camera.target.x * state->camera.zoom + vOffX, 0,
+            state->camera.zoom,
+            -state->camera.target.y * state->camera.zoom + vOffY};
+        LayerStack_ProduceCompositeView(g_viewResRT, vMat, vpW, vpH);
         if (usePresent) BeginShaderMode(GetPresentShader());
-        for (int dy = -1; dy <= 1; dy++)
-            for (int dx = -1; dx <= 1; dx++)
-                DrawTexturePro(docBlendTex->texture, srcRect,
-                    Rectangle{dstX + dx * dstW, dstY + dy * dstH, dstW, dstH},
-                    Vector2{0, 0}, 0.0f, WHITE);
+        DrawTextureRec(g_viewResRT.texture,
+            Rectangle{0, 0, (float)vpW, (float)-vpH},
+            Vector2{vpBounds.x, vpBounds.y}, WHITE);
         if (usePresent) EndShaderMode();
+        docBlendTex = &g_viewResRT;
     } else {
-        if (usePresent) BeginShaderMode(GetPresentShader());
-        DrawTexturePro(docBlendTex->texture, srcRect, dstRect, Vector2{0, 0}, 0.0f, WHITE);
-        if (usePresent) EndShaderMode();
+        // Legacy: composite at canvas resolution, draw at camera position
+        docBlendTex = DocBlender_Composite(state);
+        if (!docBlendTex || docBlendTex->id == 0) return;
+
+        float dstX = -state->camera.target.x * state->camera.zoom + state->camera.offset.x;
+        float dstY = -state->camera.target.y * state->camera.zoom + state->camera.offset.y;
+        float dstW = cw * state->camera.zoom;
+        float dstH = ch * state->camera.zoom;
+        Rectangle srcRect = {0, 0, (float)cw, (float)-ch};
+        Rectangle dstRect = {dstX, dstY, dstW, dstH};
+
+        if (g_seamlessPreview) {
+            SetTextureWrap(docBlendTex->texture, TEXTURE_WRAP_REPEAT);
+            if (usePresent) BeginShaderMode(GetPresentShader());
+            for (int dy = -1; dy <= 1; dy++)
+                for (int dx = -1; dx <= 1; dx++)
+                    DrawTexturePro(docBlendTex->texture, srcRect,
+                        Rectangle{dstX + dx * dstW, dstY + dy * dstH, dstW, dstH},
+                        Vector2{0, 0}, 0.0f, WHITE);
+            if (usePresent) EndShaderMode();
+        } else {
+            if (usePresent) BeginShaderMode(GetPresentShader());
+            DrawTexturePro(docBlendTex->texture, srcRect, dstRect, Vector2{0, 0}, 0.0f, WHITE);
+            if (usePresent) EndShaderMode();
+        }
     }
 
     // ── Brush preview overlay (quick HUD) ────────────────────────────
@@ -129,20 +157,21 @@ void ViewportHUD_Draw(AppState* state) {
                 bt = state->brushTex[state->activeBrushTex].rt.texture;
 
             // Copy the visible canvas area as background (needed for smudge, harmless for paint)
-            Camera2D prevCam = {};
-            prevCam.target = state->camera.target;
-            prevCam.offset = Vector2{PREVIEW_SZ * 0.5f, PREVIEW_SZ * 0.5f};
-            prevCam.zoom   = state->camera.zoom;
-
             BeginTextureMode(g_previewRT);
             ClearBackground(BLANK);
-            BeginMode2D(prevCam);
-            rlSetBlendMode(RL_BLEND_CUSTOM);
-            rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
-            DrawTextureRec(docBlendTex->texture,
-                Rectangle{0, 0, (float)cw, (float)-ch},
-                Vector2{0, 0}, WHITE);
-            EndMode2D();
+            if (!g_useViewRes) {
+                Camera2D prevCam = {};
+                prevCam.target = state->camera.target;
+                prevCam.offset = Vector2{PREVIEW_SZ * 0.5f, PREVIEW_SZ * 0.5f};
+                prevCam.zoom   = state->camera.zoom;
+                BeginMode2D(prevCam);
+                rlSetBlendMode(RL_BLEND_CUSTOM);
+                rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+                DrawTextureRec(docBlendTex->texture,
+                    Rectangle{0, 0, (float)cw, (float)-ch},
+                    Vector2{0, 0}, WHITE);
+                EndMode2D();
+            }
             // Draw preview strokes on top
             StrokeEngine_DrawPreview(g_previewRT, bt, &zoomBrush, state->mode,
                                      PREVIEW_SZ * 0.5f, PREVIEW_SZ * 0.5f);
@@ -169,6 +198,7 @@ void ViewportHUD_Draw(AppState* state) {
 void ViewportHUD_Shutdown(void) {
     if (g_previewRT.id > 0) { UnloadRenderTexture(g_previewRT); g_previewRT = RenderTexture2D{0}; }
     if (g_editCheckerTex.id > 0) { UnloadTexture(g_editCheckerTex); g_editCheckerTex = Texture2D{0}; }
+    if (g_viewResRT.id > 0) { UnloadRenderTexture(g_viewResRT); g_viewResRT = RenderTexture2D{0}; }
     g_lastPreviewHash = 0;
     g_frameCounter = 0;
 }

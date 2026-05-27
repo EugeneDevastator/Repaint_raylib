@@ -405,6 +405,12 @@ static RenderTexture2D* CompositeLayersInto(RenderTexture2D& a, RenderTexture2D&
 
 bool LayerStack_PresentInited(void) { return LS.presentInited; }
 Shader LayerStack_GetPresentShader(void) { return LS.presentShader; }
+Texture2D LayerStack_GetCheckerTex(void) {
+    // Ensure the checker is created at the current render-window size
+    int cw=CW(),ch=CH();
+    if(cw>0&&ch>0) EnsureChecker(cw,ch);
+    return LS.checkerTex;
+}
 void LayerStack_SetDirty(void) { LS.dirty=true; }
 
 RenderTexture2D* LayerStack_Composite(void) {
@@ -435,3 +441,108 @@ Image LayerStack_CompositeWithDither(void) {
     ImageFormat(&result,PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
     UnloadRenderTexture(a); UnloadRenderTexture(b); return result;
 }
+
+// ── New compositing API (caller-owned targets, arbitrary resolution) ──
+
+static void _viewBlendLoop(RenderTexture2D dst, RenderTexture2D tmp,
+                            const float viewMat[6], int w, int h) {
+    RenderTexture2D* src=&dst;
+    RenderTexture2D* dstBuf=&tmp;
+
+    // Own transform RT sized to match the output — layerTransRT may be wrong size
+    RenderTexture2D transRT={0};
+    bool ownsTrans=false;
+    if(LS.layerTransRT.id>0 && LS.layerTransRT.texture.width>=(unsigned)w && LS.layerTransRT.texture.height>=(unsigned)h)
+        transRT=LS.layerTransRT;
+    else{
+        transRT=Load16BitRT(w,h);
+        ownsTrans=true;
+    }
+
+    for(int i=0;i<LS.count;i++){
+        if(!LS.prop[i].visible||LS.rt[i].id==0) continue;
+
+        // Compute combined transform: viewMat * layerMat
+        Texture2D layerTex=LS.rt[i].texture;
+        if(transRT.id>0){
+            float ca=LS.prop[i].mat[0],cb=LS.prop[i].mat[1],ctx=LS.prop[i].mat[2];
+            float cc=LS.prop[i].mat[3],cd=LS.prop[i].mat[4],cty=LS.prop[i].mat[5];
+            float cmb[6];
+            if(viewMat){
+                cmb[0]=viewMat[0]*ca+viewMat[1]*cc; cmb[1]=viewMat[0]*cb+viewMat[1]*cd; cmb[2]=viewMat[0]*ctx+viewMat[1]*cty+viewMat[2];
+                cmb[3]=viewMat[3]*ca+viewMat[4]*cc; cmb[4]=viewMat[3]*cb+viewMat[4]*cd; cmb[5]=viewMat[3]*ctx+viewMat[4]*cty+viewMat[5];
+            }else{
+                cmb[0]=ca; cmb[1]=cb; cmb[2]=ctx; cmb[3]=cc; cmb[4]=cd; cmb[5]=cty;
+            }
+            BakeTransform(transRT,LS.rt[i].texture,cmb,LS.prop[i].layerW,LS.prop[i].layerH,w,h);
+            layerTex=transRT.texture;
+        }
+        sLayerProps*p=&LS.prop[i];
+        if(LS.shaderInited)
+            ApplyBlendShader(*dstBuf,src->texture,layerTex,p->op,p->blendmode,p->threshold,p->feather,w,h);
+        else{
+            BeginTextureMode(*dstBuf); ClearBackground(BLANK);
+            DrawTextureRec(src->texture,FullRect(w,h),Vector2{0,0},WHITE);
+            DrawTextureRec(layerTex,FullRect(w,h),Vector2{0,0},ColorAlpha(WHITE,p->op));
+            EndTextureMode();
+        }
+        RenderTexture2D*t=src; src=dstBuf; dstBuf=t;
+    }
+    // If final result is in tmp, copy to dst
+    if(src!=&dst) CopyRT(dst,*src,w,h);
+    if(ownsTrans) UnloadRenderTexture(transRT);
+}
+
+void LayerStack_ProduceCompositeView(RenderTexture2D dst, const float viewMat[6], int w, int h) {
+    if(w<1||h<1||dst.id==0) return;
+    EnsureShader();
+    EnsureChecker(CW(),CH());  // ensure checker texture exists
+    RenderTexture2D tmp=Load16BitRT(w,h);
+
+    // Seed accumulator with checkerboard at canvas position — matches legacy
+    // behaviour where the checkerboard is the first "layer" in the composite.
+    BeginTextureMode(dst); ClearBackground(BLANK);
+    if(LS.checkerTex.id>0 && CW()>0 && CH()>0){
+        rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE,RL_ZERO,RL_FUNC_ADD);
+        rlPushMatrix();
+        float vm[6];
+        if(viewMat){ vm[0]=viewMat[0]; vm[1]=viewMat[1]; vm[2]=viewMat[2]; vm[3]=viewMat[3]; vm[4]=viewMat[4]; vm[5]=viewMat[5]; }
+        else{ vm[0]=1; vm[1]=0; vm[2]=0; vm[3]=0; vm[4]=1; vm[5]=0; }
+        float m[16]={vm[0],vm[3],0,0, vm[1],vm[4],0,0, 0,0,1,0, vm[2],vm[5],0,1};
+        rlMultMatrixf(m);
+        DrawTextureRec(LS.checkerTex,FullRect(CW(),CH()),Vector2{0,0},WHITE);
+        rlPopMatrix(); rlSetBlendMode(RL_BLEND_ALPHA);
+    }
+    EndTextureMode();
+
+    _viewBlendLoop(dst,tmp,viewMat,w,h);
+    UnloadRenderTexture(tmp);
+    rlSetBlendMode(RL_BLEND_ALPHA);
+}
+
+void LayerStack_ProduceComposite(RenderTexture2D dst, int w, int h) {
+    LayerStack_ProduceCompositeView(dst,NULL,w,h);
+}
+
+void LayerStack_ProduceCompositeDitherView8b(Image* dst, const float viewMat[6], int w, int h) {
+    if(w<1||h<1||!dst) return;
+    EnsureShader(); EnsurePresentShader();
+    RenderTexture2D a=Load16BitRT(w,h),b=Load16BitRT(w,h);
+    BeginTextureMode(a); ClearBackground(BLANK); EndTextureMode();
+    _viewBlendLoop(a,b,viewMat,w,h);
+    // a holds the final 16-bit composite — apply present shader into b, read back as 8-bit
+    BeginTextureMode(b); ClearBackground(BLANK);
+    if(LS.presentInited)BeginShaderMode(LS.presentShader);
+    DrawTextureRec(a.texture,FullRect(w,h),Vector2{0,0},WHITE);
+    if(LS.presentInited)EndShaderMode(); EndTextureMode();
+    *dst=LoadImageFromTexture(b.texture); ImageFlipVertical(dst);
+    ImageFormat(dst,PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+    UnloadRenderTexture(a); UnloadRenderTexture(b);
+    rlSetBlendMode(RL_BLEND_ALPHA);
+}
+
+void LayerStack_ProduceCompositeDither8b(Image* dst, int w, int h) {
+    LayerStack_ProduceCompositeDitherView8b(dst,NULL,w,h);
+}
+
+

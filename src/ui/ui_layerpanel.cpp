@@ -169,6 +169,7 @@ void LayerPanel_Draw(AppState* state) {
         snprintf(idxBuf, sizeof(idxBuf), "Layer %d / %d", state->activeLayer + 1, LayerStack_Count());
         ImGui::Text("%s", idxBuf);
     }
+    ImGui::Checkbox("Use screen res", &g_useViewRes);
 
     ImGui::Separator();
 
