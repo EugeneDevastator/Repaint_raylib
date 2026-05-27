@@ -160,7 +160,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         if (lw < 1) lw = (float)state->doc.width;
         if (lh < 1) lh = (float)state->doc.height;
 
-        // Compute 4 corners of the layer in canvas space
+        // Compute 4 corners of the layer in canvas space + screen space
         float a = lp->mat[0], b = lp->mat[1], tx = lp->mat[2];
         float c = lp->mat[3], d = lp->mat[4], ty = lp->mat[5];
         Vector2 corners[4] = {
@@ -169,14 +169,18 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             {lw*a+lh*b+tx, lw*c+lh*d+ty},
             {0*a+lh*b+tx, 0*c+lh*d+ty}
         };
+        Vector2 sc[4];
+        for (int ci = 0; ci < 4; ci++)
+            sc[ci] = GetWorldToScreen2D(corners[ci], state->camera);
 
-        float cDist = Dist2D(canvasPos, Vector2{g_pivotCursorX, g_pivotCursorY});
+        float cDist = Dist2D(mousePos, GetWorldToScreen2D(
+            Vector2{g_pivotCursorX, g_pivotCursorY}, state->camera));
         bool nearCenter = cDist < 12.0f;
 
-        // Check if near any corner (for scaling)
+        // Check if near any corner (for scaling) — screen-space, matches visual handle size
         int nearCorner = -1;
         for (int ci = 0; ci < 4; ci++) {
-            if (Dist2D(canvasPos, corners[ci]) < 12.0f) { nearCorner = ci; break; }
+            if (Dist2D(mousePos, sc[ci]) < 12.0f) { nearCorner = ci; break; }
         }
 
         // Any left click on the viewport moves the layer (cursor has priority)
@@ -273,14 +277,18 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                 if (sx < 0.01f) sx = 0.01f;
                 if (sy < 0.01f) sy = 0.01f;
 
-                // Extract rotation from savedMat
+                // Extract rotation + scale from savedMat
                 float oldSx = sqrtf(as * as + cs * cs);
+                float oldSy = sqrtf(bs * bs + ds * ds);
                 float cosR = (oldSx > 0.0001f) ? as / oldSx : 1.0f;
                 float sinR = (oldSx > 0.0001f) ? cs / oldSx : 0.0f;
 
-                // New R*S columns
-                float m0 = cosR * sx, m1 = -sinR * sy;
-                float m3 = sinR * sx, m4 =  cosR * sy;
+                // New R*S columns — sx,sy are RELATIVE to the saved scale,
+                // so multiply back oldSx/oldSy to preserve existing scale level.
+                float newSx = oldSx * sx;
+                float newSy = oldSy * sy;
+                float m0 = cosR * newSx, m1 = -sinR * newSy;
+                float m3 = sinR * newSx, m4 =  cosR * newSy;
 
                 // Translation: T = pivot_world - (R*S) * pivot_local
                 float m2  = fixX - (m0 * pcx + m1 * pcy);
