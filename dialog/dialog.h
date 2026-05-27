@@ -60,6 +60,8 @@ typedef struct {
     char _filterBuf[256];
     int _filterLen;
     bool _filterActive;
+	int   repeatKey;
+	float repeatTimer;
 } DialogState;
 
 void DialogOpen_Init(DialogState* dlg, const char* title,

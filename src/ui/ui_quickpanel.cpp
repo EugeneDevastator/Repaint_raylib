@@ -369,6 +369,8 @@ void QuickPanel_DrawUI(AppState* state) {
               { static const char* items4[] = {"Brush", "Global"};
                 int v = g_texScaleMode; DrawRadioGroup("Tex Scale", &v, items4, 2); g_texScaleMode = v; }
               ImGui::EndChild();
+
+
           }
           ImGui::EndChild();
 

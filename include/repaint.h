@@ -375,6 +375,15 @@ struct QuickHudModule : IModule {
     void DrawGUI(const DrawRect& rect) override;
 };
 
+struct LayerXformModule : IModule {
+    AppState* state;
+    explicit LayerXformModule(AppState* s) : state(s) {}
+    const char* Name() const override { return "LayerXform"; }
+    bool HandleInput(InputState& input, const DrawRect& rect) override;
+    void DrawGL(const DrawRect& rect) override;
+    void DrawGUI(const DrawRect& rect) override;
+};
+
 extern ModuleStack g_moduleStack;
 
 #endif

@@ -156,17 +156,7 @@ void UpdateUI(AppState* state) {
     if (g_activeHud != HUD_QUICK)
         quickPanelMouseMode = 0;
 
-    if (IsKeyPressed(KEY_ONE)) {
-        if (g_activeHud == HUD_LAYER_XFORM) {
-            g_activeHud = HUD_NONE;
-        } else {
-            g_activeHud = HUD_LAYER_XFORM;
-            if (state->activeLayer >= 0) {
-                g_pivotCursorX = state->doc.width * 0.5f;
-                g_pivotCursorY = state->doc.height * 0.5f;
-            }
-        }
-    }
+
     if (IsKeyPressed(KEY_TWO)) state->mode = eSmudge;
     if (IsKeyPressed(KEY_THREE)) state->mode = eLine;
     if (IsKeyPressed(KEY_FOUR)) state->mode = eDisp;
@@ -426,6 +416,7 @@ void App_Init(AppState* state) {
     DrawRect vpRect{(float)uiPanelWidth, 0, (float)(sw - uiPanelWidth - RIGHT_PANEL_WIDTH), (float)sh};
     g_moduleStack.Add(std::unique_ptr<IModule>(new ViewportModule(state)), vpRect);
     g_moduleStack.Add(std::unique_ptr<IModule>(new QuickHudModule(state)), vpRect);
+    g_moduleStack.Add(std::unique_ptr<IModule>(new LayerXformModule(state)), vpRect);
     g_moduleStack.Add(std::unique_ptr<IModule>(new RightPanelModule(state)),
         DrawRect{(float)(sw - RIGHT_PANEL_WIDTH), 0, (float)RIGHT_PANEL_WIDTH, (float)sh});
     g_moduleStack.Add(std::unique_ptr<IModule>(new LeftPanelModule(state)),
@@ -532,52 +523,6 @@ void App_Draw(AppState* state) {
 
     // ── Module GL draws (viewport canvas + overlays) ──
     g_moduleStack.DrawGL();
-
-    // ── Layer transform XOR gizmo ──────────────────────────────────────
-    if (g_activeHud == HUD_LAYER_XFORM && state->activeLayer >= 0) {
-        sLayerProps* lp = LayerStack_GetProps(state->activeLayer);
-        float lw = (float)lp->layerW, lh = (float)lp->layerH;
-        if (lw < 1) lw = (float)state->doc.width;
-        if (lh < 1) lh = (float)state->doc.height;
-
-        auto ws = [&](Vector2 wp) -> Vector2 {
-            return GetWorldToScreen2D(wp, state->camera);
-        };
-
-        rlDrawRenderBatchActive();
-        glEnable(GL_COLOR_LOGIC_OP);
-        glLogicOp(GL_XOR);
-
-        // Pivot cursor (pure UI, defines rotation center during drags)
-        Vector2 uip = ws(Vector2{g_pivotCursorX, g_pivotCursorY});
-        float chLen = 12.0f;
-        DrawLine(uip.x - chLen, uip.y, uip.x + chLen, uip.y, WHITE);
-        DrawLine(uip.x, uip.y - chLen, uip.x, uip.y + chLen, WHITE);
-        DrawCircle(uip.x, uip.y, 3.0f, WHITE);
-
-        // Layer outline + scale handles — transform 4 corners through layer matrix
-        float a = lp->mat[0], b = lp->mat[1], tx = lp->mat[2];
-        float c = lp->mat[3], d = lp->mat[4], ty = lp->mat[5];
-        Vector2 pts[4] = {{0,0}, {lw,0}, {lw,lh}, {0,lh}};
-        Vector2 corners[5];
-        for (int ci = 0; ci < 4; ci++) {
-            float rx = pts[ci].x * a + pts[ci].y * b + tx;
-            float ry = pts[ci].x * c + pts[ci].y * d + ty;
-            corners[ci] = ws(Vector2{rx, ry});
-        }
-        corners[4] = corners[0];
-        DrawLineStrip(corners, 5, WHITE);
-
-        // Scale handle squares at each corner (10px half-size = 20px total)
-        for (int ci = 0; ci < 4; ci++) {
-            float hx = corners[ci].x, hy = corners[ci].y;
-            float hs = 10.0f;
-            DrawRectangleLinesEx(Rectangle{hx - hs, hy - hs, hs * 2, hs * 2}, 2.0f, WHITE);
-        }
-
-        rlDrawRenderBatchActive();
-        glDisable(GL_COLOR_LOGIC_OP);
-    }
 
     rlImGuiBegin();
     SyncImGuiInput();

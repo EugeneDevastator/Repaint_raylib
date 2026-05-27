@@ -215,31 +215,73 @@ static void _scrollbar(int x, int y, int h, int total, int view,
         }
     }
 }
+static void _handleKey(char* buf, int* cur, int* len, int k) {
+    bool ctrl = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+    if (k == KEY_BACKSPACE && *cur > 0) {
+        if (ctrl) {
+            int end = *cur;
+            while (*cur > 0 && buf[*cur-1] == ' ') (*cur)--;
+            while (*cur > 0 && buf[*cur-1] != ' ') (*cur)--;
+            int removed = end - *cur;
+            memmove(buf + *cur, buf + end, *len - end + 1);
+            *len -= removed;
+        } else {
+            memmove(buf + *cur - 1, buf + *cur, *len - *cur + 1);
+            (*cur)--; (*len)--;
+        }
+    } else if (k == KEY_DELETE && *cur < *len) {
+        memmove(buf + *cur, buf + *cur + 1, *len - *cur);
+        (*len)--;
+    } else if (k == KEY_LEFT  && *cur > 0)   (*cur)--;
+    else if (k == KEY_RIGHT && *cur < *len)   (*cur)++;
+    else if (k == KEY_HOME)                   *cur = 0;
+    else if (k == KEY_END)                    *cur = *len;
+}
 
 static void _textField(DialogState* d, Rectangle r, char* buf, int maxLen,
                        int* cur, int* len, bool active) {
     DrawRectangleRec(r, _inpBg);
     DrawRectangleLinesEx(r, 1, active ? _titleBg : _inpBd);
+
     if (active) {
+        // chars
         int c;
         while ((c = GetCharPressed()) > 0)
-            if (c >= 32 && c < 127 && *len < maxLen-1) {
-                for (int i = *len; i > *cur; i--) buf[i] = buf[i-1];
-                buf[(*cur)++] = (char)c; buf[++(*len)] = '\0';
+            if (c >= 32 && c < 127 && *len < maxLen - 1) {
+                memmove(buf + *cur + 1, buf + *cur, *len - *cur + 1);
+                buf[(*cur)++] = (char)c;
+                (*len)++;
             }
-        if (IsKeyPressed(KEY_BACKSPACE) && *cur > 0)
-            { for (int i=*cur-1; i<*len; i++) buf[i]=buf[i+1]; (*cur)--; (*len)--; }
-        if (IsKeyPressed(KEY_DELETE) && *cur < *len)
-            { for (int i=*cur; i<*len; i++) buf[i]=buf[i+1]; (*len)--; }
-        if (IsKeyPressed(KEY_LEFT)  && *cur > 0)    (*cur)--;
-        if (IsKeyPressed(KEY_RIGHT) && *cur < *len) (*cur)++;
-        if (IsKeyPressed(KEY_HOME)) *cur = 0;
-        if (IsKeyPressed(KEY_END))  *cur = *len;
+
+        // keys with repeat
+        static const int keys[] = {
+            KEY_BACKSPACE, KEY_DELETE,
+            KEY_LEFT, KEY_RIGHT,
+            KEY_HOME, KEY_END
+        };
+        for (int i = 0; i < 6; i++) {
+            if (IsKeyPressed(keys[i])) {
+                _handleKey(buf, cur, len, keys[i]);
+                d->repeatKey   = keys[i];
+                d->repeatTimer = 0.5f;
+            }
+        }
+        if (d->repeatKey && IsKeyDown(d->repeatKey)) {
+            d->repeatTimer -= GetFrameTime();
+            if (d->repeatTimer <= 0.0f) {
+                _handleKey(buf, cur, len, d->repeatKey);
+                d->repeatTimer = 0.05f;
+            }
+        } else {
+            d->repeatKey = 0;
+        }
     }
+
     int tx = (int)r.x + 6;
     int ty = (int)r.y + ((int)r.height - d->_fontSize) / 2;
     _drawText(d->_font, buf, tx, ty, d->_fontSize, _text);
-    if (active && (int)(GetTime()*2) % 2 == 0) {
+
+    if (active && (int)(GetTime() * 2) % 2 == 0) {
         char tmp[DIALOG_PATH_MAX];
         snprintf(tmp, sizeof(tmp), "%.*s", *cur, buf);
         DrawRectangle(tx + (int)_measureText(d->_font, tmp, d->_fontSize),
