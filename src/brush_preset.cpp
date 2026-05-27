@@ -84,6 +84,7 @@ void Preset_ApplyToCurrent(const BrushPreset* p, AppState* state) {
     state->eraseMode = p->eraseMode;
 
     for (int i = 0; i < BI_COUNT; i++) {
+        if (i == BI_QUICKHUE || i == BI_QUICKSAT || i == BI_QUICKLIT) continue;
         _bps[i]->user.clipmaxF = p->bp[i].val;
         _bps[i]->penMode = p->bp[i].penMode;
     }
