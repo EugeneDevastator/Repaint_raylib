@@ -28,7 +28,7 @@ typedef struct {
     int bmidx;
     bool preserveop, seamlessPaint;
     int strokeSmoothingMode;
-    float splineMinDist, splineAngleThreshold;
+    float strokeThrottle;
 } BrushPreset;
 
 /* ── File I/O ── */

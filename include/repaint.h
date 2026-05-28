@@ -133,16 +133,17 @@ struct StrokeEngine {
     Vector2 smudgeSrcPos; int dabIndex; bool inStroke;
     Vector2 prevSegPos, prevSegDir; float prevSegLen, prevVel;
     float initDir; bool initDirSet;
-    Vector2 splinePts[256]; int splineCount, processedCount;
-    Vector2 smoothBuf[4]; int smoothBufCount;
+
+    // Spline buffer for Smooth mode: throttled input points used as Catmull-Rom control points
+    Vector2 splinePts[256];
+    int splineCount, processedCount;
 };
 
 #define SMOOTH_MODE_LINEAR 0
 #define SMOOTH_MODE_SMOOTH 1
-#define SMOOTH_MODE_SPLINE 2
 
 extern int g_strokeSmoothingMode;
-extern float g_splineMinDist, g_splineAngleThreshold;
+extern float g_strokeThrottle;
 
 struct AppState;
 

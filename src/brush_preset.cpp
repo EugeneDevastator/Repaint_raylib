@@ -71,10 +71,9 @@ void Preset_CaptureFromCurrent(BrushPreset* p, AppState* state) {
     p->seamlessPaint = g_seamlessPaint;
 
     extern int g_strokeSmoothingMode;
-    extern float g_splineMinDist, g_splineAngleThreshold;
+    extern float g_strokeThrottle;
     p->strokeSmoothingMode = g_strokeSmoothingMode;
-    p->splineMinDist = g_splineMinDist;
-    p->splineAngleThreshold = g_splineAngleThreshold;
+    p->strokeThrottle = g_strokeThrottle;
 }
 
 void Preset_ApplyToCurrent(const BrushPreset* p, AppState* state) {
@@ -112,10 +111,9 @@ void Preset_ApplyToCurrent(const BrushPreset* p, AppState* state) {
     g_seamlessPaint = p->seamlessPaint;
 
     extern int g_strokeSmoothingMode;
-    extern float g_splineMinDist, g_splineAngleThreshold;
+    extern float g_strokeThrottle;
     g_strokeSmoothingMode = p->strokeSmoothingMode;
-    g_splineMinDist = p->splineMinDist;
-    g_splineAngleThreshold = p->splineAngleThreshold;
+    g_strokeThrottle = p->strokeThrottle;
 }
 
 // ── File I/O ──

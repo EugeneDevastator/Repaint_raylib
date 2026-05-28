@@ -3,9 +3,8 @@
 #include "stroke.h"
 #include <math.h>
 
-int g_strokeSmoothingMode = SMOOTH_MODE_LINEAR;
-float g_splineMinDist = 0.0f;
-float g_splineAngleThreshold = 60.0f;
+int g_strokeSmoothingMode = SMOOTH_MODE_SMOOTH;
+float g_strokeThrottle = 0.0f;
 
 // ── BaseModVal helper ────────────────────────────────────────────────
 static inline float BaseModVal(const BParam& bp, float cpar) {
@@ -41,7 +40,6 @@ CollapsedBrush CollapseBrushParams(const d_RealBrush& b, float initialAngle, int
     cb.texColorMode = b.texColorMode;
     cb.useTexLumAsAlpha = b.useTexLumAsAlpha;
 
-    // Jitter ranges: proportional to final values in drawing space
     cb.jitRadOut  = bpSize.user.jitter * b.rad_out;
     cb.jitRadIn   = bpHardness.user.jitter;
     cb.jitOpacity = bpOpacity.user.jitter;
@@ -68,12 +66,11 @@ void StrokeEngine_Init(StrokeEngine* se) {
     se->prevVel = 0.0f;
     se->initDir = 0.0f;
     se->initDirSet = false;
+    se->dabIndex = 0;
+    se->lastDabRad = 0.0f;
     se->splineCount = 0;
     se->processedCount = 0;
     memset(se->splinePts, 0, sizeof(se->splinePts));
-    se->smoothBufCount = 0;
-    se->dabIndex = 0;
-    se->lastDabRad = 0.0f;
 }
 
 void StrokeEngine_BeginStroke(StrokeEngine* se, const d_Brush* baseBrush, float x, float y) {
@@ -87,12 +84,12 @@ void StrokeEngine_BeginStroke(StrokeEngine* se, const d_Brush* baseBrush, float 
     se->prevSegLen = 0.0f;
     se->prevVel = 0.0f;
     se->initDirSet = false;
+    se->dabIndex = 0;
+    se->lastDabRad = 0.0f;
     se->splineCount = 1;
     se->processedCount = 0;
     memset(se->splinePts, 0, sizeof(se->splinePts));
     se->splinePts[0] = Vector2{x, y};
-    se->dabIndex = 0;
-    se->lastDabRad = 0.0f;
 }
 
 // Compute brush modulators and build the modulated target brush
@@ -155,7 +152,8 @@ static void BuildModulatedBrush(StrokeEngine* se,
 static int FeedOnePoint(StrokeEngine* se, Vector2 pos, float velocity,
                         const d_RealBrush* baseBrush,
                         float initialAngle, int toolMode,
-                        DrawDab* outDabs, int maxDabs) {
+                        DrawDab* outDabs, int maxDabs,
+                        Vector2 overrideCtrl0, Vector2 overrideCtrl3) {
     if (!se->inStroke || maxDabs <= 0) return 0;
 
     d_RealBrush target;
@@ -171,8 +169,8 @@ static int FeedOnePoint(StrokeEngine* se, Vector2 pos, float velocity,
     memset(&dseg, 0, sizeof(dseg));
     dseg.pos1     = se->lastDabPos;
     dseg.pos2     = pos;
-    dseg.ctrl0    = se->lastDabPos;
-    dseg.ctrl3    = pos;
+    dseg.ctrl0    = overrideCtrl0;
+    dseg.ctrl3    = overrideCtrl3;
     dseg.brushFrom = cbFrom;
     dseg.brush    = cbTo;
     dseg.spacing  = spacingVal;
@@ -207,54 +205,36 @@ int StrokeEngine_FeedPoint(StrokeEngine* se, const StrokePoint& sp,
 
     Vector2 pos = {sp.x, sp.y};
 
-    // Min distance gate (Spline mode)
-    if (g_strokeSmoothingMode == SMOOTH_MODE_SPLINE && g_splineMinDist > 0.001f && se->splineCount >= 1) {
-        float dist = Dist2D(se->splinePts[se->splineCount - 1], pos);
-        if (dist < g_splineMinDist) return 0;
-    }
-
-    // Add to spline buffer (Spline mode)
-    if (g_strokeSmoothingMode == SMOOTH_MODE_SPLINE) {
-        if (se->splineCount < STROKE_SPLINE_POINTS) {
-            se->splinePts[se->splineCount++] = pos;
-        } else {
-            memmove(se->splinePts, se->splinePts + 1, sizeof(Vector2) * (STROKE_SPLINE_POINTS - 1));
-            se->splinePts[STROKE_SPLINE_POINTS - 1] = pos;
-            if (se->processedCount > 0) se->processedCount--;
-        }
-    }
-
-    // ── Mode: Linear ──
+    // ── Mode: Linear — every point is a straight segment ────────────
     if (g_strokeSmoothingMode == SMOOTH_MODE_LINEAR) {
-        return FeedOnePoint(se, pos, sp.velocity, baseBrush, initialAngle, toolMode, outDabs, maxDabs);
+        return FeedOnePoint(se, pos, sp.velocity, baseBrush, initialAngle, toolMode,
+                            outDabs, maxDabs, se->lastDabPos, pos);
     }
 
-    // ── Mode: Smooth ──
-    if (g_strokeSmoothingMode == SMOOTH_MODE_SMOOTH) {
-        // Simple running average: blend current input with previous smoothed position
-        if (se->smoothBufCount < 4) {
-            se->smoothBuf[se->smoothBufCount++] = pos;
-        } else {
-            memmove(se->smoothBuf, se->smoothBuf + 1, sizeof(Vector2) * 3);
-            se->smoothBuf[3] = pos;
-        }
-        // Average the buffer
-        Vector2 avg = {0, 0};
-        for (int i = 0; i < se->smoothBufCount; i++) {
-            avg.x += se->smoothBuf[i].x;
-            avg.y += se->smoothBuf[i].y;
-        }
-        avg.x /= se->smoothBufCount;
-        avg.y /= se->smoothBufCount;
-        return FeedOnePoint(se, avg, sp.velocity, baseBrush, initialAngle, toolMode, outDabs, maxDabs);
+    // ── Mode: Smooth — distance gate + Catmull-Rom curved segments ──
+    float threshold = fmaxf(g_strokeThrottle, 0.5f);
+
+    // Gate: skip points that are too close to the last collected point
+    if (se->splineCount > 0) {
+        float d = Dist2D(se->splinePts[se->splineCount - 1], pos);
+        if (d < threshold)
+            return 0;
     }
 
-    // ── Mode: Spline ──
+    // Add to spline buffer
+    if (se->splineCount < STROKE_SPLINE_POINTS) {
+        se->splinePts[se->splineCount++] = pos;
+    } else {
+        memmove(se->splinePts, se->splinePts + 1, sizeof(Vector2) * (STROKE_SPLINE_POINTS - 1));
+        se->splinePts[STROKE_SPLINE_POINTS - 1] = pos;
+        if (se->processedCount > 0) se->processedCount--;
+    }
+
+    // Process stable segments (need 4 points for full Catmull-Rom support)
     int totalDabs = 0;
     float vel = sp.velocity;
     int N = se->splineCount;
 
-    // Stable segments have full 4-point support: i+2 < N → i <= N-3
     for (int seg = se->processedCount; seg <= N - 3 && totalDabs < maxDabs; seg++) {
         Vector2 p0, p1, p2, p3;
         if (seg == 0) {
@@ -273,7 +253,6 @@ int StrokeEngine_FeedPoint(StrokeEngine* se, const StrokePoint& sp,
             continue;
         }
 
-        // Build modulated brush for this segment (p1→p2)
         d_RealBrush target;
         float spacingVal;
         BuildModulatedBrush(se, p1, p2, vel,
@@ -324,18 +303,11 @@ int StrokeEngine_FeedPoint(StrokeEngine* se, const StrokePoint& sp,
     return totalDabs;
 }
 
-void StrokeEngine_EndStroke(StrokeEngine* se) {
-    se->inStroke = false;
-    se->splineCount = 0;
-    se->processedCount = 0;
-    se->smoothBufCount = 0;
-}
-
 int StrokeEngine_FlushSmoothing(StrokeEngine* se, const d_RealBrush* baseBrush,
                                  float initialAngle, int toolMode,
                                  DrawDab* outDabs, int maxDabs) {
     if (!se->inStroke || maxDabs <= 0) return 0;
-    if (g_strokeSmoothingMode != SMOOTH_MODE_SPLINE) return 0;
+    if (g_strokeSmoothingMode != SMOOTH_MODE_SMOOTH) return 0;
 
     float vel = 0.5f;
     int N = se->splineCount;
@@ -410,6 +382,12 @@ int StrokeEngine_FlushSmoothing(StrokeEngine* se, const d_RealBrush* baseBrush,
     return totalDabs;
 }
 
+void StrokeEngine_EndStroke(StrokeEngine* se) {
+    se->inStroke = false;
+    se->splineCount = 0;
+    se->processedCount = 0;
+}
+
 // ── Utilities ─────────────────────────────────────────────────────────
 
 void StrokeEngine_ApplyDabs(RenderTexture2D dstRT, Texture2D brushTex,
@@ -448,7 +426,7 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex,
     float sizeMulFactor = powf(16.0f, BParam_GetValue(&bpSizeMul) / 128.0f - 1.0f);
     float radOut = baseBrush->rad_out;
     float spacingVal = BParam_GetValue(&bpSpacing);
-    float segLen = radOut * 3.0f;          // length = 3 brush radii
+    float segLen = radOut * 3.0f;
     if (segLen < 2.0f) segLen = 2.0f;
 
     float dirX = 1.0f, dirY = -1.0f;
@@ -469,7 +447,6 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex,
     DrawDab dabs[512];
     SegResult r;
 
-    // Single segment: radius shrinks from full to 1px over 3×rad_out length
     DrawSegment s;
     memset(&s, 0, sizeof(s));
     s.pos1 = start; s.pos2 = end;
@@ -479,7 +456,6 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex,
 
     int n = DrawLinear(&s, 0, 0.0f, dabs, 256, &r);
 
-    // Set smudge source positions (feedback: src = previous dab position)
     if (toolMode == eSmudge && n > 0) {
         dabs[0].srcX = cx;
         dabs[0].srcY = cy;

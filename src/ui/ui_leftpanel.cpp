@@ -72,18 +72,17 @@ void LeftPanel_Draw(AppState* state) {
     state->currentBrush.Realb.preserveop = (uint8_t)preserve;
 
     extern int g_strokeSmoothingMode;
+    extern float g_strokeThrottle;
     ImGui::Text("Smoothing");
     ImGui::RadioButton("Linear", &g_strokeSmoothingMode, SMOOTH_MODE_LINEAR); ImGui::SameLine();
-    ImGui::RadioButton("Smooth", &g_strokeSmoothingMode, SMOOTH_MODE_SMOOTH); ImGui::SameLine();
-    ImGui::RadioButton("Spline", &g_strokeSmoothingMode, SMOOTH_MODE_SPLINE);
+    ImGui::RadioButton("Smooth", &g_strokeSmoothingMode, SMOOTH_MODE_SMOOTH);
 
-    extern float g_splineMinDist, g_splineAngleThreshold;
-    if (g_strokeSmoothingMode == SMOOTH_MODE_SPLINE) {
+    if (g_strokeSmoothingMode == SMOOTH_MODE_SMOOTH) {
         ImGui::Indent(10);
         ImGui::SetNextItemWidth(-15);
-        ImGui::SliderFloat("Min Dist", &g_splineMinDist, 0.0f, 1024.0f, "%.0f");
-        ImGui::SetNextItemWidth(-15);
-        ImGui::SliderFloat("Angle", &g_splineAngleThreshold, 10.0f, 180.0f, "%.0f");
+        ImGui::SliderFloat("Throttle", &g_strokeThrottle, 0.0f, 100.0f, "%.0f");
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Higher values = fewer segment endpoints = smoother curved strokes");
         ImGui::Unindent(10);
     }
 

@@ -239,7 +239,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         if (!leftDown) {
             if (vp->wasMouseDown) {
                 int fn = StrokeEngine_FlushSmoothing(&vp->strokeEng, &state->currentBrush.Realb,
-                                                      state->initialAngle, state->mode, dabs, 1024);
+                                                       state->initialAngle, state->mode, dabs, 1024);
                 if (fn > 0) {
                     for (int i = 0; i < fn; i++) dabs[i].brush.rad_out_px *= layerScale;
                     StrokeEngine_ApplyDabs(bt->rt, g_activeBrushTex, dabs, fn);
