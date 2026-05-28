@@ -70,6 +70,8 @@ void StrokeEngine_Init(StrokeEngine* se) {
     se->lastDabRad = 0.0f;
     se->splineCount = 0;
     se->processedCount = 0;
+    se->accumDist = 0.0f;
+    se->lastInputPos = Vector2{0, 0};
     memset(se->splinePts, 0, sizeof(se->splinePts));
 }
 
@@ -88,6 +90,8 @@ void StrokeEngine_BeginStroke(StrokeEngine* se, const d_Brush* baseBrush, float 
     se->lastDabRad = 0.0f;
     se->splineCount = 1;
     se->processedCount = 0;
+    se->accumDist = 0.0f;
+    se->lastInputPos = Vector2{x, y};
     memset(se->splinePts, 0, sizeof(se->splinePts));
     se->splinePts[0] = Vector2{x, y};
 }
@@ -211,26 +215,27 @@ int StrokeEngine_FeedPoint(StrokeEngine* se, const StrokePoint& sp,
                             outDabs, maxDabs, se->lastDabPos, pos);
     }
 
-    // ── Mode: Smooth — distance gate + Catmull-Rom curved segments ──
+    // ── Mode: Smooth — accumulated-path-length gate + Catmull-Rom ──
     float threshold = fmaxf(g_strokeThrottle, 0.5f);
 
-    // Gate: skip points that are too close to the last collected point
-    if (se->splineCount > 0) {
-        float d = Dist2D(se->splinePts[se->splineCount - 1], pos);
-        if (d < threshold)
-            return 0;
+    // Accumulate path length since the last control point
+    float dist = Dist2D(se->lastInputPos, pos);
+    se->accumDist += dist;
+    se->lastInputPos = pos;
+
+    // Add a new control point when enough path length has accumulated
+    if (se->accumDist >= threshold) {
+        if (se->splineCount < STROKE_SPLINE_POINTS) {
+            se->splinePts[se->splineCount++] = pos;
+        } else {
+            memmove(se->splinePts, se->splinePts + 1, sizeof(Vector2) * (STROKE_SPLINE_POINTS - 1));
+            se->splinePts[STROKE_SPLINE_POINTS - 1] = pos;
+            if (se->processedCount > 0) se->processedCount--;
+        }
+        se->accumDist = 0;
     }
 
-    // Add to spline buffer
-    if (se->splineCount < STROKE_SPLINE_POINTS) {
-        se->splinePts[se->splineCount++] = pos;
-    } else {
-        memmove(se->splinePts, se->splinePts + 1, sizeof(Vector2) * (STROKE_SPLINE_POINTS - 1));
-        se->splinePts[STROKE_SPLINE_POINTS - 1] = pos;
-        if (se->processedCount > 0) se->processedCount--;
-    }
-
-    // Process stable segments (need 4 points for full Catmull-Rom support)
+    // Process Catmull-Rom segments from the spline buffer
     int totalDabs = 0;
     float vel = sp.velocity;
     int N = se->splineCount;
@@ -264,9 +269,6 @@ int StrokeEngine_FeedPoint(StrokeEngine* se, const StrokePoint& sp,
 
         DrawSegment dseg;
         memset(&dseg, 0, sizeof(dseg));
-        // Use the continuous last-dab position from the previous segment
-        // so dabs don't leave a gap at segment boundaries.
-        // Control points p0/p3 still provide the correct Catmull-Rom tangents.
         dseg.pos1      = se->lastDabPos;
         dseg.pos2      = p2;
         dseg.ctrl0     = p0;
@@ -294,8 +296,6 @@ int StrokeEngine_FeedPoint(StrokeEngine* se, const StrokePoint& sp,
         if (n > 0) {
             se->lastDabPos = r.lastDabPos;
             se->lastDabRad = r.lastRadOut;
-        } else {
-            se->lastDabPos = p2;
         }
         se->segBrushFrom.Realb = target;
         se->dabIndex += n;
@@ -303,7 +303,18 @@ int StrokeEngine_FeedPoint(StrokeEngine* se, const StrokePoint& sp,
         se->processedCount = seg + 1;
     }
 
-    return totalDabs;
+    if (totalDabs > 0)
+        return totalDabs;
+
+    // Linear fallback: fills gaps between control points when CR has
+    // no pending segments (all processed). This keeps the stroke moving
+    // during throttled gaps without overlapping CR dabs.
+    if (se->splineCount >= 4 && se->processedCount >= se->splineCount - 2) {
+        return FeedOnePoint(se, pos, sp.velocity, baseBrush, initialAngle,
+                            toolMode, outDabs, maxDabs,
+                            se->lastDabPos, pos);
+    }
+    return 0;
 }
 
 int StrokeEngine_FlushSmoothing(StrokeEngine* se, const d_RealBrush* baseBrush,
@@ -374,8 +385,6 @@ int StrokeEngine_FlushSmoothing(StrokeEngine* se, const d_RealBrush* baseBrush,
         if (n > 0) {
             se->lastDabPos = r.lastDabPos;
             se->lastDabRad = r.lastRadOut;
-        } else {
-            se->lastDabPos = p2;
         }
         se->segBrushFrom.Realb = target;
         se->dabIndex += n;

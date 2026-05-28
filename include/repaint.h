@@ -137,6 +137,8 @@ struct StrokeEngine {
     // Spline buffer for Smooth mode: throttled input points used as Catmull-Rom control points
     Vector2 splinePts[256];
     int splineCount, processedCount;
+    float accumDist;        // path length accumulated since last control point
+    Vector2 lastInputPos;   // previous raw input position (for incremental distance)
 };
 
 #define SMOOTH_MODE_LINEAR 0
