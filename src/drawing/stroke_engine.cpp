@@ -217,6 +217,10 @@ int StrokeEngine_FeedPoint(StrokeEngine* se, const StrokePoint& sp,
 
     // ── Mode: Smooth — accumulated-path-length gate + Catmull-Rom ──
     float threshold = fmaxf(g_strokeThrottle, 0.5f);
+    // Fast-start: use a smaller spacing for the first few control points
+    // so CR kicks in sooner rather than waiting for 3×threshold of movement.
+    if (se->splineCount < 4)
+        threshold = fminf(threshold, 5.0f);
 
     // Accumulate path length since the last control point
     float dist = Dist2D(se->lastInputPos, pos);
@@ -306,14 +310,6 @@ int StrokeEngine_FeedPoint(StrokeEngine* se, const StrokePoint& sp,
     if (totalDabs > 0)
         return totalDabs;
 
-    // Linear fallback: fills gaps between control points when CR has
-    // no pending segments (all processed). This keeps the stroke moving
-    // during throttled gaps without overlapping CR dabs.
-    if (se->splineCount >= 4 && se->processedCount >= se->splineCount - 2) {
-        return FeedOnePoint(se, pos, sp.velocity, baseBrush, initialAngle,
-                            toolMode, outDabs, maxDabs,
-                            se->lastDabPos, pos);
-    }
     return 0;
 }
 
