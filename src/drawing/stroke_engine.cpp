@@ -55,19 +55,6 @@ CollapsedBrush CollapseBrushParams(const d_RealBrush& b, float initialAngle, int
     return cb;
 }
 
-// ── Catmull-Rom spline ──────────────────────────────────────────────
-static Vector2 CatmullRom(Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, float t) {
-    float t2 = t * t, t3 = t2 * t;
-    return Vector2{
-        0.5f * ((2.0f * p1.x) + (-p0.x + p2.x) * t +
-                (2.0f * p0.x - 5.0f * p1.x + 4.0f * p2.x - p3.x) * t2 +
-                (-p0.x + 3.0f * p1.x - 3.0f * p2.x + p3.x) * t3),
-        0.5f * ((2.0f * p1.y) + (-p0.y + p2.y) * t +
-                (2.0f * p0.y - 5.0f * p1.y + 4.0f * p2.y - p3.y) * t2 +
-                (-p0.y + 3.0f * p1.y - 3.0f * p2.y + p3.y) * t3)
-    };
-}
-
 // ── StrokeEngine implementation ─────────────────────────────────────
 
 void StrokeEngine_Init(StrokeEngine* se) {
@@ -108,14 +95,15 @@ void StrokeEngine_BeginStroke(StrokeEngine* se, const d_Brush* baseBrush, float 
     se->lastDabRad = 0.0f;
 }
 
-static int FeedOnePoint(StrokeEngine* se, Vector2 pos, float velocity,
-                        const d_RealBrush* baseBrush,
-                        float initialAngle, int toolMode,
-                        DrawDab* outDabs, int maxDabs) {
-    if (!se->inStroke || maxDabs <= 0) return 0;
-
-    float segDx = pos.x - se->prevSegPos.x;
-    float segDy = pos.y - se->prevSegPos.y;
+// Compute brush modulators and build the modulated target brush
+static void BuildModulatedBrush(StrokeEngine* se,
+                                 Vector2 from, Vector2 to,
+                                 float velocity,
+                                 const d_RealBrush* baseBrush,
+                                 float initialAngle, int toolMode,
+                                 d_RealBrush& target, float& spacingVal) {
+    float segDx = to.x - from.x;
+    float segDy = to.y - from.y;
     float segLen = sqrtf(segDx * segDx + segDy * segDy);
     float dirAng = AtanXY(segDx, segDy);
 
@@ -140,15 +128,14 @@ static int FeedOnePoint(StrokeEngine* se, Vector2 pos, float velocity,
         g_modPars.Pars[csRelang] = rel;
     }
 
-    se->prevSegPos = pos;
+    se->prevSegPos = to;
     se->prevSegDir = Vector2{segDx, segDy};
     se->prevSegLen = segLen;
     se->prevVel = velocity;
 
-    // Build modulated brush
     float sizeMulFactor = powf(16.0f, BParam_GetValue(&bpSizeMul) / 128.0f - 1.0f);
 
-    d_RealBrush target = *baseBrush;
+    target = *baseBrush;
     target.rad_out  = BaseModVal(bpSize,       g_modPars.Pars[bpSize.penMode]);
     float hVal      = BaseModVal(bpHardness,   g_modPars.Pars[bpHardness.penMode]);
     target.radInRatio = hVal;
@@ -162,9 +149,21 @@ static int FeedOnePoint(StrokeEngine* se, Vector2 pos, float velocity,
     target.cop = (toolMode == eSmudge) ? BaseModVal(bpCloneOpacity, g_modPars.Pars[bpCloneOpacity.penMode]) : 0.0f;
     target.rad_out *= sizeMulFactor;
 
-    float spacingVal = BParam_GetValue(&bpSpacing);
+    spacingVal = BParam_GetValue(&bpSpacing);
+}
 
-    // Collapse both endpoint brushes
+static int FeedOnePoint(StrokeEngine* se, Vector2 pos, float velocity,
+                        const d_RealBrush* baseBrush,
+                        float initialAngle, int toolMode,
+                        DrawDab* outDabs, int maxDabs) {
+    if (!se->inStroke || maxDabs <= 0) return 0;
+
+    d_RealBrush target;
+    float spacingVal;
+    BuildModulatedBrush(se, se->lastDabPos, pos, velocity,
+                        baseBrush, initialAngle, toolMode,
+                        target, spacingVal);
+
     CollapsedBrush cbFrom = CollapseBrushParams(se->segBrushFrom.Realb, initialAngle, toolMode);
     CollapsedBrush cbTo   = CollapseBrushParams(target, initialAngle, toolMode);
 
@@ -172,13 +171,8 @@ static int FeedOnePoint(StrokeEngine* se, Vector2 pos, float velocity,
     memset(&dseg, 0, sizeof(dseg));
     dseg.pos1     = se->lastDabPos;
     dseg.pos2     = pos;
-    if (g_strokeSmoothingMode == SMOOTH_MODE_SMOOTH && se->smoothBufCount >= 4) {
-        dseg.ctrl0 = se->smoothBuf[se->smoothBufCount - 4];
-        dseg.ctrl3 = se->smoothBuf[se->smoothBufCount - 1];
-    } else {
-        dseg.ctrl0 = se->lastDabPos;
-        dseg.ctrl3 = pos;
-    }
+    dseg.ctrl0    = se->lastDabPos;
+    dseg.ctrl3    = pos;
     dseg.brushFrom = cbFrom;
     dseg.brush    = cbTo;
     dseg.spacing  = spacingVal;
@@ -272,14 +266,58 @@ int StrokeEngine_FeedPoint(StrokeEngine* se, const StrokePoint& sp,
             p2 = se->splinePts[seg + 1];
             p3 = se->splinePts[seg + 2];
         }
-        for (int s = 0; s < STROKE_SPLINE_SUBDIVS; s++) {
-            float tMid = ((float)s + 0.5f) / (float)STROKE_SPLINE_SUBDIVS;
-            Vector2 mid = CatmullRom(p0, p1, p2, p3, tMid);
-            int rem = maxDabs - totalDabs;
-            if (rem <= 0) break;
-            totalDabs += FeedOnePoint(se, mid, vel, baseBrush, initialAngle, toolMode,
-                                      outDabs + totalDabs, rem);
+
+        float segLen = Dist2D(p1, p2);
+        if (segLen < 0.5f) {
+            se->processedCount = seg + 1;
+            continue;
         }
+
+        // Build modulated brush for this segment (p1→p2)
+        d_RealBrush target;
+        float spacingVal;
+        BuildModulatedBrush(se, p1, p2, vel,
+                            baseBrush, initialAngle, toolMode,
+                            target, spacingVal);
+
+        CollapsedBrush cbFrom = CollapseBrushParams(se->segBrushFrom.Realb, initialAngle, toolMode);
+        CollapsedBrush cbTo   = CollapseBrushParams(target, initialAngle, toolMode);
+
+        DrawSegment dseg;
+        memset(&dseg, 0, sizeof(dseg));
+        dseg.pos1      = p1;
+        dseg.pos2      = p2;
+        dseg.ctrl0     = p0;
+        dseg.ctrl3     = p3;
+        dseg.brushFrom = cbFrom;
+        dseg.brush     = cbTo;
+        dseg.spacing   = spacingVal;
+        dseg.Noisemode = 0;
+        dseg.seed      = baseBrush->seed;
+
+        SegResult r;
+        int n = DrawLinear(&dseg, se->dabIndex, se->lastDabRad,
+                           outDabs + totalDabs, maxDabs - totalDabs, &r);
+
+        if (n > 0 && toolMode == eSmudge) {
+            outDabs[totalDabs].srcX = se->smudgeSrcPos.x;
+            outDabs[totalDabs].srcY = se->smudgeSrcPos.y;
+            for (int i = 1; i < n; i++) {
+                outDabs[totalDabs + i].srcX = outDabs[totalDabs + i - 1].x;
+                outDabs[totalDabs + i].srcY = outDabs[totalDabs + i - 1].y;
+            }
+            se->smudgeSrcPos = Vector2{outDabs[totalDabs + n - 1].x, outDabs[totalDabs + n - 1].y};
+        }
+
+        if (n > 0) {
+            se->lastDabPos = r.lastDabPos;
+            se->lastDabRad = r.lastRadOut;
+        } else {
+            se->lastDabPos = p2;
+        }
+        se->segBrushFrom.Realb = target;
+        se->dabIndex += n;
+        totalDabs += n;
         se->processedCount = seg + 1;
     }
 
@@ -303,7 +341,6 @@ int StrokeEngine_FlushSmoothing(StrokeEngine* se, const d_RealBrush* baseBrush,
     int N = se->splineCount;
     int totalDabs = 0;
 
-    // Flush deferred segment N-2 (with duplicated end) and any other unprocessed segments
     for (int seg = se->processedCount; seg <= N - 2 && totalDabs < maxDabs; seg++) {
         Vector2 p0, p1, p2, p3;
         if (seg == 0) {
@@ -320,14 +357,54 @@ int StrokeEngine_FlushSmoothing(StrokeEngine* se, const d_RealBrush* baseBrush,
             p2 = se->splinePts[seg + 1];
             p3 = se->splinePts[seg + 2];
         }
-        for (int s = 0; s < STROKE_SPLINE_SUBDIVS; s++) {
-            float tMid = ((float)s + 0.5f) / (float)STROKE_SPLINE_SUBDIVS;
-            Vector2 mid = CatmullRom(p0, p1, p2, p3, tMid);
-            int rem = maxDabs - totalDabs;
-            if (rem <= 0) break;
-            totalDabs += FeedOnePoint(se, mid, vel, baseBrush, initialAngle, toolMode,
-                                      outDabs + totalDabs, rem);
+
+        float segLen = Dist2D(p1, p2);
+        if (segLen < 0.5f) continue;
+
+        d_RealBrush target;
+        float spacingVal;
+        BuildModulatedBrush(se, p1, p2, vel,
+                            baseBrush, initialAngle, toolMode,
+                            target, spacingVal);
+
+        CollapsedBrush cbFrom = CollapseBrushParams(se->segBrushFrom.Realb, initialAngle, toolMode);
+        CollapsedBrush cbTo   = CollapseBrushParams(target, initialAngle, toolMode);
+
+        DrawSegment dseg;
+        memset(&dseg, 0, sizeof(dseg));
+        dseg.pos1      = p1;
+        dseg.pos2      = p2;
+        dseg.ctrl0     = p0;
+        dseg.ctrl3     = p3;
+        dseg.brushFrom = cbFrom;
+        dseg.brush     = cbTo;
+        dseg.spacing   = spacingVal;
+        dseg.Noisemode = 0;
+        dseg.seed      = baseBrush->seed;
+
+        SegResult r;
+        int n = DrawLinear(&dseg, se->dabIndex, se->lastDabRad,
+                           outDabs + totalDabs, maxDabs - totalDabs, &r);
+
+        if (n > 0 && toolMode == eSmudge) {
+            outDabs[totalDabs].srcX = se->smudgeSrcPos.x;
+            outDabs[totalDabs].srcY = se->smudgeSrcPos.y;
+            for (int i = 1; i < n; i++) {
+                outDabs[totalDabs + i].srcX = outDabs[totalDabs + i - 1].x;
+                outDabs[totalDabs + i].srcY = outDabs[totalDabs + i - 1].y;
+            }
+            se->smudgeSrcPos = Vector2{outDabs[totalDabs + n - 1].x, outDabs[totalDabs + n - 1].y};
         }
+
+        if (n > 0) {
+            se->lastDabPos = r.lastDabPos;
+            se->lastDabRad = r.lastRadOut;
+        } else {
+            se->lastDabPos = p2;
+        }
+        se->segBrushFrom.Realb = target;
+        se->dabIndex += n;
+        totalDabs += n;
     }
 
     return totalDabs;

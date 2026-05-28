@@ -6,7 +6,6 @@
 
 // Configuration constants
 const int   STROKE_SPLINE_POINTS = 256;
-const int   STROKE_SPLINE_SUBDIVS = 32;
 
 // ── Bridge: collapse UI brush state into drawing-space brush ──
 // Called by StrokeEngine before passing to segment drawer.
