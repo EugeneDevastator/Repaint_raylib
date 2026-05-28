@@ -264,7 +264,10 @@ int StrokeEngine_FeedPoint(StrokeEngine* se, const StrokePoint& sp,
 
         DrawSegment dseg;
         memset(&dseg, 0, sizeof(dseg));
-        dseg.pos1      = p1;
+        // Use the continuous last-dab position from the previous segment
+        // so dabs don't leave a gap at segment boundaries.
+        // Control points p0/p3 still provide the correct Catmull-Rom tangents.
+        dseg.pos1      = se->lastDabPos;
         dseg.pos2      = p2;
         dseg.ctrl0     = p0;
         dseg.ctrl3     = p3;
@@ -344,7 +347,7 @@ int StrokeEngine_FlushSmoothing(StrokeEngine* se, const d_RealBrush* baseBrush,
 
         DrawSegment dseg;
         memset(&dseg, 0, sizeof(dseg));
-        dseg.pos1      = p1;
+        dseg.pos1      = se->lastDabPos;
         dseg.pos2      = p2;
         dseg.ctrl0     = p0;
         dseg.ctrl3     = p3;

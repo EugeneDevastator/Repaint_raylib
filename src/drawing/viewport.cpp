@@ -192,7 +192,9 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         }
     }
 
-    // Record input positions for debug (during active stroke)
+    // Record raw input positions for debug (during active stroke)
+    if (leftDown && !vp->wasMouseDown)
+        vp->inputLen = 0;
     if ((vp->wasMouseDown || leftDown) && vp->inputLen < MAX_STROKE_PTS)
         vp->inputPts[vp->inputLen++] = paintPos;
 
@@ -216,7 +218,6 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             if (!vp->wasMouseDown) {
                 if (vp->inBounds && leftDown) {
                     Modulators_SnapRunState();
-                    vp->inputLen = 0;
                     StrokeEngine_BeginStroke(&vp->strokeEng, &state->currentBrush, tx, ty);
                     vp->inputFilter.Reset();
                     vp->inputFilter.Feed(tx, ty, GetTime());
@@ -269,7 +270,6 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             if (state->mode == eBrush || state->mode == eSmudge) {
                 if (!vp->wasMouseDown) {
                     Modulators_SnapRunState();
-                    vp->inputLen = 0;
                     StrokeEngine_BeginStroke(&vp->strokeEng, &state->currentBrush,
                                              paintPos.x, paintPos.y);
                     vp->inputFilter.Reset();
@@ -399,10 +399,21 @@ void Viewport_DrawDebugOverlays(Viewport* vp, AppState* state) {
     if (!vp->debugShowStamps) return;
     BeginMode2D(state->camera);
 
+    // Raw input points (paintPos every frame)
     for (int i = 0; i < vp->inputLen && i < MAX_STROKE_PTS; i++)
         DrawCircle(vp->inputPts[i].x, vp->inputPts[i].y, 3, BLUE);
 
-    DrawText("DEBUG: input pos (F1 toggle)", 10, 10, 14, BLUE);
+    // Spline buffer points (throttled Catmull-Rom control points)
+    for (int i = 0; i < vp->strokeEng.splineCount; i++) {
+        DrawCircle(vp->strokeEng.splinePts[i].x, vp->strokeEng.splinePts[i].y, 4, RED);
+        DrawCircleLines(vp->strokeEng.splinePts[i].x, vp->strokeEng.splinePts[i].y, 4, RED);
+    }
+
+    // Dab positions (actual stamp locations)
+    for (int i = 0; i < vp->strokeLen && i < MAX_STROKE_PTS; i++)
+        DrawCircle(vp->strokePts[i].x, vp->strokePts[i].y, 2, GREEN);
+
+    DrawText("BLUE=raw input  RED=spline ctrl  GREEN=dabs (F1 toggle)", 10, 10, 14, WHITE);
     EndMode2D();
 }
 
