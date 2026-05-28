@@ -132,6 +132,8 @@ vec4 applyBlend(int mode, vec4 canvas, vec3 brushRGB, float brushA) {
     float outA;
 
     if (canvas.a <= 0.00000001) {
+        if (mode == 2 || mode == 3) // EraseA / EraseColor — nothing to erase
+            return vec4(canvas.rgb, 0.0);
         return vec4(clamp(brushRGB, 0.0, 1.0), clamp(brushA, 0.0, 1.0));
     }
     // older N-gamma, dont delete.
@@ -172,8 +174,7 @@ if (mode == 0) { // N-OKLab
         outRGB = canvas.rgb;
         outA   = canvas.a * (1.0 - brushA);
     } else if (mode == 3) { // EraseColor
-        float gamma = 2.2;
-        float eraseMask = pow(canvas.a, gamma) * brushA;
+        float eraseMask = canvas.a * brushA;
         outRGB = mix(canvas.rgb, brushRGB, eraseMask);
         outA   = canvas.a * (1.0 - brushA * 0.5);
     } else if (mode == 4) { // Screen
@@ -321,9 +322,8 @@ void main() {
         finalColor = vec4(canvas.rgb, newA);
         return;
     } else if (eraseMode == 2) {
-        // Color erase: apply color to semi-transparent regions using gamma formula
-        float gamma = 2.2;
-        float mask = pow(canvas.a, gamma) * finalAlpha;
+        // Color erase: apply color proportional to alpha, then erase
+        float mask = canvas.a * finalAlpha;
         vec3 erasedRGB = mix(canvas.rgb, brushFinal, mask);
         float erasedA = canvas.a * (1.0 - finalAlpha * 0.5);
         finalColor = vec4(erasedRGB, erasedA);
