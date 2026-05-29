@@ -197,15 +197,23 @@ void BrushBlend_ApplyStamp(
     float x0 = stampX - stampSizePx * 0.5f;
     float y0 = stampY - stampSizePx * 0.5f;
 
-    // Dirty rect (clamped to canvas)
+    // Dirty rect (clamped to canvas normally; for seamless mode at the
+    // border we expand to the full canvas so wrapped samples are correct)
     int rx0 = (int)floorf(x0);
     int ry0 = (int)floorf(y0);
     int rx1 = (int)ceilf(x0 + stampSizePx);
     int ry1 = (int)ceilf(y0 + stampSizePx);
-    if (rx0 < 0) rx0 = 0;
-    if (ry0 < 0) ry0 = 0;
-    if (rx1 > W) rx1 = W;
-    if (ry1 > H) ry1 = H;
+    if (g_seamlessPaint) {
+        // Stamp extends beyond canvas edge — need full canvas in the copy
+        // so the shader's fract(canvasUV) wraps to the correct pixel.
+        if (rx0 < 0 || rx1 > W) { rx0 = 0; rx1 = W; }
+        if (ry0 < 0 || ry1 > H) { ry0 = 0; ry1 = H; }
+    } else {
+        if (rx0 < 0) rx0 = 0;
+        if (ry0 < 0) ry0 = 0;
+        if (rx1 > W) rx1 = W;
+        if (ry1 > H) ry1 = H;
+    }
     int rW = rx1 - rx0;
     int rH = ry1 - ry0;
     if (rW <= 0 || rH <= 0) return;
