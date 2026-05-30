@@ -251,8 +251,8 @@ void main() {
         vec2 stUV = geouv.rg;
 
         if (texNoisemode == 0) {
-            // STENCIL (0): 256 canvas px = 1 UV, shifted by userTexOrigin
-            stUV = canvasFragUV * canvasSize / 256.0 * texScale + userTexOrigin;
+            // STENCIL (0): canvas center maps to userTexOrigin
+            stUV = (canvasFragUV - 0.5) * canvasSize / 256.0 * texScale + userTexOrigin;
         } else if (texNoisemode == 1) {
             // RANDOM (1): stamp-local UV scaled, then offset in texture-repeat space
             stUV = geouv.rg * texScale + texOffset;
