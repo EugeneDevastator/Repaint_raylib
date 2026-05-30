@@ -24,6 +24,7 @@ uniform float texFeather;
 uniform float texThresh;
 uniform int   texNoisemode;
 uniform bool  useLumAsAlpha;
+uniform bool  hasTexture;
 uniform int   texColorMode;
 uniform int   bmidx;
 uniform vec4  brushColor;
@@ -244,41 +245,48 @@ void main() {
     float alpha = geouv.a;
 
     // --- texture sampling ---
-    vec2 stUV = geouv.rg;
-
-    if (texNoisemode == 0) {
-        // STENCIL (0): canvas center maps to userTexOrigin
-        stUV = (canvasFragUV - 0.5) * canvasSize / 256.0 * texScale + userTexOrigin;
-    } else if (texNoisemode == 1) {
-        // RANDOM (1): stamp-local UV scaled, then offset in texture-repeat space
-        stUV = geouv.rg * texScale + texOffset;
-    } else {
-        // CONST (2): brush-local UV centered on userTexOrigin
-        stUV = (geouv.rg - 0.5) * texScale + userTexOrigin;
-    }
-    vec4 texel = texture(brushTex, stUV);
-
-    // --- userTexA ---
-    float userTexA = useLumAsAlpha
-        ? (texel.r + texel.g + texel.b) * (1.0 / 3.0)
-        : texel.a;
-
-    if (texThresh < 0.0)
-        userTexA = 1.0 - userTexA;
-
-    // --- mask (alpha-gated threshold of texValue) ---
-    float finalAlpha = applyThreshold(alpha * userTexA, abs(texThresh), texFeather);
-    finalAlpha = clamp(finalAlpha, 0.0, 1.0);
-
-
-    // --- brush color ---
+    float finalAlpha;
     vec3 brushFinal;
-    if (texColorMode == 0) {
-        brushFinal = brushColor.rgb;
-    } else if (texColorMode == 1) {
-        brushFinal = texel.rgb;
+
+    if (hasTexture) {
+        vec2 stUV = geouv.rg;
+
+        if (texNoisemode == 0) {
+            stUV = (canvasFragUV - 0.5) * canvasSize / 256.0 * texScale + userTexOrigin;
+        } else if (texNoisemode == 1) {
+            stUV = geouv.rg * texScale + texOffset;
+        } else {
+            stUV = (geouv.rg - 0.5) * texScale + userTexOrigin;
+        }
+        vec4 texel = texture(brushTex, stUV);
+
+        float userTexA = useLumAsAlpha
+            ? (texel.r + texel.g + texel.b) * (1.0 / 3.0)
+            : texel.a;
+
+        if (texThresh < 0.0)
+            userTexA = 1.0 - userTexA;
+
+        finalAlpha = clamp(applyThreshold(alpha * userTexA, abs(texThresh), texFeather), 0.0, 1.0);
+
+        if (texColorMode == 0) {
+            brushFinal = brushColor.rgb;
+        } else if (texColorMode == 1) {
+            brushFinal = texel.rgb;
+        } else if (texColorMode == 2) {
+            brushFinal = texel.rgb * brushColor.rgb;
+        } else {
+            // lum-color (3): whites stay white, grays get tinted by brush
+            vec3 texLab = rgbToOklab(texel.rgb);
+            vec3 brushLab = rgbToOklab(brushColor.rgb);
+            float lum = texLab.x;
+            float coloring = 1.0 - abs(lum - 0.5) * 2.0;
+            texLab.yz = mix(texLab.yz, brushLab.yz, coloring);
+            brushFinal = oklabToRgb(texLab);
+        }
     } else {
-        brushFinal = texel.rgb * brushColor.rgb;
+        finalAlpha = alpha;
+        brushFinal = brushColor.rgb;
     }
 
     finalAlpha *= opacity;

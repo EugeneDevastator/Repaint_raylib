@@ -139,11 +139,18 @@ void TexPanelModule::DrawGUI(const DrawRect& rect) {
 
         static const char* items0[] = {"lum is alpha", "tex.a is alpha"};
         static const char* items2[] = {"Stencil", "Random", "Const"};
-        static const char* items3[] = {"brush RGB", "texture RGB", "mul brush*tex"};
+        static const char* items3[] = {"brush RGB", "texture RGB", "mul brush*tex", "lum-color"};
 
+        // Row 1: Mask Mode | Color | Sample Mode
         ImGui::SetCursorPos(ImVec2(x, 10));
         ImGui::BeginChild("##rg0", ImVec2(colW, 0), false);
         { int v = mm; DrawRadioGroup("Mask Mode", &v, items0, 2); mm = v; }
+        ImGui::EndChild();
+        x += colW + 2.0f;
+
+        ImGui::SetCursorPos(ImVec2(x, 10));
+        ImGui::BeginChild("##rg3", ImVec2(colW, 0), false);
+        { int v = cm; DrawRadioGroup("Color", &v, items3, 4); cm = v; }
         ImGui::EndChild();
         x += colW + 2.0f;
 
@@ -152,11 +159,8 @@ void TexPanelModule::DrawGUI(const DrawRect& rect) {
         { int v = tnm; DrawRadioGroup("Sample Mode", &v, items2, 3); tnm = v; }
         ImGui::EndChild();
 
+        // Row 2: Tex Scale
         ImGui::SetCursorPos(ImVec2(10, 120));
-        ImGui::BeginChild("##rg3", ImVec2(colW, 0), false);
-        { int v = cm; DrawRadioGroup("Color", &v, items3, 3); cm = v; }
-        ImGui::EndChild();
-        ImGui::SetCursorPos(ImVec2(10 + colW + 2, 120));
         ImGui::BeginChild("##rg4", ImVec2(colW, 0), false);
         { static const char* items4[] = {"Brush", "Global"};
           int v = g_texScaleMode; DrawRadioGroup("Tex Scale", &v, items4, 2); g_texScaleMode = v; }

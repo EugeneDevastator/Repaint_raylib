@@ -14,6 +14,7 @@ static int locBmidx = -1, locPreserveOp = -1;
 static int locSmudgeStrength = -1, locSmudgeOffsetUV = -1;
 static int locTexBlendVal = -1, locTexScale = -1, locTexOffset = -1;
 static int locUserTexOrigin = -1;
+static int locHasTexture = -1;
 static int locTexFeather = -1, locTexThresh = -1;
 static int locUseLumAsAlpha = -1, locTexColorMode = -1;
 static int locTexNoisemode = -1;
@@ -116,6 +117,7 @@ void BrushBlend_Init(void) {
     locTexScale       = GetShaderLocation(brushBlendShader, "texScale");
     locTexOffset      = GetShaderLocation(brushBlendShader, "texOffset");
     locUserTexOrigin  = GetShaderLocation(brushBlendShader, "userTexOrigin");
+    locHasTexture     = GetShaderLocation(brushBlendShader, "hasTexture");
     locTexFeather     = GetShaderLocation(brushBlendShader, "texFeather");
     locTexThresh      = GetShaderLocation(brushBlendShader, "texThresh");
     locUseLumAsAlpha  = GetShaderLocation(brushBlendShader, "useLumAsAlpha");
@@ -343,6 +345,8 @@ void BrushBlend_ApplyStamp(
     SetShaderValue(brushBlendShader, locTexOffset,      texOff,      SHADER_UNIFORM_VEC2);
     { float uo[2] = { brush->Realb.userTexOriginX, 1.0f - brush->Realb.userTexOriginY };
       SetShaderValue(brushBlendShader, locUserTexOrigin, uo,          SHADER_UNIFORM_VEC2); }
+    { int hasTex = (brushTex.id > 0 && brushTex.id != whiteTex.id) ? 1 : 0;
+      SetShaderValue(brushBlendShader, locHasTexture, &hasTex,         SHADER_UNIFORM_INT); }
     SetShaderValue(brushBlendShader, locTexFeather,     &tf,         SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locTexThresh,      &tt,         SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locUseLumAsAlpha,  &useLum,     SHADER_UNIFORM_INT);
