@@ -8,7 +8,7 @@
 #define BRUSH_PRESET_NAME_MAX 64
 #define BRUSH_PRESET_MAX 256
 #define PRESET_FILE_MAGIC "REPRESET"
-#define PRESET_FILE_VER 1
+#define PRESET_FILE_VER 2
 
 typedef struct {
     char name[BRUSH_PRESET_NAME_MAX];
