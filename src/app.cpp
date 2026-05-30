@@ -11,6 +11,7 @@
 #include "network_broker.h"
 #include "test_broker.h"
 #include "ui_leftpanel.h"
+#include "ui_texpanel.h"
 #include "layerstack.h"
 #include "external/glad.h"
 #include <time.h>
@@ -87,6 +88,7 @@ int g_activeHud = HUD_NONE;
 bool g_seamlessPaint = false;
 bool g_seamlessPreview = false;
 int g_texScaleMode = 0;
+int g_texPanelAreaY = 0;
 bool g_useViewRes = false;
 float g_pivotCursorX = 0.0f, g_pivotCursorY = 0.0f;
 

@@ -30,10 +30,38 @@ struct DrawRect {
 struct IModule {
     virtual ~IModule() = default;
     virtual const char* Name() const = 0;
-    virtual bool HandleInput(InputState& input, const DrawRect& rect) { return false; }
-    virtual void DrawGL     (const DrawRect& rect)                    {}
-    virtual void DrawGUI    (const DrawRect& rect)                    {}
-    virtual void OnResize   (const DrawRect& rect)                    {}
+
+    // HandleInput returns true if the input was consumed.
+    // Default: ask children in reverse order (last added first).
+    virtual bool HandleInput(InputState& input, const DrawRect& rect) {
+        for (auto it = children.rbegin(); it != children.rend(); ++it)
+            if ((*it)->HandleInput(input, (*it)->childRect)) return true;
+        return false;
+    }
+
+    // DrawGL: default draws all children in add order.
+    virtual void DrawGL(const DrawRect& rect) {
+        for (auto& c : children) c->DrawGL(c->childRect);
+    }
+
+    // DrawGUI: default draws all children in add order.
+    virtual void DrawGUI(const DrawRect& rect) {
+        for (auto& c : children) c->DrawGUI(c->childRect);
+    }
+
+    virtual void OnResize(const DrawRect& rect) {}
+
+    // Register a child module with a sub-rect within this module's area.
+    // The childRect is stored on the child and updated on resize.
+    void Add(std::unique_ptr<IModule> child, DrawRect subRect) {
+        child->childRect = subRect;
+        child->OnResize(subRect);
+        children.push_back(std::move(child));
+    }
+
+    // Exposed so parent modules can adjust child rects dynamically.
+    DrawRect childRect;
+    std::vector<std::unique_ptr<IModule>> children;
 };
 
 struct ModuleStack {

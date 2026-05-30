@@ -104,8 +104,14 @@ void XORgizmo_HandleInput(AppState* state) {
     int gcy = (int)(vp.y + vp.height * 0.5f);
     float d30 = (float)(M_PI * 30.0 / 180.0);
 
+    // Clip window to area above the texture panel so clicks in the tex
+    // area fall through to the ##qpui window below.
+    float gizmoH = vp.height;
+    if (g_texPanelAreaY > 0 && g_texPanelAreaY > vp.y)
+        gizmoH = g_texPanelAreaY - vp.y;
+
     ImGui::SetNextWindowPos(ImVec2(vp.x, vp.y));
-    ImGui::SetNextWindowSize(ImVec2(vp.width, vp.height));
+    ImGui::SetNextWindowSize(ImVec2(vp.width, gizmoH));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
     ImGui::Begin("##xorgizmo", NULL,

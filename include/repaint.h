@@ -239,6 +239,7 @@ extern float g_pivotCursorX, g_pivotCursorY;
 extern bool g_seamlessPaint;
 extern bool g_seamlessPreview;
 extern int g_texScaleMode;  // 0 = brush scale, 1 = global scale
+extern int g_texPanelAreaY; // y-coordinate for the texture panel in the Quick HUD
 #define HUD_NONE 0
 #define HUD_QUICK 1
 #define HUD_LAYER_XFORM 2
@@ -371,7 +372,9 @@ struct RightPanelModule : IModule {
 
 struct QuickHudModule : IModule {
     AppState* state;
-    explicit QuickHudModule(AppState* s) : state(s) {}
+    std::unique_ptr<IModule> gizmoChild;   // reserved for future gizmo extraction
+    std::unique_ptr<IModule> texPanelChild;
+    explicit QuickHudModule(AppState* s);
     const char* Name() const override { return "QuickHud"; }
     bool HandleInput(InputState& input, const DrawRect& rect) override;
     void DrawGL(const DrawRect& rect) override;
