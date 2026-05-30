@@ -22,6 +22,8 @@ void QuickHudModule::DrawGL(const DrawRect& rect) {
     (void)rect;
     if (g_activeHud != HUD_QUICK) return;
     XORgizmo_DrawVisual(state);
+    // TexPanelModule draws XOR handles over the texture preview in DrawGL
+    texPanelChild->DrawGL(rect);
 }
 
 void QuickHudModule::DrawGUI(const DrawRect& rect) {

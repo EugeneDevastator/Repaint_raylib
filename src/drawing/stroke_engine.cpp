@@ -39,6 +39,9 @@ CollapsedBrush CollapseBrushParams(const d_RealBrush& b, float initialAngle, int
     cb.texNoisemode = b.texNoisemode;
     cb.texColorMode = b.texColorMode;
     cb.useTexLumAsAlpha = b.useTexLumAsAlpha;
+    cb.userTexOriginX = b.userTexOriginX;
+    cb.userTexOriginY = b.userTexOriginY;
+    cb.userTexDirection = b.userTexDirection;
 
     cb.jitRadOut  = bpSize.user.jitter * b.rad_out;
     cb.jitRadIn   = bpHardness.user.jitter;
@@ -423,6 +426,9 @@ void StrokeEngine_ApplyDabs(RenderTexture2D dstRT, Texture2D brushTex,
         tb.Realb.texColorMode = dabs[i].brush.texColorMode;
         tb.Realb.useTexLumAsAlpha = dabs[i].brush.useTexLumAsAlpha;
         tb.Realb.pwr         = dabs[i].brush.pwr;
+        tb.Realb.userTexOriginX = dabs[i].brush.userTexOriginX;
+        tb.Realb.userTexOriginY = dabs[i].brush.userTexOriginY;
+        tb.Realb.userTexDirection = dabs[i].brush.userTexDirection;
         BrushBlend_ApplyStamp(dstRT, &tb, brushTex,
                               dabs[i].x, dabs[i].y, dabs[i].srcX, dabs[i].srcY);
     }

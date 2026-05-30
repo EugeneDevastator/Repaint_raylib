@@ -22,6 +22,8 @@ struct CollapsedBrush {
     float texScale, texFeather, texThresh, texBlendVal;
     int   texBlendMode, texNoisemode, texColorMode;
     bool  useTexLumAsAlpha;
+    float userTexOriginX, userTexOriginY;
+    float userTexDirection;
 
     // Per-dab jitter ranges (drawing-space units, 0 = no jitter)
     float jitRadOut;

@@ -2,11 +2,103 @@
 #include "brush_preset.h"
 #include "ui_texpanel.h"
 #include "rlgl.h"
+#include "external/glad.h"
 #include "imgui.h"
 #include <math.h>
 #include <algorithm>
 
 static int g_texPanelSelected = -1;
+static int g_texPanelDragMode = 0;
+
+void TexPanelModule::DrawGL(const DrawRect& rect) {
+    (void)rect;
+    if (g_activeHud != HUD_QUICK) return;
+    if (g_texPanelAreaY <= 0) return;
+    if (state->activeBrushTex < 0 || state->activeBrushTex >= state->brushTexCount)
+        return;
+
+    Rectangle vp = viewport.bounds;
+    float thirdW = vp.width / 3.0f;
+    float pvSz = 192.0f;
+    float pvX = vp.x + thirdW + (thirdW - pvSz) * 0.5f;
+    float pvY = (float)g_texPanelAreaY + 110.0f;
+
+    // ── Draw the full texture scaled to fit the preview ─────────────
+    BrushTexture& bt = state->brushTex[state->activeBrushTex];
+    if (bt.rt.id > 0) {
+        float texW = (float)bt.w, texH = (float)bt.h;
+        float scale = fminf(pvSz / texW, pvSz / texH);
+        float dw = texW * scale, dh = texH * scale;
+        float dx = pvX + (pvSz - dw) * 0.5f;
+        float dy = pvY + (pvSz - dh) * 0.5f;
+        DrawTexturePro(bt.rt.texture,
+            Rectangle{0, 0, texW, -texH},
+            Rectangle{dx, dy, dw, dh},
+            Vector2{0, 0}, 0.0f, WHITE);
+    }
+
+    // ── XOR handles ─────────────────────────────────────────────────
+    rlDrawRenderBatchActive();
+    glEnable(GL_COLOR_LOGIC_OP);
+    glLogicOp(GL_XOR);
+
+    float ox = pvX + state->currentBrush.Realb.userTexOriginX * pvSz;
+    float oy = pvY + state->currentBrush.Realb.userTexOriginY * pvSz;
+    float angle = state->currentBrush.Realb.userTexDirection;
+    float arrowLen = 40.0f;
+
+    DrawCircleLines((int)ox, (int)oy, 6.0f, WHITE);
+    DrawCircle((int)ox, (int)oy, 2.0f, WHITE);
+
+    float ax = ox + cosf(angle) * arrowLen;
+    float ay = oy + sinf(angle) * arrowLen;
+    DrawLineEx(Vector2{ox, oy}, Vector2{ax, ay}, 2.0f, WHITE);
+    float ah = 0.4f, ahLen = 10.0f;
+    DrawLineEx(Vector2{ax, ay},
+        Vector2{ax + cosf(angle + (float)M_PI + ah) * ahLen,
+                ay + sinf(angle + (float)M_PI + ah) * ahLen}, 2.0f, WHITE);
+    DrawLineEx(Vector2{ax, ay},
+        Vector2{ax + cosf(angle + (float)M_PI - ah) * ahLen,
+                ay + sinf(angle + (float)M_PI - ah) * ahLen}, 2.0f, WHITE);
+
+    rlDrawRenderBatchActive();
+    glDisable(GL_COLOR_LOGIC_OP);
+
+    // ── Input ───────────────────────────────────────────────────────
+    Vector2 mp = GetMousePosition();
+    bool over = (mp.x >= pvX && mp.x <= pvX + pvSz &&
+                 mp.y >= pvY && mp.y <= pvY + pvSz);
+    if (over && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+        float dc = sqrtf((mp.x - ox) * (mp.x - ox) + (mp.y - oy) * (mp.y - oy));
+        if (dc <= 12.0f) {
+            g_texPanelDragMode = 1; // drag origin circle
+        } else {
+            float da = sqrtf((mp.x - ax) * (mp.x - ax) + (mp.y - ay) * (mp.y - ay));
+            if (da <= 10.0f) {
+                g_texPanelDragMode = 2; // drag arrow tip
+            } else {
+                // Clicked elsewhere — set pivot immediately, then drag
+                state->currentBrush.Realb.userTexOriginX =
+                    fminf(fmaxf((mp.x - pvX) / pvSz, 0.0f), 1.0f);
+                state->currentBrush.Realb.userTexOriginY =
+                    fminf(fmaxf((mp.y - pvY) / pvSz, 0.0f), 1.0f);
+                g_texPanelDragMode = 1;
+            }
+        }
+    }
+    if (g_texPanelDragMode == 1 && IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
+        state->currentBrush.Realb.userTexOriginX =
+            fminf(fmaxf((mp.x - pvX) / pvSz, 0.0f), 1.0f);
+        state->currentBrush.Realb.userTexOriginY =
+            fminf(fmaxf((mp.y - pvY) / pvSz, 0.0f), 1.0f);
+    }
+    if (g_texPanelDragMode == 2 && IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
+        state->currentBrush.Realb.userTexDirection =
+            atan2f(mp.y - oy, mp.x - ox);
+    }
+    if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON))
+        g_texPanelDragMode = 0;
+}
 
 bool TexPanelModule::HandleInput(InputState& input, const DrawRect& rect) {
     (void)rect;
@@ -95,8 +187,7 @@ void TexPanelModule::DrawGUI(const DrawRect& rect) {
     DrawSlider(&bpTexFeather, 0);
     rlSetBlendMode(RL_BLEND_ALPHA);
     DrawSlider(&bpTexThresh, 0);
-    rlSetBlendMode(RL_BLEND_ALPHA);
-    DrawSlider(&bpTexBlendVal, 0);
+
     ImGui::EndChild();
 
     // ── Right 1/3: texture panel ──

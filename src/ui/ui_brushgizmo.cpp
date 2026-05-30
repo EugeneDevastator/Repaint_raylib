@@ -130,6 +130,8 @@ void XORgizmo_HandleInput(AppState* state) {
     bool released = ImGui::IsMouseReleased(0);
 
     if (clicked && !ImGui::IsAnyItemHovered()) {
+        // Clip to gizmo window — ignore clicks in the texture panel area
+        if (mp.y >= vp.y + gizmoH) { ImGui::End(); return; }
         // Arrow priority: perpendicular distance to arrow line
         float arrowAng = state->currentBrush.Realb.resangle * (float)(M_PI * 2.0 / 360.0);
         float perpDist = fabsf(dx * sinf(arrowAng) - dy * cosf(arrowAng));

@@ -41,6 +41,9 @@ void LocalBroker::on_input(const BrushDab& e) {
     queue[tail].preserveop = e.brush.preserveop;
     queue[tail].eraseMode  = e.brush.eraseMode;
     queue[tail].perspective = e.brush.perspective;
+    queue[tail].userTexOriginX = e.brush.userTexOriginX;
+    queue[tail].userTexOriginY = e.brush.userTexOriginY;
+    queue[tail].userTexDirection = e.brush.userTexDirection;
     queue[tail].activeLayer = layer;
     queue[tail].targetRT   = LayerStack_GetRT(layer);
 
@@ -77,6 +80,9 @@ void LocalBroker::poll(AppState* state) {
             brush.Realb.preserveop = d->preserveop;
             brush.Realb.eraseMode  = d->eraseMode;
             brush.Realb.perspective = d->perspective;
+            brush.Realb.userTexOriginX = d->userTexOriginX;
+            brush.Realb.userTexOriginY = d->userTexOriginY;
+            brush.Realb.userTexDirection = d->userTexDirection;
 
             RenderTexture2D rt = LayerStack_GetRT(d->activeLayer);
             if (rt.id > 0)

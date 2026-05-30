@@ -19,6 +19,7 @@ uniform vec2  smudgeOffsetUV;
 uniform float texBlendVal;
 uniform float texScale;
 uniform vec2  texOffset;
+uniform vec2  userTexOrigin;
 uniform float texFeather;
 uniform float texThresh;
 uniform int   texBlendMode;
@@ -250,14 +251,14 @@ void main() {
         vec2 stUV = geouv.rg;
 
         if (texNoisemode == 0) {
-            // STENCIL (0): 256 canvas px = 1 UV, uniform regardless of canvas size
-            stUV = canvasFragUV * canvasSize / 256.0 * texScale;
+            // STENCIL (0): 256 canvas px = 1 UV, shifted by userTexOrigin
+            stUV = canvasFragUV * canvasSize / 256.0 * texScale + userTexOrigin;
         } else if (texNoisemode == 1) {
             // RANDOM (1): stamp-local UV scaled, then offset in texture-repeat space
             stUV = geouv.rg * texScale + texOffset;
         } else {
-            // CONST (2): stUV = geouv.rg, scaled, no offset, identical every stamp
-            stUV = geouv.rg * texScale;
+            // CONST (2): brush-local UV centered on userTexOrigin
+            stUV = (geouv.rg - 0.5) * texScale + userTexOrigin;
         }
         texel = texture(brushTex, stUV);
     }

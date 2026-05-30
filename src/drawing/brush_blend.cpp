@@ -13,6 +13,7 @@ static int locSol = -1, locSol2op = -1, locSeed = -1;
 static int locBmidx = -1, locPreserveOp = -1;
 static int locSmudgeStrength = -1, locSmudgeOffsetUV = -1;
 static int locTexBlendVal = -1, locTexScale = -1, locTexOffset = -1;
+static int locUserTexOrigin = -1;
 static int locTexFeather = -1, locTexThresh = -1;
 static int locUseLumAsAlpha = -1, locTexColorMode = -1;
 static int locTexBlendMode = -1, locTexNoisemode = -1;
@@ -114,6 +115,7 @@ void BrushBlend_Init(void) {
     locTexBlendVal    = GetShaderLocation(brushBlendShader, "texBlendVal");
     locTexScale       = GetShaderLocation(brushBlendShader, "texScale");
     locTexOffset      = GetShaderLocation(brushBlendShader, "texOffset");
+    locUserTexOrigin  = GetShaderLocation(brushBlendShader, "userTexOrigin");
     locTexFeather     = GetShaderLocation(brushBlendShader, "texFeather");
     locTexThresh      = GetShaderLocation(brushBlendShader, "texThresh");
     locUseLumAsAlpha  = GetShaderLocation(brushBlendShader, "useLumAsAlpha");
@@ -341,6 +343,8 @@ void BrushBlend_ApplyStamp(
     SetShaderValue(brushBlendShader, locTexBlendVal,    &tbv,        SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locTexScale,       &ts,         SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locTexOffset,      texOff,      SHADER_UNIFORM_VEC2);
+    { float uo[2] = { brush->Realb.userTexOriginX, brush->Realb.userTexOriginY };
+      SetShaderValue(brushBlendShader, locUserTexOrigin, uo,          SHADER_UNIFORM_VEC2); }
     SetShaderValue(brushBlendShader, locTexFeather,     &tf,         SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locTexThresh,      &tt,         SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locUseLumAsAlpha,  &useLum,     SHADER_UNIFORM_INT);

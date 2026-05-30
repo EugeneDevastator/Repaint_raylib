@@ -223,6 +223,9 @@ void NetworkBroker::on_input(const BrushDab& e) {
     localQueue[localTail].preserveop  = e.brush.preserveop;
     localQueue[localTail].eraseMode   = e.brush.eraseMode;
     localQueue[localTail].perspective = e.brush.perspective;
+    localQueue[localTail].userTexOriginX = e.brush.userTexOriginX;
+    localQueue[localTail].userTexOriginY = e.brush.userTexOriginY;
+    localQueue[localTail].userTexDirection = e.brush.userTexDirection;
     localQueue[localTail].activeLayer = layer;
     localQueue[localTail].targetRT    = LayerStack_GetRT(layer);
 
@@ -262,6 +265,9 @@ void NetworkBroker::poll(AppState* st) {
             brush.Realb.preserveop = d->preserveop;
             brush.Realb.eraseMode  = d->eraseMode;
             brush.Realb.perspective = d->perspective;
+            brush.Realb.userTexOriginX = d->userTexOriginX;
+            brush.Realb.userTexOriginY = d->userTexOriginY;
+            brush.Realb.userTexDirection = d->userTexDirection;
 
             RenderTexture2D rt = LayerStack_GetRT(d->activeLayer);
             if (rt.id > 0) {

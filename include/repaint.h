@@ -103,6 +103,8 @@ typedef struct {
     int eraseMode;
     float perspective;
     Color col;
+    float userTexOriginX, userTexOriginY; // sampling center 0..1 in texture UV
+    float userTexDirection;              // rotation angle for the texture handle
 } d_RealBrush;
 
 typedef struct { d_PackedBrush Pack; d_RealBrush Realb; } d_Brush;
@@ -165,6 +167,7 @@ struct LocalBroker : ICommandBroker {
         int texBlendMode,texNoisemode,texColorMode;
         Color color; int bmidx; uint16_t seed;
         int activeLayer; uint8_t preserveop,eraseMode; float perspective;
+        float userTexOriginX, userTexOriginY, userTexDirection;
     };
     QueuedDab queue[CMD_CAPACITY]; volatile int head,tail; AppState* appState;
     LocalBroker();

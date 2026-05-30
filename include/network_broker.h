@@ -42,6 +42,7 @@ struct QueuedNetDab {
     uint8_t  preserveop;
     uint8_t  eraseMode;
     float    perspective;
+    float    userTexOriginX, userTexOriginY, userTexDirection;
 };
 
 struct NetworkBroker : ICommandBroker {

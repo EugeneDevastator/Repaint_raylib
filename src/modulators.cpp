@@ -99,7 +99,7 @@ void Modulators_Init(void) {
     strncpy(bpTexScale.tooltip, "Texture pattern scale multiplier", sizeof(bpTexScale.tooltip) - 1);
     BParam_SetIcon(&bpTexScale, "ctlscale");
 
-    BParam_Init(&bpTexFeather, 31, "Feather", 0.0f, 0.5f, 0.05f);
+    BParam_Init(&bpTexFeather, 31, "Feather", 0.0f, 1.0f, 0.05f);
     strncpy(bpTexFeather.tooltip, "Softness of the threshold mask edge", sizeof(bpTexFeather.tooltip) - 1);
     BParam_SetIcon(&bpTexFeather, "ctlfeather");
 

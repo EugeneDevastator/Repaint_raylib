@@ -30,6 +30,9 @@ static BrushDab MakeBrushDab(float x, float y, const DrawDab& d) {
     r.brush.texColorMode = d.brush.texColorMode;
     r.brush.useTexLumAsAlpha = d.brush.useTexLumAsAlpha;
     r.brush.pwr         = d.brush.pwr;
+    r.brush.userTexOriginX = d.brush.userTexOriginX;
+    r.brush.userTexOriginY = d.brush.userTexOriginY;
+    r.brush.userTexDirection = d.brush.userTexDirection;
     r.brush.seed        = 0;
     r.brush.sol         = 1.0f;
     r.brush.sol2op      = 0.0f;

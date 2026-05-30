@@ -96,6 +96,9 @@ CollapsedBrush BlendBrushes(CollapsedBrush from, CollapsedBrush to, float k) {
     r.texNoisemode = from.texNoisemode;
     r.texColorMode = from.texColorMode;
     r.useTexLumAsAlpha = from.useTexLumAsAlpha;
+    r.userTexOriginX = from.userTexOriginX;
+    r.userTexOriginY = from.userTexOriginY;
+    r.userTexDirection = from.userTexDirection;
 
     // Jitter ranges (interpolated — proportional to radius)
     r.jitRadOut = lerp(from.jitRadOut, to.jitRadOut, k);
