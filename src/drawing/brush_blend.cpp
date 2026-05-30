@@ -16,7 +16,7 @@ static int locTexBlendVal = -1, locTexScale = -1, locTexOffset = -1;
 static int locUserTexOrigin = -1;
 static int locTexFeather = -1, locTexThresh = -1;
 static int locUseLumAsAlpha = -1, locTexColorMode = -1;
-static int locTexBlendMode = -1, locTexNoisemode = -1;
+static int locTexNoisemode = -1;
 static int locCanvasTex = -1, locBrushTex = -1;
 static int locStampCenter = -1;
 static int locRadOut = -1;
@@ -120,7 +120,6 @@ void BrushBlend_Init(void) {
     locTexThresh      = GetShaderLocation(brushBlendShader, "texThresh");
     locUseLumAsAlpha  = GetShaderLocation(brushBlendShader, "useLumAsAlpha");
     locTexColorMode   = GetShaderLocation(brushBlendShader, "texColorMode");
-    locTexBlendMode   = GetShaderLocation(brushBlendShader, "texBlendMode");
     locTexNoisemode   = GetShaderLocation(brushBlendShader, "texNoisemode");
     locCanvasTex      = GetShaderLocation(brushBlendShader, "canvasTex");
     locBrushTex       = GetShaderLocation(brushBlendShader, "brushTex");
@@ -327,7 +326,6 @@ void BrushBlend_ApplyStamp(
     }
     int useLum = brush->Realb.useTexLumAsAlpha ? 1 : 0;
     int cm  = (int)brush->Realb.texColorMode;
-    int tbm = (int)brush->Realb.texBlendMode;
     int tnm = (int)brush->Realb.texNoisemode;
     float sc[2] = { stampX / (float)W, (float)(H - stampY) / (float)H };
 
@@ -349,7 +347,6 @@ void BrushBlend_ApplyStamp(
     SetShaderValue(brushBlendShader, locTexThresh,      &tt,         SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locUseLumAsAlpha,  &useLum,     SHADER_UNIFORM_INT);
     SetShaderValue(brushBlendShader, locTexColorMode,   &cm,         SHADER_UNIFORM_INT);
-    SetShaderValue(brushBlendShader, locTexBlendMode,   &tbm,        SHADER_UNIFORM_INT);
     SetShaderValue(brushBlendShader, locTexNoisemode,   &tnm,        SHADER_UNIFORM_INT);
     SetShaderValue(brushBlendShader, locStampCenter,    sc,          SHADER_UNIFORM_VEC2);
 

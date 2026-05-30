@@ -22,7 +22,6 @@ uniform vec2  texOffset;
 uniform vec2  userTexOrigin;
 uniform float texFeather;
 uniform float texThresh;
-uniform int   texBlendMode;
 uniform int   texNoisemode;
 uniform bool  useLumAsAlpha;
 uniform int   texColorMode;
@@ -245,23 +244,19 @@ void main() {
     float alpha = geouv.a;
 
     // --- texture sampling ---
-    vec4 texel = vec4(1.0);
-    if (texBlendMode >= 0) {
-        // Default: stamp-local UV (brush space 0..1), same every stamp = CONST
-        vec2 stUV = geouv.rg;
+    vec2 stUV = geouv.rg;
 
-        if (texNoisemode == 0) {
-            // STENCIL (0): canvas center maps to userTexOrigin
-            stUV = (canvasFragUV - 0.5) * canvasSize / 256.0 * texScale + userTexOrigin;
-        } else if (texNoisemode == 1) {
-            // RANDOM (1): stamp-local UV scaled, then offset in texture-repeat space
-            stUV = geouv.rg * texScale + texOffset;
-        } else {
-            // CONST (2): brush-local UV centered on userTexOrigin
-            stUV = (geouv.rg - 0.5) * texScale + userTexOrigin;
-        }
-        texel = texture(brushTex, stUV);
+    if (texNoisemode == 0) {
+        // STENCIL (0): canvas center maps to userTexOrigin
+        stUV = (canvasFragUV - 0.5) * canvasSize / 256.0 * texScale + userTexOrigin;
+    } else if (texNoisemode == 1) {
+        // RANDOM (1): stamp-local UV scaled, then offset in texture-repeat space
+        stUV = geouv.rg * texScale + texOffset;
+    } else {
+        // CONST (2): brush-local UV centered on userTexOrigin
+        stUV = (geouv.rg - 0.5) * texScale + userTexOrigin;
     }
+    vec4 texel = texture(brushTex, stUV);
 
     // --- userTexA ---
     float userTexA = useLumAsAlpha
@@ -271,35 +266,8 @@ void main() {
     if (texThresh < 0.0)
         userTexA = 1.0 - userTexA;
 
-    // --- masks ---
-    float firstMask;
-    float secondMask;
-
-    if (texBlendMode == 0) {
-        firstMask  = userTexA * alpha;
-        secondMask = 1.0;
-    } else if (texBlendMode == 2) {
-        firstMask  = applyThreshold(userTexA, abs(texThresh), texFeather);
-        firstMask  *= alpha;
-        secondMask = 1;
-    } else {
-        // Threshold
-        firstMask  = alpha;
-        secondMask = userTexA;
-    }
-
-    // --- combine first and second ---
-    float finalAlpha;
-    if (texBlendMode == 2) {
-        finalAlpha = firstMask;
-    }
-    else if (texBlendMode == 1) {
-        float combined = firstMask * secondMask;
-        finalAlpha = applyThreshold(combined, abs(texThresh), texFeather);
-    } else {
-        finalAlpha = firstMask * secondMask;
-    }
-
+    // --- mask (alpha-gated threshold of texValue) ---
+    float finalAlpha = applyThreshold(alpha * userTexA, abs(texThresh), texFeather);
     finalAlpha = clamp(finalAlpha, 0.0, 1.0);
 
 

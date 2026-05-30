@@ -452,7 +452,7 @@ void App_Init(AppState* state) {
     state->currentBrush.Realb.useTexLumAsAlpha = false;
     state->currentBrush.Realb.texUseRGB = true;
     state->currentBrush.Realb.texBlendVal = 1.0f;
-    state->currentBrush.Realb.texBlendMode = 0;
+    state->currentBrush.Realb.texBlendMode = 2;
     state->currentBrush.Realb.texNoisemode = 2;
     state->currentBrush.Realb.texColorMode = 0;
     state->currentBrush.Realb.col = BLACK;

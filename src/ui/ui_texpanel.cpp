@@ -125,7 +125,6 @@ void TexPanelModule::DrawGUI(const DrawRect& rect) {
 
     // ── Left 1/3: radio groups ──
     int mm = state->currentBrush.Realb.useTexLumAsAlpha ? 0 : 1;
-    int mx = state->currentBrush.Realb.texBlendMode;
     int tnm = state->currentBrush.Realb.texNoisemode;
     int cm = state->currentBrush.Realb.texColorMode;
 
@@ -139,19 +138,12 @@ void TexPanelModule::DrawGUI(const DrawRect& rect) {
         float x = 10;
 
         static const char* items0[] = {"lum is alpha", "tex.a is alpha"};
-        static const char* items1[] = {"multiply", "threshold", "use tex mask"};
         static const char* items2[] = {"Stencil", "Random", "Const"};
         static const char* items3[] = {"brush RGB", "texture RGB", "mul brush*tex"};
 
         ImGui::SetCursorPos(ImVec2(x, 10));
         ImGui::BeginChild("##rg0", ImVec2(colW, 0), false);
         { int v = mm; DrawRadioGroup("Mask Mode", &v, items0, 2); mm = v; }
-        ImGui::EndChild();
-        x += colW + 2.0f;
-
-        ImGui::SetCursorPos(ImVec2(x, 10));
-        ImGui::BeginChild("##rg1", ImVec2(colW, 0), false);
-        { int v = mx; DrawRadioGroup("Mask Mix", &v, items1, 3); mx = v; }
         ImGui::EndChild();
         x += colW + 2.0f;
 
@@ -173,7 +165,6 @@ void TexPanelModule::DrawGUI(const DrawRect& rect) {
     ImGui::EndChild();
 
     state->currentBrush.Realb.useTexLumAsAlpha = (mm == 0);
-    state->currentBrush.Realb.texBlendMode = mx;
     state->currentBrush.Realb.texNoisemode = tnm;
     state->currentBrush.Realb.texColorMode = cm;
 
