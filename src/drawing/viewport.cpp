@@ -329,11 +329,12 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     rs.pos1 = rs.pos2 = Vector2{pos.x, pos.y};
                     rs.ctrl0 = rs.ctrl3 = rs.pos1;
                     rs.brushFrom = rs.brush = cb;
-                    rs.tool = eSingleStamp;
-                    rs.seed = state->currentBrush.Realb.seed;
-                    rs.smudgeSrcX = pos.x;
-                    rs.smudgeSrcY = pos.y;
-                    Texture2D savedTex2 = g_activeBrushTex;
+                rs.tool = eSingleStamp;
+                rs.seamless = g_seamlessPaint ? 1 : 0;
+                rs.seed = state->currentBrush.Realb.seed;
+                rs.smudgeSrcX = pos.x;
+                rs.smudgeSrcY = pos.y;
+                Texture2D savedTex2 = g_activeBrushTex;
                     g_activeBrushTex = g_defaultBrushTex;
                     DrawOneSegment(rs, bt->rt);
                     g_activeBrushTex = savedTex2;
@@ -427,11 +428,12 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                 rs.pos1 = rs.pos2 = Vector2{pos.x, pos.y};
                 rs.ctrl0 = rs.ctrl3 = rs.pos1;
                 rs.brushFrom = rs.brush = cb;
-                rs.tool = eSingleStamp;
-                rs.seed = state->currentBrush.Realb.seed;
-                rs.smudgeSrcX = pos.x;
-                rs.smudgeSrcY = pos.y;
-                vp->broker->on_segment(rs);
+                    rs.tool = eSingleStamp;
+                    rs.seamless = g_seamlessPaint ? 1 : 0;
+                    rs.seed = state->currentBrush.Realb.seed;
+                    rs.smudgeSrcX = pos.x;
+                    rs.smudgeSrcY = pos.y;
+                    vp->broker->on_segment(rs);
                 if (g_recorder) g_recorder->on_segment(rs);
                 if (vp->strokeLen < MAX_STROKE_PTS)
                     vp->strokePts[vp->strokeLen++] = pos;

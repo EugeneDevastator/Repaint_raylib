@@ -357,6 +357,9 @@ int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad, DrawDab*
 
 // ── DrawOneSegment ─────────────────────────────────────────────────
 void DrawOneSegment(const DrawSegment& dseg, RenderTexture2D rt) {
+    bool savedSeamless = g_seamlessPaint;
+    g_seamlessPaint = (dseg.seamless != 0);
+
     DrawDab dabs[512];
     SegResult r; memset(&r, 0, sizeof(r));
     int n = DrawLinear(&dseg, 0, 0.0f, dabs, 512, &r);
@@ -390,6 +393,8 @@ void DrawOneSegment(const DrawSegment& dseg, RenderTexture2D rt) {
         BrushBlend_ApplyStamp(rt, &tb, g_activeBrushTex,
                               dabs[i].x, dabs[i].y, dabs[i].srcX, dabs[i].srcY);
     }
+
+    g_seamlessPaint = savedSeamless;
 }
 
 

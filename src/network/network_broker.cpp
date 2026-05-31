@@ -203,6 +203,7 @@ void NetworkBroker::on_segment(const DrawSegment& seg) {
     d.brushTo  = seg.brush;
     d.seed = seg.seed;
     d.tool = seg.tool;
+    d.seamless = seg.seamless;
     d.smudgeSrcX = seg.smudgeSrcX;
     d.smudgeSrcY = seg.smudgeSrcY;
     d.activeLayer = layer;
@@ -224,6 +225,7 @@ void NetworkBroker::poll(AppState* st) {
                 dseg.ctrl0 = d->ctrl0; dseg.ctrl3 = d->ctrl3;
                 dseg.brushFrom = d->brushFrom; dseg.brush = d->brushTo;
                 dseg.seed = d->seed; dseg.tool = d->tool;
+                dseg.seamless = d->seamless;
                 dseg.smudgeSrcX = d->smudgeSrcX; dseg.smudgeSrcY = d->smudgeSrcY;
                 dseg.Noisemode = 0;
 
@@ -285,6 +287,7 @@ void NetworkBroker::ProcessReceived(uint8_t hid, uint8_t* data, uint32_t size) {
             ns.brushTo = ns.brushFrom;
             ns.seed = act.Brush.Realb.seed;
             ns.toolID = act.ToolID;
+            ns.seamless = 0;
             ns.smudgeSrcX = ns.pos1.x;
             ns.smudgeSrcY = ns.pos1.y;
             ns.layer = act.layer;
@@ -429,6 +432,7 @@ void NetworkBroker::SendSegment(const QueuedSegment& seg) {
     ns.brushTo  = seg.brushTo;
     ns.seed = seg.seed;
     ns.toolID = seg.tool;
+    ns.seamless = seg.seamless;
     ns.smudgeSrcX = seg.smudgeSrcX;
     ns.smudgeSrcY = seg.smudgeSrcY;
     ns.layer = seg.activeLayer;
@@ -447,6 +451,7 @@ void NetworkBroker::EnqueueRemoteSegment(const NetSegment& ns) {
     d.brushTo  = ns.brushTo;
     d.seed = ns.seed;
     d.tool = ns.toolID;
+    d.seamless = ns.seamless;
     d.smudgeSrcX = ns.smudgeSrcX;
     d.smudgeSrcY = ns.smudgeSrcY;
     d.activeLayer = ns.layer;

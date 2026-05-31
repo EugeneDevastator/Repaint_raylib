@@ -42,7 +42,7 @@ struct DrawSegment {
     Vector2 pos1, pos2;
     Vector2 ctrl0, ctrl3;  // Catmull-Rom tangents (== pos1/pos2 = straight)
     CollapsedBrush brushFrom, brush;
-    uint8_t Noisemode, tool;
+    uint8_t Noisemode, tool, seamless;
     uint16_t seed;
     float smudgeSrcX, smudgeSrcY;
 };

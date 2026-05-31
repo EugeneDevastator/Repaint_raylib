@@ -181,6 +181,7 @@ static int FeedOnePoint(StrokeEngine* se, Vector2 pos, float velocity,
     dseg.brush    = cbTo;
     dseg.Noisemode = 0;
     dseg.tool      = (uint8_t)toolMode;
+    dseg.seamless  = g_seamlessPaint ? 1 : 0;
     dseg.seed      = baseBrush->seed;
     dseg.smudgeSrcX = se->lastDabPos.x;
     dseg.smudgeSrcY = se->lastDabPos.y;
@@ -282,6 +283,7 @@ int StrokeEngine_FeedPoint(StrokeEngine* se, const StrokePoint& sp,
         dseg.brush     = cbTo;
         dseg.Noisemode = 0;
         dseg.tool      = (uint8_t)toolMode;
+        dseg.seamless  = g_seamlessPaint ? 1 : 0;
         dseg.seed      = baseBrush->seed;
         dseg.smudgeSrcX = se->lastDabPos.x;
         dseg.smudgeSrcY = se->lastDabPos.y;
@@ -357,6 +359,7 @@ int StrokeEngine_FlushSmoothing(StrokeEngine* se, const d_RealBrush* baseBrush,
         dseg.brush     = cbTo;
         dseg.Noisemode = 0;
         dseg.tool      = (uint8_t)toolMode;
+        dseg.seamless  = g_seamlessPaint ? 1 : 0;
         dseg.seed      = baseBrush->seed;
         dseg.smudgeSrcX = se->lastDabPos.x;
         dseg.smudgeSrcY = se->lastDabPos.y;
@@ -422,6 +425,7 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex,
     seed.brushFrom = seed.brush = cbFull;
     seed.seed = baseBrush->seed;
     seed.tool = eSingleStamp;
+    seed.seamless = g_seamlessPaint ? 1 : 0;
     seed.smudgeSrcX = cx;
     seed.smudgeSrcY = cy;
     DrawOneSegment(seed, dstRT);
@@ -433,6 +437,7 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex,
     s.brushFrom = cbFull; s.brush = cbTiny;
     s.seed = baseBrush->seed;
     s.tool = (uint8_t)toolMode;
+    s.seamless = g_seamlessPaint ? 1 : 0;
     s.smudgeSrcX = cx;
     s.smudgeSrcY = cy;
     DrawOneSegment(s, dstRT);

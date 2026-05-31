@@ -27,7 +27,7 @@ struct QueuedSegment {
     Vector2 pos1, pos2, ctrl0, ctrl3;
     CollapsedBrush brushFrom, brushTo;
     uint16_t seed;
-    uint8_t  tool;
+    uint8_t  tool, seamless;
     float smudgeSrcX, smudgeSrcY;
     int activeLayer;
 };

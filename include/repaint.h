@@ -161,7 +161,7 @@ struct NetSegment {
     CollapsedBrush brushFrom, brushTo;
     uint16_t seed;
     int layer;
-    uint8_t toolID;
+    uint8_t toolID, seamless;
     float smudgeSrcX, smudgeSrcY;
 };
 
