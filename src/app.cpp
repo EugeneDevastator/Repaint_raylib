@@ -547,6 +547,10 @@ void App_Init(AppState* state) {
 
     /* Load default brush preset */
     Preset_ApplyDefault(state);
+
+    // Show new-canvas dialog on startup so user goes through same flow as File > New
+    g_newCanvasActive = true;
+    g_newCanvasConfirm = false;
 }
 
 /* ── App_Draw ──────────────────────────────────────────────────────────── */
