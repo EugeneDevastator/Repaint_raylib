@@ -4,7 +4,7 @@
 #include <stdio.h>
 
 #define RPL_MAGIC "RPLREP"
-#define RPL_VER 3
+#define RPL_VER 4
 
 void ReplayRecorder::on_segment(const DrawSegment& seg) {
     if (m_playing) return;
@@ -15,8 +15,6 @@ void ReplayRecorder::on_segment(const DrawSegment& seg) {
     s.brushTo  = seg.brush;
     s.seed = seg.seed;
     s.toolID = seg.tool;
-    s.initDabIdx = seg.initDabIdx;
-    s.initDabRad = seg.initDabRad;
     s.smudgeSrcX = seg.smudgeSrcX;
     s.smudgeSrcY = seg.smudgeSrcY;
     s.layer = 0;
@@ -73,8 +71,6 @@ void ReplayRecorder::Play(AppState* state) {
         if (dseg.brush.spacing <= 0.0f) dseg.brush.spacing = 0.5f;
         dseg.seed = ns.seed;
         dseg.tool = ns.toolID;
-        dseg.initDabIdx = ns.initDabIdx;
-        dseg.initDabRad = ns.initDabRad;
         dseg.smudgeSrcX = ns.smudgeSrcX * sx;
         dseg.smudgeSrcY = ns.smudgeSrcY * sy;
         dseg.Noisemode = 0;
@@ -113,8 +109,6 @@ bool ReplayRecorder::Save(const char* path) {
         fwrite(&ns.brushTo, sizeof(CollapsedBrush), 1, f);
         fwrite(&ns.seed, sizeof(uint16_t), 1, f);
         fwrite(&ns.toolID, sizeof(uint8_t), 1, f);
-        fwrite(&ns.initDabIdx, sizeof(int), 1, f);
-        fwrite(&ns.initDabRad, sizeof(float), 1, f);
         fwrite(&ns.smudgeSrcX, sizeof(float), 1, f);
         fwrite(&ns.smudgeSrcY, sizeof(float), 1, f);
     }
@@ -149,7 +143,6 @@ bool ReplayRecorder::Load(const char* path) {
 
     for (uint32_t i = 0; i < count; i++) {
         NetSegment ns;
-        memset(&ns, 0, sizeof(ns));
         if (fread(&ns.pos1, sizeof(Vector2), 1, f) != 1) break;
         if (fread(&ns.pos2, sizeof(Vector2), 1, f) != 1) break;
         if (fread(&ns.ctrl0, sizeof(Vector2), 1, f) != 1) break;
@@ -158,8 +151,6 @@ bool ReplayRecorder::Load(const char* path) {
         if (fread(&ns.brushTo, sizeof(CollapsedBrush), 1, f) != 1) break;
         if (fread(&ns.seed, sizeof(uint16_t), 1, f) != 1) break;
         if (fread(&ns.toolID, sizeof(uint8_t), 1, f) != 1) break;
-        if (fread(&ns.initDabIdx, sizeof(int), 1, f) != 1) break;
-        if (fread(&ns.initDabRad, sizeof(float), 1, f) != 1) break;
         if (fread(&ns.smudgeSrcX, sizeof(float), 1, f) != 1) break;
         if (fread(&ns.smudgeSrcY, sizeof(float), 1, f) != 1) break;
         printf("[RPLOAD] seg %d: p1=(%.1f,%.1f) p2=(%.1f,%.1f) rad=%.1f spacing=%.2f col=(%d,%d,%d)\n",

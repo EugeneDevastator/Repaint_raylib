@@ -4,6 +4,7 @@
 #include "layerstack.h"
 #include "rlgl.h"
 #include "stroke_engine.h"
+#include "network_broker.h"
 
 static void PushDabSegment(ICommandBroker* b, float x, float y, float srcX, float srcY, const d_RealBrush& brush, int toolMode) {
     CollapsedBrush cb = CollapseBrushParams(brush, 0.0f, toolMode);
@@ -285,46 +286,41 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         layersDirty = true;
         if (!leftDown) {
             if (vp->wasMouseDown) {
-                float origRad = state->currentBrush.Realb.rad_out;
-                state->currentBrush.Realb.rad_out *= layerScale;
                 int fn = StrokeEngine_FlushSmoothing(&vp->strokeEng, &state->currentBrush.Realb,
                                                        state->initialAngle, state->mode, dabs, 1024);
-                state->currentBrush.Realb.rad_out = origRad;
-                for (int i = 0; i < fn; i++) {
-                    dabs[i].brush.rad_out_px *= layerScale;
-                    CollapsedBrush* cb = &dabs[i].brush;
-                    d_Brush tb; memset(&tb, 0, sizeof(tb));
-                    tb.Realb.rad_out = cb->rad_out_px;
-                    tb.Realb.radInRatio = cb->radInRatio;
-                    tb.Realb.opacity = cb->opacity;
-                    tb.Realb.crv = cb->crv;
-                    tb.Realb.x2y = cb->scale_y;
-                    tb.Realb.resangle = cb->resangle;
-                    tb.Realb.col = cb->col;
-                    tb.Realb.cop = cb->cop;
-                    tb.Realb.bmidx = (uint8_t)cb->bmidx;
-                    tb.Realb.preserveop = cb->preserveop;
-                    tb.Realb.eraseMode = cb->eraseMode;
-                    tb.Realb.perspective = cb->perspective;
-                    tb.Realb.texScale = cb->texScale;
-                    tb.Realb.texFeather = cb->texFeather;
-                    tb.Realb.texThresh = cb->texThresh;
-                    tb.Realb.texBlendVal = cb->texBlendVal;
-                    tb.Realb.texBlendMode = cb->texBlendMode;
-                    tb.Realb.texNoisemode = cb->texNoisemode;
-                    tb.Realb.texColorMode = cb->texColorMode;
-                    tb.Realb.useTexLumAsAlpha = cb->useTexLumAsAlpha;
-                    tb.Realb.pwr = cb->pwr;
-                    tb.Realb.userTexOriginX = cb->userTexOriginX;
-                    tb.Realb.userTexOriginY = cb->userTexOriginY;
-                    tb.Realb.userTexDirection = cb->userTexDirection;
-                    Texture2D savedTex = g_activeBrushTex;
-                    g_activeBrushTex = g_defaultBrushTex;
-                    BrushBlend_ApplyStamp(bt->rt, &tb, g_activeBrushTex,
-                                          dabs[i].x, dabs[i].y, dabs[i].srcX, dabs[i].srcY);
-                    g_activeBrushTex = savedTex;
-                }
-                if (fn == 0 && vp->strokeEng.dabIndex == 0) {
+                if (fn > 0) {
+                    for (int i = 0; i < fn; i++) {
+                        dabs[i].brush.rad_out_px *= layerScale;
+                        CollapsedBrush* cb = &dabs[i].brush;
+                        d_Brush tb; memset(&tb, 0, sizeof(tb));
+                        tb.Realb.rad_out = cb->rad_out_px;
+                        tb.Realb.radInRatio = cb->radInRatio;
+                        tb.Realb.opacity = cb->opacity;
+                        tb.Realb.crv = cb->crv;
+                        tb.Realb.x2y = cb->scale_y;
+                        tb.Realb.resangle = cb->resangle;
+                        tb.Realb.col = cb->col;
+                        tb.Realb.cop = cb->cop;
+                        tb.Realb.bmidx = (uint8_t)cb->bmidx;
+                        tb.Realb.preserveop = cb->preserveop;
+                        tb.Realb.eraseMode = cb->eraseMode;
+                        tb.Realb.perspective = cb->perspective;
+                        tb.Realb.texScale = cb->texScale;
+                        tb.Realb.texFeather = cb->texFeather;
+                        tb.Realb.texThresh = cb->texThresh;
+                        tb.Realb.texBlendVal = cb->texBlendVal;
+                        tb.Realb.texBlendMode = cb->texBlendMode;
+                        tb.Realb.texNoisemode = cb->texNoisemode;
+                        tb.Realb.texColorMode = cb->texColorMode;
+                        tb.Realb.useTexLumAsAlpha = cb->useTexLumAsAlpha;
+                        tb.Realb.pwr = cb->pwr;
+                        tb.Realb.userTexOriginX = cb->userTexOriginX;
+                        tb.Realb.userTexOriginY = cb->userTexOriginY;
+                        tb.Realb.userTexDirection = cb->userTexDirection;
+                        BrushBlend_ApplyStamp(bt->rt, &tb, g_activeBrushTex,
+                                              dabs[i].x, dabs[i].y, dabs[i].srcX, dabs[i].srcY);
+                    }
+                } else if (vp->strokeEng.dabIndex == 0) {
                     // Single click on texture
                     Vector2 pos = vp->strokeEng.lastDabPos;
                     CollapsedBrush cb = CollapseBrushParams(state->currentBrush.Realb, state->initialAngle, state->mode);
@@ -337,10 +333,10 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     rs.seed = state->currentBrush.Realb.seed;
                     rs.smudgeSrcX = pos.x;
                     rs.smudgeSrcY = pos.y;
-                    Texture2D savedTex = g_activeBrushTex;
+                    Texture2D savedTex2 = g_activeBrushTex;
                     g_activeBrushTex = g_defaultBrushTex;
                     DrawOneSegment(rs, bt->rt);
-                    g_activeBrushTex = savedTex;
+                    g_activeBrushTex = savedTex2;
                 }
                 StrokeEngine_EndStroke(&vp->strokeEng);
             }

@@ -132,8 +132,8 @@ public:
 };
 
 struct StrokeEngine {
-    d_Brush segBrushFrom; Vector2 lastDabPos; float lastDabRad;
-    Vector2 smudgeSrcPos; int dabIndex; bool inStroke;
+    d_Brush segBrushFrom; Vector2 lastDabPos;
+    int dabIndex; bool inStroke;
     Vector2 prevSegPos, prevSegDir; float prevSegLen, prevVel;
     float initDir; bool initDirSet;
 
@@ -162,8 +162,6 @@ struct NetSegment {
     uint16_t seed;
     int layer;
     uint8_t toolID;
-    int   initDabIdx;
-    float initDabRad;
     float smudgeSrcX, smudgeSrcY;
 };
 

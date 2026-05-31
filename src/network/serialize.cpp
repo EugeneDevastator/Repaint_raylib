@@ -261,8 +261,8 @@ bool LayerProps_Deserialize(sLayerProps* lp, uint8_t* buf, size_t len) {
 }
 
 size_t Segment_Serialize(const NetSegment& ns, uint8_t* buf, size_t cap) {
-    size_t need = sizeof(Vector2)*4 + sizeof(CollapsedBrush)*2 + sizeof(uint16_t) + sizeof(int)
-                + sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(float) + sizeof(float);
+    size_t need = sizeof(Vector2)*4 + sizeof(CollapsedBrush)*2 + sizeof(uint16_t)
+                + sizeof(int) + sizeof(uint8_t) + sizeof(float)*2;
     if (cap < need) return 0;
     size_t off = 0;
     memcpy(buf + off, &ns.pos1, sizeof(Vector2)); off += sizeof(Vector2);
@@ -274,16 +274,14 @@ size_t Segment_Serialize(const NetSegment& ns, uint8_t* buf, size_t cap) {
     memcpy(buf + off, &ns.seed, sizeof(uint16_t)); off += sizeof(uint16_t);
     memcpy(buf + off, &ns.layer, sizeof(int)); off += sizeof(int);
     buf[off++] = ns.toolID;
-    memcpy(buf + off, &ns.initDabIdx, sizeof(int)); off += sizeof(int);
-    memcpy(buf + off, &ns.initDabRad, sizeof(float)); off += sizeof(float);
     memcpy(buf + off, &ns.smudgeSrcX, sizeof(float)); off += sizeof(float);
     memcpy(buf + off, &ns.smudgeSrcY, sizeof(float)); off += sizeof(float);
     return off;
 }
 
 bool Segment_Deserialize(NetSegment* ns, uint8_t* buf, size_t len) {
-    size_t need = sizeof(Vector2)*4 + sizeof(CollapsedBrush)*2 + sizeof(uint16_t) + sizeof(int)
-                + sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(float) + sizeof(float);
+    size_t need = sizeof(Vector2)*4 + sizeof(CollapsedBrush)*2 + sizeof(uint16_t)
+                + sizeof(int) + sizeof(uint8_t) + sizeof(float)*2;
     if (len < need) return false;
     size_t off = 0;
     memcpy(&ns->pos1, buf + off, sizeof(Vector2)); off += sizeof(Vector2);
@@ -295,8 +293,6 @@ bool Segment_Deserialize(NetSegment* ns, uint8_t* buf, size_t len) {
     memcpy(&ns->seed, buf + off, sizeof(uint16_t)); off += sizeof(uint16_t);
     memcpy(&ns->layer, buf + off, sizeof(int)); off += sizeof(int);
     ns->toolID = buf[off++];
-    memcpy(&ns->initDabIdx, buf + off, sizeof(int)); off += sizeof(int);
-    memcpy(&ns->initDabRad, buf + off, sizeof(float)); off += sizeof(float);
     memcpy(&ns->smudgeSrcX, buf + off, sizeof(float)); off += sizeof(float);
     memcpy(&ns->smudgeSrcY, buf + off, sizeof(float)); off += sizeof(float);
     return true;

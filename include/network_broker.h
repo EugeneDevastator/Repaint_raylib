@@ -28,8 +28,6 @@ struct QueuedSegment {
     CollapsedBrush brushFrom, brushTo;
     uint16_t seed;
     uint8_t  tool;
-    int   initDabIdx;
-    float initDabRad;
     float smudgeSrcX, smudgeSrcY;
     int activeLayer;
 };

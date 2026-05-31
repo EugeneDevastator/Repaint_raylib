@@ -144,11 +144,11 @@ void JitterBrush(CollapsedBrush& b, uint16_t baseSeed, int dabIdx) {
 
     // Color jitter: HSL
     float hue, sat, lit;
-    RGBToHSL_Local(b.col, hue, sat, lit);
+    RGBToHSL(b.col, hue, sat, lit);
     hue += dr * b.jitHue; if (hue < 0) hue += 1; else if (hue > 1) hue -= 1;
     sat += dr * b.jitSat; if (sat < 0) sat = 0; if (sat > 1) sat = 1;
     lit += dr * b.jitLit; if (lit < 0) lit = 0; if (lit > 1) lit = 1;
-    b.col = HSLToRGB_Local(hue, sat, lit);
+    b.col = HSLToRGB(hue, sat, lit);
 }
 
 // ── Helpers for iterative dab placement ───────────────────────────
@@ -239,19 +239,19 @@ int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad, DrawDab*
     res->lastRadOut = seg->brushFrom.rad_out_px;
     res->overdraw = 0.0f;
 
+    Vector2 to = seg->pos2;
+    float stdist = sqrtf((to.x - from.x) * (to.x - from.x) + (to.y - from.y) * (to.y - from.y));
+    if (stdist < 0.001f) return 0;
+
     if (seg->tool == eSingleStamp) {
         out[0].x = from.x; out[0].y = from.y;
         out[0].srcX = seg->smudgeSrcX;
         out[0].srcY = seg->smudgeSrcY;
         out[0].brush = seg->brushFrom;
-        res->lastDabPos = from;
+        res->lastDabPos = Vector2{from.x, from.y};
         res->lastRadOut = seg->brushFrom.rad_out_px;
         return 1;
     }
-
-    Vector2 to = seg->pos2;
-    float stdist = sqrtf((to.x - from.x) * (to.x - from.x) + (to.y - from.y) * (to.y - from.y));
-    if (stdist < 0.001f) return 0;
 
     bool isCurved = (seg->ctrl0.x != from.x || seg->ctrl0.y != from.y ||
                      seg->ctrl3.x != to.x   || seg->ctrl3.y != to.y);
@@ -299,7 +299,7 @@ int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad, DrawDab*
                                              0.0f, totalLen, rFrom, rTo, spacingMult);
 
         // 2. Randomize the next dab's radius
-        float dr = RawRnd(seg->brushFrom.baseSeed + (uint16_t)((dabOffset + count) * 7 + 1), 1024) / 1024.0f * 2.0f - 1.0f;
+        float dr = RawRnd(seg->brushFrom.baseSeed + (uint16_t)(count * 7 + 1), 1024) / 1024.0f * 2.0f - 1.0f;
         nextDabRad += dr * seg->brushFrom.jitRadOut;
 
         // 3. Find position along the curve where the randomized radius touches the last dab
@@ -314,7 +314,7 @@ int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad, DrawDab*
         // 5. Build brush at the actual position, jitter visual params
         float k2 = lastDabPos / totalLen;
         CollapsedBrush dabCB = BlendBrushes(seg->brushFrom, seg->brush, k2);
-        JitterBrush(dabCB, seg->brushFrom.baseSeed, dabOffset + count);
+        JitterBrush(dabCB, seg->brushFrom.baseSeed, count);
 
         nn++;
         out[count].x = pos.x;
@@ -359,7 +359,7 @@ int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad, DrawDab*
 void DrawOneSegment(const DrawSegment& dseg, RenderTexture2D rt) {
     DrawDab dabs[512];
     SegResult r; memset(&r, 0, sizeof(r));
-    int n = DrawLinear(&dseg, dseg.initDabIdx, dseg.initDabRad, dabs, 512, &r);
+    int n = DrawLinear(&dseg, 0, 0.0f, dabs, 512, &r);
     for (int i = 0; i < n; i++) {
         CollapsedBrush* cb = &dabs[i].brush;
         d_Brush tb; memset(&tb, 0, sizeof(tb));

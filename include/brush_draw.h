@@ -44,8 +44,6 @@ struct DrawSegment {
     CollapsedBrush brushFrom, brush;
     uint8_t Noisemode, tool;
     uint16_t seed;
-    int   initDabIdx;
-    float initDabRad;
     float smudgeSrcX, smudgeSrcY;
 };
 
