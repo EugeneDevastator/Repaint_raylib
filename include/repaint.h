@@ -30,7 +30,7 @@ typedef enum {
 } csParams;
 
 typedef enum {
-    eBrush, eSmudge, eDisp, eCont, eLine
+    eBrush, eSmudge, ePolyStripe, eDistort, eContrast, eSingleStamp
 } eTools;
 
 typedef enum {
@@ -162,6 +162,9 @@ struct NetSegment {
     uint16_t seed;
     int layer;
     uint8_t toolID;
+    int   initDabIdx;
+    float initDabRad;
+    float smudgeSrcX, smudgeSrcY;
 };
 
 struct ICommandBroker {
@@ -172,13 +175,6 @@ struct ICommandBroker {
 
 extern ICommandBroker* g_broker;
 extern ReplayRecorder* g_recorder;
-
-struct LocalBroker : ICommandBroker {
-    AppState* appState;
-    LocalBroker();
-    void on_segment(const DrawSegment& seg) override;
-    void poll(AppState* state) override;
-};
 
 typedef struct { float clipminF,clipmaxF,jitter; } BPuserstate;
 typedef struct { float clipminF,clipmaxF; } BPrunstate;

@@ -100,7 +100,7 @@ void LeftPanel_Draw(AppState* state) {
         sprintf(zoomInfo, "Zoom: %.0f%%", state->camera.zoom * 100.0f);
         ImGui::Text("%s", zoomInfo);
 
-        const char* modeNames[] = {"Brush", "Smudge", "Disp", "Cont", "STOP", "Line"};
+        const char* modeNames[] = {"Brush", "Smudge", "PolyStripe", "Distort", "Contrast", "Single"};
         ImGui::Text("%s", modeNames[state->mode > 5 ? 0 : state->mode]);
     }
 

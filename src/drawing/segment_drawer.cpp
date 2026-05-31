@@ -1,9 +1,10 @@
 #include "brush_draw.h"
+#include "repaint.h"
 #include <math.h>
 #include <string.h>
 
 // ── HSL conversion (matches the UI-side functions) ──────────────────
-static float HueToRGB(float p, float q, float t) {
+static float HueToRGB_Local(float p, float q, float t) {
     if (t < 0) t += 1;
     if (t > 1) t -= 1;
     if (t < 1.0f/6.0f) return p + (q - p) * 6.0f * t;
@@ -12,7 +13,7 @@ static float HueToRGB(float p, float q, float t) {
     return p;
 }
 
-static void RGBToHSL(Color c, float& h, float& s, float& l) {
+static void RGBToHSL_Local(Color c, float& h, float& s, float& l) {
     float r = c.r / 255.0f, g = c.g / 255.0f, b = c.b / 255.0f;
     float mx = fmaxf(r, fmaxf(g, b)), mn = fminf(r, fminf(g, b));
     float d = mx - mn;
@@ -24,7 +25,7 @@ static void RGBToHSL(Color c, float& h, float& s, float& l) {
     else               h = ((r - g) / d + 4.0f) / 6.0f;
 }
 
-static Color HSLToRGB(float h, float s, float l) {
+static Color HSLToRGB_Local(float h, float s, float l) {
     if (s < 0.0001f) {
         uint8_t v = (uint8_t)(l * 255);
         return Color{v, v, v, 255};
@@ -32,9 +33,9 @@ static Color HSLToRGB(float h, float s, float l) {
     float q = (l < 0.5f) ? l * (1.0f + s) : l + s - l * s;
     float p = 2.0f * l - q;
     return Color{
-        (uint8_t)(HueToRGB(p, q, h + 1.0f/3.0f) * 255),
-        (uint8_t)(HueToRGB(p, q, h) * 255),
-        (uint8_t)(HueToRGB(p, q, h - 1.0f/3.0f) * 255),
+        (uint8_t)(HueToRGB_Local(p, q, h + 1.0f/3.0f) * 255),
+        (uint8_t)(HueToRGB_Local(p, q, h) * 255),
+        (uint8_t)(HueToRGB_Local(p, q, h - 1.0f/3.0f) * 255),
         255
     };
 }
@@ -143,11 +144,11 @@ void JitterBrush(CollapsedBrush& b, uint16_t baseSeed, int dabIdx) {
 
     // Color jitter: HSL
     float hue, sat, lit;
-    RGBToHSL(b.col, hue, sat, lit);
+    RGBToHSL_Local(b.col, hue, sat, lit);
     hue += dr * b.jitHue; if (hue < 0) hue += 1; else if (hue > 1) hue -= 1;
     sat += dr * b.jitSat; if (sat < 0) sat = 0; if (sat > 1) sat = 1;
     lit += dr * b.jitLit; if (lit < 0) lit = 0; if (lit > 1) lit = 1;
-    b.col = HSLToRGB(hue, sat, lit);
+    b.col = HSLToRGB_Local(hue, sat, lit);
 }
 
 // ── Helpers for iterative dab placement ───────────────────────────
@@ -238,6 +239,16 @@ int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad, DrawDab*
     res->lastRadOut = seg->brushFrom.rad_out_px;
     res->overdraw = 0.0f;
 
+    if (seg->tool == eSingleStamp) {
+        out[0].x = from.x; out[0].y = from.y;
+        out[0].srcX = seg->smudgeSrcX;
+        out[0].srcY = seg->smudgeSrcY;
+        out[0].brush = seg->brushFrom;
+        res->lastDabPos = from;
+        res->lastRadOut = seg->brushFrom.rad_out_px;
+        return 1;
+    }
+
     Vector2 to = seg->pos2;
     float stdist = sqrtf((to.x - from.x) * (to.x - from.x) + (to.y - from.y) * (to.y - from.y));
     if (stdist < 0.001f) return 0;
@@ -308,8 +319,13 @@ int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad, DrawDab*
         nn++;
         out[count].x = pos.x;
         out[count].y = pos.y;
-        out[count].srcX = pos.x;
-        out[count].srcY = pos.y;
+        if (count == 0) {
+            out[count].srcX = seg->smudgeSrcX;
+            out[count].srcY = seg->smudgeSrcY;
+        } else {
+            out[count].srcX = out[count-1].x;
+            out[count].srcY = out[count-1].y;
+        }
         out[count].brush = dabCB;
         count++;
 
@@ -336,6 +352,44 @@ int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad, DrawDab*
         }
     }
     return count;
+}
+
+
+// ── DrawOneSegment ─────────────────────────────────────────────────
+void DrawOneSegment(const DrawSegment& dseg, RenderTexture2D rt) {
+    DrawDab dabs[512];
+    SegResult r; memset(&r, 0, sizeof(r));
+    int n = DrawLinear(&dseg, dseg.initDabIdx, dseg.initDabRad, dabs, 512, &r);
+    for (int i = 0; i < n; i++) {
+        CollapsedBrush* cb = &dabs[i].brush;
+        d_Brush tb; memset(&tb, 0, sizeof(tb));
+        tb.Realb.rad_out = cb->rad_out_px;
+        tb.Realb.radInRatio = cb->radInRatio;
+        tb.Realb.opacity = cb->opacity;
+        tb.Realb.crv = cb->crv;
+        tb.Realb.x2y = cb->scale_y;
+        tb.Realb.resangle = cb->resangle;
+        tb.Realb.col = cb->col;
+        tb.Realb.cop = cb->cop;
+        tb.Realb.bmidx = (uint8_t)cb->bmidx;
+        tb.Realb.preserveop = cb->preserveop;
+        tb.Realb.eraseMode = cb->eraseMode;
+        tb.Realb.perspective = cb->perspective;
+        tb.Realb.texScale = cb->texScale;
+        tb.Realb.texFeather = cb->texFeather;
+        tb.Realb.texThresh = cb->texThresh;
+        tb.Realb.texBlendVal = cb->texBlendVal;
+        tb.Realb.texBlendMode = cb->texBlendMode;
+        tb.Realb.texNoisemode = cb->texNoisemode;
+        tb.Realb.texColorMode = cb->texColorMode;
+        tb.Realb.useTexLumAsAlpha = cb->useTexLumAsAlpha;
+        tb.Realb.pwr = cb->pwr;
+        tb.Realb.userTexOriginX = cb->userTexOriginX;
+        tb.Realb.userTexOriginY = cb->userTexOriginY;
+        tb.Realb.userTexDirection = cb->userTexDirection;
+        BrushBlend_ApplyStamp(rt, &tb, g_activeBrushTex,
+                              dabs[i].x, dabs[i].y, dabs[i].srcX, dabs[i].srcY);
+    }
 }
 
 

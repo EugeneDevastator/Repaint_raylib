@@ -3,6 +3,8 @@
 #include "serialize.h"
 #include "sock_platform.h"
 #include "app_config.h"
+#include "brush_draw.h"
+#include "stroke_engine.h"
 #include "imgui.h"
 #include <string.h>
 #include <stdlib.h>
@@ -22,8 +24,8 @@ NetworkBroker::NetworkBroker() {
     userCount     = 0;
     statusMsg[0]  = '\0';
     showUI        = false;
-    localHead     = 0;
-    localTail     = 0;
+    segHead       = 0;
+    segTail       = 0;
     recvThread    = NULL;
     threadRunning = false;
     recvPos       = 0;
@@ -189,117 +191,52 @@ void NetworkBroker::SendLAction(const d_LAction* lact) {
 /* ── ICommandBroker ─────────────────────────────────────────────────────── */
 
 void NetworkBroker::on_segment(const DrawSegment& seg) {
-    int next = (localTail + 1) % CMD_CAPACITY;
-    if (next == localHead) return;
+    int next = (segTail + 1) % CMD_CAPACITY;
+    if (next == segHead) return;
     if (!appState) return;
 
-    int      layer = appState->activeLayer;
-
-    localQueue[localTail].x     = seg.pos1.x;
-    localQueue[localTail].y     = seg.pos1.y;
-    localQueue[localTail].srcX  = seg.pos2.x;
-    localQueue[localTail].srcY  = seg.pos2.y;
-    localQueue[localTail].color       = seg.brushFrom.col;
-    localQueue[localTail].rad_out     = seg.brushFrom.rad_out_px;
-    localQueue[localTail].radInRatio  = seg.brushFrom.radInRatio;
-    localQueue[localTail].opacity     = seg.brushFrom.opacity;
-    localQueue[localTail].crv         = seg.brushFrom.crv;
-    localQueue[localTail].x2y         = seg.brushFrom.scale_y;
-    localQueue[localTail].sol         = 1.0f/*sol*/;
-    localQueue[localTail].sol2op      = 0.0f;
-    localQueue[localTail].resangle    = (float)seg.brushFrom.resangle;
-    localQueue[localTail].cop         = seg.brushFrom.cop;
-    localQueue[localTail].texBlendVal  = seg.brushFrom.texBlendVal;
-    localQueue[localTail].texScale     = seg.brushFrom.texScale;
-    localQueue[localTail].texFeather   = seg.brushFrom.texFeather;
-    localQueue[localTail].texThresh    = seg.brushFrom.texThresh;
-    localQueue[localTail].useTexLumAsAlpha = seg.brushFrom.useTexLumAsAlpha;
-    localQueue[localTail].texUseRGB    = false/*texUseRGB*/;
-    localQueue[localTail].texBlendMode = seg.brushFrom.texBlendMode;
-    localQueue[localTail].texNoisemode = seg.brushFrom.texNoisemode;
-    localQueue[localTail].texColorMode = seg.brushFrom.texColorMode;
-    localQueue[localTail].bmidx       = seg.brushFrom.bmidx;
-    localQueue[localTail].seed        = seg.seed;
-    localQueue[localTail].preserveop  = seg.brushFrom.preserveop;
-    localQueue[localTail].eraseMode   = seg.brushFrom.eraseMode;
-    localQueue[localTail].perspective = seg.brushFrom.perspective;
-    localQueue[localTail].userTexOriginX = seg.brushFrom.userTexOriginX;
-    localQueue[localTail].userTexOriginY = seg.brushFrom.userTexOriginY;
-    localQueue[localTail].userTexDirection = seg.brushFrom.userTexDirection;
-    localQueue[localTail].activeLayer = layer;
-    localQueue[localTail].targetRT    = LayerStack_GetRT(layer);
-
-    localTail = next;
+    int layer = appState->activeLayer;
+    QueuedSegment& d = segQueue[segTail];
+    d.pos1 = seg.pos1; d.pos2 = seg.pos2;
+    d.ctrl0 = seg.ctrl0; d.ctrl3 = seg.ctrl3;
+    d.brushFrom = seg.brushFrom;
+    d.brushTo  = seg.brush;
+    d.seed = seg.seed;
+    d.tool = seg.tool;
+    d.initDabIdx = seg.initDabIdx;
+    d.initDabRad = seg.initDabRad;
+    d.smudgeSrcX = seg.smudgeSrcX;
+    d.smudgeSrcY = seg.smudgeSrcY;
+    d.activeLayer = layer;
+    d.targetRT = LayerStack_GetRT(layer);
+    segTail = next;
 }
 
 void NetworkBroker::poll(AppState* st) {
     this->appState = st;
 
-    while (localHead != localTail) {
-        QueuedNetDab* d = &localQueue[localHead];
-        bool applied = false;
-
+    while (segHead != segTail) {
+        QueuedSegment* d = &segQueue[segHead];
         if (d->targetRT.id != 0 && d->activeLayer >= 0 && d->activeLayer < LayerStack_Count()) {
-            d_Brush brush = {};
-            brush.Realb.radInRatio = d->radInRatio;
-            brush.Realb.rad_out  = d->rad_out;
-            brush.Realb.opacity  = d->opacity;
-            brush.Realb.crv      = d->crv;
-            brush.Realb.x2y      = d->x2y;
-            brush.Realb.sol      = d->sol;
-            brush.Realb.sol2op   = d->sol2op;
-            brush.Realb.resangle = d->resangle;
-            brush.Realb.cop        = d->cop;
-            brush.Realb.texBlendVal  = d->texBlendVal;
-            brush.Realb.texScale     = d->texScale;
-            brush.Realb.texFeather   = d->texFeather;
-            brush.Realb.texThresh    = d->texThresh;
-            brush.Realb.useTexLumAsAlpha = d->useTexLumAsAlpha;
-            brush.Realb.texUseRGB    = d->texUseRGB;
-            brush.Realb.texBlendMode = d->texBlendMode;
-            brush.Realb.texNoisemode = d->texNoisemode;
-            brush.Realb.texColorMode = d->texColorMode;
-            brush.Realb.bmidx      = (uint8_t)d->bmidx;
-            brush.Realb.seed       = d->seed;
-            brush.Realb.col        = d->color;
-            brush.Realb.preserveop = d->preserveop;
-            brush.Realb.eraseMode  = d->eraseMode;
-            brush.Realb.perspective = d->perspective;
-            brush.Realb.userTexOriginX = d->userTexOriginX;
-            brush.Realb.userTexOriginY = d->userTexOriginY;
-            brush.Realb.userTexDirection = d->userTexDirection;
-
             RenderTexture2D rt = LayerStack_GetRT(d->activeLayer);
             if (rt.id > 0) {
-                BrushBlend_ApplyStamp(rt, &brush, g_activeBrushTex, d->x, d->y, d->srcX, d->srcY);
-                applied = true;
+                DrawSegment dseg;
+                memset(&dseg, 0, sizeof(dseg));
+                dseg.pos1 = d->pos1; dseg.pos2 = d->pos2;
+                dseg.ctrl0 = d->ctrl0; dseg.ctrl3 = d->ctrl3;
+                dseg.brushFrom = d->brushFrom; dseg.brush = d->brushTo;
+                dseg.seed = d->seed; dseg.tool = d->tool;
+                dseg.initDabIdx = d->initDabIdx; dseg.initDabRad = d->initDabRad;
+                dseg.smudgeSrcX = d->smudgeSrcX; dseg.smudgeSrcY = d->smudgeSrcY;
+                dseg.Noisemode = 0;
+
+                DrawOneSegment(dseg, rt);
+
+                if (this->state == NS_CONNECTED)
+                    SendSegment(*d);
             }
         }
-
-        if (applied && this->state == NS_CONNECTED) {
-            d_Action act;
-            act.ToolID = (uint8_t)st->mode;
-            act.Brush  = {};
-            act.Brush.Realb.radInRatio = d->radInRatio;
-            act.Brush.Realb.rad_out  = d->rad_out;
-            act.Brush.Realb.opacity  = d->opacity;
-            act.Brush.Realb.crv      = d->crv;
-            act.Brush.Realb.x2y      = d->x2y;
-            act.Brush.Realb.sol      = d->sol;
-            act.Brush.Realb.sol2op   = d->sol2op;
-            act.Brush.Realb.resangle = d->resangle;
-            act.Brush.Realb.cop      = d->cop;
-            act.Brush.Realb.bmidx    = (uint8_t)d->bmidx;
-            act.Brush.Realb.seed     = d->seed;
-            act.Brush.Realb.col      = d->color;
-            act.startseed  = 0;
-            act.Noisemode  = 0;
-            act.Stroke.pos1 = Vector2{d->x, d->y};
-            act.Stroke.pos2 = Vector2{d->srcX, d->srcY};
-            act.layer = (uint8_t)d->activeLayer;
-            SendAction(&act);
-        }
-        localHead = (localHead + 1) % CMD_CAPACITY;
+        segHead = (segHead + 1) % CMD_CAPACITY;
     }
 
     {
@@ -340,8 +277,32 @@ void NetworkBroker::ProcessReceived(uint8_t hid, uint8_t* data, uint32_t size) {
     case sdAction: {
         if (!appState) break;
         d_Action act;
-        if (Action_Deserialize(&act, data, size))
-            EnqueueRemoteDab(&act);
+        if (Action_Deserialize(&act, data, size)) {
+            NetSegment ns;
+            memset(&ns, 0, sizeof(ns));
+            ns.pos1 = act.Stroke.pos1;
+            ns.pos2 = act.Stroke.pos2;
+            ns.ctrl0 = ns.pos1;
+            ns.ctrl3 = ns.pos2;
+            ns.brushFrom = CollapseBrushParams(act.Brush.Realb, 0.0f, act.ToolID);
+            ns.brushTo = ns.brushFrom;
+            ns.seed = act.Brush.Realb.seed;
+            ns.toolID = act.ToolID;
+            ns.initDabIdx = 0;
+            ns.initDabRad = 0.0f;
+            ns.smudgeSrcX = ns.pos1.x;
+            ns.smudgeSrcY = ns.pos1.y;
+            ns.layer = act.layer;
+            EnqueueRemoteSegment(ns);
+        }
+        break;
+    }
+
+    case sdSegment: {
+        if (!appState) break;
+        NetSegment ns;
+        if (Segment_Deserialize(&ns, data, size))
+            EnqueueRemoteSegment(ns);
         break;
     }
 
@@ -464,18 +425,42 @@ void NetworkBroker::ProcessReceived(uint8_t hid, uint8_t* data, uint32_t size) {
     }
 }
 
-void NetworkBroker::EnqueueRemoteDab(const d_Action* act) {
-    if (!appState) return;
-    int layer = act->layer;
-    if (layer < 0 || layer >= LayerStack_Count()) return;
-    if (LayerStack_GetRT(layer).id == 0) return;
+void NetworkBroker::SendSegment(const QueuedSegment& seg) {
+    NetSegment ns;
+    memset(&ns, 0, sizeof(ns));
+    ns.pos1 = seg.pos1; ns.pos2 = seg.pos2;
+    ns.ctrl0 = seg.ctrl0; ns.ctrl3 = seg.ctrl3;
+    ns.brushFrom = seg.brushFrom;
+    ns.brushTo  = seg.brushTo;
+    ns.seed = seg.seed;
+    ns.toolID = seg.tool;
+    ns.initDabIdx = seg.initDabIdx;
+    ns.initDabRad = seg.initDabRad;
+    ns.smudgeSrcX = seg.smudgeSrcX;
+    ns.smudgeSrcY = seg.smudgeSrcY;
+    ns.layer = seg.activeLayer;
+    uint8_t buf[4096];
+    size_t sz = Segment_Serialize(ns, buf, sizeof(buf));
+    if (sz > 0) SendPacket(sdSegment, buf, (uint32_t)sz);
+}
 
-    d_Brush brush = act->Brush;
-    Vector2 pos1  = act->Stroke.pos1;
-    Vector2 pos2  = act->Stroke.pos2;
-    RenderTexture2D rt = LayerStack_GetRT(layer);
-    if (rt.id > 0)
-        BrushBlend_ApplyStamp(rt, &brush, g_activeBrushTex, pos1.x, pos1.y, pos2.x, pos2.y);
+void NetworkBroker::EnqueueRemoteSegment(const NetSegment& ns) {
+    int next = (segTail + 1) % CMD_CAPACITY;
+    if (next == segHead) return;
+    QueuedSegment& d = segQueue[segTail];
+    d.pos1 = ns.pos1; d.pos2 = ns.pos2;
+    d.ctrl0 = ns.ctrl0; d.ctrl3 = ns.ctrl3;
+    d.brushFrom = ns.brushFrom;
+    d.brushTo  = ns.brushTo;
+    d.seed = ns.seed;
+    d.tool = ns.toolID;
+    d.initDabIdx = ns.initDabIdx;
+    d.initDabRad = ns.initDabRad;
+    d.smudgeSrcX = ns.smudgeSrcX;
+    d.smudgeSrcY = ns.smudgeSrcY;
+    d.activeLayer = ns.layer;
+    d.targetRT = LayerStack_GetRT(ns.layer);
+    segTail = next;
 }
 
 /* ── Config ─────────────────────────────────────────────────────────────── */

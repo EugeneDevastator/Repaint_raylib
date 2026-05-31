@@ -42,8 +42,11 @@ struct DrawSegment {
     Vector2 pos1, pos2;
     Vector2 ctrl0, ctrl3;  // Catmull-Rom tangents (== pos1/pos2 = straight)
     CollapsedBrush brushFrom, brush;
-    uint8_t Noisemode;
+    uint8_t Noisemode, tool;
     uint16_t seed;
+    int   initDabIdx;
+    float initDabRad;
+    float smudgeSrcX, smudgeSrcY;
 };
 
 // ── Output dab ─────────────────────────────────────────────────────
@@ -68,6 +71,9 @@ void JitterBrush(CollapsedBrush& b, uint16_t baseSeed, int dabIdx);
 
 // ── Linear stroke: places next dab only when distance >= spacing ──
 int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad, DrawDab* out, int maxOut, SegResult* res);
+
+// ── Stateless: draws one segment onto a render target ──────────────
+void DrawOneSegment(const DrawSegment& dseg, RenderTexture2D rt);
 
 // ── Airflow stroke: accumulates overdraw, bursty placement ─────────
 int DrawAirflow(const DrawSegment* seg, float accum, DrawDab* out, int maxOut, SegResult* res);

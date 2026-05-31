@@ -4,7 +4,7 @@
 #include <stdio.h>
 
 #define RPL_MAGIC "RPLREP"
-#define RPL_VER 2
+#define RPL_VER 3
 
 void ReplayRecorder::on_segment(const DrawSegment& seg) {
     if (m_playing) return;
@@ -14,8 +14,12 @@ void ReplayRecorder::on_segment(const DrawSegment& seg) {
     s.brushFrom = seg.brushFrom;
     s.brushTo  = seg.brush;
     s.seed = seg.seed;
+    s.toolID = seg.tool;
+    s.initDabIdx = seg.initDabIdx;
+    s.initDabRad = seg.initDabRad;
+    s.smudgeSrcX = seg.smudgeSrcX;
+    s.smudgeSrcY = seg.smudgeSrcY;
     s.layer = 0;
-    s.toolID = 0;
     m_segs.push_back(s);
     if (m_segs.size() % 10 == 0)
         printf("[REC] %d segments recorded\n", (int)m_segs.size()), fflush(stdout);
@@ -68,6 +72,11 @@ void ReplayRecorder::Play(AppState* state) {
         if (dseg.brushFrom.spacing <= 0.0f) dseg.brushFrom.spacing = 0.5f;
         if (dseg.brush.spacing <= 0.0f) dseg.brush.spacing = 0.5f;
         dseg.seed = ns.seed;
+        dseg.tool = ns.toolID;
+        dseg.initDabIdx = ns.initDabIdx;
+        dseg.initDabRad = ns.initDabRad;
+        dseg.smudgeSrcX = ns.smudgeSrcX * sx;
+        dseg.smudgeSrcY = ns.smudgeSrcY * sy;
         dseg.Noisemode = 0;
 
         printf("[REPLAY] seg %d: pos1=%.1f,%.1f pos2=%.1f,%.1f rad=%.1f spacing=%.2f\n",
@@ -75,41 +84,7 @@ void ReplayRecorder::Play(AppState* state) {
             dseg.brushFrom.rad_out_px, dseg.brushFrom.spacing);
         fflush(stdout);
 
-        DrawDab dabs[512];
-        SegResult r;
-        int n = DrawLinear(&dseg, 0, 0.0f, dabs, 512, &r);
-        printf("[REPLAY] seg %d: %d dabs\n", segIdx, n); fflush(stdout);
-        for (int i = 0; i < n; i++) {
-            CollapsedBrush* cb = &dabs[i].brush;
-            d_Brush tb; memset(&tb, 0, sizeof(tb));
-            tb.Realb.rad_out = cb->rad_out_px;
-            tb.Realb.radInRatio = cb->radInRatio;
-            tb.Realb.opacity = cb->opacity;
-            tb.Realb.crv = cb->crv;
-            tb.Realb.x2y = cb->scale_y;
-            tb.Realb.resangle = cb->resangle;
-            tb.Realb.col = cb->col;
-            tb.Realb.cop = cb->cop;
-            tb.Realb.bmidx = (uint8_t)cb->bmidx;
-            tb.Realb.preserveop = cb->preserveop;
-            tb.Realb.eraseMode = cb->eraseMode;
-            tb.Realb.perspective = cb->perspective;
-            tb.Realb.texScale = cb->texScale;
-            tb.Realb.texFeather = cb->texFeather;
-            tb.Realb.texThresh = cb->texThresh;
-            tb.Realb.texBlendVal = cb->texBlendVal;
-            tb.Realb.texBlendMode = cb->texBlendMode;
-            tb.Realb.texNoisemode = cb->texNoisemode;
-            tb.Realb.texColorMode = cb->texColorMode;
-            tb.Realb.useTexLumAsAlpha = cb->useTexLumAsAlpha;
-            tb.Realb.pwr = cb->pwr;
-            tb.Realb.userTexOriginX = cb->userTexOriginX;
-            tb.Realb.userTexOriginY = cb->userTexOriginY;
-            tb.Realb.userTexDirection = cb->userTexDirection;
-            RenderTexture2D rt = LayerStack_GetRT(state->activeLayer);
-            if (rt.id > 0)
-                BrushBlend_ApplyStamp(rt, &tb, g_activeBrushTex, dabs[i].x, dabs[i].y, dabs[i].srcX, dabs[i].srcY);
-        }
+        DrawOneSegment(dseg, rt);
     }
     printf("[REPLAY] Play done\n"); fflush(stdout);
 }
@@ -138,6 +113,10 @@ bool ReplayRecorder::Save(const char* path) {
         fwrite(&ns.brushTo, sizeof(CollapsedBrush), 1, f);
         fwrite(&ns.seed, sizeof(uint16_t), 1, f);
         fwrite(&ns.toolID, sizeof(uint8_t), 1, f);
+        fwrite(&ns.initDabIdx, sizeof(int), 1, f);
+        fwrite(&ns.initDabRad, sizeof(float), 1, f);
+        fwrite(&ns.smudgeSrcX, sizeof(float), 1, f);
+        fwrite(&ns.smudgeSrcY, sizeof(float), 1, f);
     }
     fclose(f);
     return true;
@@ -170,6 +149,7 @@ bool ReplayRecorder::Load(const char* path) {
 
     for (uint32_t i = 0; i < count; i++) {
         NetSegment ns;
+        memset(&ns, 0, sizeof(ns));
         if (fread(&ns.pos1, sizeof(Vector2), 1, f) != 1) break;
         if (fread(&ns.pos2, sizeof(Vector2), 1, f) != 1) break;
         if (fread(&ns.ctrl0, sizeof(Vector2), 1, f) != 1) break;
@@ -178,6 +158,10 @@ bool ReplayRecorder::Load(const char* path) {
         if (fread(&ns.brushTo, sizeof(CollapsedBrush), 1, f) != 1) break;
         if (fread(&ns.seed, sizeof(uint16_t), 1, f) != 1) break;
         if (fread(&ns.toolID, sizeof(uint8_t), 1, f) != 1) break;
+        if (fread(&ns.initDabIdx, sizeof(int), 1, f) != 1) break;
+        if (fread(&ns.initDabRad, sizeof(float), 1, f) != 1) break;
+        if (fread(&ns.smudgeSrcX, sizeof(float), 1, f) != 1) break;
+        if (fread(&ns.smudgeSrcY, sizeof(float), 1, f) != 1) break;
         printf("[RPLOAD] seg %d: p1=(%.1f,%.1f) p2=(%.1f,%.1f) rad=%.1f spacing=%.2f col=(%d,%d,%d)\n",
             (int)i, ns.pos1.x, ns.pos1.y, ns.pos2.x, ns.pos2.y,
             ns.brushFrom.rad_out_px, ns.brushFrom.spacing,

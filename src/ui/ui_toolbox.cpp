@@ -2,8 +2,8 @@
 #include "imgui.h"
 
 #define GIZMO_TOOL_N 6
-static const char* gizmoToolLabels[GIZMO_TOOL_N] = {"Br","Sm","Li","Er","Di","Co"};
-static const int gizmoToolModes[GIZMO_TOOL_N] = {eBrush, eSmudge, eLine,  eCont, eDisp, eCont};
+static const char* gizmoToolLabels[GIZMO_TOOL_N] = {"Br","Sm","Po","Er","Di","Co"};
+static const int gizmoToolModes[GIZMO_TOOL_N] = {eBrush, eSmudge, ePolyStripe, eBrush, eDistort, eContrast};
 
 #define TOOL_ICON_N 6
 static Texture2D toolIconTex[TOOL_ICON_N];

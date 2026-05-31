@@ -22,27 +22,16 @@ struct ReceivedPacket {
     uint32_t size;
 };
 
-struct QueuedNetDab {
+struct QueuedSegment {
     RenderTexture2D targetRT;
-    float    x, y;
-    float    srcX, srcY;
-    float    radInRatio, rad_out, opacity, crv, x2y, sol, sol2op, resangle;
-    float    cop;
-    float    texBlendVal;
-    float    texScale;
-    float    texFeather;
-    float    texThresh;
-    bool     useTexLumAsAlpha;
-    bool     texUseRGB;
-    int      texBlendMode, texNoisemode, texColorMode;
-    Color    color;
-    int      bmidx;
+    Vector2 pos1, pos2, ctrl0, ctrl3;
+    CollapsedBrush brushFrom, brushTo;
     uint16_t seed;
-    int      activeLayer;
-    uint8_t  preserveop;
-    uint8_t  eraseMode;
-    float    perspective;
-    float    userTexOriginX, userTexOriginY, userTexDirection;
+    uint8_t  tool;
+    int   initDabIdx;
+    float initDabRad;
+    float smudgeSrcX, smudgeSrcY;
+    int activeLayer;
 };
 
 struct NetworkBroker : ICommandBroker {
@@ -59,9 +48,9 @@ struct NetworkBroker : ICommandBroker {
     char statusMsg[2048];
     bool showUI;
 
-    QueuedNetDab localQueue[CMD_CAPACITY];
-    volatile int localHead;
-    volatile int localTail;
+    QueuedSegment segQueue[CMD_CAPACITY];
+    volatile int segHead;
+    volatile int segTail;
 
     std::thread* recvThread;
     bool         threadRunning;
@@ -91,6 +80,7 @@ struct NetworkBroker : ICommandBroker {
 
     void SendPacket(uint8_t hid, const uint8_t* data, uint32_t size);
     void SendAction(const d_Action* act);
+    void SendSegment(const QueuedSegment& seg);
     void SendLAction(const d_LAction* lact);
 
     void LoadConfig(const char* path);
@@ -100,7 +90,7 @@ struct NetworkBroker : ICommandBroker {
 private:
     static void RecvThreadFunc(NetworkBroker* self);
     void ProcessReceived(uint8_t hid, uint8_t* data, uint32_t size);
-    void EnqueueRemoteDab(const d_Action* act);
+    void EnqueueRemoteSegment(const NetSegment& ns);
 };
 
 extern NetworkBroker networkBroker;

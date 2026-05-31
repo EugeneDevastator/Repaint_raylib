@@ -83,7 +83,7 @@ static bool _presetIsValid(const BrushPreset* p) {
         if (p->name[i] == '\0') break;
         if (i == BRUSH_PRESET_NAME_MAX - 1) return false;
     }
-    if (p->mode < 0 || p->mode > eLine) return false;
+    if (p->mode < 0 || p->mode > eSingleStamp) return false;
     if (p->eraseMode < 0 || p->eraseMode > 2) return false;
     for (int i = 0; i < 64; i++) {
         if (p->texName[i] == '\0') break;

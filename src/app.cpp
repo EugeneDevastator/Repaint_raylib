@@ -166,9 +166,9 @@ void UpdateUI(AppState* state) {
 
 
     if (IsKeyPressed(KEY_TWO)) state->mode = eSmudge;
-    if (IsKeyPressed(KEY_THREE)) state->mode = eLine;
-    if (IsKeyPressed(KEY_FOUR)) state->mode = eDisp;
-    if (IsKeyPressed(KEY_FIVE)) state->mode = eCont;
+    if (IsKeyPressed(KEY_THREE)) state->mode = ePolyStripe;
+    if (IsKeyPressed(KEY_FOUR)) state->mode = eDistort;
+    if (IsKeyPressed(KEY_FIVE)) state->mode = eContrast;
 
     // Undo / Redo
     if (IsKeyDown(KEY_LEFT_CONTROL) && !IsKeyDown(KEY_LEFT_SHIFT) && IsKeyPressed(KEY_Z)) {

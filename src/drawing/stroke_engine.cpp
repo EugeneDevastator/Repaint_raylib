@@ -2,6 +2,7 @@
 #include "replay_recorder.h"
 #include "stroke_engine.h"
 #include "stroke.h"
+#include "network_broker.h"
 #include <math.h>
 
 int g_strokeSmoothingMode = SMOOTH_MODE_SMOOTH;
@@ -184,7 +185,16 @@ static int FeedOnePoint(StrokeEngine* se, Vector2 pos, float velocity,
     dseg.brushFrom = cbFrom;
     dseg.brush    = cbTo;
     dseg.Noisemode = 0;
-    dseg.seed     = baseBrush->seed;
+    dseg.tool      = (uint8_t)toolMode;
+    dseg.seed      = baseBrush->seed;
+    dseg.initDabIdx = se->dabIndex;
+    dseg.initDabRad = se->lastDabRad;
+    dseg.smudgeSrcX = se->lastDabPos.x;
+    dseg.smudgeSrcY = se->lastDabPos.y;
+    if (toolMode == eSmudge) {
+        dseg.smudgeSrcX = se->smudgeSrcPos.x;
+        dseg.smudgeSrcY = se->smudgeSrcPos.y;
+    }
 
     if (g_recorder) {
         g_recorder->on_segment(dseg);
@@ -192,19 +202,13 @@ static int FeedOnePoint(StrokeEngine* se, Vector2 pos, float velocity,
         static int warn = 0;
         if (++warn == 1) printf("[REC] g_recorder is NULL!\n"), fflush(stdout);
     }
+    if (g_broker) g_broker->on_segment(dseg);
 
     SegResult r;
     int n = DrawLinear(&dseg, se->dabIndex, se->lastDabRad, outDabs, maxDabs, &r);
 
-    if (n > 0 && toolMode == eSmudge) {
-        outDabs[0].srcX = se->smudgeSrcPos.x;
-        outDabs[0].srcY = se->smudgeSrcPos.y;
-        for (int i = 1; i < n; i++) {
-            outDabs[i].srcX = outDabs[i-1].x;
-            outDabs[i].srcY = outDabs[i-1].y;
-        }
+    if (n > 0 && toolMode == eSmudge)
         se->smudgeSrcPos = Vector2{outDabs[n-1].x, outDabs[n-1].y};
-    }
 
     se->lastDabPos = r.lastDabPos;
     se->lastDabRad = r.lastRadOut;
@@ -221,25 +225,21 @@ int StrokeEngine_FeedPoint(StrokeEngine* se, const StrokePoint& sp,
 
     Vector2 pos = {sp.x, sp.y};
 
-    // ── Mode: Linear — every point is a straight segment ────────────
+    // ── Mode: Linear ─ every point is a straight segment
     if (g_strokeSmoothingMode == SMOOTH_MODE_LINEAR) {
         return FeedOnePoint(se, pos, sp.velocity, baseBrush, initialAngle, toolMode,
                             outDabs, maxDabs, se->lastDabPos, pos);
     }
 
-    // ── Mode: Smooth — accumulated-path-length gate + Catmull-Rom ──
+    // ── Mode: Smooth ─ accumulated-path-length gate + Catmull-Rom
     float threshold = fmaxf(g_strokeThrottle, 0.5f);
-    // Fast-start: use a smaller spacing for the first few control points
-    // so CR kicks in sooner rather than waiting for 3×threshold of movement.
     if (se->splineCount < 4)
         threshold = fminf(threshold, 5.0f);
 
-    // Accumulate path length since the last control point
     float dist = Dist2D(se->lastInputPos, pos);
     se->accumDist += dist;
     se->lastInputPos = pos;
 
-    // Add a new control point when enough path length has accumulated
     if (se->accumDist >= threshold) {
         if (se->splineCount < STROKE_SPLINE_POINTS) {
             se->splinePts[se->splineCount++] = pos;
@@ -251,7 +251,6 @@ int StrokeEngine_FeedPoint(StrokeEngine* se, const StrokePoint& sp,
         se->accumDist = 0;
     }
 
-    // Process Catmull-Rom segments from the spline buffer
     int totalDabs = 0;
     float vel = sp.velocity;
     int N = se->splineCount;
@@ -292,21 +291,25 @@ int StrokeEngine_FeedPoint(StrokeEngine* se, const StrokePoint& sp,
         dseg.brushFrom = cbFrom;
         dseg.brush     = cbTo;
         dseg.Noisemode = 0;
+        dseg.tool      = (uint8_t)toolMode;
         dseg.seed      = baseBrush->seed;
+        dseg.initDabIdx = se->dabIndex;
+        dseg.initDabRad = se->lastDabRad;
+        dseg.smudgeSrcX = se->lastDabPos.x;
+        dseg.smudgeSrcY = se->lastDabPos.y;
+        if (toolMode == eSmudge) {
+            dseg.smudgeSrcX = se->smudgeSrcPos.x;
+            dseg.smudgeSrcY = se->smudgeSrcPos.y;
+        }
 
         if (g_recorder) g_recorder->on_segment(dseg);
+        if (g_broker) g_broker->on_segment(dseg);
 
         SegResult r;
         int n = DrawLinear(&dseg, se->dabIndex, se->lastDabRad,
                            outDabs + totalDabs, maxDabs - totalDabs, &r);
 
         if (n > 0 && toolMode == eSmudge) {
-            outDabs[totalDabs].srcX = se->smudgeSrcPos.x;
-            outDabs[totalDabs].srcY = se->smudgeSrcPos.y;
-            for (int i = 1; i < n; i++) {
-                outDabs[totalDabs + i].srcX = outDabs[totalDabs + i - 1].x;
-                outDabs[totalDabs + i].srcY = outDabs[totalDabs + i - 1].y;
-            }
             se->smudgeSrcPos = Vector2{outDabs[totalDabs + n - 1].x, outDabs[totalDabs + n - 1].y};
         }
 
@@ -374,21 +377,25 @@ int StrokeEngine_FlushSmoothing(StrokeEngine* se, const d_RealBrush* baseBrush,
         dseg.brushFrom = cbFrom;
         dseg.brush     = cbTo;
         dseg.Noisemode = 0;
+        dseg.tool      = (uint8_t)toolMode;
         dseg.seed      = baseBrush->seed;
+        dseg.initDabIdx = se->dabIndex;
+        dseg.initDabRad = se->lastDabRad;
+        dseg.smudgeSrcX = se->lastDabPos.x;
+        dseg.smudgeSrcY = se->lastDabPos.y;
+        if (toolMode == eSmudge) {
+            dseg.smudgeSrcX = se->smudgeSrcPos.x;
+            dseg.smudgeSrcY = se->smudgeSrcPos.y;
+        }
 
         if (g_recorder) g_recorder->on_segment(dseg);
+        if (g_broker) g_broker->on_segment(dseg);
 
         SegResult r;
         int n = DrawLinear(&dseg, se->dabIndex, se->lastDabRad,
                            outDabs + totalDabs, maxDabs - totalDabs, &r);
 
         if (n > 0 && toolMode == eSmudge) {
-            outDabs[totalDabs].srcX = se->smudgeSrcPos.x;
-            outDabs[totalDabs].srcY = se->smudgeSrcPos.y;
-            for (int i = 1; i < n; i++) {
-                outDabs[totalDabs + i].srcX = outDabs[totalDabs + i - 1].x;
-                outDabs[totalDabs + i].srcY = outDabs[totalDabs + i - 1].y;
-            }
             se->smudgeSrcPos = Vector2{outDabs[totalDabs + n - 1].x, outDabs[totalDabs + n - 1].y};
         }
 
@@ -411,39 +418,6 @@ void StrokeEngine_EndStroke(StrokeEngine* se) {
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────
-
-void StrokeEngine_ApplyDabs(RenderTexture2D dstRT, Texture2D brushTex,
-                            DrawDab* dabs, int n) {
-    for (int i = 0; i < n; i++) {
-        d_Brush tb; memset(&tb, 0, sizeof(tb));
-        tb.Realb.rad_out     = dabs[i].brush.rad_out_px;
-        tb.Realb.radInRatio  = dabs[i].brush.radInRatio;
-        tb.Realb.opacity     = dabs[i].brush.opacity;
-        tb.Realb.crv         = dabs[i].brush.crv;
-        tb.Realb.x2y         = dabs[i].brush.scale_y;
-        tb.Realb.resangle    = dabs[i].brush.resangle;
-        tb.Realb.col         = dabs[i].brush.col;
-        tb.Realb.cop         = dabs[i].brush.cop;
-        tb.Realb.bmidx       = (uint8_t)dabs[i].brush.bmidx;
-        tb.Realb.preserveop  = dabs[i].brush.preserveop;
-        tb.Realb.eraseMode   = dabs[i].brush.eraseMode;
-        tb.Realb.perspective = dabs[i].brush.perspective;
-        tb.Realb.texScale    = dabs[i].brush.texScale;
-        tb.Realb.texFeather  = dabs[i].brush.texFeather;
-        tb.Realb.texThresh   = dabs[i].brush.texThresh;
-        tb.Realb.texBlendVal = dabs[i].brush.texBlendVal;
-        tb.Realb.texBlendMode = dabs[i].brush.texBlendMode;
-        tb.Realb.texNoisemode = dabs[i].brush.texNoisemode;
-        tb.Realb.texColorMode = dabs[i].brush.texColorMode;
-        tb.Realb.useTexLumAsAlpha = dabs[i].brush.useTexLumAsAlpha;
-        tb.Realb.pwr         = dabs[i].brush.pwr;
-        tb.Realb.userTexOriginX = dabs[i].brush.userTexOriginX;
-        tb.Realb.userTexOriginY = dabs[i].brush.userTexOriginY;
-        tb.Realb.userTexDirection = dabs[i].brush.userTexDirection;
-        BrushBlend_ApplyStamp(dstRT, &tb, brushTex,
-                              dabs[i].x, dabs[i].y, dabs[i].srcX, dabs[i].srcY);
-    }
-}
 
 void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex,
                               const d_RealBrush* baseBrush, int toolMode,
@@ -470,33 +444,35 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex,
     CollapsedBrush cbTiny = cbFull;
     cbTiny.rad_out_px = 1.0f;
 
-    DrawDab dabs[512];
-    SegResult r;
+    Texture2D savedTex = g_activeBrushTex;
+    g_activeBrushTex = brushTex;
 
-    // Place a seed dab at the preview center so the first dab is always visible
-    int n = 1;
-    dabs[0].x = cx;
-    dabs[0].y = cy;
-    dabs[0].srcX = cx;
-    dabs[0].srcY = cy;
-    dabs[0].brush = cbFull;
+    // Seed dab at preview center
+    DrawSegment seed;
+    memset(&seed, 0, sizeof(seed));
+    seed.pos1 = seed.pos2 = Vector2{cx, cy};
+    seed.ctrl0 = seed.ctrl3 = seed.pos1;
+    seed.brushFrom = seed.brush = cbFull;
+    seed.seed = baseBrush->seed;
+    seed.initDabIdx = 0;
+    seed.initDabRad = 0.0f;
+    seed.smudgeSrcX = cx;
+    seed.smudgeSrcY = cy;
+    seed.tool = eSingleStamp;
+    DrawOneSegment(seed, dstRT);
 
+    // Preview line (shrinking radius to show direction)
     DrawSegment s;
     memset(&s, 0, sizeof(s));
     s.pos1 = start; s.pos2 = end;
     s.brushFrom = cbFull; s.brush = cbTiny;
     s.seed = baseBrush->seed;
+    s.initDabIdx = 1;
+    s.initDabRad = cbFull.rad_out_px;
+    s.smudgeSrcX = cx;
+    s.smudgeSrcY = cy;
+    s.tool = (uint8_t)toolMode;
+    DrawOneSegment(s, dstRT);
 
-    n += DrawLinear(&s, 0, cbFull.rad_out_px, dabs + n, 255, &r);
-
-    if (toolMode == eSmudge && n > 0) {
-        dabs[0].srcX = cx;
-        dabs[0].srcY = cy;
-        for (int i = 1; i < n; i++) {
-            dabs[i].srcX = dabs[i-1].x;
-            dabs[i].srcY = dabs[i-1].y;
-        }
-    }
-
-    StrokeEngine_ApplyDabs(dstRT, brushTex, dabs, n);
+    g_activeBrushTex = savedTex;
 }

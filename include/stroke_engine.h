@@ -25,8 +25,6 @@ int  StrokeEngine_FlushSmoothing(StrokeEngine* se, const d_RealBrush* baseBrush,
                                   DrawDab* outDabs, int maxDabs);
 
 // ── Utilities ──
-void StrokeEngine_ApplyDabs(RenderTexture2D dstRT, Texture2D brushTex,
-                            DrawDab* dabs, int n);
 void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex,
                               const d_RealBrush* baseBrush, int toolMode,
                               float cx, float cy);

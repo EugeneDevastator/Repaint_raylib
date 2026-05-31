@@ -117,7 +117,6 @@ set(SOURCES
     src/drawing/segment_drawer.cpp
     # ── network ───────────────────────────────────────────────────────
     src/network/serialize.cpp
-    src/network/local_broker.cpp
     src/network/network_broker.cpp
     src/network/sock_platform.cpp
     src/network/test_broker.cpp
