@@ -275,6 +275,19 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                 if (!vp->wasMouseDown) {
                     Modulators_SnapRunState();
                     if (state->undo) state->undo->Snapshot(state, active);
+                    // Seed dab at stroke origin so the first dab always paints
+                    if (vp->broker) {
+                        CollapsedBrush seedCb = CollapseBrushParams(state->currentBrush.Realb, adjustedAngle, state->mode);
+                        seedCb.rad_out_px *= layerScale;
+                        DrawDab sd = {};
+                        sd.x = paintPos.x; sd.y = paintPos.y;
+                        sd.srcX = paintPos.x; sd.srcY = paintPos.y;
+                        sd.brush = seedCb;
+                        BrushDab bd = MakeBrushDab(sd.x, sd.y, sd);
+                        vp->broker->on_input(bd);
+                        if (vp->strokeLen < MAX_STROKE_PTS)
+                            vp->strokePts[vp->strokeLen++] = Vector2{sd.x, sd.y};
+                    }
                     StrokeEngine_BeginStroke(&vp->strokeEng, &state->currentBrush,
                                              paintPos.x, paintPos.y);
                     vp->inputFilter.Reset();

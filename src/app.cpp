@@ -150,7 +150,8 @@ void UpdateUI(AppState* state) {
     if (IsKeyPressed(KEY_TAB))
         g_panelsVisible = !g_panelsVisible;
 
-    if (IsKeyPressed(KEY_LEFT_SHIFT) || IsKeyPressed(KEY_RIGHT_SHIFT)) {
+    // Shift toggles quick HUD (not Ctrl+Shift which is undo/redo)
+    if (!IsKeyDown(KEY_LEFT_CONTROL) && (IsKeyPressed(KEY_LEFT_SHIFT) || IsKeyPressed(KEY_RIGHT_SHIFT))) {
         if (g_activeHud == HUD_QUICK)
             g_activeHud = HUD_NONE;
         else

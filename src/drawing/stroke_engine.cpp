@@ -461,6 +461,14 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex,
     DrawDab dabs[512];
     SegResult r;
 
+    // Place a seed dab at the preview center so the first dab is always visible
+    int n = 1;
+    dabs[0].x = cx;
+    dabs[0].y = cy;
+    dabs[0].srcX = cx;
+    dabs[0].srcY = cy;
+    dabs[0].brush = cbFull;
+
     DrawSegment s;
     memset(&s, 0, sizeof(s));
     s.pos1 = start; s.pos2 = end;
@@ -468,7 +476,7 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex,
     s.spacing = spacingVal;
     s.seed = baseBrush->seed;
 
-    int n = DrawLinear(&s, 0, 0.0f, dabs, 256, &r);
+    n += DrawLinear(&s, 0, cbFull.rad_out_px, dabs + n, 255, &r);
 
     if (toolMode == eSmudge && n > 0) {
         dabs[0].srcX = cx;

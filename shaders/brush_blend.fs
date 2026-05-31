@@ -275,15 +275,14 @@ void main() {
             brushFinal = texel.rgb;
         } else if (texColorMode == 2) {
             brushFinal = texel.rgb * brushColor.rgb;
-        } else {
-            // lum-color (3): whites stay white, grays get tinted by brush
-            vec3 texLab = rgbToOklab(texel.rgb);
-            vec3 brushLab = rgbToOklab(brushColor.rgb);
-            float lum = texLab.x;
-            float coloring = 1.0 - abs(lum - 0.5) * 2.0;
-            texLab.yz = mix(texLab.yz, brushLab.yz, coloring);
-            brushFinal = oklabToRgb(texLab);
-        }
+    } else {
+        // lum-color (3): black → brushColor → white via luminance
+        float lum = dot(texel.rgb, vec3(0.299, 0.587, 0.114));
+        if (lum < 0.5)
+            brushFinal = mix(vec3(0.0), brushColor.rgb, lum * 2.0);
+        else
+            brushFinal = mix(brushColor.rgb, vec3(1.0), (lum - 0.5) * 2.0);
+    }
     } else {
         finalAlpha = alpha;
         brushFinal = brushColor.rgb;
