@@ -8,7 +8,6 @@ int g_strokeSmoothingMode = SMOOTH_MODE_SMOOTH;
 float g_strokeThrottle = 0.0f;
 ICommandBroker* g_broker = nullptr;
 
-// ── BaseModVal helper ────────────────────────────────────────────────
 static inline float BaseModVal(const BParam& bp, float cpar) {
     float rng = bp.run.clipmaxF - bp.run.clipminF;
     float base = cpar * rng + bp.run.clipminF;
@@ -16,7 +15,6 @@ static inline float BaseModVal(const BParam& bp, float cpar) {
     return base * (bp.outMax - bp.outMin) + bp.outMin;
 }
 
-// ── Bridge: collapse UI brush → drawing-space brush ─────────────────
 CollapsedBrush CollapseBrushParams(const d_RealBrush& b, float initialAngle, int toolMode) {
     CollapsedBrush cb;
     cb.rad_out_px = b.rad_out;
@@ -45,7 +43,6 @@ CollapsedBrush CollapseBrushParams(const d_RealBrush& b, float initialAngle, int
     cb.userTexOriginY = b.userTexOriginY;
     cb.userTexDirection = b.userTexDirection;
     cb.spacing = BParam_GetValue(&bpSpacing);
-
     cb.jitRadOut  = bpSize.user.jitter * b.rad_out;
     cb.jitRadIn   = bpHardness.user.jitter;
     cb.jitOpacity = bpOpacity.user.jitter;
@@ -58,8 +55,6 @@ CollapsedBrush CollapseBrushParams(const d_RealBrush& b, float initialAngle, int
     cb.baseSeed   = b.seed;
     return cb;
 }
-
-// ── StrokeEngine implementation ─────────────────────────────────────
 
 void StrokeEngine_Init(StrokeEngine* se) {
     memset(&se->segBrushFrom, 0, sizeof(se->segBrushFrom));
@@ -98,7 +93,6 @@ void StrokeEngine_BeginStroke(StrokeEngine* se, const d_Brush* baseBrush, float 
     se->splinePts[0] = Vector2{x, y};
 }
 
-// Compute brush modulators and build the modulated target brush
 static void BuildModulatedBrush(StrokeEngine* se,
                                  Vector2 from, Vector2 to,
                                  float velocity,
@@ -151,7 +145,6 @@ static void BuildModulatedBrush(StrokeEngine* se,
                                BaseModVal(bpQuickLit, g_modPars.Pars[bpQuickLit.penMode]));
     target.cop = (toolMode == eSmudge) ? BaseModVal(bpCloneOpacity, g_modPars.Pars[bpCloneOpacity.penMode]) : 0.0f;
     target.rad_out *= sizeMulFactor;
-
     spacingVal = BParam_GetValue(&bpSpacing);
 }
 
@@ -186,16 +179,11 @@ static int FeedOnePoint(StrokeEngine* se, Vector2 pos, float velocity,
     dseg.smudgeSrcX = se->lastDabPos.x;
     dseg.smudgeSrcY = se->lastDabPos.y;
 
-    if (g_recorder) {
-        g_recorder->on_segment(dseg);
-    } else {
-        static int warn = 0;
-        if (++warn == 1) printf("[REC] g_recorder is NULL!\n"), fflush(stdout);
-    }
+    if (g_recorder) g_recorder->on_segment(dseg);
     if (g_broker) g_broker->on_segment(dseg);
 
     SegResult r;
-    int n = DrawLinear(&dseg, se->dabIndex, 0.0f, outDabs, maxDabs, &r);
+    int n = DrawLinear(&dseg, se->dabIndex, 0.0f, nullptr, nullptr, 65536, &r);
 
     se->lastDabPos = r.lastDabPos;
     se->segBrushFrom.Realb = target;
@@ -211,25 +199,19 @@ int StrokeEngine_FeedPoint(StrokeEngine* se, const StrokePoint& sp,
 
     Vector2 pos = {sp.x, sp.y};
 
-    // ── Mode: Linear — every point is a straight segment ────────────
     if (g_strokeSmoothingMode == SMOOTH_MODE_LINEAR) {
         return FeedOnePoint(se, pos, sp.velocity, baseBrush, initialAngle, toolMode,
                             outDabs, maxDabs, se->lastDabPos, pos);
     }
 
-    // ── Mode: Smooth — accumulated-path-length gate + Catmull-Rom ──
     float threshold = fmaxf(g_strokeThrottle, 0.5f);
-    // Fast-start: use a smaller spacing for the first few control points
-    // so CR kicks in sooner rather than waiting for 3×threshold of movement.
     if (se->splineCount < 4)
         threshold = fminf(threshold, 5.0f);
 
-    // Accumulate path length since the last control point
     float dist = Dist2D(se->lastInputPos, pos);
     se->accumDist += dist;
     se->lastInputPos = pos;
 
-    // Add a new control point when enough path length has accumulated
     if (se->accumDist >= threshold) {
         if (se->splineCount < STROKE_SPLINE_POINTS) {
             se->splinePts[se->splineCount++] = pos;
@@ -241,7 +223,6 @@ int StrokeEngine_FeedPoint(StrokeEngine* se, const StrokePoint& sp,
         se->accumDist = 0;
     }
 
-    // Process Catmull-Rom segments from the spline buffer
     int totalDabs = 0;
     float vel = sp.velocity;
     int N = se->splineCount;
@@ -293,26 +274,21 @@ int StrokeEngine_FeedPoint(StrokeEngine* se, const StrokePoint& sp,
 
         SegResult r;
         int n = DrawLinear(&dseg, se->dabIndex, 0.0f,
-                           outDabs + totalDabs, maxDabs - totalDabs, &r);
+                           nullptr, nullptr, 65536, &r);
 
-        if (n > 0) {
-            se->lastDabPos = r.lastDabPos;
-        }
+        if (n > 0) se->lastDabPos = r.lastDabPos;
         se->segBrushFrom.Realb = target;
         se->dabIndex += n;
         totalDabs += n;
         se->processedCount = seg + 1;
     }
 
-    if (totalDabs > 0)
-        return totalDabs;
-
-    return 0;
+    return totalDabs > 0 ? totalDabs : 0;
 }
 
 int StrokeEngine_FlushSmoothing(StrokeEngine* se, const d_RealBrush* baseBrush,
-                                 float initialAngle, int toolMode,
-                                 DrawDab* outDabs, int maxDabs) {
+                                  float initialAngle, int toolMode,
+                                  DrawDab* outDabs, int maxDabs) {
     if (!se->inStroke || maxDabs <= 0) return 0;
     if (g_strokeSmoothingMode != SMOOTH_MODE_SMOOTH) return 0;
 
@@ -369,11 +345,9 @@ int StrokeEngine_FlushSmoothing(StrokeEngine* se, const d_RealBrush* baseBrush,
 
         SegResult r;
         int n = DrawLinear(&dseg, se->dabIndex, 0.0f,
-                           outDabs + totalDabs, maxDabs - totalDabs, &r);
+                           nullptr, nullptr, 65536, &r);
 
-        if (n > 0) {
-            se->lastDabPos = r.lastDabPos;
-        }
+        if (n > 0) se->lastDabPos = r.lastDabPos;
         se->segBrushFrom.Realb = target;
         se->dabIndex += n;
         totalDabs += n;
@@ -387,8 +361,6 @@ void StrokeEngine_EndStroke(StrokeEngine* se) {
     se->splineCount = 0;
     se->processedCount = 0;
 }
-
-// ── Utilities ─────────────────────────────────────────────────────────
 
 void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex,
                               const d_RealBrush* baseBrush, int toolMode,
@@ -417,7 +389,6 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex,
     Texture2D savedTex = g_activeBrushTex;
     g_activeBrushTex = brushTex;
 
-    // Seed dab at preview center
     DrawSegment seed;
     memset(&seed, 0, sizeof(seed));
     seed.pos1 = seed.pos2 = Vector2{cx, cy};
@@ -430,7 +401,6 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex,
     seed.smudgeSrcY = cy;
     DrawOneSegment(seed, dstRT);
 
-    // Preview line
     DrawSegment s;
     memset(&s, 0, sizeof(s));
     s.pos1 = start; s.pos2 = end;

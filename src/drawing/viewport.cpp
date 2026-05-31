@@ -74,7 +74,6 @@ void Viewport_SetBounds(Viewport* vp, Rectangle bounds) {
 }
 
 void Viewport_HandleInput(Viewport* vp, AppState* state) {
-    static DrawDab dabs[1024];
 
     if (IsKeyPressed(KEY_F1)) vp->debugShowStamps = !vp->debugShowStamps;
 
@@ -244,9 +243,10 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             } else if (leftDown) {
                 double now = GetTime();
                 StrokePoint sp = vp->inputFilter.Feed(tx, ty, now);
+                DrawDab dabs[2048];
                 int n = StrokeEngine_FeedPoint(&vp->strokeEng, sp,
                     &state->currentBrush.Realb, state->initialAngle, state->mode,
-                    dabs, 1024);
+                    dabs, 2048);
                 if (n > 0) {
                     for (int i = 0; i < n; i++) {
                         dabs[i].brush.rad_out_px *= layerScale;
@@ -286,12 +286,13 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         layersDirty = true;
         if (!leftDown) {
             if (vp->wasMouseDown) {
+                DrawDab fdabs[2048];
                 int fn = StrokeEngine_FlushSmoothing(&vp->strokeEng, &state->currentBrush.Realb,
-                                                       state->initialAngle, state->mode, dabs, 1024);
+                                                       state->initialAngle, state->mode, fdabs, 2048);
                 if (fn > 0) {
                     for (int i = 0; i < fn; i++) {
-                        dabs[i].brush.rad_out_px *= layerScale;
-                        CollapsedBrush* cb = &dabs[i].brush;
+                        fdabs[i].brush.rad_out_px *= layerScale;
+                        CollapsedBrush* cb = &fdabs[i].brush;
                         d_Brush tb; memset(&tb, 0, sizeof(tb));
                         tb.Realb.rad_out = cb->rad_out_px;
                         tb.Realb.radInRatio = cb->radInRatio;
@@ -318,7 +319,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                         tb.Realb.userTexOriginY = cb->userTexOriginY;
                         tb.Realb.userTexDirection = cb->userTexDirection;
                         BrushBlend_ApplyStamp(bt->rt, &tb, g_activeBrushTex,
-                                              dabs[i].x, dabs[i].y, dabs[i].srcX, dabs[i].srcY);
+                                              fdabs[i].x, fdabs[i].y, fdabs[i].srcX, fdabs[i].srcY);
                     }
                 } else if (vp->strokeEng.dabIndex == 0) {
                     // Single click on texture
@@ -370,13 +371,14 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     StrokePoint sp = vp->inputFilter.Feed(paintPos.x, paintPos.y, now);
                     float origRad = state->currentBrush.Realb.rad_out;
                     state->currentBrush.Realb.rad_out *= layerScale;
+                    DrawDab ndabs[2048];
                     int n = StrokeEngine_FeedPoint(&vp->strokeEng, sp,
                         &state->currentBrush.Realb, adjustedAngle, state->mode,
-                        dabs, 1024);
+                        ndabs, 2048);
                     state->currentBrush.Realb.rad_out = origRad;
                     for (int i = 0; i < n; i++) {
                         if (vp->strokeLen < MAX_STROKE_PTS)
-                            vp->strokePts[vp->strokeLen++] = Vector2{dabs[i].x, dabs[i].y};
+                            vp->strokePts[vp->strokeLen++] = Vector2{ndabs[i].x, ndabs[i].y};
                     }
                 }
             } else {
@@ -416,8 +418,9 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         if (vp->wasMouseDown) {
             float origRad = state->currentBrush.Realb.rad_out;
             state->currentBrush.Realb.rad_out *= layerScale;
+            DrawDab fdabs2[2048];
             int fn = StrokeEngine_FlushSmoothing(&vp->strokeEng, &state->currentBrush.Realb,
-                                                   adjustedAngle, state->mode, dabs, 1024);
+                                                   adjustedAngle, state->mode, fdabs2, 2048);
             state->currentBrush.Realb.rad_out = origRad;
             if (fn == 0 && vp->strokeEng.dabIndex == 0 && vp->broker) {
                 // Single click — emit a SingleStamp segment

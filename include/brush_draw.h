@@ -68,7 +68,11 @@ CollapsedBrush BlendBrushes(CollapsedBrush from, CollapsedBrush to, float k);
 void JitterBrush(CollapsedBrush& b, uint16_t baseSeed, int dabIdx);
 
 // ── Linear stroke: places next dab only when distance >= spacing ──
-int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad, DrawDab* out, int maxOut, SegResult* res);
+// When apply is non-null, each generated dab is passed to it immediately.
+// The function still returns the dab count and fills *res for state tracking.
+int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad,
+               void (*apply)(float x, float y, float srcX, float srcY, const CollapsedBrush& brush, void* user),
+               void* user, int maxOut, SegResult* res);
 
 // ── Stateless: draws one segment onto a render target ──────────────
 void DrawOneSegment(const DrawSegment& dseg, RenderTexture2D rt);
