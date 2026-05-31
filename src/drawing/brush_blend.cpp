@@ -345,7 +345,7 @@ void BrushBlend_ApplyStamp(
     SetShaderValue(brushBlendShader, locTexOffset,      texOff,      SHADER_UNIFORM_VEC2);
     { float uo[2] = { brush->Realb.userTexOriginX, 1.0f - brush->Realb.userTexOriginY };
       SetShaderValue(brushBlendShader, locUserTexOrigin, uo,          SHADER_UNIFORM_VEC2); }
-    { int hasTex = (brushTex.id > 0 && brushTex.id != whiteTex.id) ? 1 : 0;
+    { int hasTex = (brushTex.id > 0 && brushTex.id != whiteTex.id && brushTex.id != g_defaultBrushTex.id) ? 1 : 0;
       SetShaderValue(brushBlendShader, locHasTexture, &hasTex,         SHADER_UNIFORM_INT); }
     SetShaderValue(brushBlendShader, locTexFeather,     &tf,         SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locTexThresh,      &tt,         SHADER_UNIFORM_FLOAT);

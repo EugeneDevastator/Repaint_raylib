@@ -149,6 +149,8 @@ struct StrokeEngine {
 extern int g_strokeSmoothingMode;
 extern float g_strokeThrottle;
 
+class UndoManager;
+extern UndoManager* g_undoManager;
 struct AppState;
 
 struct ICommandBroker {
@@ -192,6 +194,7 @@ typedef struct {
 
 struct AppState {
     Document doc;
+    UndoManager* undo;
     d_Brush currentBrush;
     int activeLayer;
     Camera2D camera;

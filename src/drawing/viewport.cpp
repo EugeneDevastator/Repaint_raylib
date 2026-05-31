@@ -1,4 +1,5 @@
 #include "repaint.h"
+#include "undo.h"
 #include "layerstack.h"
 #include "rlgl.h"
 #include "stroke_engine.h"
@@ -273,6 +274,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             if (state->mode == eBrush || state->mode == eSmudge) {
                 if (!vp->wasMouseDown) {
                     Modulators_SnapRunState();
+                    if (state->undo) state->undo->Snapshot(state, active);
                     StrokeEngine_BeginStroke(&vp->strokeEng, &state->currentBrush,
                                              paintPos.x, paintPos.y);
                     vp->inputFilter.Reset();

@@ -1,4 +1,5 @@
 #include "layerstack.h"
+#include "undo.h"
 #include "rlgl.h"
 #include <math.h>
 #include <string.h>
@@ -167,7 +168,9 @@ int LayerStack_Add(int w, int h) {
     int idx=LS.count;
     ReallocArrays(idx+1);
     InitLayerSlot(idx,w,h);
-    LS.count++; LS.dirty=true; return idx;
+    LS.count++; LS.dirty=true;
+    if (g_undoManager) g_undoManager->InvalidateAll();
+    return idx;
 }
 
 int LayerStack_InsertLayer(int afterIdx) {
@@ -176,12 +179,15 @@ int LayerStack_InsertLayer(int afterIdx) {
     ReallocArrays(LS.count+1);
     ShiftLayersUp(LS.count,idx);
     InitLayerSlot(idx,cw,ch);
-    LS.count++; LS.dirty=true; return idx;
+    LS.count++; LS.dirty=true;
+    if (g_undoManager) g_undoManager->InvalidateAll();
+    return idx;
 }
 
 void LayerStack_DeleteLayer(int idx) {
     if(idx<0||idx>=LS.count||LS.count<=1) return;
     RemoveLayerSlot(idx);
+    if (g_undoManager) g_undoManager->InvalidateAll();
 }
 
 void LayerStack_DuplicateLayer(int idx) {
@@ -352,6 +358,7 @@ static void MergeDownImpl(int idx, bool seamless) {
     RebuildLayerImageAndTex(idx-1,mergedRT);
     UnloadRenderTexture(oldRT);
     RemoveLayerSlot(idx);
+    if (g_undoManager) g_undoManager->InvalidateAll();
 }
 
 void LayerStack_MergeDown(int idx) { MergeDownImpl(idx,false); }

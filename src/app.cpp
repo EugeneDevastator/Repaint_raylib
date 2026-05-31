@@ -13,6 +13,7 @@
 #include "ui_leftpanel.h"
 #include "ui_texpanel.h"
 #include "layerstack.h"
+#include "undo.h"
 #include "external/glad.h"
 #include <time.h>
 
@@ -90,6 +91,7 @@ bool g_seamlessPreview = false;
 int g_texScaleMode = 0;
 int g_texPanelAreaY = 0;
 bool g_useViewRes = false;
+UndoManager* g_undoManager = nullptr;
 float g_pivotCursorX = 0.0f, g_pivotCursorY = 0.0f;
 
 static void DrawSplash(const char* msg) {
@@ -163,6 +165,14 @@ void UpdateUI(AppState* state) {
     if (IsKeyPressed(KEY_THREE)) state->mode = eLine;
     if (IsKeyPressed(KEY_FOUR)) state->mode = eDisp;
     if (IsKeyPressed(KEY_FIVE)) state->mode = eCont;
+
+    // Undo / Redo
+    if (IsKeyDown(KEY_LEFT_CONTROL) && !IsKeyDown(KEY_LEFT_SHIFT) && IsKeyPressed(KEY_Z)) {
+        if (state->undo) state->undo->Undo(state, state->activeLayer);
+    }
+    if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyDown(KEY_LEFT_SHIFT) && IsKeyPressed(KEY_Z)) {
+        if (state->undo) state->undo->Redo(state, state->activeLayer);
+    }
 
     // Toggle texture editing mode with T key
     if (IsKeyPressed(KEY_T)) {
@@ -407,6 +417,9 @@ void App_Init(AppState* state) {
     };
     Viewport_Init(&viewport, viewportBounds);
     viewport.broker = g_useTestBroker ? (ICommandBroker*)&g_testBroker : (ICommandBroker*)&networkBroker;
+
+    state->undo = new UndoManager();
+    g_undoManager = state->undo;
 
     state->camera = Camera2D{};
     state->camera.target = Vector2{(float)state->doc.width * 0.5f, (float)state->doc.height * 0.5f};
