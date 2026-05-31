@@ -2,6 +2,7 @@
 #define REPAINT_H
 
 #include "raylib.h"
+#include "brush_draw.h"
 #include "ui_style.h"
 #include "ui_rect.h"
 #include <cstdint>
@@ -153,27 +154,26 @@ class UndoManager;
 extern UndoManager* g_undoManager;
 struct AppState;
 
+struct NetSegment {
+    Vector2 pos1, pos2, ctrl0, ctrl3;
+    CollapsedBrush brushFrom, brushTo;
+    uint16_t seed;
+    int layer;
+    uint8_t toolID;
+};
+
 struct ICommandBroker {
-    virtual void on_input(const BrushDab& e) = 0;
+    virtual void on_segment(const DrawSegment& seg) = 0;
     virtual void poll(AppState* state) = 0;
     virtual ~ICommandBroker() = default;
 };
 
+extern ICommandBroker* g_broker;
+
 struct LocalBroker : ICommandBroker {
-    static const int CMD_CAPACITY = 4096;
-    struct QueuedDab {
-        RenderTexture2D targetRT; float x,y,srcX,srcY;
-        float radInRatio,rad_out,opacity,crv,x2y,sol,sol2op,resangle,cop;
-        float texBlendVal,texScale,texFeather,texThresh;
-        bool useTexLumAsAlpha,texUseRGB;
-        int texBlendMode,texNoisemode,texColorMode;
-        Color color; int bmidx; uint16_t seed;
-        int activeLayer; uint8_t preserveop,eraseMode; float perspective;
-        float userTexOriginX, userTexOriginY, userTexDirection;
-    };
-    QueuedDab queue[CMD_CAPACITY]; volatile int head,tail; AppState* appState;
+    AppState* appState;
     LocalBroker();
-    void on_input(const BrushDab& e) override;
+    void on_segment(const DrawSegment& seg) override;
     void poll(AppState* state) override;
 };
 

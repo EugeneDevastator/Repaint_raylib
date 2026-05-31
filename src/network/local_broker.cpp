@@ -1,94 +1,67 @@
 #include "repaint.h"
 
-LocalBroker::LocalBroker() {
-    head = 0;
-    tail = 0;
-    appState = NULL;
-}
+struct LBDab { float x,y; d_RealBrush brush; int layer; RenderTexture2D targetRT; };
 
-void LocalBroker::on_input(const BrushDab& e) {
-    int next = (tail + 1) % CMD_CAPACITY;
-    if (next == head) return;
+static LBDab s_queue[4096];
+static volatile int s_head = 0, s_tail = 0;
+
+LocalBroker::LocalBroker() { appState = NULL; }
+
+void LocalBroker::on_segment(const DrawSegment& seg) {
+    int next = (s_tail + 1) % 4096;
+    if (next == s_head) return;
     if (!appState) return;
 
-    int layer = appState->activeLayer;
+    LBDab& d = s_queue[s_tail];
+    d.x = seg.pos1.x;
+    d.y = seg.pos1.y;
 
-    queue[tail].x = e.x;
-    queue[tail].y = e.y;
-    queue[tail].srcX = e.srcX;
-    queue[tail].srcY = e.srcY;
-    queue[tail].color      = e.brush.col;
-    queue[tail].rad_out    = e.brush.rad_out;
-    queue[tail].radInRatio = e.brush.radInRatio;
-    queue[tail].opacity    = e.brush.opacity;
-    queue[tail].crv        = e.brush.crv;
-    queue[tail].x2y        = e.brush.x2y;
-    queue[tail].sol        = e.brush.sol;
-    queue[tail].sol2op     = e.brush.sol2op;
-    queue[tail].resangle   = (float)e.brush.resangle;
-    queue[tail].cop        = e.brush.cop;
-    queue[tail].texBlendVal  = e.brush.texBlendVal;
-    queue[tail].texScale     = e.brush.texScale;
-    queue[tail].texFeather   = e.brush.texFeather;
-    queue[tail].texThresh    = e.brush.texThresh;
-    queue[tail].useTexLumAsAlpha = e.brush.useTexLumAsAlpha;
-    queue[tail].texUseRGB    = e.brush.texUseRGB;
-    queue[tail].texBlendMode = e.brush.texBlendMode;
-    queue[tail].texNoisemode = e.brush.texNoisemode;
-    queue[tail].texColorMode = e.brush.texColorMode;
-    queue[tail].bmidx      = (int)e.brush.bmidx;
-    queue[tail].seed       = e.brush.seed;
-    queue[tail].preserveop = e.brush.preserveop;
-    queue[tail].eraseMode  = e.brush.eraseMode;
-    queue[tail].perspective = e.brush.perspective;
-    queue[tail].userTexOriginX = e.brush.userTexOriginX;
-    queue[tail].userTexOriginY = e.brush.userTexOriginY;
-    queue[tail].userTexDirection = e.brush.userTexDirection;
-    queue[tail].activeLayer = layer;
-    queue[tail].targetRT   = LayerStack_GetRT(layer);
-
-    tail = next;
+    CollapsedBrush cb = seg.brushFrom;
+    d.brush.rad_out     = cb.rad_out_px;
+    d.brush.radInRatio  = cb.radInRatio;
+    d.brush.opacity     = cb.opacity;
+    d.brush.crv         = cb.crv;
+    d.brush.x2y         = cb.scale_y;
+    d.brush.sol         = 1.0f;
+    d.brush.sol2op      = 0.0f;
+    d.brush.resangle    = cb.resangle;
+    d.brush.col         = cb.col;
+    d.brush.cop         = cb.cop;
+    d.brush.bmidx       = (uint8_t)cb.bmidx;
+    d.brush.preserveop  = cb.preserveop;
+    d.brush.eraseMode   = cb.eraseMode;
+    d.brush.perspective = cb.perspective;
+    d.brush.texScale    = cb.texScale;
+    d.brush.texFeather  = cb.texFeather;
+    d.brush.texThresh   = cb.texThresh;
+    d.brush.texBlendVal = cb.texBlendVal;
+    d.brush.texBlendMode = cb.texBlendMode;
+    d.brush.texNoisemode = cb.texNoisemode;
+    d.brush.texColorMode = cb.texColorMode;
+    d.brush.useTexLumAsAlpha = cb.useTexLumAsAlpha;
+    d.brush.texUseRGB   = false;
+    d.brush.pwr         = cb.pwr;
+    d.brush.userTexOriginX = cb.userTexOriginX;
+    d.brush.userTexOriginY = cb.userTexOriginY;
+    d.brush.userTexDirection = cb.userTexDirection;
+    d.brush.seed        = seg.seed;
+    d.layer = appState->activeLayer;
+    d.targetRT = LayerStack_GetRT(d.layer);
+    s_tail = next;
 }
 
 void LocalBroker::poll(AppState* state) {
-    while (head != tail) {
-        QueuedDab* d = &queue[head];
-
-        if (d->targetRT.id != 0 && d->activeLayer >= 0 && d->activeLayer < LayerStack_Count()) {
-            d_Brush brush = {};
-            brush.Realb.radInRatio = d->radInRatio;
-            brush.Realb.rad_out  = d->rad_out;
-            brush.Realb.opacity  = d->opacity;
-            brush.Realb.crv      = d->crv;
-            brush.Realb.x2y      = d->x2y;
-            brush.Realb.sol      = d->sol;
-            brush.Realb.sol2op   = d->sol2op;
-            brush.Realb.resangle = d->resangle;
-            brush.Realb.cop        = d->cop;
-            brush.Realb.texBlendVal  = d->texBlendVal;
-            brush.Realb.texScale     = d->texScale;
-            brush.Realb.texFeather   = d->texFeather;
-            brush.Realb.texThresh    = d->texThresh;
-            brush.Realb.useTexLumAsAlpha = d->useTexLumAsAlpha;
-            brush.Realb.texUseRGB    = d->texUseRGB;
-            brush.Realb.texBlendMode = d->texBlendMode;
-            brush.Realb.texNoisemode = d->texNoisemode;
-            brush.Realb.texColorMode = d->texColorMode;
-            brush.Realb.bmidx      = (uint8_t)d->bmidx;
-            brush.Realb.seed       = d->seed;
-            brush.Realb.col        = d->color;
-            brush.Realb.preserveop = d->preserveop;
-            brush.Realb.eraseMode  = d->eraseMode;
-            brush.Realb.perspective = d->perspective;
-            brush.Realb.userTexOriginX = d->userTexOriginX;
-            brush.Realb.userTexOriginY = d->userTexOriginY;
-            brush.Realb.userTexDirection = d->userTexDirection;
-
-            RenderTexture2D rt = LayerStack_GetRT(d->activeLayer);
-            if (rt.id > 0)
-                BrushBlend_ApplyStamp(rt, &brush, g_activeBrushTex, d->x, d->y, d->srcX, d->srcY);
+    (void)state;
+    while (s_head != s_tail) {
+        LBDab& d = s_queue[s_head];
+        if (d.targetRT.id != 0 && d.layer >= 0 && d.layer < LayerStack_Count()) {
+            RenderTexture2D rt = LayerStack_GetRT(d.layer);
+            if (rt.id > 0) {
+                d_Brush tb = {};
+                tb.Realb = d.brush;
+                BrushBlend_ApplyStamp(rt, &tb, g_activeBrushTex, d.x, d.y, d.x, d.y);
+            }
         }
-
-        head = (head + 1) % CMD_CAPACITY;
+        s_head = (s_head + 1) % 4096;
     }
 }

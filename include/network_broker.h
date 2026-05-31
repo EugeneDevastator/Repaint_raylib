@@ -82,7 +82,7 @@ struct NetworkBroker : ICommandBroker {
     NetworkBroker();
     ~NetworkBroker();
 
-    void on_input(const BrushDab& e) override;
+    void on_segment(const DrawSegment& seg) override;
     void poll(AppState* state) override;
 
     bool Connect(const char* addr, int port);

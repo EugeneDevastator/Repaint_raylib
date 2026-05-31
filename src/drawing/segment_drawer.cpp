@@ -245,7 +245,7 @@ int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad, DrawDab*
     bool isCurved = (seg->ctrl0.x != from.x || seg->ctrl0.y != from.y ||
                      seg->ctrl3.x != to.x   || seg->ctrl3.y != to.y);
 
-    float spacingMult = seg->spacing;
+    float spacingMult = seg->brushFrom.spacing;
     if (spacingMult < 0.0f) spacingMult = 0.0f;
 
     float rFrom = seg->brushFrom.rad_out_px;
@@ -351,7 +351,7 @@ int DrawAirflow(const DrawSegment* seg, float accum, DrawDab* out, int maxOut, S
     float stdist = sqrtf((to.x - from.x) * (to.x - from.x) + (to.y - from.y) * (to.y - from.y));
     if (stdist < 0.001f) return 0;
 
-    float spacingMult = seg->spacing;
+    float spacingMult = seg->brushFrom.spacing;
     if (spacingMult < 0.0f) spacingMult = 0.0f;
 
     float dx = to.x - from.x, dy = to.y - from.y;

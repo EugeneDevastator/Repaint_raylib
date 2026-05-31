@@ -24,6 +24,7 @@ struct CollapsedBrush {
     bool  useTexLumAsAlpha;
     float userTexOriginX, userTexOriginY;
     float userTexDirection;
+    float spacing;       // 0–1 multiplier for dab spacing
 
     // Per-dab jitter ranges (drawing-space units, 0 = no jitter)
     float jitRadOut;
@@ -41,7 +42,6 @@ struct DrawSegment {
     Vector2 pos1, pos2;
     Vector2 ctrl0, ctrl3;  // Catmull-Rom tangents (== pos1/pos2 = straight)
     CollapsedBrush brushFrom, brush;
-    float spacing;       // 0–1 multiplier
     uint8_t Noisemode;
     uint16_t seed;
 };

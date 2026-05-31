@@ -188,44 +188,44 @@ void NetworkBroker::SendLAction(const d_LAction* lact) {
 
 /* ── ICommandBroker ─────────────────────────────────────────────────────── */
 
-void NetworkBroker::on_input(const BrushDab& e) {
+void NetworkBroker::on_segment(const DrawSegment& seg) {
     int next = (localTail + 1) % CMD_CAPACITY;
     if (next == localHead) return;
     if (!appState) return;
 
     int      layer = appState->activeLayer;
 
-    localQueue[localTail].x     = e.x;
-    localQueue[localTail].y     = e.y;
-    localQueue[localTail].srcX  = e.srcX;
-    localQueue[localTail].srcY  = e.srcY;
-    localQueue[localTail].color       = e.brush.col;
-    localQueue[localTail].rad_out     = e.brush.rad_out;
-    localQueue[localTail].radInRatio  = e.brush.radInRatio;
-    localQueue[localTail].opacity     = e.brush.opacity;
-    localQueue[localTail].crv         = e.brush.crv;
-    localQueue[localTail].x2y         = e.brush.x2y;
-    localQueue[localTail].sol         = e.brush.sol;
-    localQueue[localTail].sol2op      = e.brush.sol2op;
-    localQueue[localTail].resangle    = (float)e.brush.resangle;
-    localQueue[localTail].cop         = e.brush.cop;
-    localQueue[localTail].texBlendVal  = e.brush.texBlendVal;
-    localQueue[localTail].texScale     = e.brush.texScale;
-    localQueue[localTail].texFeather   = e.brush.texFeather;
-    localQueue[localTail].texThresh    = e.brush.texThresh;
-    localQueue[localTail].useTexLumAsAlpha = e.brush.useTexLumAsAlpha;
-    localQueue[localTail].texUseRGB    = e.brush.texUseRGB;
-    localQueue[localTail].texBlendMode = e.brush.texBlendMode;
-    localQueue[localTail].texNoisemode = e.brush.texNoisemode;
-    localQueue[localTail].texColorMode = e.brush.texColorMode;
-    localQueue[localTail].bmidx       = (int)e.brush.bmidx;
-    localQueue[localTail].seed        = e.brush.seed;
-    localQueue[localTail].preserveop  = e.brush.preserveop;
-    localQueue[localTail].eraseMode   = e.brush.eraseMode;
-    localQueue[localTail].perspective = e.brush.perspective;
-    localQueue[localTail].userTexOriginX = e.brush.userTexOriginX;
-    localQueue[localTail].userTexOriginY = e.brush.userTexOriginY;
-    localQueue[localTail].userTexDirection = e.brush.userTexDirection;
+    localQueue[localTail].x     = seg.pos1.x;
+    localQueue[localTail].y     = seg.pos1.y;
+    localQueue[localTail].srcX  = seg.pos2.x;
+    localQueue[localTail].srcY  = seg.pos2.y;
+    localQueue[localTail].color       = seg.brushFrom.col;
+    localQueue[localTail].rad_out     = seg.brushFrom.rad_out_px;
+    localQueue[localTail].radInRatio  = seg.brushFrom.radInRatio;
+    localQueue[localTail].opacity     = seg.brushFrom.opacity;
+    localQueue[localTail].crv         = seg.brushFrom.crv;
+    localQueue[localTail].x2y         = seg.brushFrom.scale_y;
+    localQueue[localTail].sol         = 1.0f/*sol*/;
+    localQueue[localTail].sol2op      = 0.0f;
+    localQueue[localTail].resangle    = (float)seg.brushFrom.resangle;
+    localQueue[localTail].cop         = seg.brushFrom.cop;
+    localQueue[localTail].texBlendVal  = seg.brushFrom.texBlendVal;
+    localQueue[localTail].texScale     = seg.brushFrom.texScale;
+    localQueue[localTail].texFeather   = seg.brushFrom.texFeather;
+    localQueue[localTail].texThresh    = seg.brushFrom.texThresh;
+    localQueue[localTail].useTexLumAsAlpha = seg.brushFrom.useTexLumAsAlpha;
+    localQueue[localTail].texUseRGB    = false/*texUseRGB*/;
+    localQueue[localTail].texBlendMode = seg.brushFrom.texBlendMode;
+    localQueue[localTail].texNoisemode = seg.brushFrom.texNoisemode;
+    localQueue[localTail].texColorMode = seg.brushFrom.texColorMode;
+    localQueue[localTail].bmidx       = seg.brushFrom.bmidx;
+    localQueue[localTail].seed        = seg.seed;
+    localQueue[localTail].preserveop  = seg.brushFrom.preserveop;
+    localQueue[localTail].eraseMode   = seg.brushFrom.eraseMode;
+    localQueue[localTail].perspective = seg.brushFrom.perspective;
+    localQueue[localTail].userTexOriginX = seg.brushFrom.userTexOriginX;
+    localQueue[localTail].userTexOriginY = seg.brushFrom.userTexOriginY;
+    localQueue[localTail].userTexDirection = seg.brushFrom.userTexDirection;
     localQueue[localTail].activeLayer = layer;
     localQueue[localTail].targetRT    = LayerStack_GetRT(layer);
 

@@ -418,6 +418,7 @@ void App_Init(AppState* state) {
     };
     Viewport_Init(&viewport, viewportBounds);
     viewport.broker = g_useTestBroker ? (ICommandBroker*)&g_testBroker : (ICommandBroker*)&networkBroker;
+    g_broker = viewport.broker;
 
     state->undo = new UndoManager();
     g_undoManager = state->undo;

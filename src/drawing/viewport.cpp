@@ -1,8 +1,20 @@
 #include "repaint.h"
 #include "undo.h"
+#include "undo.h"
 #include "layerstack.h"
 #include "rlgl.h"
 #include "stroke_engine.h"
+
+static void PushDabSegment(ICommandBroker* b, float x, float y, const d_RealBrush& brush) {
+    CollapsedBrush cb = CollapseBrushParams(brush, 0.0f, 0);
+    DrawSegment s; memset(&s, 0, sizeof(s));
+    s.pos1 = s.pos2 = Vector2{x, y};
+    s.ctrl0 = s.ctrl3 = s.pos1;
+    s.brushFrom = s.brush = cb;
+    s.seed = brush.seed;
+    b->on_segment(s);
+}
+
 
 extern float g_pivotCursorX, g_pivotCursorY;
 
@@ -284,7 +296,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                         sd.srcX = paintPos.x; sd.srcY = paintPos.y;
                         sd.brush = seedCb;
                         BrushDab bd = MakeBrushDab(sd.x, sd.y, sd);
-                        vp->broker->on_input(bd);
+                        PushDabSegment(vp->broker, bd.x, bd.y, bd.brush);
                         if (vp->strokeLen < MAX_STROKE_PTS)
                             vp->strokePts[vp->strokeLen++] = Vector2{sd.x, sd.y};
                     }
@@ -305,7 +317,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     for (int i = 0; i < n; i++) {
                         if (vp->broker) {
                             BrushDab bd = MakeBrushDab(dabs[i].x, dabs[i].y, dabs[i]);
-                            vp->broker->on_input(bd);
+                            PushDabSegment(vp->broker, bd.x, bd.y, bd.brush);
                         }
                         if (vp->strokeLen < MAX_STROKE_PTS)
                             vp->strokePts[vp->strokeLen++] = Vector2{dabs[i].x, dabs[i].y};
@@ -322,7 +334,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                         d_RealBrush scaled = state->currentBrush.Realb;
                         scaled.rad_out = scaledRad;
                         BrushDab ev = {paintPos.x, paintPos.y, paintPos.x, paintPos.y, scaled};
-                        vp->broker->on_input(ev);
+                        PushDabSegment(vp->broker, ev.x, ev.y, ev.brush);
                     }
                     vp->wasMouseDown = true;
                 } else {
@@ -331,7 +343,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                             d_RealBrush scaled = state->currentBrush.Realb;
                             scaled.rad_out = scaledRad;
                             BrushDab ev = {paintPos.x, paintPos.y, paintPos.x, paintPos.y, scaled};
-                            vp->broker->on_input(ev);
+                            PushDabSegment(vp->broker, ev.x, ev.y, ev.brush);
                         }
                         vp->strokeEng.lastDabPos = paintPos;
                     }
@@ -358,14 +370,14 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                 single.brush = CollapseBrushParams(state->currentBrush.Realb, state->initialAngle, state->mode);
                 single.brush.rad_out_px *= layerScale;
                 BrushDab bd = MakeBrushDab(pos.x, pos.y, single);
-                vp->broker->on_input(bd);
+                PushDabSegment(vp->broker, bd.x, bd.y, bd.brush);
                 if (vp->strokeLen < MAX_STROKE_PTS)
                     vp->strokePts[vp->strokeLen++] = pos;
             }
             for (int i = 0; i < fn; i++) {
                 if (vp->broker) {
                     BrushDab bd = MakeBrushDab(dabs[i].x, dabs[i].y, dabs[i]);
-                    vp->broker->on_input(bd);
+                    PushDabSegment(vp->broker, bd.x, bd.y, bd.brush);
                 }
             }
             StrokeEngine_EndStroke(&vp->strokeEng);
@@ -397,7 +409,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                                    vp->lineLastDabPos.y + (paintPos.y - vp->lineLastDabPos.y) * t};
                     if (vp->broker) {
                         BrushDab ev = {pos.x, pos.y, pos.x, pos.y, state->currentBrush.Realb};
-                        vp->broker->on_input(ev);
+                        PushDabSegment(vp->broker, ev.x, ev.y, ev.brush);
                     }
                 }
                 vp->lineLastDabPos = canvasPos;

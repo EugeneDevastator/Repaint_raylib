@@ -5,6 +5,7 @@
 
 int g_strokeSmoothingMode = SMOOTH_MODE_SMOOTH;
 float g_strokeThrottle = 0.0f;
+ICommandBroker* g_broker = nullptr;
 
 // ── BaseModVal helper ────────────────────────────────────────────────
 static inline float BaseModVal(const BParam& bp, float cpar) {
@@ -42,6 +43,7 @@ CollapsedBrush CollapseBrushParams(const d_RealBrush& b, float initialAngle, int
     cb.userTexOriginX = b.userTexOriginX;
     cb.userTexOriginY = b.userTexOriginY;
     cb.userTexDirection = b.userTexDirection;
+    cb.spacing = BParam_GetValue(&bpSpacing);
 
     cb.jitRadOut  = bpSize.user.jitter * b.rad_out;
     cb.jitRadIn   = bpHardness.user.jitter;
@@ -180,7 +182,6 @@ static int FeedOnePoint(StrokeEngine* se, Vector2 pos, float velocity,
     dseg.ctrl3    = overrideCtrl3;
     dseg.brushFrom = cbFrom;
     dseg.brush    = cbTo;
-    dseg.spacing  = spacingVal;
     dseg.Noisemode = 0;
     dseg.seed     = baseBrush->seed;
 
@@ -282,7 +283,6 @@ int StrokeEngine_FeedPoint(StrokeEngine* se, const StrokePoint& sp,
         dseg.ctrl3     = p3;
         dseg.brushFrom = cbFrom;
         dseg.brush     = cbTo;
-        dseg.spacing   = spacingVal;
         dseg.Noisemode = 0;
         dseg.seed      = baseBrush->seed;
 
@@ -363,7 +363,6 @@ int StrokeEngine_FlushSmoothing(StrokeEngine* se, const d_RealBrush* baseBrush,
         dseg.ctrl3     = p3;
         dseg.brushFrom = cbFrom;
         dseg.brush     = cbTo;
-        dseg.spacing   = spacingVal;
         dseg.Noisemode = 0;
         dseg.seed      = baseBrush->seed;
 
@@ -454,6 +453,7 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex,
     cbFull.jitRadOut = cbFull.jitRadIn = cbFull.jitOpacity = cbFull.jitCrv = cbFull.jitX2y = 0;
     cbFull.jitHue = cbFull.jitSat = cbFull.jitLit = cbFull.jitCloneOp = 0;
     cbFull.baseSeed = 0;
+    cbFull.spacing = spacingVal;
 
     CollapsedBrush cbTiny = cbFull;
     cbTiny.rad_out_px = 1.0f;
@@ -473,7 +473,6 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex,
     memset(&s, 0, sizeof(s));
     s.pos1 = start; s.pos2 = end;
     s.brushFrom = cbFull; s.brush = cbTiny;
-    s.spacing = spacingVal;
     s.seed = baseBrush->seed;
 
     n += DrawLinear(&s, 0, cbFull.rad_out_px, dabs + n, 255, &r);
