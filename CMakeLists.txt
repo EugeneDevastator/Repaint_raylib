@@ -9,6 +9,43 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-exceptions -fno-rtti")
 # ── dependencies ──────────────────────────────────────────────────────────────
 include(FetchContent)
 
+# ── detect display server (X11 / Wayland) ────────────────────────────────────
+if(UNIX AND NOT APPLE)
+    find_package(X11 QUIET)
+    find_package(PkgConfig QUIET)
+    set(_WAYLAND_FOUND FALSE)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(_WL QUIET wayland-client wayland-cursor xkbcommon)
+        if(_WL_FOUND)
+            set(_WAYLAND_FOUND TRUE)
+        endif()
+    endif()
+
+    if(NOT X11_FOUND AND NOT _WAYLAND_FOUND)
+        message(FATAL_ERROR
+            "\nNeither X11 nor Wayland development libraries were found.\n"
+            "Install one of the following before building:\n"
+            "  Debian/Ubuntu:  sudo apt install libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxrender-dev libxfixes-dev libxext-dev\n"
+            "  Fedora:         sudo dnf install libX11-devel libXrandr-devel libXinerama-devel libXcursor-devel libXi-devel libXrender-devel libXfixes-devel libXext-devel\n"
+            "  Arch:           sudo pacman -S libx11 libxrandr libxinerama libxcursor libxi libxrender libxfixes libxext\n"
+            "For Wayland:      install libwayland-dev (Debian) / wayland-devel (Fedora) / wayland (Arch)\n")
+    endif()
+
+    find_package(OpenGL QUIET)
+    if(NOT OPENGL_FOUND)
+        message(FATAL_ERROR
+            "\nOpenGL development libraries were not found.\n"
+            "Install the following:\n"
+            "  Debian/Ubuntu:  sudo apt install libgl1-mesa-dev\n"
+            "  Fedora:         sudo dnf install mesa-libGL-devel\n"
+            "  Arch:           sudo pacman -S mesa\n")
+    endif()
+
+    set(GLFW_BUILD_X11     ${X11_FOUND}       CACHE BOOL "" FORCE)
+    set(GLFW_BUILD_WAYLAND ${_WAYLAND_FOUND}   CACHE BOOL "" FORCE)
+    message(STATUS "GLFW backends — X11: ${X11_FOUND}, Wayland: ${_WAYLAND_FOUND}")
+endif()
+
 # raylib 6.0 — latest stable release as of 2025
 FetchContent_Declare(
     raylib
@@ -63,6 +100,9 @@ set(SOURCES
     src/ui/ui_quickhud.cpp
     src/ui/ui_layerxform.cpp
     src/ui/ui_style.cpp
+    src/ui/ui_texpanel.cpp
+    src/undo.cpp
+    src/replay_recorder.cpp
     # ── sensors ───────────────────────────────────────────────────────
     src/sensors/tablet.cpp
     src/sensors/input_filter.cpp
@@ -77,7 +117,6 @@ set(SOURCES
     src/drawing/segment_drawer.cpp
     # ── network ───────────────────────────────────────────────────────
     src/network/serialize.cpp
-    src/network/local_broker.cpp
     src/network/network_broker.cpp
     src/network/sock_platform.cpp
     src/network/test_broker.cpp
@@ -138,9 +177,13 @@ target_link_libraries(tablet-calibrator PRIVATE raylib)
 
 # ── platform linking ──────────────────────────────────────────────────────────
 if(UNIX AND NOT APPLE)
-    find_package(X11 QUIET)
     if(X11_FOUND)
         target_link_libraries(repaint PRIVATE ${X11_LIBRARIES})
+        target_link_libraries(tablet-calibrator PRIVATE ${X11_LIBRARIES})
+    endif()
+    if(_WAYLAND_FOUND)
+        target_link_libraries(repaint PRIVATE ${_WL_LIBRARIES})
+        target_link_libraries(tablet-calibrator PRIVATE ${_WL_LIBRARIES})
     endif()
     target_link_libraries(repaint PRIVATE m pthread dl)
 endif()

@@ -11,7 +11,10 @@
 #include "network_broker.h"
 #include "test_broker.h"
 #include "ui_leftpanel.h"
+#include "ui_texpanel.h"
 #include "layerstack.h"
+#include "undo.h"
+#include "replay_recorder.h"
 #include "external/glad.h"
 #include <time.h>
 
@@ -87,7 +90,11 @@ int g_activeHud = HUD_NONE;
 bool g_seamlessPaint = false;
 bool g_seamlessPreview = false;
 int g_texScaleMode = 0;
+int g_texPanelAreaY = 0;
 bool g_useViewRes = false;
+UndoManager* g_undoManager = nullptr;
+ReplayRecorder* g_recorder = nullptr;
+bool g_replayPopupActive = false;
 float g_pivotCursorX = 0.0f, g_pivotCursorY = 0.0f;
 
 static void DrawSplash(const char* msg) {
@@ -146,7 +153,8 @@ void UpdateUI(AppState* state) {
     if (IsKeyPressed(KEY_TAB))
         g_panelsVisible = !g_panelsVisible;
 
-    if (IsKeyPressed(KEY_LEFT_SHIFT) || IsKeyPressed(KEY_RIGHT_SHIFT)) {
+    // Shift toggles quick HUD (not Ctrl+Shift which is undo/redo)
+    if (!IsKeyDown(KEY_LEFT_CONTROL) && (IsKeyPressed(KEY_LEFT_SHIFT) || IsKeyPressed(KEY_RIGHT_SHIFT))) {
         if (g_activeHud == HUD_QUICK)
             g_activeHud = HUD_NONE;
         else
@@ -158,9 +166,22 @@ void UpdateUI(AppState* state) {
 
 
     if (IsKeyPressed(KEY_TWO)) state->mode = eSmudge;
-    if (IsKeyPressed(KEY_THREE)) state->mode = eLine;
-    if (IsKeyPressed(KEY_FOUR)) state->mode = eDisp;
-    if (IsKeyPressed(KEY_FIVE)) state->mode = eCont;
+    if (IsKeyPressed(KEY_THREE)) state->mode = ePolyStripe;
+    if (IsKeyPressed(KEY_FOUR)) state->mode = eDistort;
+    if (IsKeyPressed(KEY_FIVE)) state->mode = eContrast;
+
+    // Undo / Redo
+    if (IsKeyDown(KEY_LEFT_CONTROL) && !IsKeyDown(KEY_LEFT_SHIFT) && IsKeyPressed(KEY_Z)) {
+        if (state->undo) state->undo->Undo(state, state->activeLayer);
+    }
+    if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyDown(KEY_LEFT_SHIFT) && IsKeyPressed(KEY_Z)) {
+        if (state->undo) state->undo->Redo(state, state->activeLayer);
+    }
+
+    // Replay confirmation popup
+    if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyDown(KEY_LEFT_SHIFT) && IsKeyPressed(KEY_R)) {
+        if (g_recorder) g_replayPopupActive = true;
+    }
 
     // Toggle texture editing mode with T key
     if (IsKeyPressed(KEY_T)) {
@@ -233,6 +254,36 @@ static void OnOpenResult(DialogResult r) {
             };
             LayerStack_SetRenderWindow(g_state->doc.width, g_state->doc.height);
             layersDirty = true;
+            // Load associated replay file
+            if (g_recorder) {
+                g_recorder->Reset(g_state->doc.width, g_state->doc.height);
+                char rpPath[1024];
+                snprintf(rpPath, sizeof(rpPath), "%s.re.play", r.output);
+                g_recorder->Load(rpPath);
+            }
+        } else {
+            // Failed to load as repaint — try loading as replay, then make default canvas
+            int w = 800, h = 600;
+            g_state->doc = Doc_New(w, h);
+            g_state->activeLayer = 0;
+            g_state->camera.target = Vector2{(float)w * 0.5f, (float)h * 0.5f};
+            g_state->camera.zoom = 1.0f;
+            LayerStack_SetRenderWindow(w, h);
+            int idx = LayerStack_Add(w, h);
+            Image* img = LayerStack_GetImage(idx);
+            UnloadImage(*img);
+            *img = GenImageColor(w, h, WHITE);
+            ImageFormat(img, PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
+            LayerStack_SyncRTFromImage(idx);
+            layersDirty = true;
+            if (g_recorder) {
+                g_recorder->Reset(w, h);
+                // Try loading as a replay file (user may have opened .re.play directly)
+                g_recorder->Load(r.output);
+                if (!g_recorder->m_segs.empty()) {
+                    // Also try the .re.play appended version
+                }
+            }
         }
     }
 }
@@ -243,6 +294,12 @@ static void OnSaveResult(DialogResult r) {
             int len = (int)strlen(r.output);
             if (len < (int)sizeof(g_currentFilePath) - 1)
                 memcpy(g_currentFilePath, r.output, len + 1);
+            // Auto-save replay
+            if (g_recorder) {
+                char rpPath[1024];
+                snprintf(rpPath, sizeof(rpPath), "%s.re.play", r.output);
+                g_recorder->Save(rpPath);
+            }
         }
     }
 }
@@ -271,6 +328,7 @@ static void DoCreateNew(void) {
     layersDirty = true;
     g_currentFilePath[0] = '\0';
     g_newCanvasActive = false;
+    if (g_recorder) g_recorder->Reset(g_newW, g_newH);
     ImGui::CloseCurrentPopup();
 }
 
@@ -286,6 +344,11 @@ void App_FileOpen(void) {
 void App_FileSave(void) {
     if (g_currentFilePath[0]) {
         SaveRePaint(g_currentFilePath, &g_state->doc, g_state);
+        if (g_recorder) {
+            char rpPath[1024];
+            snprintf(rpPath, sizeof(rpPath), "%s.re.play", g_currentFilePath);
+            g_recorder->Save(rpPath);
+        }
     } else {
         App_FileSaveAs();
     }
@@ -405,6 +468,13 @@ void App_Init(AppState* state) {
     };
     Viewport_Init(&viewport, viewportBounds);
     viewport.broker = g_useTestBroker ? (ICommandBroker*)&g_testBroker : (ICommandBroker*)&networkBroker;
+    g_broker = viewport.broker;
+
+    state->undo = new UndoManager();
+    g_undoManager = state->undo;
+
+    g_recorder = new ReplayRecorder();
+    g_recorder->Reset(state->doc.width, state->doc.height);
 
     state->camera = Camera2D{};
     state->camera.target = Vector2{(float)state->doc.width * 0.5f, (float)state->doc.height * 0.5f};
@@ -450,10 +520,13 @@ void App_Init(AppState* state) {
     state->currentBrush.Realb.useTexLumAsAlpha = false;
     state->currentBrush.Realb.texUseRGB = true;
     state->currentBrush.Realb.texBlendVal = 1.0f;
-    state->currentBrush.Realb.texBlendMode = 0;
+    state->currentBrush.Realb.texBlendMode = 2;
     state->currentBrush.Realb.texNoisemode = 2;
     state->currentBrush.Realb.texColorMode = 0;
     state->currentBrush.Realb.col = BLACK;
+    state->currentBrush.Realb.userTexOriginX = 0.5f;
+    state->currentBrush.Realb.userTexOriginY = 0.5f;
+    state->currentBrush.Realb.userTexDirection = 0.0f;
 
     colorHue = 0.35f;
     colorSat = 1.0f;
@@ -474,6 +547,10 @@ void App_Init(AppState* state) {
 
     /* Load default brush preset */
     Preset_ApplyDefault(state);
+
+    // Show new-canvas dialog on startup so user goes through same flow as File > New
+    g_newCanvasActive = true;
+    g_newCanvasConfirm = false;
 }
 
 /* ── App_Draw ──────────────────────────────────────────────────────────── */
@@ -518,6 +595,7 @@ void App_Draw(AppState* state) {
     UserTexture_Update(state);
 
     if (viewport.broker) viewport.broker->poll(state);
+    if (g_recorder) g_recorder->poll(state);
     if (viewport.strokeEnded) {
         SyncLayerTexture(state, viewport.endLayer);
         viewport.strokeEnded = false;
@@ -555,6 +633,26 @@ void App_Draw(AppState* state) {
                 ImVec2(org.x + (gx + 1) * sz, org.y + (gy + 1) * sz),
                 IM_COL32(100, 100, 100, 200));
         }
+    }
+
+    /* Replay confirmation popup */
+    if (g_replayPopupActive) {
+        g_replayPopupActive = false;
+        ImGui::OpenPopup("Replay Recording");
+    }
+    if (ImGui::BeginPopupModal("Replay Recording", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+        int n = g_recorder ? (int)g_recorder->m_segs.size() : -1;
+        printf("[REPLAYPOPUP] g_recorder=%p segs=%d\n", (void*)g_recorder, n); fflush(stdout);
+        ImGui::Text("Replay %d recorded strokes on the current canvas?", n);
+        ImGui::Separator();
+        if (ImGui::Button("Yes", ImVec2(80, 0))) {
+            if (g_recorder) g_recorder->m_playing = true;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("No", ImVec2(80, 0)))
+            ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
     }
 
     /* New canvas dialog (imgui modal) */

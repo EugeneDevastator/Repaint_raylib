@@ -2,6 +2,7 @@
 #define REPAINT_H
 
 #include "raylib.h"
+#include "brush_draw.h"
 #include "ui_style.h"
 #include "ui_rect.h"
 #include <cstdint>
@@ -29,7 +30,7 @@ typedef enum {
 } csParams;
 
 typedef enum {
-    eBrush, eSmudge, eDisp, eCont, eLine
+    eBrush, eSmudge, ePolyStripe, eDistort, eContrast, eSingleStamp
 } eTools;
 
 typedef enum {
@@ -103,6 +104,8 @@ typedef struct {
     int eraseMode;
     float perspective;
     Color col;
+    float userTexOriginX, userTexOriginY; // sampling center 0..1 in texture UV
+    float userTexDirection;              // rotation angle for the texture handle
 } d_RealBrush;
 
 typedef struct { d_PackedBrush Pack; d_RealBrush Realb; } d_Brush;
@@ -129,45 +132,47 @@ public:
 };
 
 struct StrokeEngine {
-    d_Brush segBrushFrom; Vector2 lastDabPos; float lastDabRad;
-    Vector2 smudgeSrcPos; int dabIndex; bool inStroke;
+    d_Brush segBrushFrom; Vector2 lastDabPos;
+    int dabIndex; bool inStroke;
     Vector2 prevSegPos, prevSegDir; float prevSegLen, prevVel;
     float initDir; bool initDirSet;
-    Vector2 splinePts[256]; int splineCount, processedCount;
-    Vector2 smoothBuf[4]; int smoothBufCount;
+
+    // Spline buffer for Smooth mode: throttled input points used as Catmull-Rom control points
+    Vector2 splinePts[256];
+    int splineCount, processedCount;
+    float accumDist;        // path length accumulated since last control point
+    Vector2 lastInputPos;   // previous raw input position (for incremental distance)
 };
 
 #define SMOOTH_MODE_LINEAR 0
 #define SMOOTH_MODE_SMOOTH 1
-#define SMOOTH_MODE_SPLINE 2
 
 extern int g_strokeSmoothingMode;
-extern float g_splineMinDist, g_splineAngleThreshold;
+extern float g_strokeThrottle;
 
+class UndoManager;
+extern UndoManager* g_undoManager;
 struct AppState;
+struct ReplayRecorder;
+extern ReplayRecorder* g_recorder;
+
+struct NetSegment {
+    Vector2 pos1, pos2, ctrl0, ctrl3;
+    CollapsedBrush brushFrom, brushTo;
+    uint16_t seed;
+    int layer;
+    uint8_t toolID, seamless;
+    float smudgeSrcX, smudgeSrcY;
+};
 
 struct ICommandBroker {
-    virtual void on_input(const BrushDab& e) = 0;
+    virtual void on_segment(const DrawSegment& seg) = 0;
     virtual void poll(AppState* state) = 0;
     virtual ~ICommandBroker() = default;
 };
 
-struct LocalBroker : ICommandBroker {
-    static const int CMD_CAPACITY = 4096;
-    struct QueuedDab {
-        RenderTexture2D targetRT; float x,y,srcX,srcY;
-        float radInRatio,rad_out,opacity,crv,x2y,sol,sol2op,resangle,cop;
-        float texBlendVal,texScale,texFeather,texThresh;
-        bool useTexLumAsAlpha,texUseRGB;
-        int texBlendMode,texNoisemode,texColorMode;
-        Color color; int bmidx; uint16_t seed;
-        int activeLayer; uint8_t preserveop,eraseMode; float perspective;
-    };
-    QueuedDab queue[CMD_CAPACITY]; volatile int head,tail; AppState* appState;
-    LocalBroker();
-    void on_input(const BrushDab& e) override;
-    void poll(AppState* state) override;
-};
+extern ICommandBroker* g_broker;
+extern ReplayRecorder* g_recorder;
 
 typedef struct { float clipminF,clipmaxF,jitter; } BPuserstate;
 typedef struct { float clipminF,clipmaxF; } BPrunstate;
@@ -186,6 +191,7 @@ typedef struct {
 
 struct AppState {
     Document doc;
+    UndoManager* undo;
     d_Brush currentBrush;
     int activeLayer;
     Camera2D camera;
@@ -236,6 +242,7 @@ extern float g_pivotCursorX, g_pivotCursorY;
 extern bool g_seamlessPaint;
 extern bool g_seamlessPreview;
 extern int g_texScaleMode;  // 0 = brush scale, 1 = global scale
+extern int g_texPanelAreaY; // y-coordinate for the texture panel in the Quick HUD
 #define HUD_NONE 0
 #define HUD_QUICK 1
 #define HUD_LAYER_XFORM 2
@@ -368,7 +375,9 @@ struct RightPanelModule : IModule {
 
 struct QuickHudModule : IModule {
     AppState* state;
-    explicit QuickHudModule(AppState* s) : state(s) {}
+    std::unique_ptr<IModule> gizmoChild;   // reserved for future gizmo extraction
+    std::unique_ptr<IModule> texPanelChild;
+    explicit QuickHudModule(AppState* s);
     const char* Name() const override { return "QuickHud"; }
     bool HandleInput(InputState& input, const DrawRect& rect) override;
     void DrawGL(const DrawRect& rect) override;

@@ -9,7 +9,7 @@ TestBroker::TestBroker() {
     appState = NULL;
 }
 
-void TestBroker::on_input(const BrushDab& e) {
+void TestBroker::on_segment(const DrawSegment& seg) {
     if (!appState) return;
     int layer = appState->activeLayer;
     if (layer < 0 || layer >= LayerStack_Count()) return;
@@ -17,11 +17,11 @@ void TestBroker::on_input(const BrushDab& e) {
     int next = (tail + 1) % CMD_CAPACITY;
     if (next == head) return;
 
-    queue[tail].x = e.x;
-    queue[tail].y = e.y;
-    queue[tail].srcX = e.srcX;
-    queue[tail].srcY = e.srcY;
-    queue[tail].brush = e.brush;
+    queue[tail].x = seg.pos1.x;
+    queue[tail].y = seg.pos1.y;
+    queue[tail].srcX = seg.pos2.x;
+    queue[tail].srcY = seg.pos2.y;
+    queue[tail].brush = appState->currentBrush.Realb;
     queue[tail].activeLayer = layer;
     tail = next;
 
@@ -29,11 +29,11 @@ void TestBroker::on_input(const BrushDab& e) {
     next = (tail + 1) % CMD_CAPACITY;
     if (next == head) return;
 
-    queue[tail].x = e.x + 200.0f;
-    queue[tail].y = e.y;
-    queue[tail].srcX = e.srcX + 200.0f;
-    queue[tail].srcY = e.srcY;
-    queue[tail].brush = e.brush;
+    queue[tail].x = seg.pos1.x + 200.0f;
+    queue[tail].y = seg.pos1.y;
+    queue[tail].srcX = seg.pos2.x + 200.0f;
+    queue[tail].srcY = seg.pos2.y;
+    queue[tail].brush = appState->currentBrush.Realb;
     queue[tail].activeLayer = layer;
     tail = next;
 }

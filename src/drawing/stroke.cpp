@@ -53,6 +53,9 @@ d_RealBrush Stroke_BlendBrushes(d_RealBrush from, d_RealBrush to, float k) {
     bbr.texColorMode = from.texColorMode;
     bbr.perspective  = from.perspective;
     bbr.eraseMode    = from.eraseMode;
+    bbr.userTexOriginX   = from.userTexOriginX;
+    bbr.userTexOriginY   = from.userTexOriginY;
+    bbr.userTexDirection = from.userTexDirection;
 
     return bbr;
 }

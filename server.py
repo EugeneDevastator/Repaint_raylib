@@ -16,11 +16,11 @@ import threading
 NET_PORT = 33789
 NET_HEADER_SIZE = 5
 
-sdNONE, sdAction, sdSection, sdLAction, sdGetName, sdGetPass, sdGetMsg, \
+sdNONE, sdAction, sdSegment, sdSection, sdLAction, sdGetName, sdGetPass, sdGetMsg, \
     sdLogin, sdLoginS, sdUserAdded, sdUserDel, sdUserStat, sdRoomJoin, \
     sdRoomPart, sdRoomCreate, sdAuth, sdReg, sdLog, sdFriendSeek, \
     sdFriendAdd, sdFriendDel, sdLock, sdUnlock, sdGetImg, sdReqImg, \
-    sdConfirmImg, sdPeopleResults, sdMisc, sdFAIL, sdSTOP = range(30)
+    sdConfirmImg, sdPeopleResults, sdMisc, sdFAIL, sdSTOP = range(31)
 
 atLogin, atRegister, atRename, atSTOP = range(4)
 
@@ -172,7 +172,7 @@ class Server:
                 return
 
             # relay messages to all other clients
-            if hid in (sdAction, sdSection, sdGetMsg):
+            if hid in (sdAction, sdSegment, sdSection, sdGetMsg):
                 for c in self.clients:
                     if c is not sender and c.registered:
                         c.send_packet(hid, payload)

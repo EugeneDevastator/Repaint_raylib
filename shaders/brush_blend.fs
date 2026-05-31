@@ -7,6 +7,8 @@ uniform sampler2D texture0;
 uniform sampler2D canvasTex;
 uniform sampler2D brushTex;
 
+uniform vec2  copyOrigin;
+uniform vec2  copySize;
 uniform float opacity;
 uniform float sol;
 uniform float sol2op;
@@ -17,11 +19,12 @@ uniform vec2  smudgeOffsetUV;
 uniform float texBlendVal;
 uniform float texScale;
 uniform vec2  texOffset;
+uniform vec2  userTexOrigin;
 uniform float texFeather;
 uniform float texThresh;
-uniform int   texBlendMode;
 uniform int   texNoisemode;
 uniform bool  useLumAsAlpha;
+uniform bool  hasTexture;
 uniform int   texColorMode;
 uniform int   bmidx;
 uniform vec4  brushColor;
@@ -130,6 +133,8 @@ vec4 applyBlend(int mode, vec4 canvas, vec3 brushRGB, float brushA) {
     float outA;
 
     if (canvas.a <= 0.00000001) {
+        if (mode == 2 || mode == 3) // EraseA / EraseColor — nothing to erase
+            return vec4(canvas.rgb, 0.0);
         return vec4(clamp(brushRGB, 0.0, 1.0), clamp(brushA, 0.0, 1.0));
     }
     // older N-gamma, dont delete.
@@ -170,8 +175,7 @@ if (mode == 0) { // N-OKLab
         outRGB = canvas.rgb;
         outA   = canvas.a * (1.0 - brushA);
     } else if (mode == 3) { // EraseColor
-        float gamma = 2.2;
-        float eraseMask = pow(canvas.a, gamma) * brushA;
+        float eraseMask = canvas.a * brushA;
         outRGB = mix(canvas.rgb, brushRGB, eraseMask);
         outA   = canvas.a * (1.0 - brushA * 0.5);
     } else if (mode == 4) { // Screen
@@ -216,12 +220,19 @@ if (mode == 0) { // N-OKLab
     return vec4(clamp(outRGB, 0.0, 1.0), clamp(outA, 0.0, 1.0));
 }
 
+// Convert canvas-normalised UV (canvasFragUV) to the stamp-region copy UV
+vec2 toCopyUV(vec2 cuv) {
+    vec2 px;
+    px.x = cuv.x * canvasSize.x;
+    px.y = (1.0 - cuv.y) * canvasSize.y;
+    return (px - copyOrigin) / copySize;
+}
+
 void main() {
     vec2 uv       = fragTexCoord;
     vec2 sampleUV = vec2(uv.x, 1.0 - uv.y);
     vec4 geouv    = texture(texture0, sampleUV);
-    vec2 canvasUV = canvasFragUV;
-    canvasUV.y *= -1;
+    vec2 canvasUV = toCopyUV(canvasFragUV);
     vec4 canvas = uSeamless 
         ? texture(canvasTex, fract(canvasUV))
         : texture(canvasTex, canvasUV);
@@ -234,72 +245,47 @@ void main() {
     float alpha = geouv.a;
 
     // --- texture sampling ---
-    vec4 texel = vec4(1.0);
-    if (texBlendMode >= 0) {
-        // Default: stamp-local UV (brush space 0..1), same every stamp = CONST
+    float finalAlpha;
+    vec3 brushFinal;
+
+    if (hasTexture) {
         vec2 stUV = geouv.rg;
 
         if (texNoisemode == 0) {
-            // STENCIL (0): 256 canvas px = 1 UV, uniform regardless of canvas size
-            stUV = canvasFragUV * canvasSize / 256.0 * texScale;
+            stUV = (canvasFragUV - 0.5) * canvasSize / 256.0 * texScale + userTexOrigin;
         } else if (texNoisemode == 1) {
-            // RANDOM (1): stamp-local UV scaled, then offset in texture-repeat space
             stUV = geouv.rg * texScale + texOffset;
         } else {
-            // CONST (2): stUV = geouv.rg, scaled, no offset, identical every stamp
-            stUV = geouv.rg * texScale;
+            stUV = (geouv.rg - 0.5) * texScale + userTexOrigin;
         }
-        texel = texture(brushTex, stUV);
-    }
+        vec4 texel = texture(brushTex, stUV);
 
-    // --- userTexA ---
-    float userTexA = useLumAsAlpha
-        ? (texel.r + texel.g + texel.b) * (1.0 / 3.0)
-        : texel.a;
+        float userTexA = useLumAsAlpha
+            ? (texel.r + texel.g + texel.b) * (1.0 / 3.0)
+            : texel.a;
 
-    if (texThresh < 0.0)
-        userTexA = 1.0 - userTexA;
+        if (texThresh < 0.0)
+            userTexA = 1.0 - userTexA;
 
-    // --- masks ---
-    float firstMask;
-    float secondMask;
+        finalAlpha = clamp(applyThreshold(alpha * userTexA, abs(texThresh), texFeather), 0.0, 1.0);
 
-    if (texBlendMode == 0) {
-        firstMask  = userTexA * alpha;
-        secondMask = 1.0;
-    } else if (texBlendMode == 2) {
-        firstMask  = applyThreshold(userTexA, abs(texThresh), texFeather);
-        firstMask  *= alpha;
-        secondMask = 1;
+        if (texColorMode == 0) {
+            brushFinal = brushColor.rgb;
+        } else if (texColorMode == 1) {
+            brushFinal = texel.rgb;
+        } else if (texColorMode == 2) {
+            brushFinal = texel.rgb * brushColor.rgb;
     } else {
-        // Threshold
-        firstMask  = alpha;
-        secondMask = userTexA;
+        // lum-color (3): black → brushColor → white via luminance
+        float lum = dot(texel.rgb, vec3(0.299, 0.587, 0.114));
+        if (lum < 0.5)
+            brushFinal = mix(vec3(0.0), brushColor.rgb, lum * 2.0);
+        else
+            brushFinal = mix(brushColor.rgb, vec3(1.0), (lum - 0.5) * 2.0);
     }
-
-    // --- combine first and second ---
-    float finalAlpha;
-    if (texBlendMode == 2) {
-        finalAlpha = firstMask;
-    }
-    else if (texBlendMode == 1) {
-        float combined = firstMask * secondMask;
-        finalAlpha = applyThreshold(combined, abs(texThresh), texFeather);
     } else {
-        finalAlpha = firstMask * secondMask;
-    }
-
-    finalAlpha = clamp(finalAlpha, 0.0, 1.0);
-
-
-    // --- brush color ---
-    vec3 brushFinal;
-    if (texColorMode == 0) {
+        finalAlpha = alpha;
         brushFinal = brushColor.rgb;
-    } else if (texColorMode == 1) {
-        brushFinal = texel.rgb;
-    } else {
-        brushFinal = texel.rgb * brushColor.rgb;
     }
 
     finalAlpha *= opacity;
@@ -312,9 +298,8 @@ void main() {
         finalColor = vec4(canvas.rgb, newA);
         return;
     } else if (eraseMode == 2) {
-        // Color erase: apply color to semi-transparent regions using gamma formula
-        float gamma = 2.2;
-        float mask = pow(canvas.a, gamma) * finalAlpha;
+        // Color erase: apply color proportional to alpha, then erase
+        float mask = canvas.a * finalAlpha;
         vec3 erasedRGB = mix(canvas.rgb, brushFinal, mask);
         float erasedA = canvas.a * (1.0 - finalAlpha * 0.5);
         finalColor = vec4(erasedRGB, erasedA);
@@ -328,9 +313,7 @@ float cloneOpacity = smudgeStrength;
         ? fract(canvasFragUV - smudgeOffsetUV)
         : clamp(canvasFragUV - smudgeOffsetUV, 0.001, 0.999);
 
-        smudgeUV.y *= -1;
-        smudgeUV = fract(smudgeUV);
-        vec4 smudgeSample = texture(canvasTex, smudgeUV);
+        vec4 smudgeSample = texture(canvasTex, toCopyUV(smudgeUV));
         float smudgeA = smudgeSample.a;
 
 // gracefully handle transparent layers to not mix with blacks.

@@ -71,13 +71,29 @@ void Preset_CaptureFromCurrent(BrushPreset* p, AppState* state) {
     p->seamlessPaint = g_seamlessPaint;
 
     extern int g_strokeSmoothingMode;
-    extern float g_splineMinDist, g_splineAngleThreshold;
+    extern float g_strokeThrottle;
     p->strokeSmoothingMode = g_strokeSmoothingMode;
-    p->splineMinDist = g_splineMinDist;
-    p->splineAngleThreshold = g_splineAngleThreshold;
+    p->strokeThrottle = g_strokeThrottle;
+}
+
+// ── Validation ────────────────────────────────────────────────────────
+static bool _presetIsValid(const BrushPreset* p) {
+    if (!p->name[0]) return false;
+    for (int i = 0; i < BRUSH_PRESET_NAME_MAX; i++) {
+        if (p->name[i] == '\0') break;
+        if (i == BRUSH_PRESET_NAME_MAX - 1) return false;
+    }
+    if (p->mode < 0 || p->mode > eSingleStamp) return false;
+    if (p->eraseMode < 0 || p->eraseMode > 2) return false;
+    for (int i = 0; i < 64; i++) {
+        if (p->texName[i] == '\0') break;
+        if (i == 63) return false;
+    }
+    return true;
 }
 
 void Preset_ApplyToCurrent(const BrushPreset* p, AppState* state) {
+    if (!_presetIsValid(p)) return;
     _ensureBPs();
 
     state->mode = p->mode;
@@ -112,13 +128,31 @@ void Preset_ApplyToCurrent(const BrushPreset* p, AppState* state) {
     g_seamlessPaint = p->seamlessPaint;
 
     extern int g_strokeSmoothingMode;
-    extern float g_splineMinDist, g_splineAngleThreshold;
+    extern float g_strokeThrottle;
     g_strokeSmoothingMode = p->strokeSmoothingMode;
-    g_splineMinDist = p->splineMinDist;
-    g_splineAngleThreshold = p->splineAngleThreshold;
+    g_strokeThrottle = p->strokeThrottle;
 }
 
 // ── File I/O ──
+
+// Old struct for version-1 files (exact layout as originally written)
+struct PresetV1 {
+    char name[64];
+    int mode, eraseMode;
+    struct { float val; int penMode; } bp[19];
+    int texBlendMode, texNoisemode, texColorMode;
+    bool useTexLumAsAlpha, texUseRGB;
+    char texName[64];
+    int bmidx;
+    bool preserveop, seamlessPaint;
+    int strokeSmoothingMode;
+    float splineMinDist;
+    float splineAngleThreshold;
+};
+// Verify the old struct has the same size as originally written
+// (4 bytes of padding between the bools and the final fields)
+static_assert(sizeof(PresetV1) == sizeof(BrushPreset) + 4,
+              "PresetV1 layout mismatch — check alignment");
 
 static int _loadFile(const char* path, BrushPreset* out, int maxCount) {
     FILE* f = fopen(path, "rb");
@@ -129,18 +163,61 @@ static int _loadFile(const char* path, BrushPreset* out, int maxCount) {
         fclose(f); return 0;
     }
 
+    // Read version (ignored — we detect format from file size)
     unsigned char verBuf[4];
     if (fread(verBuf, 1, 4, f) != 4) { fclose(f); return 0; }
-    // version unused for now
 
     unsigned char countBuf[4];
     if (fread(countBuf, 1, 4, f) != 4) { fclose(f); return 0; }
     int count = countBuf[0] | (countBuf[1] << 8) | (countBuf[2] << 16) | (countBuf[3] << 24);
     if (count < 0 || count > maxCount) { fclose(f); return 0; }
 
-    size_t readSz = fread(out, sizeof(BrushPreset), count, f);
+    // Detect entry size from file size to handle format changes
+    fseek(f, 0, SEEK_END);
+    long fileSize = ftell(f);
+    fseek(f, 16, SEEK_SET); // back to start of data
+
+    long dataSize = fileSize - 16;
+    int entrySize = (count > 0) ? (int)(dataSize / count) : 0;
+    if (entrySize <= 0 || dataSize % count != 0) { fclose(f); return 0; }
+
+    int loaded = 0;
+
+    if (entrySize == sizeof(BrushPreset)) {
+        // Current format — read directly
+        size_t readSz = fread(out, sizeof(BrushPreset), count, f);
+        loaded = (int)readSz;
+    } else if (entrySize == sizeof(PresetV1)) {
+        // Version 1 format — read old struct and convert
+        for (int i = 0; i < count && i < maxCount; i++) {
+            PresetV1 old;
+            if (fread(&old, sizeof(PresetV1), 1, f) != 1) break;
+            BrushPreset* p = &out[loaded];
+            memcpy(p->name, old.name, sizeof(p->name));
+            p->mode = old.mode;
+            p->eraseMode = old.eraseMode;
+            memcpy(p->bp, old.bp, sizeof(p->bp));
+            p->texBlendMode = old.texBlendMode;
+            p->texNoisemode = old.texNoisemode;
+            p->texColorMode = old.texColorMode;
+            p->useTexLumAsAlpha = old.useTexLumAsAlpha;
+            p->texUseRGB = old.texUseRGB;
+            memcpy(p->texName, old.texName, sizeof(p->texName));
+            p->bmidx = old.bmidx;
+            p->preserveop = old.preserveop;
+            p->seamlessPaint = old.seamlessPaint;
+            p->strokeSmoothingMode = old.strokeSmoothingMode;
+            p->strokeThrottle = old.splineMinDist; // map old min-dist to throttle
+            if (_presetIsValid(p))
+                loaded++;
+        }
+    } else {
+        // Unknown format — skip (file might be corrupted)
+        fclose(f); return 0;
+    }
+
     fclose(f);
-    return (int)readSz;
+    return loaded;
 }
 
 int Preset_LoadDefault(BrushPreset* out, int maxCount) {

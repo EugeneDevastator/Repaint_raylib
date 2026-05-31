@@ -195,7 +195,7 @@ void DrawSlider(BParam* bp, int orient, float thick, float len) {
     ImGui::PushID(bp->id);
 
     if (orient == 0) {
-        float ctrlH = 28.0f, spacing = 4.0f;
+        float ctrlH = 29.0f, spacing = 4.0f;
 
         if (bp->iconLoaded)
             ImGui::Image((ImTextureID)(intptr_t)bp->iconTex.id, ImVec2(ctrlH, ctrlH));

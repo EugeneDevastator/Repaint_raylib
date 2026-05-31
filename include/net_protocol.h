@@ -18,6 +18,7 @@ enum ConnectionMode {
 enum dStates {
     sdNONE,
     sdAction,
+    sdSegment,
     sdSection,
     sdLAction,
     sdGetName,

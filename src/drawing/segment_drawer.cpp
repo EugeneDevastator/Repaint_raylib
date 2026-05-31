@@ -1,9 +1,10 @@
 #include "brush_draw.h"
+#include "repaint.h"
 #include <math.h>
 #include <string.h>
 
 // ── HSL conversion (matches the UI-side functions) ──────────────────
-static float HueToRGB(float p, float q, float t) {
+static float HueToRGB_Local(float p, float q, float t) {
     if (t < 0) t += 1;
     if (t > 1) t -= 1;
     if (t < 1.0f/6.0f) return p + (q - p) * 6.0f * t;
@@ -12,7 +13,7 @@ static float HueToRGB(float p, float q, float t) {
     return p;
 }
 
-static void RGBToHSL(Color c, float& h, float& s, float& l) {
+static void RGBToHSL_Local(Color c, float& h, float& s, float& l) {
     float r = c.r / 255.0f, g = c.g / 255.0f, b = c.b / 255.0f;
     float mx = fmaxf(r, fmaxf(g, b)), mn = fminf(r, fminf(g, b));
     float d = mx - mn;
@@ -24,7 +25,7 @@ static void RGBToHSL(Color c, float& h, float& s, float& l) {
     else               h = ((r - g) / d + 4.0f) / 6.0f;
 }
 
-static Color HSLToRGB(float h, float s, float l) {
+static Color HSLToRGB_Local(float h, float s, float l) {
     if (s < 0.0001f) {
         uint8_t v = (uint8_t)(l * 255);
         return Color{v, v, v, 255};
@@ -32,9 +33,9 @@ static Color HSLToRGB(float h, float s, float l) {
     float q = (l < 0.5f) ? l * (1.0f + s) : l + s - l * s;
     float p = 2.0f * l - q;
     return Color{
-        (uint8_t)(HueToRGB(p, q, h + 1.0f/3.0f) * 255),
-        (uint8_t)(HueToRGB(p, q, h) * 255),
-        (uint8_t)(HueToRGB(p, q, h - 1.0f/3.0f) * 255),
+        (uint8_t)(HueToRGB_Local(p, q, h + 1.0f/3.0f) * 255),
+        (uint8_t)(HueToRGB_Local(p, q, h) * 255),
+        (uint8_t)(HueToRGB_Local(p, q, h - 1.0f/3.0f) * 255),
         255
     };
 }
@@ -96,6 +97,9 @@ CollapsedBrush BlendBrushes(CollapsedBrush from, CollapsedBrush to, float k) {
     r.texNoisemode = from.texNoisemode;
     r.texColorMode = from.texColorMode;
     r.useTexLumAsAlpha = from.useTexLumAsAlpha;
+    r.userTexOriginX = from.userTexOriginX;
+    r.userTexOriginY = from.userTexOriginY;
+    r.userTexDirection = from.userTexDirection;
 
     // Jitter ranges (interpolated — proportional to radius)
     r.jitRadOut = lerp(from.jitRadOut, to.jitRadOut, k);
@@ -239,10 +243,20 @@ int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad, DrawDab*
     float stdist = sqrtf((to.x - from.x) * (to.x - from.x) + (to.y - from.y) * (to.y - from.y));
     if (stdist < 0.001f) return 0;
 
+    if (seg->tool == eSingleStamp) {
+        out[0].x = from.x; out[0].y = from.y;
+        out[0].srcX = seg->smudgeSrcX;
+        out[0].srcY = seg->smudgeSrcY;
+        out[0].brush = seg->brushFrom;
+        res->lastDabPos = Vector2{from.x, from.y};
+        res->lastRadOut = seg->brushFrom.rad_out_px;
+        return 1;
+    }
+
     bool isCurved = (seg->ctrl0.x != from.x || seg->ctrl0.y != from.y ||
                      seg->ctrl3.x != to.x   || seg->ctrl3.y != to.y);
 
-    float spacingMult = seg->spacing;
+    float spacingMult = seg->brushFrom.spacing;
     if (spacingMult < 0.0f) spacingMult = 0.0f;
 
     float rFrom = seg->brushFrom.rad_out_px;
@@ -285,7 +299,7 @@ int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad, DrawDab*
                                              0.0f, totalLen, rFrom, rTo, spacingMult);
 
         // 2. Randomize the next dab's radius
-        float dr = RawRnd(seg->brushFrom.baseSeed + (uint16_t)((dabOffset + count) * 7 + 1), 1024) / 1024.0f * 2.0f - 1.0f;
+        float dr = RawRnd(seg->brushFrom.baseSeed + (uint16_t)(count * 7 + 1), 1024) / 1024.0f * 2.0f - 1.0f;
         nextDabRad += dr * seg->brushFrom.jitRadOut;
 
         // 3. Find position along the curve where the randomized radius touches the last dab
@@ -300,13 +314,18 @@ int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad, DrawDab*
         // 5. Build brush at the actual position, jitter visual params
         float k2 = lastDabPos / totalLen;
         CollapsedBrush dabCB = BlendBrushes(seg->brushFrom, seg->brush, k2);
-        JitterBrush(dabCB, seg->brushFrom.baseSeed, dabOffset + count);
+        JitterBrush(dabCB, seg->brushFrom.baseSeed, count);
 
         nn++;
         out[count].x = pos.x;
         out[count].y = pos.y;
-        out[count].srcX = pos.x;
-        out[count].srcY = pos.y;
+        if (count == 0) {
+            out[count].srcX = seg->smudgeSrcX;
+            out[count].srcY = seg->smudgeSrcY;
+        } else {
+            out[count].srcX = out[count-1].x;
+            out[count].srcY = out[count-1].y;
+        }
         out[count].brush = dabCB;
         count++;
 
@@ -336,6 +355,49 @@ int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad, DrawDab*
 }
 
 
+// ── DrawOneSegment ─────────────────────────────────────────────────
+void DrawOneSegment(const DrawSegment& dseg, RenderTexture2D rt) {
+    bool savedSeamless = g_seamlessPaint;
+    g_seamlessPaint = (dseg.seamless != 0);
+
+    DrawDab dabs[512];
+    SegResult r; memset(&r, 0, sizeof(r));
+    int n = DrawLinear(&dseg, 0, 0.0f, dabs, 512, &r);
+    for (int i = 0; i < n; i++) {
+        CollapsedBrush* cb = &dabs[i].brush;
+        d_Brush tb; memset(&tb, 0, sizeof(tb));
+        tb.Realb.rad_out = cb->rad_out_px;
+        tb.Realb.radInRatio = cb->radInRatio;
+        tb.Realb.opacity = cb->opacity;
+        tb.Realb.crv = cb->crv;
+        tb.Realb.x2y = cb->scale_y;
+        tb.Realb.resangle = cb->resangle;
+        tb.Realb.col = cb->col;
+        tb.Realb.cop = cb->cop;
+        tb.Realb.bmidx = (uint8_t)cb->bmidx;
+        tb.Realb.preserveop = cb->preserveop;
+        tb.Realb.eraseMode = cb->eraseMode;
+        tb.Realb.perspective = cb->perspective;
+        tb.Realb.texScale = cb->texScale;
+        tb.Realb.texFeather = cb->texFeather;
+        tb.Realb.texThresh = cb->texThresh;
+        tb.Realb.texBlendVal = cb->texBlendVal;
+        tb.Realb.texBlendMode = cb->texBlendMode;
+        tb.Realb.texNoisemode = cb->texNoisemode;
+        tb.Realb.texColorMode = cb->texColorMode;
+        tb.Realb.useTexLumAsAlpha = cb->useTexLumAsAlpha;
+        tb.Realb.pwr = cb->pwr;
+        tb.Realb.userTexOriginX = cb->userTexOriginX;
+        tb.Realb.userTexOriginY = cb->userTexOriginY;
+        tb.Realb.userTexDirection = cb->userTexDirection;
+        BrushBlend_ApplyStamp(rt, &tb, g_activeBrushTex,
+                              dabs[i].x, dabs[i].y, dabs[i].srcX, dabs[i].srcY);
+    }
+
+    g_seamlessPaint = savedSeamless;
+}
+
+
 // ── DrawAirflow ────────────────────────────────────────────────────
 int DrawAirflow(const DrawSegment* seg, float accum, DrawDab* out, int maxOut, SegResult* res) {
     if (maxOut <= 0 || !res) return 0;
@@ -348,7 +410,7 @@ int DrawAirflow(const DrawSegment* seg, float accum, DrawDab* out, int maxOut, S
     float stdist = sqrtf((to.x - from.x) * (to.x - from.x) + (to.y - from.y) * (to.y - from.y));
     if (stdist < 0.001f) return 0;
 
-    float spacingMult = seg->spacing;
+    float spacingMult = seg->brushFrom.spacing;
     if (spacingMult < 0.0f) spacingMult = 0.0f;
 
     float dx = to.x - from.x, dy = to.y - from.y;
