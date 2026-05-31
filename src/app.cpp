@@ -408,6 +408,7 @@ void App_Init(AppState* state) {
     g_state = state;
 
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
+    SetTraceLogLevel(LOG_WARNING);
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "RePaint");
     MaximizeWindow();
     DrawSplash("Initializing...");
