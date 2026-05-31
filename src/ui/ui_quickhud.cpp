@@ -6,6 +6,8 @@
 void QuickPanel_DrawUI(AppState* state);
 void XORgizmo_DrawVisual(AppState* state);
 void XORgizmo_HandleInput(AppState* state);
+void FilePanel_Draw(AppState* state, Rectangle vp);
+void ToolBox_Draw(AppState* state, Rectangle vp);
 
 QuickHudModule::QuickHudModule(AppState* s) : state(s) {
     texPanelChild = std::unique_ptr<IModule>(new TexPanelModule(s));
@@ -29,6 +31,12 @@ void QuickHudModule::DrawGL(const DrawRect& rect) {
 void QuickHudModule::DrawGUI(const DrawRect& rect) {
     (void)rect;
     if (g_activeHud != HUD_QUICK) return;
+
+    Rectangle vp = viewport.bounds;
+    rlSetBlendMode(RL_BLEND_ALPHA);
+    FilePanel_Draw(state, vp);
+    rlSetBlendMode(RL_BLEND_ALPHA);
+    ToolBox_Draw(state, vp);
 
     // ── Open the shared ##qpui window ──────────────────────────────
     ImGui::SetNextWindowPos(ImVec2(rect.x, rect.y));

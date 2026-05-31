@@ -1,6 +1,6 @@
 #include "repaint.h"
 
-struct LBDab { float x,y; d_RealBrush brush; int layer; RenderTexture2D targetRT; };
+struct LBDab { float x,y, srcX,srcY; d_RealBrush brush; int layer; RenderTexture2D targetRT; };
 
 static LBDab s_queue[4096];
 static volatile int s_head = 0, s_tail = 0;
@@ -15,6 +15,8 @@ void LocalBroker::on_segment(const DrawSegment& seg) {
     LBDab& d = s_queue[s_tail];
     d.x = seg.pos1.x;
     d.y = seg.pos1.y;
+    d.srcX = seg.pos2.x;
+    d.srcY = seg.pos2.y;
 
     CollapsedBrush cb = seg.brushFrom;
     d.brush.rad_out     = cb.rad_out_px;
@@ -57,9 +59,10 @@ void LocalBroker::poll(AppState* state) {
         if (d.targetRT.id != 0 && d.layer >= 0 && d.layer < LayerStack_Count()) {
             RenderTexture2D rt = LayerStack_GetRT(d.layer);
             if (rt.id > 0) {
+                float sx = d.srcX, sy = d.srcY;
                 d_Brush tb = {};
                 tb.Realb = d.brush;
-                BrushBlend_ApplyStamp(rt, &tb, g_activeBrushTex, d.x, d.y, d.x, d.y);
+                BrushBlend_ApplyStamp(rt, &tb, g_activeBrushTex, d.x, d.y, sx, sy);
             }
         }
         s_head = (s_head + 1) % 4096;

@@ -51,6 +51,7 @@ static void CommitLayerOp(AppState* state, d_LAction* lact) {
 }
 
 void LayerPanel_Draw(AppState* state) {
+    if (LayerStack_Count() <= 0) return; // no layers yet
     int sw = GetScreenWidth();
     int sh = GetScreenHeight();
     ImGui::SetNextWindowPos(ImVec2((float)(sw - RIGHT_PANEL_WIDTH), 0), ImGuiCond_Always);

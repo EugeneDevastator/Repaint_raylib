@@ -77,11 +77,6 @@ void QuickPanel_DrawUI(AppState* state) {
     int gcx = (int)(vp.x + vp.width * 0.5f);
     int gcy = (int)(vp.y + vp.height * 0.5f);
 
-    rlSetBlendMode(RL_BLEND_ALPHA);
-    FilePanel_Draw(state, vp);
-    rlSetBlendMode(RL_BLEND_ALPHA);
-    ToolBox_Draw(state, vp);
-
     ImDrawList* dl = ImGui::GetWindowDrawList();
     int sw = GetScreenWidth();
     int sh = GetScreenHeight();

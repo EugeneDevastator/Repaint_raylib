@@ -1,4 +1,5 @@
 #include "repaint.h"
+#include "replay_recorder.h"
 #include "stroke_engine.h"
 #include "stroke.h"
 #include <math.h>
@@ -185,6 +186,13 @@ static int FeedOnePoint(StrokeEngine* se, Vector2 pos, float velocity,
     dseg.Noisemode = 0;
     dseg.seed     = baseBrush->seed;
 
+    if (g_recorder) {
+        g_recorder->on_segment(dseg);
+    } else {
+        static int warn = 0;
+        if (++warn == 1) printf("[REC] g_recorder is NULL!\n"), fflush(stdout);
+    }
+
     SegResult r;
     int n = DrawLinear(&dseg, se->dabIndex, se->lastDabRad, outDabs, maxDabs, &r);
 
@@ -286,6 +294,8 @@ int StrokeEngine_FeedPoint(StrokeEngine* se, const StrokePoint& sp,
         dseg.Noisemode = 0;
         dseg.seed      = baseBrush->seed;
 
+        if (g_recorder) g_recorder->on_segment(dseg);
+
         SegResult r;
         int n = DrawLinear(&dseg, se->dabIndex, se->lastDabRad,
                            outDabs + totalDabs, maxDabs - totalDabs, &r);
@@ -365,6 +375,8 @@ int StrokeEngine_FlushSmoothing(StrokeEngine* se, const d_RealBrush* baseBrush,
         dseg.brush     = cbTo;
         dseg.Noisemode = 0;
         dseg.seed      = baseBrush->seed;
+
+        if (g_recorder) g_recorder->on_segment(dseg);
 
         SegResult r;
         int n = DrawLinear(&dseg, se->dabIndex, se->lastDabRad,

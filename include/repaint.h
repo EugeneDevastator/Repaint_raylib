@@ -153,6 +153,8 @@ extern float g_strokeThrottle;
 class UndoManager;
 extern UndoManager* g_undoManager;
 struct AppState;
+struct ReplayRecorder;
+extern ReplayRecorder* g_recorder;
 
 struct NetSegment {
     Vector2 pos1, pos2, ctrl0, ctrl3;
@@ -169,6 +171,7 @@ struct ICommandBroker {
 };
 
 extern ICommandBroker* g_broker;
+extern ReplayRecorder* g_recorder;
 
 struct LocalBroker : ICommandBroker {
     AppState* appState;

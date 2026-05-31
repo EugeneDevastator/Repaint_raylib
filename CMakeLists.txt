@@ -102,6 +102,7 @@ set(SOURCES
     src/ui/ui_style.cpp
     src/ui/ui_texpanel.cpp
     src/undo.cpp
+    src/replay_recorder.cpp
     # ── sensors ───────────────────────────────────────────────────────
     src/sensors/tablet.cpp
     src/sensors/input_filter.cpp

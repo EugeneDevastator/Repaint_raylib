@@ -103,7 +103,6 @@ struct ModuleStack {
         for (auto& s : slots)
             s.module->DrawGL(s.rect);
     }
-
     void DrawGUI() {
         for (auto& s : slots)
             s.module->DrawGUI(s.rect);
