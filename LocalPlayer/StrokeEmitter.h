@@ -36,6 +36,15 @@ private:
     float m_prevSegLen, m_prevVel;
     float m_initDir;
     bool  m_initDirSet;
+
+    Vector2 m_splinePts[256];
+    int m_splineCount, m_processedCount;
+    float m_accumDist;
+    Vector2 m_lastInputPos;
+
+    void emitSegment(Vector2 p0, Vector2 p2, Vector2 ctrl0, Vector2 ctrl3,
+                     const d_RealBrush& brush, float initAngle, int toolMode);
+    void flushSmoothing(const d_RealBrush& brush, float initAngle, int toolMode);
 };
 
 extern StrokeEmitter* g_emitter;
