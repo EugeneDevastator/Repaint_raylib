@@ -31,6 +31,11 @@ private:
     float m_initAngle;
     int   m_toolMode;
     uint16_t m_seed;
+
+    Vector2 m_prevSegPos, m_prevSegDir;
+    float m_prevSegLen, m_prevVel;
+    float m_initDir;
+    bool  m_initDirSet;
 };
 
 extern StrokeEmitter* g_emitter;

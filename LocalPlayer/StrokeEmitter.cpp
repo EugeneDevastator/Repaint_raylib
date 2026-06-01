@@ -23,6 +23,11 @@ void StrokeEmitter::BeginStroke(float x, float y, const d_RealBrush& brush, floa
     m_dabIndex = 0;
     m_lastDabPos = Vector2{x, y};
     m_seed = brush.seed;
+    m_prevSegPos = Vector2{x, y};
+    m_prevSegDir = Vector2{0, 0};
+    m_prevSegLen = 0;
+    m_prevVel = 0;
+    m_initDirSet = false;
 }
 
 void StrokeEmitter::AddPoint(const InputPoint& pt, const d_RealBrush& brush, float initAngle, int toolMode) {
@@ -38,8 +43,41 @@ void StrokeEmitter::AddPoint(const InputPoint& pt, const d_RealBrush& brush, flo
     g_modPars.Pars[csXtilt]    = pt.tiltX;
     g_modPars.Pars[csYtilt]    = pt.tiltY;
 
-    // Brush modulation
+    // Stroke geometry modulators (directions, curve, acceleration)
+    float segDx = pos.x - m_lastDabPos.x;
+    float segDy = pos.y - m_lastDabPos.y;
+    float segLen = sqrtf(segDx * segDx + segDy * segDy);
+    float dirAng = AtanXY(segDx, segDy);
+
+    g_modPars.Pars[csVel] = pt.velocity;
+    g_modPars.Pars[csDir] = RngConv(dirAng, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
+    if (!m_initDirSet && segLen > 0.5f) { m_initDir = dirAng; m_initDirSet = true; }
+    g_modPars.Pars[csIdir] = RngConv(m_initDir, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
+
+    if (m_prevSegLen > 0.5f && segLen > 0.5f) {
+        float dot = (m_prevSegDir.x * segDx + m_prevSegDir.y * segDy) / (m_prevSegLen * segLen);
+        g_modPars.Pars[csCrv] = RngConv(dot, 0.8f, 1.0f, 0.0f, 1.0f);
+    }
+    g_modPars.Pars[csAcc] = 1.0f - fabsf(pt.velocity - m_prevVel);
+    g_modPars.Pars[csAcc] = RngConv(g_modPars.Pars[csAcc], 0.7f, 1.0f, 0.0f, 1.0f);
+    if (segLen > 0.001f) g_modPars.Pars[csHVdir] = fabsf(segDx / segLen);
+
+    {
+        float dir01 = g_modPars.Pars[csDir], rot01 = brush.resangle / 360.0f;
+        float rel = fabsf(dir01 - rot01);
+        if (rel > 0.5f) rel = 1.0f - rel;
+        rel = rel * 2.0f; rel = 1.0f - fabsf(rel - 0.5f) * 2.0f;
+        g_modPars.Pars[csRelang] = rel;
+    }
+
+    m_prevSegPos = pos;
+    m_prevSegDir = Vector2{segDx, segDy};
+    m_prevSegLen = segLen;
+    m_prevVel = pt.velocity;
+
+    // Brush modulation with geometry-aware modulators
     d_RealBrush target = brush;
+    float sizeMul = powf(16.0f, BParam_GetValue(&bpSizeMul) / 128.0f - 1.0f);
     target.rad_out  = GetModVal(&bpSize);
     target.radInRatio = GetModVal(&bpHardness);
     target.crv      = GetModVal(&bpCurvature);
@@ -48,7 +86,6 @@ void StrokeEmitter::AddPoint(const InputPoint& pt, const d_RealBrush& brush, flo
     target.x2y      = GetModVal(&bpScaleRel);
     target.col      = HSLToRGB(GetModVal(&bpQuickHue), GetModVal(&bpQuickSat), GetModVal(&bpQuickLit));
     target.cop      = (toolMode == eSmudge) ? GetModVal(&bpCloneOpacity) : 0.0f;
-    float sizeMul   = powf(16.0f, BParam_GetValue(&bpSizeMul) / 128.0f - 1.0f);
     target.rad_out *= sizeMul;
 
     CollapsedBrush cbFrom = CollapseBrushParams(m_brushFrom, initAngle, toolMode);
@@ -71,9 +108,9 @@ void StrokeEmitter::AddPoint(const InputPoint& pt, const d_RealBrush& brush, flo
     dseg.targetType = m_targetType;
     dseg.targetId   = m_targetId;
 
-    // Compute exact last dab position for chaining
+    // Compute exact last dab position for chaining (with radius continuity)
     SegResult r;
-    DrawLinear(&dseg, m_dabIndex, 0.0f, nullptr, nullptr, 65536, &r);
+    int dabs = DrawLinear(&dseg, m_dabIndex, 0.0f, nullptr, nullptr, 65536, &r);
     m_lastDabPos = r.lastDabPos;
 
     // Push to segment renderer for local drawing
@@ -89,7 +126,7 @@ void StrokeEmitter::AddPoint(const InputPoint& pt, const d_RealBrush& brush, flo
     if (g_broker) g_broker->on_segment(dseg);
 
     m_brushFrom = target;
-    m_dabIndex++;
+    m_dabIndex += dabs;
 }
 
 void StrokeEmitter::EndStroke() {
