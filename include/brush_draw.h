@@ -45,14 +45,13 @@ struct DrawSegment {
     uint8_t Noisemode, tool, seamless;
     uint16_t seed;
     float smudgeSrcX, smudgeSrcY;
+    uint8_t targetType;  // 0 = layer, 1 = brush texture
+    uint8_t targetId;    // layer index or brushTex index
 };
 
-// ── Output dab ─────────────────────────────────────────────────────
-struct DrawDab {
-    float x, y;
-    float srcX, srcY;
-    CollapsedBrush brush;
-};
+// ── Apply a collapsed brush stamp onto a render target ─────────────
+void ApplyCollapsedBrush(RenderTexture2D rt, const CollapsedBrush& cb,
+                         float x, float y, float srcX, float srcY);
 
 // ── Segment result ─────────────────────────────────────────────────
 struct SegResult {
@@ -76,8 +75,5 @@ int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad,
 
 // ── Stateless: draws one segment onto a render target ──────────────
 void DrawOneSegment(const DrawSegment& dseg, RenderTexture2D rt);
-
-// ── Airflow stroke: accumulates overdraw, bursty placement ─────────
-int DrawAirflow(const DrawSegment* seg, float accum, DrawDab* out, int maxOut, SegResult* res);
 
 #endif

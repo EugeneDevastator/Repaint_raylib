@@ -17,12 +17,10 @@ void StrokeEngine_Init(StrokeEngine* se);
 void StrokeEngine_BeginStroke(StrokeEngine* se, const d_Brush* baseBrush, float x, float y);
 int  StrokeEngine_FeedPoint(StrokeEngine* se, const StrokePoint& sp,
                             const d_RealBrush* baseBrush,
-                            float initialAngle, int toolMode,
-                            DrawDab* outDabs, int maxDabs);
+                            float initialAngle, int toolMode);
 void StrokeEngine_EndStroke(StrokeEngine* se);
 int  StrokeEngine_FlushSmoothing(StrokeEngine* se, const d_RealBrush* baseBrush,
-                                  float initialAngle, int toolMode,
-                                  DrawDab* outDabs, int maxDabs);
+                                  float initialAngle, int toolMode);
 
 // ── Utilities ──
 void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex,

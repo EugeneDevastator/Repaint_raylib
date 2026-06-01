@@ -136,6 +136,8 @@ struct StrokeEngine {
     int dabIndex; bool inStroke;
     Vector2 prevSegPos, prevSegDir; float prevSegLen, prevVel;
     float initDir; bool initDirSet;
+    uint8_t targetType;  // 0 = layer, 1 = brush texture
+    uint8_t targetId;    // layer index or brushTex index
 
     // Spline buffer for Smooth mode: throttled input points used as Catmull-Rom control points
     Vector2 splinePts[256];
@@ -160,8 +162,8 @@ struct NetSegment {
     Vector2 pos1, pos2, ctrl0, ctrl3;
     CollapsedBrush brushFrom, brushTo;
     uint16_t seed;
-    int layer;
-    uint8_t toolID, seamless;
+    uint8_t layer;       // target layer index
+    uint8_t toolID, seamless;   // pad byte
     float smudgeSrcX, smudgeSrcY;
 };
 

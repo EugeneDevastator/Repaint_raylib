@@ -193,9 +193,7 @@ void NetworkBroker::SendLAction(const d_LAction* lact) {
 void NetworkBroker::on_segment(const DrawSegment& seg) {
     int next = (segTail + 1) % CMD_CAPACITY;
     if (next == segHead) return;
-    if (!appState) return;
 
-    int layer = appState->activeLayer;
     QueuedSegment& d = segQueue[segTail];
     d.pos1 = seg.pos1; d.pos2 = seg.pos2;
     d.ctrl0 = seg.ctrl0; d.ctrl3 = seg.ctrl3;
@@ -206,8 +204,8 @@ void NetworkBroker::on_segment(const DrawSegment& seg) {
     d.seamless = seg.seamless;
     d.smudgeSrcX = seg.smudgeSrcX;
     d.smudgeSrcY = seg.smudgeSrcY;
-    d.activeLayer = layer;
-    d.targetRT = LayerStack_GetRT(layer);
+    d.targetType = seg.targetType;
+    d.targetId   = seg.targetId;
     segTail = next;
 }
 
@@ -216,24 +214,29 @@ void NetworkBroker::poll(AppState* st) {
 
     while (segHead != segTail) {
         QueuedSegment* d = &segQueue[segHead];
-        if (d->targetRT.id != 0 && d->activeLayer >= 0 && d->activeLayer < LayerStack_Count()) {
-            RenderTexture2D rt = LayerStack_GetRT(d->activeLayer);
-            if (rt.id > 0) {
-                DrawSegment dseg;
-                memset(&dseg, 0, sizeof(dseg));
-                dseg.pos1 = d->pos1; dseg.pos2 = d->pos2;
-                dseg.ctrl0 = d->ctrl0; dseg.ctrl3 = d->ctrl3;
-                dseg.brushFrom = d->brushFrom; dseg.brush = d->brushTo;
-                dseg.seed = d->seed; dseg.tool = d->tool;
-                dseg.seamless = d->seamless;
-                dseg.smudgeSrcX = d->smudgeSrcX; dseg.smudgeSrcY = d->smudgeSrcY;
-                dseg.Noisemode = 0;
 
-                DrawOneSegment(dseg, rt);
+        RenderTexture2D rt = {0};
+        if (d->targetType == 1 && d->targetId >= 0 && d->targetId < st->brushTexCount) {
+            rt = st->brushTex[d->targetId].rt;
+        } else if (d->targetId >= 0 && d->targetId < LayerStack_Count()) {
+            rt = LayerStack_GetRT(d->targetId);
+        }
 
-                if (this->state == NS_CONNECTED)
-                    SendSegment(*d);
-            }
+        if (rt.id > 0) {
+            DrawSegment dseg;
+            memset(&dseg, 0, sizeof(dseg));
+            dseg.pos1 = d->pos1; dseg.pos2 = d->pos2;
+            dseg.ctrl0 = d->ctrl0; dseg.ctrl3 = d->ctrl3;
+            dseg.brushFrom = d->brushFrom; dseg.brush = d->brushTo;
+            dseg.seed = d->seed; dseg.tool = d->tool;
+            dseg.seamless = d->seamless;
+            dseg.smudgeSrcX = d->smudgeSrcX; dseg.smudgeSrcY = d->smudgeSrcY;
+            dseg.Noisemode = 0;
+
+            DrawOneSegment(dseg, rt);
+
+            if (this->state == NS_CONNECTED)
+                SendSegment(*d);
         }
         segHead = (segHead + 1) % CMD_CAPACITY;
     }
@@ -435,7 +438,7 @@ void NetworkBroker::SendSegment(const QueuedSegment& seg) {
     ns.seamless = seg.seamless;
     ns.smudgeSrcX = seg.smudgeSrcX;
     ns.smudgeSrcY = seg.smudgeSrcY;
-    ns.layer = seg.activeLayer;
+    ns.layer = seg.targetId;
     uint8_t buf[4096];
     size_t sz = Segment_Serialize(ns, buf, sizeof(buf));
     if (sz > 0) SendPacket(sdSegment, buf, (uint32_t)sz);
@@ -454,8 +457,8 @@ void NetworkBroker::EnqueueRemoteSegment(const NetSegment& ns) {
     d.seamless = ns.seamless;
     d.smudgeSrcX = ns.smudgeSrcX;
     d.smudgeSrcY = ns.smudgeSrcY;
-    d.activeLayer = ns.layer;
-    d.targetRT = LayerStack_GetRT(ns.layer);
+    d.targetType = 0;
+    d.targetId   = ns.layer;
     segTail = next;
 }
 

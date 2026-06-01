@@ -20,40 +20,6 @@ static void PushDabSegment(ICommandBroker* b, float x, float y, float srcX, floa
 
 extern float g_pivotCursorX, g_pivotCursorY;
 
-static BrushDab MakeBrushDab(float x, float y, const DrawDab& d) {
-    BrushDab r;
-    r.x = x; r.y = y;
-    r.srcX = d.srcX; r.srcY = d.srcY;
-    r.brush.rad_out     = d.brush.rad_out_px;
-    r.brush.radInRatio  = d.brush.radInRatio;
-    r.brush.opacity     = d.brush.opacity;
-    r.brush.crv         = d.brush.crv;
-    r.brush.x2y         = d.brush.scale_y;
-    r.brush.resangle    = d.brush.resangle;
-    r.brush.col         = d.brush.col;
-    r.brush.cop         = d.brush.cop;
-    r.brush.bmidx       = (uint8_t)d.brush.bmidx;
-    r.brush.preserveop  = d.brush.preserveop;
-    r.brush.eraseMode   = d.brush.eraseMode;
-    r.brush.perspective = d.brush.perspective;
-    r.brush.texScale    = d.brush.texScale;
-    r.brush.texFeather  = d.brush.texFeather;
-    r.brush.texThresh   = d.brush.texThresh;
-    r.brush.texBlendVal = d.brush.texBlendVal;
-    r.brush.texBlendMode = d.brush.texBlendMode;
-    r.brush.texNoisemode = d.brush.texNoisemode;
-    r.brush.texColorMode = d.brush.texColorMode;
-    r.brush.useTexLumAsAlpha = d.brush.useTexLumAsAlpha;
-    r.brush.pwr         = d.brush.pwr;
-    r.brush.userTexOriginX = d.brush.userTexOriginX;
-    r.brush.userTexOriginY = d.brush.userTexOriginY;
-    r.brush.userTexDirection = d.brush.userTexDirection;
-    r.brush.seed        = 0;
-    r.brush.sol         = 1.0f;
-    r.brush.sol2op      = 0.0f;
-    return r;
-}
-
 void Viewport_Init(Viewport* vp, Rectangle bounds) {
     vp->bounds = bounds;
     vp->strokeLen = 0;
@@ -217,7 +183,8 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
 
     // ── Texture editing mode ──────────────────────────────────────────
     if (state->editTexMode && state->activeBrushTex >= 0 &&
-        state->activeBrushTex < state->brushTexCount)
+        state->activeBrushTex < state->brushTexCount &&
+        !state->brushTex[state->activeBrushTex].builtIn)
     {
         BrushTexture* bt = &state->brushTex[state->activeBrushTex];
         if (bt->rt.id > 0 && (state->mode == eBrush || state->mode == eSmudge)) {
@@ -227,7 +194,6 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             float dstH = bt->h * state->camera.zoom;
             float tx = (mousePos.x - dstX) / dstW * bt->w;
             float ty = (mousePos.y - dstY) / dstH * bt->h;
-            Vector2 texPos = {tx, ty};
 
             Texture2D savedTex = g_activeBrushTex;
             g_activeBrushTex = g_defaultBrushTex;
@@ -235,6 +201,8 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             if (!vp->wasMouseDown) {
                 if (vp->inBounds && leftDown) {
                     Modulators_SnapRunState();
+                    vp->strokeEng.targetType = 1;
+                    vp->strokeEng.targetId = state->activeBrushTex;
                     StrokeEngine_BeginStroke(&vp->strokeEng, &state->currentBrush, tx, ty);
                     vp->inputFilter.Reset();
                     vp->inputFilter.Feed(tx, ty, GetTime());
@@ -243,107 +211,37 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             } else if (leftDown) {
                 double now = GetTime();
                 StrokePoint sp = vp->inputFilter.Feed(tx, ty, now);
-                DrawDab dabs[2048];
-                int n = StrokeEngine_FeedPoint(&vp->strokeEng, sp,
-                    &state->currentBrush.Realb, state->initialAngle, state->mode,
-                    dabs, 2048);
-                if (n > 0) {
-                    for (int i = 0; i < n; i++) {
-                        dabs[i].brush.rad_out_px *= layerScale;
-                        CollapsedBrush* cb = &dabs[i].brush;
-                        d_Brush tb; memset(&tb, 0, sizeof(tb));
-                        tb.Realb.rad_out = cb->rad_out_px;
-                        tb.Realb.radInRatio = cb->radInRatio;
-                        tb.Realb.opacity = cb->opacity;
-                        tb.Realb.crv = cb->crv;
-                        tb.Realb.x2y = cb->scale_y;
-                        tb.Realb.resangle = cb->resangle;
-                        tb.Realb.col = cb->col;
-                        tb.Realb.cop = cb->cop;
-                        tb.Realb.bmidx = (uint8_t)cb->bmidx;
-                        tb.Realb.preserveop = cb->preserveop;
-                        tb.Realb.eraseMode = cb->eraseMode;
-                        tb.Realb.perspective = cb->perspective;
-                        tb.Realb.texScale = cb->texScale;
-                        tb.Realb.texFeather = cb->texFeather;
-                        tb.Realb.texThresh = cb->texThresh;
-                        tb.Realb.texBlendVal = cb->texBlendVal;
-                        tb.Realb.texBlendMode = cb->texBlendMode;
-                        tb.Realb.texNoisemode = cb->texNoisemode;
-                        tb.Realb.texColorMode = cb->texColorMode;
-                        tb.Realb.useTexLumAsAlpha = cb->useTexLumAsAlpha;
-                        tb.Realb.pwr = cb->pwr;
-                        tb.Realb.userTexOriginX = cb->userTexOriginX;
-                        tb.Realb.userTexOriginY = cb->userTexOriginY;
-                        tb.Realb.userTexDirection = cb->userTexDirection;
-                        BrushBlend_ApplyStamp(bt->rt, &tb, g_activeBrushTex,
-                                              dabs[i].x, dabs[i].y, dabs[i].srcX, dabs[i].srcY);
-                    }
-                }
+                StrokeEngine_FeedPoint(&vp->strokeEng, sp,
+                    &state->currentBrush.Realb, state->initialAngle, state->mode);
             }
+
+            if (!leftDown && vp->wasMouseDown) {
+                int fn = StrokeEngine_FlushSmoothing(&vp->strokeEng, &state->currentBrush.Realb,
+                                                      state->initialAngle, state->mode);
+                if (fn == 0) {
+                    // Single click — emit a SingleStamp segment via broker
+                    CollapsedBrush cb = CollapseBrushParams(state->currentBrush.Realb, state->initialAngle, state->mode);
+                    DrawSegment rs; memset(&rs, 0, sizeof(rs));
+                    rs.pos1 = rs.pos2 = Vector2{tx, ty};
+                    rs.ctrl0 = rs.ctrl3 = rs.pos1;
+                    rs.brushFrom = rs.brush = cb;
+                    rs.tool = eSingleStamp;
+                    rs.seamless = g_seamlessPaint ? 1 : 0;
+                    rs.seed = state->currentBrush.Realb.seed;
+                    rs.smudgeSrcX = tx;
+                    rs.smudgeSrcY = ty;
+                    rs.targetType = 1;
+                    rs.targetId = state->activeBrushTex;
+                    if (g_broker) g_broker->on_segment(rs);
+                    if (g_recorder) g_recorder->on_segment(rs);
+                }
+                StrokeEngine_EndStroke(&vp->strokeEng);
+                vp->wasMouseDown = false;
+            }
+
             g_activeBrushTex = savedTex;
         }
         layersDirty = true;
-        if (!leftDown) {
-            if (vp->wasMouseDown) {
-                DrawDab fdabs[2048];
-                int fn = StrokeEngine_FlushSmoothing(&vp->strokeEng, &state->currentBrush.Realb,
-                                                       state->initialAngle, state->mode, fdabs, 2048);
-                if (fn > 0) {
-                    for (int i = 0; i < fn; i++) {
-                        fdabs[i].brush.rad_out_px *= layerScale;
-                        CollapsedBrush* cb = &fdabs[i].brush;
-                        d_Brush tb; memset(&tb, 0, sizeof(tb));
-                        tb.Realb.rad_out = cb->rad_out_px;
-                        tb.Realb.radInRatio = cb->radInRatio;
-                        tb.Realb.opacity = cb->opacity;
-                        tb.Realb.crv = cb->crv;
-                        tb.Realb.x2y = cb->scale_y;
-                        tb.Realb.resangle = cb->resangle;
-                        tb.Realb.col = cb->col;
-                        tb.Realb.cop = cb->cop;
-                        tb.Realb.bmidx = (uint8_t)cb->bmidx;
-                        tb.Realb.preserveop = cb->preserveop;
-                        tb.Realb.eraseMode = cb->eraseMode;
-                        tb.Realb.perspective = cb->perspective;
-                        tb.Realb.texScale = cb->texScale;
-                        tb.Realb.texFeather = cb->texFeather;
-                        tb.Realb.texThresh = cb->texThresh;
-                        tb.Realb.texBlendVal = cb->texBlendVal;
-                        tb.Realb.texBlendMode = cb->texBlendMode;
-                        tb.Realb.texNoisemode = cb->texNoisemode;
-                        tb.Realb.texColorMode = cb->texColorMode;
-                        tb.Realb.useTexLumAsAlpha = cb->useTexLumAsAlpha;
-                        tb.Realb.pwr = cb->pwr;
-                        tb.Realb.userTexOriginX = cb->userTexOriginX;
-                        tb.Realb.userTexOriginY = cb->userTexOriginY;
-                        tb.Realb.userTexDirection = cb->userTexDirection;
-                        BrushBlend_ApplyStamp(bt->rt, &tb, g_activeBrushTex,
-                                              fdabs[i].x, fdabs[i].y, fdabs[i].srcX, fdabs[i].srcY);
-                    }
-                } else if (vp->strokeEng.dabIndex == 0) {
-                    // Single click on texture
-                    Vector2 pos = vp->strokeEng.lastDabPos;
-                    CollapsedBrush cb = CollapseBrushParams(state->currentBrush.Realb, state->initialAngle, state->mode);
-                    cb.rad_out_px *= layerScale;
-                    DrawSegment rs; memset(&rs, 0, sizeof(rs));
-                    rs.pos1 = rs.pos2 = Vector2{pos.x, pos.y};
-                    rs.ctrl0 = rs.ctrl3 = rs.pos1;
-                    rs.brushFrom = rs.brush = cb;
-                rs.tool = eSingleStamp;
-                rs.seamless = g_seamlessPaint ? 1 : 0;
-                rs.seed = state->currentBrush.Realb.seed;
-                rs.smudgeSrcX = pos.x;
-                rs.smudgeSrcY = pos.y;
-                Texture2D savedTex2 = g_activeBrushTex;
-                    g_activeBrushTex = g_defaultBrushTex;
-                    DrawOneSegment(rs, bt->rt);
-                    g_activeBrushTex = savedTex2;
-                }
-                StrokeEngine_EndStroke(&vp->strokeEng);
-            }
-            vp->wasMouseDown = false;
-        }
     }
 
     // ── Normal layer painting ────────────────────────────────────────
@@ -358,6 +256,8 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
 
                     float origRad = state->currentBrush.Realb.rad_out;
                     state->currentBrush.Realb.rad_out *= layerScale;
+                    vp->strokeEng.targetType = 0;
+                    vp->strokeEng.targetId = active;
                     StrokeEngine_BeginStroke(&vp->strokeEng, &state->currentBrush,
                                              paintPos.x, paintPos.y);
                     state->currentBrush.Realb.rad_out = origRad;
@@ -371,15 +271,9 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     StrokePoint sp = vp->inputFilter.Feed(paintPos.x, paintPos.y, now);
                     float origRad = state->currentBrush.Realb.rad_out;
                     state->currentBrush.Realb.rad_out *= layerScale;
-                    DrawDab ndabs[2048];
-                    int n = StrokeEngine_FeedPoint(&vp->strokeEng, sp,
-                        &state->currentBrush.Realb, adjustedAngle, state->mode,
-                        ndabs, 2048);
+                    StrokeEngine_FeedPoint(&vp->strokeEng, sp,
+                        &state->currentBrush.Realb, adjustedAngle, state->mode);
                     state->currentBrush.Realb.rad_out = origRad;
-                    for (int i = 0; i < n; i++) {
-                        if (vp->strokeLen < MAX_STROKE_PTS)
-                            vp->strokePts[vp->strokeLen++] = Vector2{ndabs[i].x, ndabs[i].y};
-                    }
                 }
             } else {
                 // Distort / Contrast
@@ -418,9 +312,8 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         if (vp->wasMouseDown) {
             float origRad = state->currentBrush.Realb.rad_out;
             state->currentBrush.Realb.rad_out *= layerScale;
-            DrawDab fdabs2[2048];
             int fn = StrokeEngine_FlushSmoothing(&vp->strokeEng, &state->currentBrush.Realb,
-                                                   adjustedAngle, state->mode, fdabs2, 2048);
+                                                   adjustedAngle, state->mode);
             state->currentBrush.Realb.rad_out = origRad;
             if (fn == 0 && vp->strokeEng.dabIndex == 0 && vp->broker) {
                 // Single click — emit a SingleStamp segment
@@ -431,11 +324,13 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                 rs.pos1 = rs.pos2 = Vector2{pos.x, pos.y};
                 rs.ctrl0 = rs.ctrl3 = rs.pos1;
                 rs.brushFrom = rs.brush = cb;
-                    rs.tool = eSingleStamp;
-                    rs.seamless = g_seamlessPaint ? 1 : 0;
-                    rs.seed = state->currentBrush.Realb.seed;
-                    rs.smudgeSrcX = pos.x;
-                    rs.smudgeSrcY = pos.y;
+                rs.tool = eSingleStamp;
+                rs.seamless = g_seamlessPaint ? 1 : 0;
+                rs.seed = state->currentBrush.Realb.seed;
+                rs.smudgeSrcX = pos.x;
+                rs.smudgeSrcY = pos.y;
+                rs.targetType = 0;
+                rs.targetId   = active;
                     vp->broker->on_segment(rs);
                 if (g_recorder) g_recorder->on_segment(rs);
                 if (vp->strokeLen < MAX_STROKE_PTS)

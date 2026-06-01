@@ -10,7 +10,8 @@ struct TestBroker : ICommandBroker {
         float x, y;
         float srcX, srcY;
         d_RealBrush brush;
-        int activeLayer;
+        uint8_t targetType;  // 0 = layer, 1 = texture
+        uint8_t targetId;
     };
 
     Dab queue[CMD_CAPACITY];

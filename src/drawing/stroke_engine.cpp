@@ -71,6 +71,8 @@ void StrokeEngine_Init(StrokeEngine* se) {
     se->processedCount = 0;
     se->accumDist = 0.0f;
     se->lastInputPos = Vector2{0, 0};
+    se->targetType = 0;
+    se->targetId = 0;
     memset(se->splinePts, 0, sizeof(se->splinePts));
 }
 
@@ -151,9 +153,8 @@ static void BuildModulatedBrush(StrokeEngine* se,
 static int FeedOnePoint(StrokeEngine* se, Vector2 pos, float velocity,
                         const d_RealBrush* baseBrush,
                         float initialAngle, int toolMode,
-                        DrawDab* outDabs, int maxDabs,
                         Vector2 overrideCtrl0, Vector2 overrideCtrl3) {
-    if (!se->inStroke || maxDabs <= 0) return 0;
+    if (!se->inStroke) return 0;
 
     d_RealBrush target;
     float spacingVal;
@@ -178,30 +179,31 @@ static int FeedOnePoint(StrokeEngine* se, Vector2 pos, float velocity,
     dseg.seed      = baseBrush->seed;
     dseg.smudgeSrcX = se->lastDabPos.x;
     dseg.smudgeSrcY = se->lastDabPos.y;
+    dseg.targetType = se->targetType;
+    dseg.targetId   = se->targetId;
 
     if (g_recorder) g_recorder->on_segment(dseg);
     if (g_broker) g_broker->on_segment(dseg);
 
     SegResult r;
-    int n = DrawLinear(&dseg, se->dabIndex, 0.0f, nullptr, nullptr, 65536, &r);
+    DrawLinear(&dseg, se->dabIndex, 0.0f, nullptr, nullptr, 65536, &r);
 
     se->lastDabPos = r.lastDabPos;
     se->segBrushFrom.Realb = target;
-    se->dabIndex += n;
-    return n;
+    se->dabIndex += (int)(r.lastDabPos.x != se->lastDabPos.x || r.lastDabPos.y != se->lastDabPos.y);
+    return 1;
 }
 
 int StrokeEngine_FeedPoint(StrokeEngine* se, const StrokePoint& sp,
                            const d_RealBrush* baseBrush,
-                           float initialAngle, int toolMode,
-                           DrawDab* outDabs, int maxDabs) {
-    if (!se->inStroke || maxDabs <= 0) return 0;
+                           float initialAngle, int toolMode) {
+    if (!se->inStroke) return 0;
 
     Vector2 pos = {sp.x, sp.y};
 
     if (g_strokeSmoothingMode == SMOOTH_MODE_LINEAR) {
         return FeedOnePoint(se, pos, sp.velocity, baseBrush, initialAngle, toolMode,
-                            outDabs, maxDabs, se->lastDabPos, pos);
+                            se->lastDabPos, pos);
     }
 
     float threshold = fmaxf(g_strokeThrottle, 0.5f);
@@ -227,7 +229,7 @@ int StrokeEngine_FeedPoint(StrokeEngine* se, const StrokePoint& sp,
     float vel = sp.velocity;
     int N = se->splineCount;
 
-    for (int seg = se->processedCount; seg <= N - 3 && totalDabs < maxDabs; seg++) {
+    for (int seg = se->processedCount; seg <= N - 3; seg++) {
         Vector2 p0, p1, p2, p3;
         if (seg == 0) {
             p0 = se->splinePts[0]; p1 = se->splinePts[0];
@@ -268,18 +270,20 @@ int StrokeEngine_FeedPoint(StrokeEngine* se, const StrokePoint& sp,
         dseg.seed      = baseBrush->seed;
         dseg.smudgeSrcX = se->lastDabPos.x;
         dseg.smudgeSrcY = se->lastDabPos.y;
+        dseg.targetType = se->targetType;
+        dseg.targetId   = se->targetId;
 
         if (g_recorder) g_recorder->on_segment(dseg);
         if (g_broker) g_broker->on_segment(dseg);
 
         SegResult r;
-        int n = DrawLinear(&dseg, se->dabIndex, 0.0f,
-                           nullptr, nullptr, 65536, &r);
+        DrawLinear(&dseg, se->dabIndex, 0.0f, nullptr, nullptr, 65536, &r);
 
-        if (n > 0) se->lastDabPos = r.lastDabPos;
+        if (r.lastDabPos.x != se->lastDabPos.x || r.lastDabPos.y != se->lastDabPos.y) {
+            se->lastDabPos = r.lastDabPos;
+            totalDabs++;
+        }
         se->segBrushFrom.Realb = target;
-        se->dabIndex += n;
-        totalDabs += n;
         se->processedCount = seg + 1;
     }
 
@@ -287,16 +291,15 @@ int StrokeEngine_FeedPoint(StrokeEngine* se, const StrokePoint& sp,
 }
 
 int StrokeEngine_FlushSmoothing(StrokeEngine* se, const d_RealBrush* baseBrush,
-                                  float initialAngle, int toolMode,
-                                  DrawDab* outDabs, int maxDabs) {
-    if (!se->inStroke || maxDabs <= 0) return 0;
+                                  float initialAngle, int toolMode) {
+    if (!se->inStroke) return 0;
     if (g_strokeSmoothingMode != SMOOTH_MODE_SMOOTH) return 0;
 
     float vel = 0.5f;
     int N = se->splineCount;
     int totalDabs = 0;
 
-    for (int seg = se->processedCount; seg <= N - 2 && totalDabs < maxDabs; seg++) {
+    for (int seg = se->processedCount; seg <= N - 2; seg++) {
         Vector2 p0, p1, p2, p3;
         if (seg == 0) {
             p0 = se->splinePts[0]; p1 = se->splinePts[0];
@@ -339,18 +342,20 @@ int StrokeEngine_FlushSmoothing(StrokeEngine* se, const d_RealBrush* baseBrush,
         dseg.seed      = baseBrush->seed;
         dseg.smudgeSrcX = se->lastDabPos.x;
         dseg.smudgeSrcY = se->lastDabPos.y;
+        dseg.targetType = se->targetType;
+        dseg.targetId   = se->targetId;
 
         if (g_recorder) g_recorder->on_segment(dseg);
         if (g_broker) g_broker->on_segment(dseg);
 
         SegResult r;
-        int n = DrawLinear(&dseg, se->dabIndex, 0.0f,
-                           nullptr, nullptr, 65536, &r);
+        DrawLinear(&dseg, se->dabIndex, 0.0f, nullptr, nullptr, 65536, &r);
 
-        if (n > 0) se->lastDabPos = r.lastDabPos;
+        if (r.lastDabPos.x != se->lastDabPos.x || r.lastDabPos.y != se->lastDabPos.y) {
+            se->lastDabPos = r.lastDabPos;
+            totalDabs++;
+        }
         se->segBrushFrom.Realb = target;
-        se->dabIndex += n;
-        totalDabs += n;
     }
 
     return totalDabs;

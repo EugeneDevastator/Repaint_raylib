@@ -342,108 +342,48 @@ int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad,
 }
 
 
+// ── ApplyCollapsedBrush ─────────────────────────────────────────────
+void ApplyCollapsedBrush(RenderTexture2D rt, const CollapsedBrush& cb,
+                         float x, float y, float srcX, float srcY) {
+    d_Brush tb; memset(&tb, 0, sizeof(tb));
+    tb.Realb.rad_out = cb.rad_out_px;
+    tb.Realb.radInRatio = cb.radInRatio;
+    tb.Realb.opacity = cb.opacity;
+    tb.Realb.crv = cb.crv;
+    tb.Realb.x2y = cb.scale_y;
+    tb.Realb.resangle = cb.resangle;
+    tb.Realb.col = cb.col;
+    tb.Realb.cop = cb.cop;
+    tb.Realb.bmidx = (uint8_t)cb.bmidx;
+    tb.Realb.preserveop = cb.preserveop;
+    tb.Realb.eraseMode = cb.eraseMode;
+    tb.Realb.perspective = cb.perspective;
+    tb.Realb.texScale = cb.texScale;
+    tb.Realb.texFeather = cb.texFeather;
+    tb.Realb.texThresh = cb.texThresh;
+    tb.Realb.texBlendVal = cb.texBlendVal;
+    tb.Realb.texBlendMode = cb.texBlendMode;
+    tb.Realb.texNoisemode = cb.texNoisemode;
+    tb.Realb.texColorMode = cb.texColorMode;
+    tb.Realb.useTexLumAsAlpha = cb.useTexLumAsAlpha;
+    tb.Realb.pwr = cb.pwr;
+    tb.Realb.userTexOriginX = cb.userTexOriginX;
+    tb.Realb.userTexOriginY = cb.userTexOriginY;
+    tb.Realb.userTexDirection = cb.userTexDirection;
+    BrushBlend_ApplyStamp(rt, &tb, g_activeBrushTex, x, y, srcX, srcY);
+}
+
 // ── DrawOneSegment ─────────────────────────────────────────────────
 void DrawOneSegment(const DrawSegment& dseg, RenderTexture2D rt) {
     bool savedSeamless = g_seamlessPaint;
     g_seamlessPaint = (dseg.seamless != 0);
 
     auto cb = [](float x, float y, float srcX, float srcY, const CollapsedBrush& brush, void* user) {
-        RenderTexture2D rt = *(RenderTexture2D*)user;
-        d_Brush tb; memset(&tb, 0, sizeof(tb));
-        tb.Realb.rad_out = brush.rad_out_px;
-        tb.Realb.radInRatio = brush.radInRatio;
-        tb.Realb.opacity = brush.opacity;
-        tb.Realb.crv = brush.crv;
-        tb.Realb.x2y = brush.scale_y;
-        tb.Realb.resangle = brush.resangle;
-        tb.Realb.col = brush.col;
-        tb.Realb.cop = brush.cop;
-        tb.Realb.bmidx = (uint8_t)brush.bmidx;
-        tb.Realb.preserveop = brush.preserveop;
-        tb.Realb.eraseMode = brush.eraseMode;
-        tb.Realb.perspective = brush.perspective;
-        tb.Realb.texScale = brush.texScale;
-        tb.Realb.texFeather = brush.texFeather;
-        tb.Realb.texThresh = brush.texThresh;
-        tb.Realb.texBlendVal = brush.texBlendVal;
-        tb.Realb.texBlendMode = brush.texBlendMode;
-        tb.Realb.texNoisemode = brush.texNoisemode;
-        tb.Realb.texColorMode = brush.texColorMode;
-        tb.Realb.useTexLumAsAlpha = brush.useTexLumAsAlpha;
-        tb.Realb.pwr = brush.pwr;
-        tb.Realb.userTexOriginX = brush.userTexOriginX;
-        tb.Realb.userTexOriginY = brush.userTexOriginY;
-        tb.Realb.userTexDirection = brush.userTexDirection;
-        BrushBlend_ApplyStamp(rt, &tb, g_activeBrushTex, x, y, srcX, srcY);
+        ApplyCollapsedBrush(*(RenderTexture2D*)user, brush, x, y, srcX, srcY);
     };
 
     SegResult r;
     DrawLinear(&dseg, 0, 0.0f, cb, &rt, 65536, &r);
 
     g_seamlessPaint = savedSeamless;
-}
-
-
-// ── DrawAirflow ────────────────────────────────────────────────────
-int DrawAirflow(const DrawSegment* seg, float accum, DrawDab* out, int maxOut, SegResult* res) {
-    if (maxOut <= 0 || !res) return 0;
-    Vector2 from = seg->pos1;
-    res->lastDabPos = from;
-    res->lastRadOut = seg->brushFrom.rad_out_px;
-    res->overdraw = 0.0f;
-
-    Vector2 to = seg->pos2;
-    float stdist = sqrtf((to.x - from.x) * (to.x - from.x) + (to.y - from.y) * (to.y - from.y));
-    if (stdist < 0.001f) return 0;
-
-    float spacingMult = seg->brushFrom.spacing;
-    if (spacingMult < 0.0f) spacingMult = 0.0f;
-
-    float dx = to.x - from.x, dy = to.y - from.y;
-    float x2r = dx / stdist, y2r = dy / stdist;
-
-    float tdist = stdist + accum;
-    float firstSpacing = seg->brushFrom.rad_out_px * 2.0f * spacingMult;
-    if (firstSpacing < 1.0f) firstSpacing = 1.0f;
-
-    if (tdist < firstSpacing) {
-        res->overdraw = tdist;
-        return 0;
-    }
-
-    float firstDist = firstSpacing - accum;
-    if (firstDist < 0.0f) firstDist = 0.0f;
-    float remaining = stdist - firstDist;
-    int extra = (remaining > 0.0f) ? (int)(remaining / firstSpacing) : 0;
-    int count = 0;
-    float dabbable = fmaxf(stdist - firstDist, 0.001f);
-    uint16_t nn = 0;
-
-    for (int i = 0; i <= extra && count < maxOut; i++) {
-        float d = firstDist + i * firstSpacing;
-        if (d > stdist) break;
-
-        nn++;
-        float k = fminf((d - firstDist) / dabbable, 1.0f);
-        CollapsedBrush cb = BlendBrushes(seg->brushFrom, seg->brush, k);
-        JitterBrush(cb, seg->brushFrom.baseSeed, count);
-
-        Vector2 pos = {from.x + d * x2r, from.y + d * y2r};
-        out[count].x = pos.x;
-        out[count].y = pos.y;
-        out[count].srcX = pos.x;
-        out[count].srcY = pos.y;
-        out[count].brush = cb;
-        count++;
-    }
-
-    if (count > 0) {
-        float lastD = firstDist + (count - 1) * firstSpacing;
-        res->lastRadOut = out[count-1].brush.rad_out_px;
-        res->lastDabPos = Vector2{from.x + lastD * x2r, from.y + lastD * y2r};
-        res->overdraw = stdist - lastD;
-    } else {
-        res->overdraw = accum + stdist;
-    }
-    return count;
 }

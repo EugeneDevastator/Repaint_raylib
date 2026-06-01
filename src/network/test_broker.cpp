@@ -11,8 +11,7 @@ TestBroker::TestBroker() {
 
 void TestBroker::on_segment(const DrawSegment& seg) {
     if (!appState) return;
-    int layer = appState->activeLayer;
-    if (layer < 0 || layer >= LayerStack_Count()) return;
+    int target = (seg.targetType == 1) ? seg.targetId : appState->activeLayer;
 
     int next = (tail + 1) % CMD_CAPACITY;
     if (next == head) return;
@@ -22,10 +21,10 @@ void TestBroker::on_segment(const DrawSegment& seg) {
     queue[tail].srcX = seg.pos2.x;
     queue[tail].srcY = seg.pos2.y;
     queue[tail].brush = appState->currentBrush.Realb;
-    queue[tail].activeLayer = layer;
+    queue[tail].targetType = seg.targetType;
+    queue[tail].targetId = target;
     tail = next;
 
-    // Duplicate with +200px X offset
     next = (tail + 1) % CMD_CAPACITY;
     if (next == head) return;
 
@@ -34,19 +33,22 @@ void TestBroker::on_segment(const DrawSegment& seg) {
     queue[tail].srcX = seg.pos2.x + 200.0f;
     queue[tail].srcY = seg.pos2.y;
     queue[tail].brush = appState->currentBrush.Realb;
-    queue[tail].activeLayer = layer;
+    queue[tail].targetType = seg.targetType;
+    queue[tail].targetId = target;
     tail = next;
 }
 
 void TestBroker::poll(AppState* state) {
     while (head != tail) {
         Dab* d = &queue[head];
-        int layer = d->activeLayer;
-        if (layer < 0 || layer >= LayerStack_Count()) {
-            head = (head + 1) % CMD_CAPACITY;
-            continue;
+
+        RenderTexture2D rt = {0};
+        if (d->targetType == 1 && d->targetId >= 0 && d->targetId < state->brushTexCount) {
+            rt = state->brushTex[d->targetId].rt;
+        } else if (d->targetId >= 0 && d->targetId < LayerStack_Count()) {
+            rt = LayerStack_GetRT(d->targetId);
         }
-        RenderTexture2D rt = LayerStack_GetRT(layer);
+
         if (rt.id > 0) {
             d_Brush brush = {};
             brush.Realb = d->brush;
