@@ -15,6 +15,8 @@
 #include "layerstack.h"
 #include "undo.h"
 #include "replay_recorder.h"
+#include "StrokeEmitter.h"
+#include "SegmentRenderer.h"
 #include "external/glad.h"
 #include <time.h>
 
@@ -471,6 +473,12 @@ void App_Init(AppState* state) {
     viewport.broker = g_useTestBroker ? (ICommandBroker*)&g_testBroker : (ICommandBroker*)&networkBroker;
     g_broker = viewport.broker;
 
+    // LocalPlayer modules
+    static SegmentRenderer s_segRenderer;
+    static StrokeEmitter s_emitter(&s_segRenderer);
+    g_segRenderer = &s_segRenderer;
+    g_emitter = &s_emitter;
+
     state->undo = new UndoManager();
     g_undoManager = state->undo;
 
@@ -596,6 +604,7 @@ void App_Draw(AppState* state) {
     UserTexture_Update(state);
 
     if (viewport.broker) viewport.broker->poll(state);
+    if (g_segRenderer) g_segRenderer->RenderPending(32);
     if (g_recorder) g_recorder->poll(state);
     if (viewport.strokeEnded) {
         SyncLayerTexture(state, viewport.endLayer);

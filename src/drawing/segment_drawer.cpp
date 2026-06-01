@@ -344,7 +344,7 @@ int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad,
 
 // ── ApplyCollapsedBrush ─────────────────────────────────────────────
 void ApplyCollapsedBrush(RenderTexture2D rt, const CollapsedBrush& cb,
-                         float x, float y, float srcX, float srcY) {
+                         float x, float y, float srcX, float srcY, Texture2D brushTex) {
     d_Brush tb; memset(&tb, 0, sizeof(tb));
     tb.Realb.rad_out = cb.rad_out_px;
     tb.Realb.radInRatio = cb.radInRatio;
@@ -370,20 +370,19 @@ void ApplyCollapsedBrush(RenderTexture2D rt, const CollapsedBrush& cb,
     tb.Realb.userTexOriginX = cb.userTexOriginX;
     tb.Realb.userTexOriginY = cb.userTexOriginY;
     tb.Realb.userTexDirection = cb.userTexDirection;
-    BrushBlend_ApplyStamp(rt, &tb, g_activeBrushTex, x, y, srcX, srcY);
+    BrushBlend_ApplyStamp(rt, &tb, brushTex, x, y, srcX, srcY);
 }
 
 // ── DrawOneSegment ─────────────────────────────────────────────────
-void DrawOneSegment(const DrawSegment& dseg, RenderTexture2D rt) {
-    bool savedSeamless = g_seamlessPaint;
-    g_seamlessPaint = (dseg.seamless != 0);
+void DrawOneSegment(const DrawSegment& dseg, RenderTexture2D rt, Texture2D brushTex, bool seamless) {
+    struct UserData { RenderTexture2D* rt; Texture2D tex; };
+    UserData ud = {&rt, brushTex};
 
     auto cb = [](float x, float y, float srcX, float srcY, const CollapsedBrush& brush, void* user) {
-        ApplyCollapsedBrush(*(RenderTexture2D*)user, brush, x, y, srcX, srcY);
+        UserData* ud = (UserData*)user;
+        ApplyCollapsedBrush(*ud->rt, brush, x, y, srcX, srcY, ud->tex);
     };
 
     SegResult r;
-    DrawLinear(&dseg, 0, 0.0f, cb, &rt, 65536, &r);
-
-    g_seamlessPaint = savedSeamless;
+    DrawLinear(&dseg, 0, 0.0f, cb, &ud, 65536, &r);
 }

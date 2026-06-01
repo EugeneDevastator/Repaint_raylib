@@ -20,6 +20,12 @@ static TabletState g_penState = {0};
 static CRITICAL_SECTION g_penLock;
 static int g_hookCount = 0;
 
+#define MOUSE_RING_SIZE 2048
+static float g_mouseX[MOUSE_RING_SIZE];
+static float g_mouseY[MOUSE_RING_SIZE];
+static volatile int g_mouseHead = 0;
+static volatile int g_mouseTail = 0;
+
 typedef BOOL (WINAPI *GetPointerPenInfoFn)(UINT32 pointerId, POINTER_PEN_INFO* penInfo);
 static GetPointerPenInfoFn g_GetPointerPenInfo = NULL;
 
@@ -58,6 +64,15 @@ static LRESULT CALLBACK TabletMsgHook(int code, WPARAM wParam, LPARAM lParam) {
                     if (penInfo.penFlags & PEN_FLAG_INVERTED) g_penState.buttons |= 4;
                     LeaveCriticalSection(&g_penLock);
                 }
+            }
+        }
+        // Capture every real mouse position while button is held
+        if (msg->message == WM_MOUSEMOVE && (msg->wParam & MK_LBUTTON)) {
+            int next = (g_mouseTail + 1) % MOUSE_RING_SIZE;
+            if (next != g_mouseHead) {
+                g_mouseX[g_mouseTail] = (float)(short)LOWORD(msg->lParam);
+                g_mouseY[g_mouseTail] = (float)(short)HIWORD(msg->lParam);
+                g_mouseTail = next;
             }
         }
     }
@@ -102,6 +117,23 @@ bool TabletPlatform_Poll(TabletState* state) {
 }
 
 int TabletPlatform_GetHookCount(void)   { return g_hookCount; }
+
+int TabletPlatform_DrainMousePos(float* buf, int maxOut) {
+    int count = 0;
+    while (g_mouseHead != g_mouseTail && count + 1 < maxOut) {
+        buf[count * 2]     = g_mouseX[g_mouseHead];
+        buf[count * 2 + 1] = g_mouseY[g_mouseHead];
+        g_mouseHead = (g_mouseHead + 1) % MOUSE_RING_SIZE;
+        count++;
+    }
+    if (g_mouseHead == g_mouseTail)
+        g_mouseHead = g_mouseTail = 0;
+    return count;
+}
+
+void TabletPlatform_ClearMousePos(void) {
+    g_mouseHead = g_mouseTail = 0;
+}
 
 void TabletPlatform_GetDebugInfo(char* buf, size_t sz) {
     UINT digitizer = GetSystemMetrics(SM_DIGITIZER);

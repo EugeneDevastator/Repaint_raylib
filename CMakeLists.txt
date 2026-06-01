@@ -115,6 +115,10 @@ set(SOURCES
     src/drawing/stroke.cpp
     src/drawing/stroke_engine.cpp
     src/drawing/segment_drawer.cpp
+    # ── LocalPlayer ─────────────────────────────────────────────────────
+    LocalPlayer/InputQueue.cpp
+    LocalPlayer/StrokeEmitter.cpp
+    LocalPlayer/SegmentRenderer.cpp
     # ── network ───────────────────────────────────────────────────────
     src/network/serialize.cpp
     src/network/network_broker.cpp
@@ -145,6 +149,7 @@ endif()
 target_include_directories(repaint PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/dialog
+    ${CMAKE_CURRENT_SOURCE_DIR}/LocalPlayer
     ${imgui_SOURCE_DIR}
     ${rlimgui_SOURCE_DIR}
 )

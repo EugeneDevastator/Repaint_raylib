@@ -4,6 +4,8 @@
 #include "layerstack.h"
 #include "rlgl.h"
 #include "stroke_engine.h"
+#include "StrokeEmitter.h"
+#include "tablet_platform.h"
 #include "network_broker.h"
 
 static void PushDabSegment(ICommandBroker* b, float x, float y, float srcX, float srcY, const d_RealBrush& brush, int toolMode) {
@@ -201,9 +203,9 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             if (!vp->wasMouseDown) {
                 if (vp->inBounds && leftDown) {
                     Modulators_SnapRunState();
-                    vp->strokeEng.targetType = 1;
-                    vp->strokeEng.targetId = state->activeBrushTex;
-                    StrokeEngine_BeginStroke(&vp->strokeEng, &state->currentBrush, tx, ty);
+                    g_emitter->BeginStroke(tx, ty, state->currentBrush.Realb,
+                        state->initialAngle, state->mode, 1, state->activeBrushTex,
+                        bt->rt, g_defaultBrushTex);
                     vp->inputFilter.Reset();
                     vp->inputFilter.Feed(tx, ty, GetTime());
                     vp->wasMouseDown = true;
@@ -211,31 +213,13 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             } else if (leftDown) {
                 double now = GetTime();
                 StrokePoint sp = vp->inputFilter.Feed(tx, ty, now);
-                StrokeEngine_FeedPoint(&vp->strokeEng, sp,
-                    &state->currentBrush.Realb, state->initialAngle, state->mode);
+                InputPoint ip; ip.x = sp.x; ip.y = sp.y; ip.pressure = 1.0f; ip.rotation = 0.5f;
+                ip.tiltX = 0; ip.tiltY = 0; ip.velocity = sp.velocity; ip.timestamp = now;
+                g_emitter->AddPoint(ip, state->currentBrush.Realb, state->initialAngle, state->mode);
             }
 
             if (!leftDown && vp->wasMouseDown) {
-                int fn = StrokeEngine_FlushSmoothing(&vp->strokeEng, &state->currentBrush.Realb,
-                                                      state->initialAngle, state->mode);
-                if (fn == 0) {
-                    // Single click — emit a SingleStamp segment via broker
-                    CollapsedBrush cb = CollapseBrushParams(state->currentBrush.Realb, state->initialAngle, state->mode);
-                    DrawSegment rs; memset(&rs, 0, sizeof(rs));
-                    rs.pos1 = rs.pos2 = Vector2{tx, ty};
-                    rs.ctrl0 = rs.ctrl3 = rs.pos1;
-                    rs.brushFrom = rs.brush = cb;
-                    rs.tool = eSingleStamp;
-                    rs.seamless = g_seamlessPaint ? 1 : 0;
-                    rs.seed = state->currentBrush.Realb.seed;
-                    rs.smudgeSrcX = tx;
-                    rs.smudgeSrcY = ty;
-                    rs.targetType = 1;
-                    rs.targetId = state->activeBrushTex;
-                    if (g_broker) g_broker->on_segment(rs);
-                    if (g_recorder) g_recorder->on_segment(rs);
-                }
-                StrokeEngine_EndStroke(&vp->strokeEng);
+                g_emitter->EndStroke();
                 vp->wasMouseDown = false;
             }
 
@@ -256,23 +240,34 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
 
                     float origRad = state->currentBrush.Realb.rad_out;
                     state->currentBrush.Realb.rad_out *= layerScale;
-                    vp->strokeEng.targetType = 0;
-                    vp->strokeEng.targetId = active;
-                    StrokeEngine_BeginStroke(&vp->strokeEng, &state->currentBrush,
-                                             paintPos.x, paintPos.y);
+                    TabletPlatform_ClearMousePos();
+                    g_emitter->BeginStroke(paintPos.x, paintPos.y, state->currentBrush.Realb,
+                        adjustedAngle, state->mode, 0, active,
+                        LayerStack_GetRT(active), g_activeBrushTex);
                     state->currentBrush.Realb.rad_out = origRad;
-                    vp->inputFilter.Reset();
-                    vp->inputFilter.Feed(paintPos.x, paintPos.y, GetTime());
                     vp->wasMouseDown = true;
                     if (vp->strokeLen < MAX_STROKE_PTS)
                         vp->strokePts[vp->strokeLen++] = paintPos;
                 } else {
-                    double now = GetTime();
-                    StrokePoint sp = vp->inputFilter.Feed(paintPos.x, paintPos.y, now);
                     float origRad = state->currentBrush.Realb.rad_out;
                     state->currentBrush.Realb.rad_out *= layerScale;
-                    StrokeEngine_FeedPoint(&vp->strokeEng, sp,
-                        &state->currentBrush.Realb, adjustedAngle, state->mode);
+
+                    float mouseBuf[1024];
+                    int n = TabletPlatform_DrainMousePos(mouseBuf, 512);
+                    for (int i = 0; i < n; i++) {
+                        Vector2 screenPos = {mouseBuf[i*2], mouseBuf[i*2+1]};
+                        Vector2 worldPos = GetScreenToWorld2D(screenPos, state->camera);
+                        StrokePoint sp = vp->inputFilter.Feed(worldPos.x, worldPos.y, GetTime());
+                        InputPoint ip;
+                        ip.x = sp.x; ip.y = sp.y;
+                        ip.pressure = g_modPars.Pars[csPressure];
+                        ip.tiltX = g_modPars.Pars[csTilt];
+                        ip.tiltY = g_modPars.Pars[csVtilt];
+                        ip.rotation = g_modPars.Pars[csRot];
+                        ip.velocity = sp.velocity;
+                        ip.timestamp = GetTime();
+                        g_emitter->AddPoint(ip, state->currentBrush.Realb, adjustedAngle, state->mode);
+                    }
                     state->currentBrush.Realb.rad_out = origRad;
                 }
             } else {
@@ -312,31 +307,8 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         if (vp->wasMouseDown) {
             float origRad = state->currentBrush.Realb.rad_out;
             state->currentBrush.Realb.rad_out *= layerScale;
-            int fn = StrokeEngine_FlushSmoothing(&vp->strokeEng, &state->currentBrush.Realb,
-                                                   adjustedAngle, state->mode);
+            g_emitter->EndStroke();
             state->currentBrush.Realb.rad_out = origRad;
-            if (fn == 0 && vp->strokeEng.dabIndex == 0 && vp->broker) {
-                // Single click — emit a SingleStamp segment
-                Vector2 pos = vp->strokeEng.lastDabPos;
-                CollapsedBrush cb = CollapseBrushParams(state->currentBrush.Realb, state->initialAngle, state->mode);
-                cb.rad_out_px *= layerScale;
-                DrawSegment rs; memset(&rs, 0, sizeof(rs));
-                rs.pos1 = rs.pos2 = Vector2{pos.x, pos.y};
-                rs.ctrl0 = rs.ctrl3 = rs.pos1;
-                rs.brushFrom = rs.brush = cb;
-                rs.tool = eSingleStamp;
-                rs.seamless = g_seamlessPaint ? 1 : 0;
-                rs.seed = state->currentBrush.Realb.seed;
-                rs.smudgeSrcX = pos.x;
-                rs.smudgeSrcY = pos.y;
-                rs.targetType = 0;
-                rs.targetId   = active;
-                    vp->broker->on_segment(rs);
-                if (g_recorder) g_recorder->on_segment(rs);
-                if (vp->strokeLen < MAX_STROKE_PTS)
-                    vp->strokePts[vp->strokeLen++] = pos;
-            }
-            StrokeEngine_EndStroke(&vp->strokeEng);
             vp->strokeEnded = true;
             vp->endLayer = active;
         }

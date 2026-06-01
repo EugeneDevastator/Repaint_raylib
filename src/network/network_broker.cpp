@@ -233,7 +233,7 @@ void NetworkBroker::poll(AppState* st) {
             dseg.smudgeSrcX = d->smudgeSrcX; dseg.smudgeSrcY = d->smudgeSrcY;
             dseg.Noisemode = 0;
 
-            DrawOneSegment(dseg, rt);
+            DrawOneSegment(dseg, rt, g_activeBrushTex, g_seamlessPaint);
 
             if (this->state == NS_CONNECTED)
                 SendSegment(*d);
