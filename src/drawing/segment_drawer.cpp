@@ -173,18 +173,38 @@ static Vector2 WalkArc(Vector2* pts, int n, float& arcPos, float step, float tot
     if (target > totalLen) target = totalLen;
     if (target < 0) target = 0;
 
-    float remaining = target;
+    // Skip segments before arcPos
+    float walked = 0.0f;
     for (int i = 1; i < n; i++) {
         float segLen = sqrtf((pts[i].x - pts[i-1].x) * (pts[i].x - pts[i-1].x) +
                               (pts[i].y - pts[i-1].y) * (pts[i].y - pts[i-1].y));
-        if (remaining <= segLen || i == n - 1) {
-            float t = (segLen > 0.001f) ? remaining / segLen : 0;
-            if (t < 0) t = 0; if (t > 1) t = 1;
-            arcPos = target;
-            return Vector2{pts[i-1].x + (pts[i].x - pts[i-1].x) * t,
-                           pts[i-1].y + (pts[i].y - pts[i-1].y) * t};
+        if (walked + segLen >= arcPos) {
+            // We're in the segment that contains arcPos, start walking from here
+            float remaining = target - arcPos;
+            float localOffset = arcPos - walked; // how far into this segment arcPos is
+            // remaining distance in this segment from arcPos
+            float segRemaining = segLen - localOffset;
+
+            while (i < n) {
+                if (remaining <= segRemaining || i == n - 1) {
+                    float t = (segLen > 0.001f) ? (localOffset + remaining) / segLen : 0;
+                    if (t < 0) t = 0; if (t > 1) t = 1;
+                    arcPos = target;
+                    return Vector2{pts[i-1].x + (pts[i].x - pts[i-1].x) * t,
+                                   pts[i-1].y + (pts[i].y - pts[i-1].y) * t};
+                }
+                remaining -= segRemaining;
+                i++;
+                if (i < n) {
+                    segLen = sqrtf((pts[i].x - pts[i-1].x) * (pts[i].x - pts[i-1].x) +
+                                    (pts[i].y - pts[i-1].y) * (pts[i].y - pts[i-1].y));
+                    localOffset = 0;
+                    segRemaining = segLen;
+                }
+            }
+            break;
         }
-        remaining -= segLen;
+        walked += segLen;
     }
     arcPos = target;
     return pts[n - 1];
@@ -342,6 +362,9 @@ void ApplyCollapsedBrush(RenderTexture2D rt, const CollapsedBrush& cb,
 
 // ── DrawOneSegment ─────────────────────────────────────────────────
 void DrawOneSegment(const DrawSegment& dseg, RenderTexture2D rt, Texture2D brushTex, bool seamless) {
+    bool savedSeamless = g_seamlessPaint;
+    g_seamlessPaint = seamless;
+
     struct UserData { RenderTexture2D* rt; Texture2D tex; };
     UserData ud = {&rt, brushTex};
 
@@ -352,4 +375,6 @@ void DrawOneSegment(const DrawSegment& dseg, RenderTexture2D rt, Texture2D brush
 
     SegResult r;
     DrawLinear(&dseg, 0, 0.0f, cb, &ud, 65536, &r);
+
+    g_seamlessPaint = savedSeamless;
 }
