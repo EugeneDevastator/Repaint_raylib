@@ -367,11 +367,22 @@ void Viewport_DrawDebugOverlays(Viewport* vp, AppState* state) {
         DrawCircleLines(vp->strokeEng.splinePts[i].x, vp->strokeEng.splinePts[i].y, 4, RED);
     }
 
+    // Emitted segment endpoints (pos1→pos2 pairs)
+    if (g_emitter) {
+        for (int i = 0; i + 1 < g_emitter->m_segEpCount; i += 2) {
+            Vector2 p1 = g_emitter->m_segEndpoints[i];
+            Vector2 p2 = g_emitter->m_segEndpoints[i + 1];
+            DrawCircle(p1.x, p1.y, 2, YELLOW);
+            DrawCircle(p2.x, p2.y, 2, ORANGE);
+            DrawLineV(p1, p2, (Color){255, 255, 0, 80});
+        }
+    }
+
     // Dab positions (actual stamp locations)
     for (int i = 0; i < vp->strokeLen && i < MAX_STROKE_PTS; i++)
         DrawCircle(vp->strokePts[i].x, vp->strokePts[i].y, 2, GREEN);
 
-    DrawText("BLUE=raw input  RED=spline ctrl  GREEN=dabs (F1 toggle)", 10, 10, 14, WHITE);
+    DrawText("BLUE=raw input  RED=spline ctrl  YEL/ORG=segEnds  GREEN=dabs (F1 toggle)", 10, 10, 14, WHITE);
     EndMode2D();
 }
 

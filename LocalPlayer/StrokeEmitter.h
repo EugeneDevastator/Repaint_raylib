@@ -20,6 +20,11 @@ public:
     Vector2 m_lastDabPos;
     int dabCount() const { return m_dabIndex; }
 
+    // Debug: segment endpoint history
+    static const int DBG_SEG_PTS = 2048;
+    Vector2 m_segEndpoints[DBG_SEG_PTS];
+    int m_segEpCount = 0;
+
 private:
     SegmentRenderer* m_renderer;
     bool m_active;

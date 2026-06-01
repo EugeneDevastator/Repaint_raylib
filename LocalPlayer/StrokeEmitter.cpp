@@ -41,6 +41,7 @@ void StrokeEmitter::BeginStroke(float x, float y, const d_RealBrush& brush, floa
     m_lastInputPos = Vector2{x, y};
     memset(m_splinePts, 0, sizeof(m_splinePts));
     m_splinePts[0] = Vector2{x, y};
+    m_segEpCount = 0;
 }
 
 void StrokeEmitter::emitSegment(Vector2 p0, Vector2 p2, Vector2 ctrl0, Vector2 ctrl3,
@@ -100,6 +101,12 @@ void StrokeEmitter::emitSegment(Vector2 p0, Vector2 p2, Vector2 ctrl0, Vector2 c
     SegResult r;
     int dabs = DrawLinear(&dseg, m_dabIndex, 0.0f, nullptr, nullptr, 65536, &r);
     m_lastDabPos = r.lastDabPos;
+
+    // Debug: record segment endpoints
+    if (m_segEpCount + 1 < DBG_SEG_PTS) {
+        m_segEndpoints[m_segEpCount++] = dseg.pos1;
+        m_segEndpoints[m_segEpCount++] = dseg.pos2;
+    }
 
     PendingDraw pd;
     pd.seg = dseg;
