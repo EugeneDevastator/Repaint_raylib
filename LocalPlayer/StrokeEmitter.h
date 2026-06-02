@@ -25,6 +25,10 @@ public:
     Vector2 m_segEndpoints[DBG_SEG_PTS];
     int m_segEpCount = 0;
 
+    // Debug: spline control points
+    Vector2 m_splinePts[256];
+    int m_splineCount;
+
 private:
     SegmentRenderer* m_renderer;
     bool m_active;
@@ -42,8 +46,7 @@ private:
     float m_initDir;
     bool  m_initDirSet;
 
-    Vector2 m_splinePts[256];
-    int m_splineCount, m_processedCount;
+    int m_processedCount;
     float m_accumDist;
     Vector2 m_lastInputPos;
 

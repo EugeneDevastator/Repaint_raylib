@@ -112,8 +112,8 @@ void StrokeEmitter::emitSegment(Vector2 p0, Vector2 p2, Vector2 ctrl0, Vector2 c
     pd.seg = dseg;
     pd.targetRT = m_targetRT;
     pd.brushTex = m_brushTex;
-    pd.seamless = dseg.seamless != 0;
-    m_renderer->Push(pd);
+        pd.seamless = dseg.seamless != 0;
+        m_renderer->Push(pd);
 
     if (g_recorder) g_recorder->on_segment(dseg);
     if (g_broker) g_broker->on_segment(dseg);

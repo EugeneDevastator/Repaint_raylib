@@ -34,7 +34,6 @@ void Viewport_Init(Viewport* vp, Rectangle bounds) {
     vp->endLayer = 0;
     vp->broker = NULL;
     vp->lineLastDabPos = Vector2{0, 0};
-    StrokeEngine_Init(&vp->strokeEng);
 }
 
 void Viewport_SetBounds(Viewport* vp, Rectangle bounds) {
@@ -266,8 +265,13 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                         ip.rotation = g_modPars.Pars[csRot];
                         ip.velocity = sp.velocity;
                         ip.timestamp = GetTime();
-                        g_emitter->AddPoint(ip, state->currentBrush.Realb, adjustedAngle, state->mode);
+                        g_inputQueue.AddPoint(ip);
                     }
+                    // Drain InputQueue into the emitter
+                    InputPoint drained[512];
+                    int dn = g_inputQueue.Drain(drained, 512);
+                    for (int i = 0; i < dn; i++)
+                        g_emitter->AddPoint(drained[i], state->currentBrush.Realb, adjustedAngle, state->mode);
                     state->currentBrush.Realb.rad_out = origRad;
                 }
             } else {
@@ -285,14 +289,14 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     }
                     vp->wasMouseDown = true;
                 } else {
-                    if (Dist2D(vp->strokeEng.lastDabPos, paintPos) >= spacing) {
-                        if (vp->broker) {
-                            d_RealBrush scaled = state->currentBrush.Realb;
-                            scaled.rad_out = scaledRad;
-                            BrushDab ev = {paintPos.x, paintPos.y, paintPos.x, paintPos.y, scaled};
-                            PushDabSegment(vp->broker, ev.x, ev.y, ev.srcX, ev.srcY, ev.brush, state->mode);
-                        }
-                        vp->strokeEng.lastDabPos = paintPos;
+                if (Dist2D(g_emitter->m_lastDabPos, paintPos) >= spacing) {
+                    if (vp->broker) {
+                        d_RealBrush scaled = state->currentBrush.Realb;
+                        scaled.rad_out = scaledRad;
+                        BrushDab ev = {paintPos.x, paintPos.y, paintPos.x, paintPos.y, scaled};
+                        PushDabSegment(vp->broker, ev.x, ev.y, ev.srcX, ev.srcY, ev.brush, state->mode);
+                    }
+                    g_emitter->m_lastDabPos = paintPos;
                     }
                 }
             }
@@ -362,9 +366,11 @@ void Viewport_DrawDebugOverlays(Viewport* vp, AppState* state) {
         DrawCircle(vp->inputPts[i].x, vp->inputPts[i].y, 3, BLUE);
 
     // Spline buffer points (throttled Catmull-Rom control points)
-    for (int i = 0; i < vp->strokeEng.splineCount; i++) {
-        DrawCircle(vp->strokeEng.splinePts[i].x, vp->strokeEng.splinePts[i].y, 4, RED);
-        DrawCircleLines(vp->strokeEng.splinePts[i].x, vp->strokeEng.splinePts[i].y, 4, RED);
+    if (g_emitter) {
+        for (int i = 0; i < g_emitter->m_splineCount; i++) {
+            DrawCircle(g_emitter->m_splinePts[i].x, g_emitter->m_splinePts[i].y, 4, RED);
+            DrawCircleLines(g_emitter->m_splinePts[i].x, g_emitter->m_splinePts[i].y, 4, RED);
+        }
     }
 
     // Emitted segment endpoints (pos1→pos2 pairs)
