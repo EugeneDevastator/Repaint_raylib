@@ -57,6 +57,11 @@ void ApplyCollapsedBrush(RenderTexture2D rt, const CollapsedBrush& cb,
 // ── Stateless: draws one segment onto a render target ──────────────
 void DrawOneSegment(const DrawSegment& dseg, RenderTexture2D rt, Texture2D brushTex, bool seamless, int dabOffset);
 
+// ── Segment computation helpers (no rendering) ─────────────────────
+void SegDrawer_SetSegmentStart(float startRad, Vector2 startPos, DrawSegment* seg);
+void SegDrawer_ComputeSegmentEnd(const DrawSegment* seg, int dabOffset, float initialRad,
+                                  Vector2* outLastPos, float* outLastRad);
+
 // ── Segment result ─────────────────────────────────────────────────
 struct SegResult {
     Vector2 lastDabPos;

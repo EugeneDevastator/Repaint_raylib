@@ -26,7 +26,7 @@ private:
 
     bool m_active;
     d_RealBrush m_brushFrom;
-    int  m_dabIndex;
+    bool m_emittedAny;
     uint16_t m_seed;
     uint8_t m_targetType;
     uint8_t m_targetId;

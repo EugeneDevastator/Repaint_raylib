@@ -416,3 +416,19 @@ void DrawOneSegment(const DrawSegment& dseg, RenderTexture2D rt, Texture2D brush
 
     g_seamlessPaint = savedSeamless;
 }
+
+// ── SegDrawer helpers (computation only, no rendering) ─────────────
+
+void SegDrawer_SetSegmentStart(float startRad, Vector2 startPos, DrawSegment* seg) {
+    seg->pos1 = startPos;
+    if (startRad > 0.0f)
+        seg->brushFrom.rad_out_px = startRad;
+}
+
+void SegDrawer_ComputeSegmentEnd(const DrawSegment* seg, int dabOffset, float initialRad,
+                                  Vector2* outLastPos, float* outLastRad) {
+    SegResult r;
+    DrawLinear(seg, dabOffset, initialRad, nullptr, nullptr, 65536, &r);
+    *outLastPos = r.lastDabPos;
+    *outLastRad = r.lastRadOut;
+}

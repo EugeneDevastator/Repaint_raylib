@@ -1,13 +1,14 @@
 #include "StrokeEmitter.h"
 #include "stroke_engine.h"
 #include "replay_recorder.h"
+#include "brush_draw.h"
 #include <string.h>
 #include <math.h>
 
 StrokeEmitter* g_emitter = nullptr;
 
 StrokeEmitter::StrokeEmitter(SegmentRenderer* renderer)
-    : m_renderer(renderer), m_active(false), m_dabIndex(0) {
+    : m_renderer(renderer), m_active(false), m_emittedAny(false) {
     m_splineCount = 0;
     m_processedCount = 0;
     m_accumDist = 0;
@@ -16,12 +17,11 @@ StrokeEmitter::StrokeEmitter(SegmentRenderer* renderer)
     m_prevSegLen = 0;
 }
 
-// ── handleBegin ────────────────────────────────────────────────────
 void StrokeEmitter::handleBegin(const InputEntry& e) {
     m_active = true;
     m_brushFrom = e.brush;
+    m_emittedAny = false;
     m_seed = e.brush.seed;
-    m_dabIndex = 0;
     m_initAngle = e.initAngle;
     m_toolMode = e.toolMode;
     m_targetType = e.targetType;
@@ -35,7 +35,6 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
     m_prevSegLen = 0;
     m_prevVel = 0;
     m_initDirSet = false;
-
     m_splineCount = 1;
     m_processedCount = 0;
     m_accumDist = 0;
@@ -45,7 +44,6 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
     m_segEpCount = 0;
 }
 
-// ── emitSegment ────────────────────────────────────────────────────
 void StrokeEmitter::emitSegment(Vector2 p0, Vector2 p2, Vector2 ctrl0, Vector2 ctrl3,
                                const d_RealBrush& brush, float initAngle, int toolMode) {
     float segDx = p2.x - m_lastDabPos.x;
@@ -98,31 +96,26 @@ void StrokeEmitter::emitSegment(Vector2 p0, Vector2 p2, Vector2 ctrl0, Vector2 c
     dseg.smudgeSrcY = m_lastDabPos.y;
     dseg.targetType = m_targetType;
     dseg.targetId   = m_targetId;
+    dseg.dabOffset  = 0;
 
-    // State tracking — exact lastDabPos for segment chaining
-    SegResult r;
-    int dabs = DrawLinear(&dseg, m_dabIndex, m_lastDabRad, nullptr, nullptr, 65536, &r);
-    m_lastDabPos = r.lastDabPos;
-    m_lastDabRad = r.lastRadOut;
+    SegDrawer_SetSegmentStart(m_lastDabRad, m_lastDabPos, &dseg);
 
-    // Debug
     if (m_segEpCount + 1 < DBG_SEG_PTS) {
         m_segEndpoints[m_segEpCount++] = dseg.pos1;
         m_segEndpoints[m_segEpCount++] = dseg.pos2;
     }
 
-    // Push to renderer (resolves textures at draw time)
     m_renderer->Push(dseg);
 
-    // Network send only — not rendering
     if (g_recorder) g_recorder->on_segment(dseg);
     if (g_broker) g_broker->on_segment(dseg);
 
+    SegDrawer_ComputeSegmentEnd(&dseg, 0, m_lastDabRad, &m_lastDabPos, &m_lastDabRad);
+
     m_brushFrom = target;
-    m_dabIndex += dabs;
+    m_emittedAny = true;
 }
 
-// ── handlePoint ────────────────────────────────────────────────────
 void StrokeEmitter::handlePoint(const InputEntry& e) {
     if (!m_active) return;
 
@@ -141,7 +134,6 @@ void StrokeEmitter::handlePoint(const InputEntry& e) {
         return;
     }
 
-    // Smooth mode
     float threshold = fmaxf(g_strokeThrottle, 0.5f);
     if (m_splineCount < 4) threshold = fminf(threshold, 5.0f);
 
@@ -179,7 +171,6 @@ void StrokeEmitter::handlePoint(const InputEntry& e) {
     }
 }
 
-// ── flushSmoothing ─────────────────────────────────────────────────
 void StrokeEmitter::flushSmoothing(const d_RealBrush& brush, float initAngle, int toolMode) {
     if (g_strokeSmoothingMode != SMOOTH_MODE_SMOOTH) return;
     int N = m_splineCount;
@@ -205,13 +196,11 @@ void StrokeEmitter::flushSmoothing(const d_RealBrush& brush, float initAngle, in
     }
 }
 
-// ── handleEnd ──────────────────────────────────────────────────────
 void StrokeEmitter::handleEnd() {
     if (!m_active) return;
     flushSmoothing(m_brushFrom, m_initAngle, m_toolMode);
 
-    if (m_dabIndex == 0) {
-        // Single-click stamp
+    if (!m_emittedAny) {
         CollapsedBrush cb = CollapseBrushParams(m_brushFrom, m_initAngle, m_toolMode);
         DrawSegment dseg;
         memset(&dseg, 0, sizeof(dseg));
@@ -225,6 +214,7 @@ void StrokeEmitter::handleEnd() {
         dseg.smudgeSrcY = m_lastDabPos.y;
         dseg.targetType = m_targetType;
         dseg.targetId   = m_targetId;
+        dseg.dabOffset  = 0;
 
         m_renderer->Push(dseg);
         if (g_recorder) g_recorder->on_segment(dseg);
@@ -236,7 +226,6 @@ void StrokeEmitter::handleEnd() {
     m_processedCount = 0;
 }
 
-// ── ProcessInputQueue ──────────────────────────────────────────────
 void StrokeEmitter::ProcessInputQueue() {
     InputEntry entries[256];
     int n = g_inputQueue.Drain(entries, 256);
