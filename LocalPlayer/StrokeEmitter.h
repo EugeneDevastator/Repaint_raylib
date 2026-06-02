@@ -3,43 +3,34 @@
 
 #include "brush_draw.h"
 #include "repaint.h"
-#include "tablet.h"
 #include "InputQueue.h"
 #include "SegmentRenderer.h"
 
 class StrokeEmitter {
 public:
     StrokeEmitter(SegmentRenderer* renderer);
+    void ProcessInputQueue();
 
-    void BeginStroke(float x, float y, const d_RealBrush& brush, float initAngle, int toolMode,
-                     uint8_t targetType, uint8_t targetId,
-                     RenderTexture2D rt, Texture2D brushTex);
-    void AddPoint(const InputPoint& pt, const d_RealBrush& brush, float initAngle, int toolMode);
-    void EndStroke();
+    Vector2 m_lastDabPos;  // public for Distort/Contrast debug
 
-    Vector2 m_lastDabPos;
-    int dabCount() const { return m_dabIndex; }
-
-    // Debug: segment endpoint history
+    // Debug
     static const int DBG_SEG_PTS = 2048;
     Vector2 m_segEndpoints[DBG_SEG_PTS];
     int m_segEpCount = 0;
-
-    // Debug: spline control points
     Vector2 m_splinePts[256];
     int m_splineCount;
 
 private:
     SegmentRenderer* m_renderer;
+
     bool m_active;
     d_RealBrush m_brushFrom;
     int  m_dabIndex;
-    uint8_t m_targetType, m_targetId;
-    RenderTexture2D m_targetRT;
-    Texture2D m_brushTex;
+    uint16_t m_seed;
+    uint8_t m_targetType;
+    uint8_t m_targetId;
     float m_initAngle;
     int   m_toolMode;
-    uint16_t m_seed;
 
     Vector2 m_prevSegPos, m_prevSegDir;
     float m_prevSegLen, m_prevVel;
@@ -50,6 +41,9 @@ private:
     float m_accumDist;
     Vector2 m_lastInputPos;
 
+    void handleBegin(const InputEntry& e);
+    void handlePoint(const InputEntry& e);
+    void handleEnd();
     void emitSegment(Vector2 p0, Vector2 p2, Vector2 ctrl0, Vector2 ctrl3,
                      const d_RealBrush& brush, float initAngle, int toolMode);
     void flushSmoothing(const d_RealBrush& brush, float initAngle, int toolMode);

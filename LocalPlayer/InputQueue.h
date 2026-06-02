@@ -1,28 +1,39 @@
 #ifndef LOCALPLAYER_INPUT_QUEUE_H
 #define LOCALPLAYER_INPUT_QUEUE_H
 
+#include "repaint.h"
 #include "tablet.h"
 
-struct InputPoint {
+struct InputEntry {
+    enum Type : uint8_t { Begin, Point, End };
+    Type type;
+
+    // Point + Begin: position
     float x, y;
     float pressure, tiltX, tiltY, rotation;
     float velocity;
     double timestamp;
+
+    // Begin only: stroke context
+    d_RealBrush brush;
+    float initAngle;
+    int toolMode;
+    uint8_t targetType;
+    uint8_t targetId;
 };
 
 class InputQueue {
 public:
-    InputQueue();
-    void Clear();
-    void AddPoint(const InputPoint& pt);
-    int  Drain(InputPoint* out, int maxOut);
+    static const int CAPACITY = 2048;
+
+    void AddEntry(const InputEntry& e);
+    int  Drain(InputEntry* out, int maxOut);
     bool IsEmpty() const { return m_head == m_tail; }
 
 private:
-    static const int CAPACITY = 1024;
-    InputPoint m_buf[CAPACITY];
-    int m_head;
-    int m_tail;
+    InputEntry m_buf[CAPACITY];
+    int m_head = 0;
+    int m_tail = 0;
 };
 
 extern InputQueue g_inputQueue;

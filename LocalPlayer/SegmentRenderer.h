@@ -4,22 +4,17 @@
 #include "brush_draw.h"
 #include "raylib.h"
 
-struct PendingDraw {
-    DrawSegment seg;
-    RenderTexture2D targetRT;
-    Texture2D brushTex;
-    bool seamless;
-};
+struct AppState;
 
 class SegmentRenderer {
 public:
     static const int CAPACITY = 65536;
 
-    void Push(const PendingDraw& d);
-    int  RenderPending(int maxPerFrame);
+    void Push(const DrawSegment& seg);
+    int  RenderPending(AppState* state, int maxPerFrame);
 
 private:
-    PendingDraw m_buf[CAPACITY];
+    DrawSegment m_buf[CAPACITY];
     int m_head = 0;
     int m_tail = 0;
 };

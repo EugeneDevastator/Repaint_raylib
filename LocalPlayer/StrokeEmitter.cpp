@@ -1,8 +1,8 @@
 #include "StrokeEmitter.h"
 #include "stroke_engine.h"
-#include "repaint.h"
 #include "replay_recorder.h"
 #include <string.h>
+#include <math.h>
 
 StrokeEmitter* g_emitter = nullptr;
 
@@ -16,48 +16,48 @@ StrokeEmitter::StrokeEmitter(SegmentRenderer* renderer)
     m_prevSegLen = 0;
 }
 
-void StrokeEmitter::BeginStroke(float x, float y, const d_RealBrush& brush, float initAngle, int toolMode,
-                                uint8_t targetType, uint8_t targetId,
-                                RenderTexture2D rt, Texture2D brushTex) {
+// ── handleBegin ────────────────────────────────────────────────────
+void StrokeEmitter::handleBegin(const InputEntry& e) {
     m_active = true;
-    m_targetType = targetType;
-    m_targetId = targetId;
-    m_targetRT = rt;
-    m_brushTex = brushTex;
-    m_initAngle = initAngle;
-    m_toolMode = toolMode;
-    m_brushFrom = brush;
+    m_brushFrom = e.brush;
+    m_seed = e.brush.seed;
     m_dabIndex = 0;
-    m_lastDabPos = Vector2{x, y};
-    m_seed = brush.seed;
-    m_prevSegPos = Vector2{x, y};
+    m_initAngle = e.initAngle;
+    m_toolMode = e.toolMode;
+    m_targetType = e.targetType;
+    m_targetId = e.targetId;
+
+    Vector2 start = {e.x, e.y};
+    m_lastDabPos = start;
+    m_prevSegPos = start;
     m_prevSegDir = Vector2{0, 0};
     m_prevSegLen = 0;
     m_prevVel = 0;
     m_initDirSet = false;
+
     m_splineCount = 1;
     m_processedCount = 0;
     m_accumDist = 0;
-    m_lastInputPos = Vector2{x, y};
+    m_lastInputPos = start;
     memset(m_splinePts, 0, sizeof(m_splinePts));
-    m_splinePts[0] = Vector2{x, y};
+    m_splinePts[0] = start;
     m_segEpCount = 0;
 }
 
+// ── emitSegment ────────────────────────────────────────────────────
 void StrokeEmitter::emitSegment(Vector2 p0, Vector2 p2, Vector2 ctrl0, Vector2 ctrl3,
                                const d_RealBrush& brush, float initAngle, int toolMode) {
     float segDx = p2.x - m_lastDabPos.x;
     float segDy = p2.y - m_lastDabPos.y;
-    float segLen = sqrtf(segDx * segDx + segDy * segDy);
+    float segLen = sqrtf(segDx*segDx + segDy*segDy);
     float dirAng = AtanXY(segDx, segDy);
 
-    // Stroke geometry modulators
     g_modPars.Pars[csVel] = 0;
     g_modPars.Pars[csDir] = RngConv(dirAng, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
     if (!m_initDirSet && segLen > 0.5f) { m_initDir = dirAng; m_initDirSet = true; }
     g_modPars.Pars[csIdir] = RngConv(m_initDir, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
     if (m_prevSegLen > 0.5f && segLen > 0.5f) {
-        float dot = (m_prevSegDir.x * segDx + m_prevSegDir.y * segDy) / (m_prevSegLen * segLen);
+        float dot = (m_prevSegDir.x*segDx + m_prevSegDir.y*segDy) / (m_prevSegLen*segLen);
         g_modPars.Pars[csCrv] = RngConv(dot, 0.8f, 1.0f, 0.0f, 1.0f);
     }
     g_modPars.Pars[csAcc] = 1.0f;
@@ -98,23 +98,21 @@ void StrokeEmitter::emitSegment(Vector2 p0, Vector2 p2, Vector2 ctrl0, Vector2 c
     dseg.targetType = m_targetType;
     dseg.targetId   = m_targetId;
 
+    // State tracking — exact lastDabPos for segment chaining
     SegResult r;
     int dabs = DrawLinear(&dseg, m_dabIndex, 0.0f, nullptr, nullptr, 65536, &r);
     m_lastDabPos = r.lastDabPos;
 
-    // Debug: record segment endpoints
+    // Debug
     if (m_segEpCount + 1 < DBG_SEG_PTS) {
         m_segEndpoints[m_segEpCount++] = dseg.pos1;
         m_segEndpoints[m_segEpCount++] = dseg.pos2;
     }
 
-    PendingDraw pd;
-    pd.seg = dseg;
-    pd.targetRT = m_targetRT;
-    pd.brushTex = m_brushTex;
-        pd.seamless = dseg.seamless != 0;
-        m_renderer->Push(pd);
+    // Push to renderer (resolves textures at draw time)
+    m_renderer->Push(dseg);
 
+    // Network send only — not rendering
     if (g_recorder) g_recorder->on_segment(dseg);
     if (g_broker) g_broker->on_segment(dseg);
 
@@ -122,31 +120,28 @@ void StrokeEmitter::emitSegment(Vector2 p0, Vector2 p2, Vector2 ctrl0, Vector2 c
     m_dabIndex += dabs;
 }
 
-void StrokeEmitter::AddPoint(const InputPoint& pt, const d_RealBrush& brush, float initAngle, int toolMode) {
+// ── handlePoint ────────────────────────────────────────────────────
+void StrokeEmitter::handlePoint(const InputEntry& e) {
     if (!m_active) return;
 
-    Vector2 pos = {pt.x, pt.y};
-
-    g_modPars.Pars[csPressure] = pt.pressure;
-    g_modPars.Pars[csRot]      = pt.rotation;
-    g_modPars.Pars[csTilt]     = pt.tiltX;
-    g_modPars.Pars[csHtilt]    = pt.tiltX;
-    g_modPars.Pars[csVtilt]    = pt.tiltY;
-    g_modPars.Pars[csXtilt]    = pt.tiltX;
-    g_modPars.Pars[csYtilt]    = pt.tiltY;
-
-    // Velocity modulator (for pressure simulation mods)
-    m_prevVel = pt.velocity;
+    Vector2 pos = {e.x, e.y};
+    g_modPars.Pars[csPressure] = e.pressure;
+    g_modPars.Pars[csRot]      = e.rotation;
+    g_modPars.Pars[csTilt]     = e.tiltX;
+    g_modPars.Pars[csHtilt]    = e.tiltX;
+    g_modPars.Pars[csVtilt]    = e.tiltY;
+    g_modPars.Pars[csXtilt]    = e.tiltX;
+    g_modPars.Pars[csYtilt]    = e.tiltY;
+    m_prevVel = e.velocity;
 
     if (g_strokeSmoothingMode == SMOOTH_MODE_LINEAR) {
-        emitSegment(pos, pos, m_lastDabPos, pos, brush, initAngle, toolMode);
+        emitSegment(pos, pos, m_lastDabPos, pos, m_brushFrom, m_initAngle, m_toolMode);
         return;
     }
 
-    // Smooth mode — accumulate spline control points with distance gate
+    // Smooth mode
     float threshold = fmaxf(g_strokeThrottle, 0.5f);
-    if (m_splineCount < 4)
-        threshold = fminf(threshold, 5.0f);
+    if (m_splineCount < 4) threshold = fminf(threshold, 5.0f);
 
     float dist = Dist2D(m_lastInputPos, pos);
     m_accumDist += dist;
@@ -175,18 +170,16 @@ void StrokeEmitter::AddPoint(const InputPoint& pt, const d_RealBrush& brush, flo
             p2 = m_splinePts[seg + 1];
             p3 = m_splinePts[seg + 2];
         }
-
         float segLen = Dist2D(p1, p2);
         if (segLen < 0.5f) { m_processedCount = seg + 1; continue; }
-
-        emitSegment(p0, p2, p0, p3, brush, initAngle, toolMode);
+        emitSegment(p0, p2, p0, p3, m_brushFrom, m_initAngle, m_toolMode);
         m_processedCount = seg + 1;
     }
 }
 
+// ── flushSmoothing ─────────────────────────────────────────────────
 void StrokeEmitter::flushSmoothing(const d_RealBrush& brush, float initAngle, int toolMode) {
     if (g_strokeSmoothingMode != SMOOTH_MODE_SMOOTH) return;
-
     int N = m_splineCount;
     for (int seg = m_processedCount; seg <= N - 2; seg++) {
         Vector2 p0, p1, p2, p3;
@@ -204,20 +197,19 @@ void StrokeEmitter::flushSmoothing(const d_RealBrush& brush, float initAngle, in
             p2 = m_splinePts[seg + 1];
             p3 = m_splinePts[seg + 2];
         }
-
         float segLen = Dist2D(p1, p2);
         if (segLen < 0.5f) continue;
-
         emitSegment(p0, p2, p0, p3, brush, initAngle, toolMode);
     }
 }
 
-void StrokeEmitter::EndStroke() {
+// ── handleEnd ──────────────────────────────────────────────────────
+void StrokeEmitter::handleEnd() {
     if (!m_active) return;
-
     flushSmoothing(m_brushFrom, m_initAngle, m_toolMode);
 
     if (m_dabIndex == 0) {
+        // Single-click stamp
         CollapsedBrush cb = CollapseBrushParams(m_brushFrom, m_initAngle, m_toolMode);
         DrawSegment dseg;
         memset(&dseg, 0, sizeof(dseg));
@@ -232,13 +224,7 @@ void StrokeEmitter::EndStroke() {
         dseg.targetType = m_targetType;
         dseg.targetId   = m_targetId;
 
-        PendingDraw pd;
-        pd.seg = dseg;
-        pd.targetRT = m_targetRT;
-        pd.brushTex = m_brushTex;
-        pd.seamless = dseg.seamless != 0;
-        m_renderer->Push(pd);
-
+        m_renderer->Push(dseg);
         if (g_recorder) g_recorder->on_segment(dseg);
         if (g_broker) g_broker->on_segment(dseg);
     }
@@ -246,4 +232,17 @@ void StrokeEmitter::EndStroke() {
     m_active = false;
     m_splineCount = 0;
     m_processedCount = 0;
+}
+
+// ── ProcessInputQueue ──────────────────────────────────────────────
+void StrokeEmitter::ProcessInputQueue() {
+    InputEntry entries[256];
+    int n = g_inputQueue.Drain(entries, 256);
+    for (int i = 0; i < n; i++) {
+        switch (entries[i].type) {
+        case InputEntry::Begin:  handleBegin(entries[i]); break;
+        case InputEntry::Point:  handlePoint(entries[i]); break;
+        case InputEntry::End:    handleEnd(); break;
+        }
+    }
 }

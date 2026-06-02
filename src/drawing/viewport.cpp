@@ -5,6 +5,7 @@
 #include "rlgl.h"
 #include "stroke_engine.h"
 #include "StrokeEmitter.h"
+#include "InputQueue.h"
 #include "tablet_platform.h"
 #include "network_broker.h"
 
@@ -202,23 +203,33 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             if (!vp->wasMouseDown) {
                 if (vp->inBounds && leftDown) {
                     Modulators_SnapRunState();
-                    g_emitter->BeginStroke(tx, ty, state->currentBrush.Realb,
-                        state->initialAngle, state->mode, 1, state->activeBrushTex,
-                        bt->rt, g_defaultBrushTex);
-                    vp->inputFilter.Reset();
-                    vp->inputFilter.Feed(tx, ty, GetTime());
+
+                    InputEntry be;
+                    be.type = InputEntry::Begin;
+                    be.x = tx; be.y = ty;
+                    be.brush = state->currentBrush.Realb;
+                    be.initAngle = state->initialAngle;
+                    be.toolMode = state->mode;
+                    be.targetType = 1;
+                    be.targetId = state->activeBrushTex;
+                    g_inputQueue.AddEntry(be);
+
                     vp->wasMouseDown = true;
                 }
             } else if (leftDown) {
                 double now = GetTime();
                 StrokePoint sp = vp->inputFilter.Feed(tx, ty, now);
-                InputPoint ip; ip.x = sp.x; ip.y = sp.y; ip.pressure = 1.0f; ip.rotation = 0.5f;
-                ip.tiltX = 0; ip.tiltY = 0; ip.velocity = sp.velocity; ip.timestamp = now;
-                g_emitter->AddPoint(ip, state->currentBrush.Realb, state->initialAngle, state->mode);
+                InputEntry e;
+                e.type = InputEntry::Point;
+                e.x = sp.x; e.y = sp.y;
+                e.pressure = 1.0f; e.rotation = 0.5f;
+                e.tiltX = 0; e.tiltY = 0; e.velocity = sp.velocity; e.timestamp = now;
+                g_inputQueue.AddEntry(e);
             }
 
             if (!leftDown && vp->wasMouseDown) {
-                g_emitter->EndStroke();
+                InputEntry ee; ee.type = InputEntry::End;
+                g_inputQueue.AddEntry(ee);
                 vp->wasMouseDown = false;
             }
 
@@ -240,9 +251,17 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     float origRad = state->currentBrush.Realb.rad_out;
                     state->currentBrush.Realb.rad_out *= layerScale;
                     TabletPlatform_ClearMousePos();
-                    g_emitter->BeginStroke(paintPos.x, paintPos.y, state->currentBrush.Realb,
-                        adjustedAngle, state->mode, 0, active,
-                        LayerStack_GetRT(active), g_activeBrushTex);
+
+                    InputEntry be;
+                    be.type = InputEntry::Begin;
+                    be.x = paintPos.x; be.y = paintPos.y;
+                    be.brush = state->currentBrush.Realb;
+                    be.initAngle = adjustedAngle;
+                    be.toolMode = state->mode;
+                    be.targetType = 0;
+                    be.targetId = active;
+                    g_inputQueue.AddEntry(be);
+
                     state->currentBrush.Realb.rad_out = origRad;
                     vp->wasMouseDown = true;
                     if (vp->strokeLen < MAX_STROKE_PTS)
@@ -257,21 +276,17 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                         Vector2 screenPos = {mouseBuf[i*2], mouseBuf[i*2+1]};
                         Vector2 worldPos = GetScreenToWorld2D(screenPos, state->camera);
                         StrokePoint sp = vp->inputFilter.Feed(worldPos.x, worldPos.y, GetTime());
-                        InputPoint ip;
-                        ip.x = sp.x; ip.y = sp.y;
-                        ip.pressure = g_modPars.Pars[csPressure];
-                        ip.tiltX = g_modPars.Pars[csTilt];
-                        ip.tiltY = g_modPars.Pars[csVtilt];
-                        ip.rotation = g_modPars.Pars[csRot];
-                        ip.velocity = sp.velocity;
-                        ip.timestamp = GetTime();
-                        g_inputQueue.AddPoint(ip);
+                        InputEntry e;
+                        e.type = InputEntry::Point;
+                        e.x = sp.x; e.y = sp.y;
+                        e.pressure = g_modPars.Pars[csPressure];
+                        e.tiltX = g_modPars.Pars[csTilt];
+                        e.tiltY = g_modPars.Pars[csVtilt];
+                        e.rotation = g_modPars.Pars[csRot];
+                        e.velocity = sp.velocity;
+                        e.timestamp = GetTime();
+                        g_inputQueue.AddEntry(e);
                     }
-                    // Drain InputQueue into the emitter
-                    InputPoint drained[512];
-                    int dn = g_inputQueue.Drain(drained, 512);
-                    for (int i = 0; i < dn; i++)
-                        g_emitter->AddPoint(drained[i], state->currentBrush.Realb, adjustedAngle, state->mode);
                     state->currentBrush.Realb.rad_out = origRad;
                 }
             } else {
@@ -311,7 +326,8 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         if (vp->wasMouseDown) {
             float origRad = state->currentBrush.Realb.rad_out;
             state->currentBrush.Realb.rad_out *= layerScale;
-            g_emitter->EndStroke();
+            InputEntry ee; ee.type = InputEntry::End;
+            g_inputQueue.AddEntry(ee);
             state->currentBrush.Realb.rad_out = origRad;
             vp->strokeEnded = true;
             vp->endLayer = active;

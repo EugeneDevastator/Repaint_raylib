@@ -603,8 +603,13 @@ void App_Draw(AppState* state) {
 
     UserTexture_Update(state);
 
+    // Process user input → segments
+    g_emitter->ProcessInputQueue();
+
+    // Render queued segments (single rendering path)
+    if (g_segRenderer) g_segRenderer->RenderPending(state, 64);
+
     if (viewport.broker) viewport.broker->poll(state);
-    if (g_segRenderer) g_segRenderer->RenderPending(32);
     if (g_recorder) g_recorder->poll(state);
     if (viewport.strokeEnded) {
         SyncLayerTexture(state, viewport.endLayer);
