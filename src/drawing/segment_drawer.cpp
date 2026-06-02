@@ -210,44 +210,22 @@ static Vector2 CatmullRom(Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, float 
 // starting from arc position `curPos`. Returns the new position and advances arcPos.
 static Vector2 WalkArc(Vector2* pts, int n, float& arcPos, float step, float totalLen) {
     float target = arcPos + step;
-    if (target > totalLen) target = totalLen;
-    if (target < 0) target = 0;
+    if (target >= totalLen) { arcPos = totalLen; return pts[n-1]; }
 
-    // Skip segments before arcPos
     float walked = 0.0f;
     for (int i = 1; i < n; i++) {
-        float segLen = sqrtf((pts[i].x - pts[i-1].x) * (pts[i].x - pts[i-1].x) +
-                              (pts[i].y - pts[i-1].y) * (pts[i].y - pts[i-1].y));
-        if (walked + segLen >= arcPos) {
-            // We're in the segment that contains arcPos, start walking from here
-            float remaining = target - arcPos;
-            float localOffset = arcPos - walked; // how far into this segment arcPos is
-            // remaining distance in this segment from arcPos
-            float segRemaining = segLen - localOffset;
-
-            while (i < n) {
-                if (remaining <= segRemaining || i == n - 1) {
-                    float t = (segLen > 0.001f) ? (localOffset + remaining) / segLen : 0;
-                    if (t < 0) t = 0; if (t > 1) t = 1;
-                    arcPos = target;
-                    return Vector2{pts[i-1].x + (pts[i].x - pts[i-1].x) * t,
-                                   pts[i-1].y + (pts[i].y - pts[i-1].y) * t};
-                }
-                remaining -= segRemaining;
-                i++;
-                if (i < n) {
-                    segLen = sqrtf((pts[i].x - pts[i-1].x) * (pts[i].x - pts[i-1].x) +
-                                    (pts[i].y - pts[i-1].y) * (pts[i].y - pts[i-1].y));
-                    localOffset = 0;
-                    segRemaining = segLen;
-                }
-            }
-            break;
+        float dx = pts[i].x - pts[i-1].x, dy = pts[i].y - pts[i-1].y;
+        float segLen = sqrtf(dx*dx + dy*dy);
+        float segEnd = walked + segLen;
+        if (segEnd >= target) {
+            float t = (segLen > 0.0001f) ? (target - walked) / segLen : 0.0f;
+            arcPos = target;
+            return Vector2{pts[i-1].x + dx*t, pts[i-1].y + dy*t};
         }
-        walked += segLen;
+        walked = segEnd;
     }
-    arcPos = target;
-    return pts[n - 1];
+    arcPos = totalLen;
+    return pts[n-1];
 }
 
 // ── DrawLinear ─────────────────────────────────────────────────────
@@ -307,38 +285,30 @@ int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad,
     float lastDabRad = (initialRad > 0.0f) ? initialRad : rFrom;
     res->lastRadOut = lastDabRad;
     int count = 0;
-    uint16_t nn = 0;
     float lastSrcX = seg->smudgeSrcX;
     float lastSrcY = seg->smudgeSrcY;
 
-    while (lastDabPos < totalLen - 1.0f && count < maxOut) {
-        // 1. Find next dab's un-jittered base radius
-        float k = lastDabPos / totalLen;
-        float baseRad = rFrom + (rTo - rFrom) * k;
+    while (lastDabPos < totalLen && count < maxOut) {
+        // 1. Find next dab's un-jittered radius at estimated next position
         float nextDabRad = FindNextDabRadius(lastDabRad, lastDabPos,
                                              0.0f, totalLen, rFrom, rTo, spacingMult);
 
-        // 2. Randomize the next dab's radius
-        float dr = RawRnd(seg->brushFrom.baseSeed + (uint16_t)((dabOffset + count) * 7 + 1), 1024) / 1024.0f * 2.0f - 1.0f;
-        nextDabRad += dr * seg->brushFrom.jitRadOut;
-
-        // 3. Find position along the curve where the randomized radius touches the last dab
+        // 2. Find position where edges touch (using un-jittered next radius)
         float nextArc = FindNextDabPosition(lastDabRad, lastDabPos, nextDabRad, spacingMult);
         if (nextArc > totalLen) break;
 
-        // 4. Get position on curve at this arc distance
+        // 3. Get position on curve at this arc distance
         float arcPos = lastDabPos;
         Vector2 pos = WalkArc(curvePts, 65, arcPos, nextArc - lastDabPos, totalLen);
         lastDabPos = nextArc;
 
-        // 5. Build brush at the actual position, jitter visual params
+        // 4. Build brush at the actual position, then jitter (jitter applies once)
         float k2 = lastDabPos / totalLen;
         if (k2 > 1.0f) k2 = 1.0f;
         CollapsedBrush dabCB = BlendBrushes(seg->brushFrom, seg->brush, k2);
         JitterBrush(dabCB, seg->brushFrom.baseSeed, dabOffset + count);
 
-        nn++;
-        if (apply) apply(pos.x, pos.y, lastSrcX, lastSrcY, dabCB, user);
+        if (apply) apply(pos.x, pos.y, lastSrcX, lastSrcX, dabCB, user);
         lastSrcX = pos.x;
         lastSrcY = pos.y;
         count++;
