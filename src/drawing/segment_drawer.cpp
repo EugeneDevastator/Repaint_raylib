@@ -302,17 +302,18 @@ int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad,
         Vector2 pos = WalkArc(curvePts, 65, arcPos, nextArc - lastDabPos, totalLen);
         lastDabPos = nextArc;
 
-        // 4. Build brush at the actual position, then jitter (jitter applies once)
+        // 4. Build brush at the actual position, save un-jittered radius, then jitter
         float k2 = lastDabPos / totalLen;
         if (k2 > 1.0f) k2 = 1.0f;
         CollapsedBrush dabCB = BlendBrushes(seg->brushFrom, seg->brush, k2);
+        float unjitteredRad = dabCB.rad_out_px;
         JitterBrush(dabCB, seg->brushFrom.baseSeed, dabOffset + count);
 
-        if (apply) apply(pos.x, pos.y, lastSrcX, lastSrcX, dabCB, user);
+        if (apply) apply(pos.x, pos.y, lastSrcX, lastSrcY, dabCB, user);
         lastSrcX = pos.x;
         lastSrcY = pos.y;
         count++;
-        lastDabRad = dabCB.rad_out_px;
+        lastDabRad = unjitteredRad;
     }
 
     if (count > 0) {
