@@ -35,6 +35,7 @@ void Viewport_Init(Viewport* vp, Rectangle bounds) {
     vp->endLayer = 0;
     vp->broker = NULL;
     vp->lineLastDabPos = Vector2{0, 0};
+    vp->m_distortLastDabPos = Vector2{0, 0};
 }
 
 void Viewport_SetBounds(Viewport* vp, Rectangle bounds) {
@@ -304,14 +305,14 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     }
                     vp->wasMouseDown = true;
                 } else {
-                if (Dist2D(g_emitter->m_lastDabPos, paintPos) >= spacing) {
+                if (Dist2D(vp->m_distortLastDabPos, paintPos) >= spacing) {
                     if (vp->broker) {
                         d_RealBrush scaled = state->currentBrush.Realb;
                         scaled.rad_out = scaledRad;
                         BrushDab ev = {paintPos.x, paintPos.y, paintPos.x, paintPos.y, scaled};
                         PushDabSegment(vp->broker, ev.x, ev.y, ev.srcX, ev.srcY, ev.brush, state->mode);
                     }
-                    g_emitter->m_lastDabPos = paintPos;
+                    vp->m_distortLastDabPos = paintPos;
                     }
                 }
             }

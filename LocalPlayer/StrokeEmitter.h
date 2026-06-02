@@ -12,6 +12,7 @@ public:
     void ProcessInputQueue();
 
     Vector2 m_lastDabPos;  // public for Distort/Contrast debug
+    float m_lastDabRad;
 
     // Debug
     static const int DBG_SEG_PTS = 2048;

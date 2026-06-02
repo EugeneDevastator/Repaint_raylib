@@ -131,21 +131,6 @@ public:
     StrokePoint Feed(float x, float y, double time);
 };
 
-struct StrokeEngine {
-    d_Brush segBrushFrom; Vector2 lastDabPos;
-    int dabIndex; bool inStroke;
-    Vector2 prevSegPos, prevSegDir; float prevSegLen, prevVel;
-    float initDir; bool initDirSet;
-    uint8_t targetType;  // 0 = layer, 1 = brush texture
-    uint8_t targetId;    // layer index or brushTex index
-
-    // Spline buffer for Smooth mode: throttled input points used as Catmull-Rom control points
-    Vector2 splinePts[256];
-    int splineCount, processedCount;
-    float accumDist;        // path length accumulated since last control point
-    Vector2 lastInputPos;   // previous raw input position (for incremental distance)
-};
-
 #define SMOOTH_MODE_LINEAR 0
 #define SMOOTH_MODE_SMOOTH 1
 
@@ -187,8 +172,9 @@ typedef struct {
     int strokeLen, inputLen;
     bool wasMouseDown, debugShowStamps, rightMouseDown;
     Vector2 lastMousePos; bool inBounds, strokeEnded; int endLayer;
-    ICommandBroker* broker; InputFilter inputFilter; StrokeEngine strokeEng;
+    ICommandBroker* broker; InputFilter inputFilter;
     Vector2 lineLastDabPos;
+    Vector2 m_distortLastDabPos;
 } Viewport;
 
 struct AppState {

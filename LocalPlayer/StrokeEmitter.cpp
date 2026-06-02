@@ -29,6 +29,7 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
 
     Vector2 start = {e.x, e.y};
     m_lastDabPos = start;
+    m_lastDabRad = 0;
     m_prevSegPos = start;
     m_prevSegDir = Vector2{0, 0};
     m_prevSegLen = 0;
@@ -100,8 +101,9 @@ void StrokeEmitter::emitSegment(Vector2 p0, Vector2 p2, Vector2 ctrl0, Vector2 c
 
     // State tracking — exact lastDabPos for segment chaining
     SegResult r;
-    int dabs = DrawLinear(&dseg, m_dabIndex, 0.0f, nullptr, nullptr, 65536, &r);
+    int dabs = DrawLinear(&dseg, m_dabIndex, m_lastDabRad, nullptr, nullptr, 65536, &r);
     m_lastDabPos = r.lastDabPos;
+    m_lastDabRad = r.lastRadOut;
 
     // Debug
     if (m_segEpCount + 1 < DBG_SEG_PTS) {
