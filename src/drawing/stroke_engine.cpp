@@ -82,7 +82,7 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex,
     seed.seamless = g_seamlessPaint ? 1 : 0;
     seed.smudgeSrcX = cx;
     seed.smudgeSrcY = cy;
-    DrawOneSegment(seed, dstRT, brushTex, seed.seamless != 0);
+    DrawOneSegment(seed, dstRT, brushTex, seed.seamless != 0, 0);
 
     DrawSegment s;
     memset(&s, 0, sizeof(s));
@@ -93,5 +93,5 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex,
     s.seamless = g_seamlessPaint ? 1 : 0;
     s.smudgeSrcX = cx;
     s.smudgeSrcY = cy;
-    DrawOneSegment(s, dstRT, brushTex, s.seamless != 0);
+    DrawOneSegment(s, dstRT, brushTex, s.seamless != 0, 0);
 }

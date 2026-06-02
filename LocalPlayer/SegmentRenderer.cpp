@@ -37,7 +37,7 @@ int SegmentRenderer::RenderPending(AppState* state, int maxPerFrame) {
         }
 
         if (rt.id != 0)
-            DrawOneSegment(seg, rt, brushTex, seg.seamless != 0);
+            DrawOneSegment(seg, rt, brushTex, seg.seamless != 0, seg.dabOffset);
 
         m_head = (m_head + 1) % CAPACITY;
         rendered++;

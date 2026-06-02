@@ -40,13 +40,14 @@ struct CollapsedBrush {
 // ── Segment for the drawer ─────────────────────────────────────────
 struct DrawSegment {
     Vector2 pos1, pos2;
-    Vector2 ctrl0, ctrl3;  // Catmull-Rom tangents (== pos1/pos2 = straight)
+    Vector2 ctrl0, ctrl3;
     CollapsedBrush brushFrom, brush;
     uint8_t Noisemode, tool, seamless;
     uint16_t seed;
     float smudgeSrcX, smudgeSrcY;
-    uint8_t targetType;  // 0 = layer, 1 = brush texture
-    uint8_t targetId;    // layer index or brushTex index
+    uint8_t targetType;
+    uint8_t targetId;
+    int dabOffset;
 };
 
 // ── Apply a collapsed brush stamp onto a render target ─────────────
@@ -54,7 +55,7 @@ void ApplyCollapsedBrush(RenderTexture2D rt, const CollapsedBrush& cb,
                          float x, float y, float srcX, float srcY, Texture2D brushTex);
 
 // ── Stateless: draws one segment onto a render target ──────────────
-void DrawOneSegment(const DrawSegment& dseg, RenderTexture2D rt, Texture2D brushTex, bool seamless);
+void DrawOneSegment(const DrawSegment& dseg, RenderTexture2D rt, Texture2D brushTex, bool seamless, int dabOffset);
 
 // ── Segment result ─────────────────────────────────────────────────
 struct SegResult {

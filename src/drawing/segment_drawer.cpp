@@ -153,6 +153,46 @@ void JitterBrush(CollapsedBrush& b, uint16_t baseSeed, int dabIdx) {
 
 // ── Helpers for iterative dab placement ───────────────────────────
 
+// Given the last dab's radius and position, estimate the NEXT dab's
+// un-jittered radius by assuming both radii are equal for the step.
+static float FindNextDabRadius(float lastRad, float lastPos,
+                               float segStart, float segEnd,
+                               float segStartRad, float segEndRad,
+                               float spacingMult)
+{
+    float segLen = segEnd - segStart;
+    if (segLen < 0.0001f)
+        return segStartRad;
+
+    float slope = (segEndRad - segStartRad) / segLen;
+    float rAtLast = segStartRad + slope * (lastPos - segStart);
+
+    float denom = 1.0f - spacingMult * slope;
+    float step;
+    if (fabsf(denom) < 0.0001f) {
+        step = (lastRad + rAtLast) * spacingMult;
+    } else {
+        step = spacingMult * (lastRad + rAtLast) / denom;
+    }
+    if (step < 1.0f) step = 1.0f;
+
+    float nextPos = lastPos + step;
+    float t = (nextPos - segStart) / segLen;
+    if (t < 0.0f) t = 0.0f;
+    if (t > 1.0f) t = 1.0f;
+    return segStartRad + (segEndRad - segStartRad) * t;
+}
+
+
+// Given the last dab's radius and position and the NEW dab's radius,
+// find where the new dab should be placed so edges touch.
+static float FindNextDabPosition(float lastRad, float lastPos,
+                                  float nextRad, float spacingMult) {
+    float step = (lastRad + nextRad) * spacingMult;
+    if (step < 1.0f) step = 1.0f;
+    return lastPos + step;
+}
+
 // ── Catmull-Rom ────────────────────────────────────────────────────
 static Vector2 CatmullRom(Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, float t) {
     float t2 = t * t, t3 = t2 * t;
@@ -267,39 +307,37 @@ int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad,
     float lastDabRad = (initialRad > 0.0f) ? initialRad : rFrom;
     res->lastRadOut = lastDabRad;
     int count = 0;
+    uint16_t nn = 0;
     float lastSrcX = seg->smudgeSrcX;
     float lastSrcY = seg->smudgeSrcY;
 
-    // Precompute closed-form slope for next-position solve:
-    //   nextArc = lastDabPos + (lastDabRad + r(nextArc)) * spacingMult
-    //   r(nextArc) = rFrom + slope * nextArc
-    //   => nextArc*(1 - slope*spacingMult) = lastDabPos + (lastDabRad+rFrom) *spacingMult
-    float slope = (totalLen > 0.0001f) ? (rTo - rFrom) / totalLen : 0.0f;
-    float denom = 1.0f - slope * spacingMult;
+    while (lastDabPos < totalLen - 1.0f && count < maxOut) {
+        // 1. Find next dab's un-jittered base radius
+        float k = lastDabPos / totalLen;
+        float baseRad = rFrom + (rTo - rFrom) * k;
+        float nextDabRad = FindNextDabRadius(lastDabRad, lastDabPos,
+                                             0.0f, totalLen, rFrom, rTo, spacingMult);
 
-    while (count < maxOut) {
-        float nextArc;
-        if (fabsf(denom) < 0.0001f) {
-            float rAtLast = rFrom + slope * lastDabPos;
-            nextArc = lastDabPos + (lastDabRad + rAtLast) * spacingMult;
-        } else {
-            nextArc = (lastDabPos + (lastDabRad + rFrom) * spacingMult) / denom;
-        }
+        // 2. Randomize the next dab's radius
+        float dr = RawRnd(seg->brushFrom.baseSeed + (uint16_t)((dabOffset + count) * 7 + 1), 1024) / 1024.0f * 2.0f - 1.0f;
+        nextDabRad += dr * seg->brushFrom.jitRadOut;
 
-        if (nextArc <= lastDabPos + 0.5f)
-            nextArc = lastDabPos + 0.5f;
-        if (nextArc > totalLen)
-            break;
+        // 3. Find position along the curve where the randomized radius touches the last dab
+        float nextArc = FindNextDabPosition(lastDabRad, lastDabPos, nextDabRad, spacingMult);
+        if (nextArc > totalLen) break;
 
+        // 4. Get position on curve at this arc distance
         float arcPos = lastDabPos;
         Vector2 pos = WalkArc(curvePts, 65, arcPos, nextArc - lastDabPos, totalLen);
         lastDabPos = nextArc;
 
+        // 5. Build brush at the actual position, jitter visual params
         float k2 = lastDabPos / totalLen;
         if (k2 > 1.0f) k2 = 1.0f;
         CollapsedBrush dabCB = BlendBrushes(seg->brushFrom, seg->brush, k2);
         JitterBrush(dabCB, seg->brushFrom.baseSeed, dabOffset + count);
 
+        nn++;
         if (apply) apply(pos.x, pos.y, lastSrcX, lastSrcY, dabCB, user);
         lastSrcX = pos.x;
         lastSrcY = pos.y;
@@ -361,7 +399,7 @@ void ApplyCollapsedBrush(RenderTexture2D rt, const CollapsedBrush& cb,
 }
 
 // ── DrawOneSegment ─────────────────────────────────────────────────
-void DrawOneSegment(const DrawSegment& dseg, RenderTexture2D rt, Texture2D brushTex, bool seamless) {
+void DrawOneSegment(const DrawSegment& dseg, RenderTexture2D rt, Texture2D brushTex, bool seamless, int dabOffset) {
     bool savedSeamless = g_seamlessPaint;
     g_seamlessPaint = seamless;
 
@@ -374,7 +412,7 @@ void DrawOneSegment(const DrawSegment& dseg, RenderTexture2D rt, Texture2D brush
     };
 
     SegResult r;
-    DrawLinear(&dseg, 0, 0.0f, cb, &ud, 65536, &r);
+    DrawLinear(&dseg, dabOffset, 0.0f, cb, &ud, 65536, &r);
 
     g_seamlessPaint = savedSeamless;
 }
