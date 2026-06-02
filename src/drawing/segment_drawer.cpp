@@ -119,8 +119,12 @@ CollapsedBrush BlendBrushes(CollapsedBrush from, CollapsedBrush to, float k) {
 void JitterBrush(CollapsedBrush& b, uint16_t baseSeed, int dabIdx) {
     float dr = RawRnd(baseSeed + (uint16_t)(dabIdx * 7 + 1), 1024) / 1024.0f * 2.0f - 1.0f;
 
+    float baseRad = b.rad_out_px;  // save before jitter
     b.rad_out_px += dr * b.jitRadOut;
-    if (b.rad_out_px < 0.5f) b.rad_out_px = 0.5f;
+    // clamp: never go below half base or above double base, and hard min 0.5
+    float radMin = fmaxf(0.5f, baseRad - b.jitRadOut);
+    float radMax = fmaxf(radMin + 0.001f, baseRad + b.jitRadOut);
+    b.rad_out_px = fmaxf(radMin, fminf(radMax, b.rad_out_px));
 
     b.radInRatio += dr * b.jitRadIn;
     if (b.radInRatio < 0.0f) b.radInRatio = 0.0f;
@@ -310,6 +314,7 @@ int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad,
 
         // 4. Find exact position using jittered next radius
         float nextArc = lastDabPos + (lastDabRad + nextRadJit) * spacingMult;
+        if (nextArc <= lastDabPos + 0.5f) nextArc = lastDabPos + 0.5f; // prevent lock
         if (nextArc > totalLen) break;
 
         // 5. Get curve position
