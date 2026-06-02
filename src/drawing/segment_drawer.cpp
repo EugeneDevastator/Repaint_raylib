@@ -174,6 +174,8 @@ static float FindNextDabRadius(float lastRad, float lastPos,
     } else {
         step = spacingMult * (lastRad + rAtLast) / denom;
     }
+    float minStep = spacingMult * 2.0f * fminf(lastRad, rAtLast);
+    if (step < minStep) step = minStep;
     if (step < 1.0f) step = 1.0f;
 
     float nextPos = lastPos + step;
@@ -288,32 +290,46 @@ int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad,
     float lastSrcX = seg->smudgeSrcX;
     float lastSrcY = seg->smudgeSrcY;
 
-    while (lastDabPos < totalLen && count < maxOut) {
-        // 1. Find next dab's un-jittered radius at estimated next position
-        float nextDabRad = FindNextDabRadius(lastDabRad, lastDabPos,
-                                             0.0f, totalLen, rFrom, rTo, spacingMult);
+    while (count < maxOut) {
+        // 1. Estimate next position using last (jittered) radius
+        float tNext_est = lastDabPos / totalLen;
+        float nextRadEst = rFrom + (rTo - rFrom) * tNext_est;
+        float nextArc_est = lastDabPos + (lastDabRad + nextRadEst) * spacingMult;
+        if (nextArc_est > totalLen) break;
 
-        // 2. Find position where edges touch (using un-jittered next radius)
-        float nextArc = FindNextDabPosition(lastDabRad, lastDabPos, nextDabRad, spacingMult);
+        // 2. Sample unjittered radius at estimated position
+        float tNext = nextArc_est / totalLen;
+        if (tNext > 1.0f) tNext = 1.0f;
+        float nextRadUnJit = rFrom + (rTo - rFrom) * tNext;
+
+        // 3. Apply jitter to get ACTUAL next radius
+        CollapsedBrush tempCB = BlendBrushes(seg->brushFrom, seg->brush, tNext);
+        tempCB.rad_out_px = nextRadUnJit;
+        JitterBrush(tempCB, seg->brushFrom.baseSeed, dabOffset + count);
+        float nextRadJit = tempCB.rad_out_px;
+
+        // 4. Find exact position using jittered next radius
+        float nextArc = lastDabPos + (lastDabRad + nextRadJit) * spacingMult;
         if (nextArc > totalLen) break;
 
-        // 3. Get position on curve at this arc distance
+        // 5. Get curve position
         float arcPos = lastDabPos;
         Vector2 pos = WalkArc(curvePts, 65, arcPos, nextArc - lastDabPos, totalLen);
-        lastDabPos = nextArc;
 
-        // 4. Build brush at the actual position, save un-jittered radius, then jitter
-        float k2 = lastDabPos / totalLen;
-        if (k2 > 1.0f) k2 = 1.0f;
-        CollapsedBrush dabCB = BlendBrushes(seg->brushFrom, seg->brush, k2);
-        float unjitteredRad = dabCB.rad_out_px;
+        // 6. Build final brush (jitter call 2 — deterministic, same result)
+        float k = nextArc / totalLen;
+        if (k > 1.0f) k = 1.0f;
+        CollapsedBrush dabCB = BlendBrushes(seg->brushFrom, seg->brush, k);
+        dabCB.rad_out_px = nextRadUnJit;
         JitterBrush(dabCB, seg->brushFrom.baseSeed, dabOffset + count);
 
         if (apply) apply(pos.x, pos.y, lastSrcX, lastSrcY, dabCB, user);
         lastSrcX = pos.x;
         lastSrcY = pos.y;
+
+        lastDabPos = nextArc;
+        lastDabRad = dabCB.rad_out_px;  // JITTERED — actual placed size
         count++;
-        lastDabRad = unjitteredRad;
     }
 
     if (count > 0) {
