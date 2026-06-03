@@ -223,10 +223,12 @@ void BrushBlend_ApplyStamp(
     if (brush->Realb.cop > 0.0f) {
         int offX = (int)ceilf(fabsf(stampX - srcX));
         int offY = (int)ceilf(fabsf(stampY - srcY));
-        rx0 = (int)fmaxf(0, (float)(rx0 - offX));
-        ry0 = (int)fmaxf(0, (float)(ry0 - offY));
-        rx1 = (int)fminf((float)W, (float)(rx1 + offX));
-        ry1 = (int)fminf((float)H, (float)(ry1 + offY));
+        int margin = 4;
+        rx0 = (int)fmaxf(0, (float)(rx0 - offX - margin));
+        ry0 = (int)fmaxf(0, (float)(ry0 - offY - margin));
+        rx1 = (int)fminf((float)W, (float)(rx1 + offX + margin));
+        ry1 = (int)fminf((float)H, (float)(ry1 + offY + margin));
+
     }
     int rW = rx1 - rx0;
     int rH = ry1 - ry0;
@@ -324,8 +326,8 @@ void BrushBlend_ApplyStamp(
     float preserveop = (brush->Realb.preserveop > 0) ? 1.0f : 0.0f;
     float smudge     = brush->Realb.cop;
     float offsetUV[2] = {
-        (stampX - srcX) / (float)W,
-        -(stampY - srcY) / (float)H
+        stampX - srcX,
+        (stampY - srcY)
     };
     float col[4] = {
         brush->Realb.col.r / 255.0f,

@@ -35,6 +35,7 @@ uniform float pwr;
 uniform int   eraseMode;
 uniform bool  uSeamless;
 in vec2 canvasFragUV;
+in vec2 outCanvasPx;
 
 float srgbToLinear(float c) {
     return (c <= 0.04045) ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4);
@@ -229,6 +230,24 @@ if (mode == 0) { // N-OKLab
     return vec4(clamp(outRGB, 0.0, 1.0), clamp(outA, 0.0, 1.0));
 }
 
+// Manual bilinear filtering — avoids hardware sampler precision issues
+vec4 sampleCopy(sampler2D tex, vec2 canvasPx) {
+    vec2 px = canvasPx - copyOrigin - 0.5;  // shift: integer coords are pixel centers
+    vec2 ipx = floor(px);
+    vec2 f = fract(px);
+
+    ivec2 maxCoord = ivec2(copySize - vec2(1.0));
+    ivec2 c00 = clamp(ivec2(ipx), ivec2(0, 0), maxCoord);
+    ivec2 c10 = clamp(ivec2(ipx + ivec2(1, 0)), ivec2(0, 0), maxCoord);
+    ivec2 c01 = clamp(ivec2(ipx + ivec2(0, 1)), ivec2(0, 0), maxCoord);
+    ivec2 c11 = clamp(ivec2(ipx + ivec2(1, 1)), ivec2(0, 0), maxCoord);
+    vec4 tl = texelFetch(tex, c00, 0);
+    vec4 tr = texelFetch(tex, c10, 0);
+    vec4 bl = texelFetch(tex, c01, 0);
+    vec4 br = texelFetch(tex, c11, 0);
+    return mix(mix(tl, tr, f.x), mix(bl, br, f.x), f.y);
+}
+
 // Convert canvas-normalised UV (canvasFragUV) to the stamp-region copy UV
 vec2 toCopyUV(vec2 cuv) {
     vec2 px;
@@ -241,10 +260,9 @@ void main() {
     vec2 uv       = fragTexCoord;
     vec2 sampleUV = vec2(uv.x, 1.0 - uv.y);
     vec4 geouv    = texture(texture0, sampleUV);
-    vec2 canvasUV = toCopyUV(canvasFragUV);
-    vec4 canvas = uSeamless 
-        ? texture(canvasTex, fract(canvasUV))
-        : texture(canvasTex, canvasUV);
+    vec4 canvas = uSeamless
+        ? sampleCopy(canvasTex, mod(outCanvasPx, canvasSize))
+        : sampleCopy(canvasTex, outCanvasPx);
 
     if (geouv.a < 0.01) {
         finalColor = canvas;
@@ -318,11 +336,13 @@ void main() {
 float cloneOpacity = smudgeStrength;
     if (cloneOpacity > 0.000001) {
 
-    vec2 smudgeUV = uSeamless
-        ? fract(canvasFragUV - smudgeOffsetUV)
-        : clamp(canvasFragUV - smudgeOffsetUV, 0.001, 0.999);
+    vec2 srcPx = outCanvasPx - smudgeOffsetUV;  // smudgeOffsetUV is now in pixels
+    if (uSeamless)
+        srcPx = mod(srcPx, canvasSize);
+    else
+        srcPx = clamp(srcPx, copyOrigin, copyOrigin + copySize - vec2(1.0));
 
-        vec4 smudgeSample = texture(canvasTex, toCopyUV(smudgeUV));
+        vec4 smudgeSample = sampleCopy(canvasTex, srcPx);
         float smudgeA = smudgeSample.a;
 
 // gracefully handle transparent layers to not mix with blacks.
