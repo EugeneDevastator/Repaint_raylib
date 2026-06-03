@@ -3,7 +3,7 @@
 in vec2 fragTexCoord;
 out vec4 finalColor;
 
-uniform sampler2D texture0;
+uniform sampler2D presentTex;
 
 // Improved spatial hash — produces well-distributed noise from 2D coords
 float hash21(vec2 p) {
@@ -14,7 +14,7 @@ float hash21(vec2 p) {
 
 // ── Active: static per-pixel noise ───────────────────────────────────
 void main() {
-    vec4 col = texture(texture0, fragTexCoord);
+    vec4 col = texture(presentTex, fragTexCoord);
 
 	float pixsize = 1.0;
     float d = hash21(floor(gl_FragCoord.xy / pixsize));

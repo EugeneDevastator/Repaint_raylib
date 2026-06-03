@@ -3,7 +3,7 @@
 in vec2 fragTexCoord;
 out vec4 finalColor;
 
-uniform sampler2D texture0;
+uniform sampler2D underTex;
 uniform sampler2D layerTex;
 uniform float layerAlpha;
 uniform int bmidx;
@@ -103,7 +103,7 @@ vec4 applyBlend(int mode, vec4 underLayer, vec3 layerRGB, float layerA) {
 }
 
 void main() {
-    vec4 underLayer = texture(texture0, fragTexCoord);
+    vec4 underLayer = texture(underTex, fragTexCoord);
     vec4 thisLayer  = texture(layerTex, fract(fragTexCoord));
     float layerA    = thisLayer.a;
 

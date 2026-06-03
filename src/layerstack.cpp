@@ -17,7 +17,9 @@ static struct {
     Texture2D checkerTex; bool checkerValid;
     Shader blendShader; bool shaderInited;
     int locLayerTex, locLayerAlpha, locBmIdx, locLayerThreshold, locLayerFeather;
+    int locUnderTex;
     Shader presentShader; bool presentInited;
+    int locPresentTex;
     int curCanvasW, curCanvasH;
     RenderTexture2D* finalAcc;
     bool dirty;
@@ -50,6 +52,8 @@ static bool LoadBlendShader(void) {
     LS.locBmIdx=GetShaderLocation(LS.blendShader,"bmidx");
     LS.locLayerThreshold=GetShaderLocation(LS.blendShader,"layerThreshold");
     LS.locLayerFeather=GetShaderLocation(LS.blendShader,"layerFeather");
+    LS.locUnderTex=GetShaderLocation(LS.blendShader,"underTex");
+    if(LS.locUnderTex>=0){ int u=0; SetShaderValue(LS.blendShader,LS.locUnderTex,&u,SHADER_UNIFORM_INT); }
     LS.shaderInited=true; return true;
 }
 
@@ -391,6 +395,10 @@ static void EnsurePresentShader(void) {
     const char* ad=GetApplicationDirectory(); char fs[512];
     snprintf(fs,sizeof(fs),"%sshaders/present.fs",ad);
     LS.presentShader=LoadShader(0,fs); LS.presentInited=LS.presentShader.id>0;
+    if(LS.presentInited) {
+        LS.locPresentTex=GetShaderLocation(LS.presentShader,"presentTex");
+        if(LS.locPresentTex>=0){ int u=0; SetShaderValue(LS.presentShader,LS.locPresentTex,&u,SHADER_UNIFORM_INT); }
+    }
 }
 
 // ── Helper: run the ping-pong layer blend loop ──
