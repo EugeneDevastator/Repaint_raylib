@@ -3,7 +3,7 @@
 in vec2 fragTexCoord;
 out vec4 finalColor;
 
-uniform sampler2D texture0;
+uniform sampler2D geoTex;
 uniform sampler2D canvasTex;
 uniform sampler2D brushTex;
 
@@ -257,7 +257,7 @@ vec2 toCopyUV(vec2 cuv) {
 void main() {
     vec2 uv       = fragTexCoord;
     vec2 sampleUV = vec2(uv.x, 1.0 - uv.y);
-    vec4 geouv    = texture(texture0, sampleUV);
+    vec4 geouv    = texture(geoTex, sampleUV);
     vec4 canvas = uSeamless
         ? sampleCopy(canvasTex, mod(outCanvasPx, canvasSize))
         : sampleCopy(canvasTex, outCanvasPx);

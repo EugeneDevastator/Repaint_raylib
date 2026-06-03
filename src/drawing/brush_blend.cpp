@@ -27,6 +27,7 @@ static int locPwr = -1;
 static int locEraseMode = -1;
 static int locSeamless = -1;
 static int locCopyOrigin = -1, locCopySize = -1;
+static int locGeoTex = -1;
 static bool inited = false;
 
 static RenderTexture2D canvasCopyRT = {0};
@@ -136,6 +137,9 @@ void BrushBlend_Init(void) {
 
     if (locCanvasTex >= 0) { int u = 1; SetShaderValue(brushBlendShader, locCanvasTex, &u, SHADER_UNIFORM_INT); }
     if (locBrushTex  >= 0) { int u = 2; SetShaderValue(brushBlendShader, locBrushTex,  &u, SHADER_UNIFORM_INT); }
+
+    locGeoTex = GetShaderLocation(brushBlendShader, "geoTex");
+    if (locGeoTex >= 0) { int u = 0; SetShaderValue(brushBlendShader, locGeoTex, &u, SHADER_UNIFORM_INT); }
 
     Image img = GenImageColor(1, 1, WHITE);
     whiteTex = LoadTextureFromImage(img);
