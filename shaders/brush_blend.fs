@@ -35,10 +35,19 @@ uniform float pwr;
 uniform int   eraseMode;
 uniform bool  uSeamless;
 in vec2 canvasFragUV;
+
+float srgbToLinear(float c) {
+    return (c <= 0.04045) ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4);
+}
+float linearToSrgb(float c) {
+    return (c <= 0.0031308) ? c * 12.92 : 1.055 * pow(c, 1.0/2.4) - 0.055;
+}
+vec3 srgbToLinear3(vec3 c) { return vec3(srgbToLinear(c.r), srgbToLinear(c.g), srgbToLinear(c.b)); }
+vec3 linearToSrgb3(vec3 c) { return vec3(linearToSrgb(c.r), linearToSrgb(c.g), linearToSrgb(c.b)); }
 						   // sRGB -> OKLab
 vec3 rgbToOklab(vec3 c) {
     // sRGB to linear
-    vec3 lin = c * c; // fast approx, same as your existing code
+    vec3 lin = srgbToLinear3(c); // fast approx, same as your existing code
 
     // linear RGB -> LMS (OKLab's cone space)
     float l = 0.4122214708 * lin.r + 0.5363325363 * lin.g + 0.0514459929 * lin.b;
@@ -78,7 +87,7 @@ vec3 oklabToRgb(vec3 lab) {
     );
 
     // linear -> sRGB (fast approx)
-    return sqrt(max(lin, 0.0));
+    return linearToSrgb3(lin);
 }
 
 float hash2(vec2 p) {
@@ -325,7 +334,12 @@ float cloneOpacity = smudgeStrength;
 
         vec4 smudgeCol = vec4(smudgeRGB, 1);
 
-        brushFinal = applyBlend(bmidx, smudgeCol, brushFinal, (1.0 - smudgeStrength)*(1.0 - smudgeStrength)).rgb;
+        if (smudgeStrength >= 0.9999999) {
+            brushFinal = smudgeRGB;
+        } else {
+            float w = (1.0 - smudgeStrength) * (1.0 - smudgeStrength);
+            brushFinal = applyBlend(bmidx, smudgeCol, brushFinal, w).rgb;
+        }
         finalColor = applyBlend(bmidx, canvas, brushFinal, finalAlpha);
 
        // Alpha: treat canvas A as plain channel, lerp smudge alpha into canvas alpha weighted by brush mask
