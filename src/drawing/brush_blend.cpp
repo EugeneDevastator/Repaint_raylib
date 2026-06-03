@@ -314,7 +314,7 @@ void BrushBlend_ApplyStamp(
     EndTextureMode();
 
     // Switch to bilinear for sub-pixel blend sampling
-    SetTextureFilter(geoRT->texture, TEXTURE_FILTER_BILINEAR);
+    //SetTextureFilter(geoRT->texture, TEXTURE_FILTER_BILINEAR);
 
     // -------- Pass 2: blend
     float opacity    = clampf((float)brush->Realb.opacity, 0.0f, 1.0f);

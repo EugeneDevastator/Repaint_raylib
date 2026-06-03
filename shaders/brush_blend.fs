@@ -47,9 +47,7 @@ vec3 srgbToLinear3(vec3 c) { return vec3(srgbToLinear(c.r), srgbToLinear(c.g), s
 vec3 linearToSrgb3(vec3 c) { return vec3(linearToSrgb(c.r), linearToSrgb(c.g), linearToSrgb(c.b)); }
 						   // sRGB -> OKLab
 vec3 rgbToOklab(vec3 c) {
-    // sRGB to linear
-    vec3 lin = srgbToLinear3(c); // fast approx, same as your existing code
-
+    vec3 lin = srgbToLinear3(clamp(c, 0.0, 1.0));  // add clamp here
     // linear RGB -> LMS (OKLab's cone space)
     float l = 0.4122214708 * lin.r + 0.5363325363 * lin.g + 0.0514459929 * lin.b;
     float m = 0.2119034982 * lin.r + 0.6806995451 * lin.g + 0.1073969566 * lin.b;
@@ -263,8 +261,13 @@ void main() {
     vec4 canvas = uSeamless
         ? sampleCopy(canvasTex, mod(outCanvasPx, canvasSize))
         : sampleCopy(canvasTex, outCanvasPx);
-
-    if (geouv.a < 0.01) {
+vec2 localPx = outCanvasPx - copyOrigin - 0.5;
+if (localPx.x < 0.0 || localPx.y < 0.0 ||
+    localPx.x >= copySize.x || localPx.y >= copySize.y) {
+    // Outside copy region — shouldn't happen but discard
+    discard;
+}
+    if (geouv.a < 0.5) {
         finalColor = canvas;
         return;
     }
@@ -309,14 +312,14 @@ void main() {
             brushFinal = mix(vec3(0.0), brushColor.rgb, lum * 2.0);
         else
             brushFinal = mix(brushColor.rgb, vec3(1.0), (lum - 0.5) * 2.0);
-    }
+        }
     } else {
         finalAlpha = alpha;
         brushFinal = brushColor.rgb;
     }
 
     finalAlpha *= opacity;
-    if (finalAlpha < 0.000000001) { finalColor = canvas; return; }
+    if (finalAlpha < 0.00001) { finalColor = canvas; return; }
 
     // ── Erase modes ─────────────────────────────────────────────────
     if (eraseMode == 1) {
@@ -364,9 +367,8 @@ float cloneOpacity = smudgeStrength;
         vec3 smudgeLab = rgbToOklab(brushFinal);
         vec3 blendedLab = mix(canvasLab, smudgeLab, finalAlpha);
         finalColor = vec4(oklabToRgb(blendedLab), canvas.a);
-        return;
-       // Alpha: treat canvas A as plain channel, lerp smudge alpha into canvas alpha weighted by brush mask
-       float blendedA = mix(canvas.a, smudgeA, finalAlpha);
+        // Alpha: treat canvas A as plain channel, lerp smudge alpha into canvas alpha weighted by brush mask
+        float blendedA = mix(canvas.a, smudgeA, finalAlpha);
 
            if (preserveop > 0.5)
             finalColor.a = canvas.a;
