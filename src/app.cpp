@@ -613,8 +613,8 @@ void App_Draw(AppState* state) {
     // Emit dabs from pending segments (populates dab queue, no rendering)
     if (g_segRenderer) g_segRenderer->EmitPending(state, 4, g_dabDrawer);
 
-    // Draw dabs throttled per frame
-    if (g_dabDrawer) g_dabDrawer->DrawPending(256);
+    // Draw dabs, budget = 256 * 16² = 65536 radius²·px per frame
+    if (g_dabDrawer) g_dabDrawer->DrawPending(65536*32);
 
     if (viewport.broker) viewport.broker->poll(state);
     if (g_recorder) g_recorder->poll(state);

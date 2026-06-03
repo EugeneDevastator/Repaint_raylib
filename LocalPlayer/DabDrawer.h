@@ -20,7 +20,7 @@ public:
     bool PushSafe(const DabEntry& dab);  // returns false if full
     void Clear();
     int  PendingCount();
-    int  DrawPending(int maxPerFrame);
+    int  DrawPending(int pixelBudget);  // consumes dab.rad_out_px² from budget
     bool HasRoom(int need) const;  // true if <need> entries fit
 
 private:

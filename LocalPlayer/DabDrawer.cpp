@@ -33,14 +33,22 @@ bool DabDrawer::HasRoom(int need) const {
     return (used + need) < CAPACITY;
 }
 
-int DabDrawer::DrawPending(int maxPerFrame) {
+int DabDrawer::DrawPending(int pixelBudget) {
     int drawn = 0;
-    while (m_head != m_tail && drawn < maxPerFrame) {
+    int budget = pixelBudget;
+    while (m_head != m_tail && budget > 0) {
         DabEntry& d = m_buf[m_head];
+        float r = d.brush.rad_out_px;
+        if (r < 0.5f) r = 0.5f;
+        int cost = (int)(r * r);
+        if (cost > budget) break;
+
         bool savedSeamless = g_seamlessPaint;
         g_seamlessPaint = d.seamless;
         ApplyCollapsedBrush(d.rt, d.brush, d.x, d.y, d.srcX, d.srcY, d.brushTex);
         g_seamlessPaint = savedSeamless;
+
+        budget -= cost;
         m_head = (m_head + 1) % CAPACITY;
         drawn++;
     }
