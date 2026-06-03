@@ -340,8 +340,11 @@ float cloneOpacity = smudgeStrength;
             float w = (1.0 - smudgeStrength) * (1.0 - smudgeStrength);
             brushFinal = applyBlend(bmidx, smudgeCol, brushFinal, w).rgb;
         }
-        finalColor = applyBlend(bmidx, canvas, brushFinal, finalAlpha);
-
+        vec3 canvasLab = rgbToOklab(canvas.rgb);
+        vec3 smudgeLab = rgbToOklab(brushFinal);
+        vec3 blendedLab = mix(canvasLab, smudgeLab, finalAlpha);
+        finalColor = vec4(oklabToRgb(blendedLab), canvas.a);
+        return;
        // Alpha: treat canvas A as plain channel, lerp smudge alpha into canvas alpha weighted by brush mask
        float blendedA = mix(canvas.a, smudgeA, finalAlpha);
 

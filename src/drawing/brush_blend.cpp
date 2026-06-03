@@ -236,7 +236,10 @@ void BrushBlend_ApplyStamp(
     if (canvasCopyRT.id == 0 || canvasCopyW != rW || canvasCopyH != rH) {
         if (canvasCopyRT.id > 0) UnloadRenderTexture(canvasCopyRT);
         canvasCopyRT = Load16BitRT(rW, rH);
-        SetTextureFilter(canvasCopyRT.texture, TEXTURE_FILTER_BILINEAR);
+        //SetTextureFilter(canvasCopyRT.texture, TEXTURE_FILTER_BILINEAR);
+        rlTextureParameters(canvasCopyRT.texture.id, RL_TEXTURE_MIN_FILTER, RL_TEXTURE_FILTER_NEAREST);
+        rlTextureParameters(canvasCopyRT.texture.id, RL_TEXTURE_MAG_FILTER, RL_TEXTURE_FILTER_NEAREST);
+
         SetTextureWrap(canvasCopyRT.texture, TEXTURE_WRAP_REPEAT);
         canvasCopyW = rW;
         canvasCopyH = rH;
@@ -244,6 +247,8 @@ void BrushBlend_ApplyStamp(
 
     // Source: dstRT is OpenGL upside-down, flip Y for texture rect
     float srcTexY = (float)(H - ry1); // flip to GL tex coord space
+    rlTextureParameters(dstRT.texture.id, RL_TEXTURE_MIN_FILTER, RL_TEXTURE_FILTER_NEAREST);
+    rlTextureParameters(dstRT.texture.id, RL_TEXTURE_MAG_FILTER, RL_TEXTURE_FILTER_NEAREST);
 
     BeginTextureMode(canvasCopyRT);
     rlSetBlendMode(RL_BLEND_CUSTOM);
