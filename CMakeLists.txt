@@ -119,6 +119,7 @@ set(SOURCES
     LocalPlayer/InputQueue.cpp
     LocalPlayer/StrokeEmitter.cpp
     LocalPlayer/SegmentRenderer.cpp
+    LocalPlayer/DabDrawer.cpp
     # ── network ───────────────────────────────────────────────────────
     src/network/serialize.cpp
     src/network/network_broker.cpp

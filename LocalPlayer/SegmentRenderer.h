@@ -5,6 +5,7 @@
 #include "raylib.h"
 
 struct AppState;
+class DabDrawer;
 
 class SegmentRenderer {
 public:
@@ -12,6 +13,7 @@ public:
 
     void Push(const DrawSegment& seg);
     int  RenderPending(AppState* state, int maxPerFrame);
+    int  EmitPending(AppState* state, int maxSegments, DabDrawer* dd);
 
 private:
     DrawSegment m_buf[CAPACITY];

@@ -17,6 +17,7 @@
 #include "replay_recorder.h"
 #include "StrokeEmitter.h"
 #include "SegmentRenderer.h"
+#include "DabDrawer.h"
 #include "external/glad.h"
 #include <time.h>
 
@@ -479,6 +480,9 @@ void App_Init(AppState* state) {
     g_segRenderer = &s_segRenderer;
     g_emitter = &s_emitter;
 
+    static DabDrawer s_dabDrawer;
+    g_dabDrawer = &s_dabDrawer;
+
     state->undo = new UndoManager();
     g_undoManager = state->undo;
 
@@ -606,8 +610,11 @@ void App_Draw(AppState* state) {
     // Process user input → segments
     g_emitter->ProcessInputQueue();
 
-    // Render queued segments (single rendering path)
-    if (g_segRenderer) g_segRenderer->RenderPending(state, 64);
+    // Emit dabs from pending segments (populates dab queue, no rendering)
+    if (g_segRenderer) g_segRenderer->EmitPending(state, 4, g_dabDrawer);
+
+    // Draw dabs throttled per frame
+    if (g_dabDrawer) g_dabDrawer->DrawPending(256);
 
     if (viewport.broker) viewport.broker->poll(state);
     if (g_recorder) g_recorder->poll(state);
