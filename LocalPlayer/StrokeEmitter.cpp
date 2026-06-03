@@ -148,6 +148,7 @@ void StrokeEmitter::handlePoint(const InputEntry& e) {
             memmove(m_splinePts, m_splinePts + 1, sizeof(Vector2) * 255);
             m_splinePts[255] = pos;
             if (m_processedCount > 0) m_processedCount--;
+            m_splinePts[m_processedCount] = m_lastDabPos;
         }
         m_accumDist = 0;
     }
