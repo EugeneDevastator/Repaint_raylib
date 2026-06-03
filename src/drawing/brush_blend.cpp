@@ -217,6 +217,17 @@ void BrushBlend_ApplyStamp(
         if (rx1 > W) rx1 = W;
         if (ry1 > H) ry1 = H;
     }
+    // When smudge is active, expand the copy rect so smudge UVs
+    // (which sample at an offset from the stamp position) land inside
+    // the copied region rather than clamping to the border.
+    if (brush->Realb.cop > 0.0f) {
+        int offX = (int)ceilf(fabsf(stampX - srcX));
+        int offY = (int)ceilf(fabsf(stampY - srcY));
+        rx0 = (int)fmaxf(0, (float)(rx0 - offX));
+        ry0 = (int)fmaxf(0, (float)(ry0 - offY));
+        rx1 = (int)fminf((float)W, (float)(rx1 + offX));
+        ry1 = (int)fminf((float)H, (float)(ry1 + offY));
+    }
     int rW = rx1 - rx0;
     int rH = ry1 - ry0;
     if (rW <= 0 || rH <= 0) return;
