@@ -20,6 +20,7 @@ struct InputEntry {
     int toolMode;
     uint8_t targetType;
     uint8_t targetId;
+    float layerScale;
 };
 
 class InputQueue {

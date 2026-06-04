@@ -32,6 +32,7 @@ private:
     uint8_t m_targetId;
     float m_initAngle;
     int   m_toolMode;
+    float m_layerScale;
 
     Vector2 m_prevSegPos, m_prevSegDir;
     float m_prevSegLen, m_prevVel;

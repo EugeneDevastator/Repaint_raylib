@@ -138,24 +138,35 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
     // Adjust brush rotation so stamps appear upright in world space
     float adjustedAngle = state->initialAngle;
 
+    // Inverse layer-transform helper — converts world-space coords to paint-space
+    auto toPaintSpace = [&](Vector2 worldPt) -> Vector2 {
+        if (state->editTexMode || active < 0 || active >= LayerStack_Count())
+            return worldPt;
+        sLayerProps* lp = LayerStack_GetProps(active);
+        if (lp->mat[0] == 1.0f && lp->mat[1] == 0.0f && lp->mat[2] == 0.0f &&
+            lp->mat[3] == 0.0f && lp->mat[4] == 1.0f && lp->mat[5] == 0.0f)
+            return worldPt;
+        float a = lp->mat[0], b = lp->mat[1], tx = lp->mat[2];
+        float c = lp->mat[3], d = lp->mat[4], ty = lp->mat[5];
+        float det = a * d - b * c;
+        if (fabsf(det) <= 0.0001f) return worldPt;
+        float invDet = 1.0f / det;
+        float ia = d * invDet, ib = -b * invDet, itx = (b * ty - d * tx) * invDet;
+        float ic = -c * invDet, id = a * invDet, ity = (c * tx - a * ty) * invDet;
+        Vector2 pt;
+        pt.x = worldPt.x * ia + worldPt.y * ib + itx;
+        pt.y = worldPt.x * ic + worldPt.y * id + ity;
+        return pt;
+    };
+
     // Transform brush position if the active layer has a transform
-    Vector2 paintPos = canvasPos;
+    Vector2 paintPos = toPaintSpace(canvasPos);
+
+    // Subtract layer rotation so brush stamps appear upright in world space
     if (!state->editTexMode && active >= 0 && active < LayerStack_Count()) {
         sLayerProps* lp = LayerStack_GetProps(active);
         if (lp->mat[0] != 1.0f || lp->mat[1] != 0.0f || lp->mat[2] != 0.0f ||
             lp->mat[3] != 0.0f || lp->mat[4] != 1.0f || lp->mat[5] != 0.0f) {
-            // Inverse of 2x3 affine matrix: [a,b,tx, c,d,ty]
-            float a = lp->mat[0], b = lp->mat[1], tx = lp->mat[2];
-            float c = lp->mat[3], d = lp->mat[4], ty = lp->mat[5];
-            float det = a * d - b * c;
-            if (fabsf(det) > 0.0001f) {
-                float invDet = 1.0f / det;
-                float ia = d * invDet, ib = -b * invDet, itx = (b * ty - d * tx) * invDet;
-                float ic = -c * invDet, id = a * invDet, ity = (c * tx - a * ty) * invDet;
-                paintPos.x = canvasPos.x * ia + canvasPos.y * ib + itx;
-                paintPos.y = canvasPos.x * ic + canvasPos.y * id + ity;
-            }
-            // Subtract layer rotation so brush stamps appear upright in world space
             float layerRot = atan2f(lp->mat[3], lp->mat[0]) * (180.0f / (float)M_PI);
             adjustedAngle -= layerRot;
         }
@@ -213,6 +224,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     be.toolMode = state->mode;
                     be.targetType = 1;
                     be.targetId = state->activeBrushTex;
+                    be.layerScale = 1.0f;
                     g_inputQueue.AddEntry(be);
 
                     vp->wasMouseDown = true;
@@ -261,6 +273,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     be.toolMode = state->mode;
                     be.targetType = 0;
                     be.targetId = active;
+                    be.layerScale = layerScale;
                     g_inputQueue.AddEntry(be);
 
                     state->currentBrush.Realb.rad_out = origRad;
@@ -276,7 +289,8 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     for (int i = 0; i < n; i++) {
                         Vector2 screenPos = {mouseBuf[i*2], mouseBuf[i*2+1]};
                         Vector2 worldPos = GetScreenToWorld2D(screenPos, state->camera);
-                        StrokePoint sp = vp->inputFilter.Feed(worldPos.x, worldPos.y, GetTime());
+                        Vector2 paintPt = toPaintSpace(worldPos);
+                        StrokePoint sp = vp->inputFilter.Feed(paintPt.x, paintPt.y, GetTime());
                         InputEntry e;
                         e.type = InputEntry::Point;
                         e.x = sp.x; e.y = sp.y;
@@ -361,7 +375,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                         PushDabSegment(vp->broker, ev.x, ev.y, ev.srcX, ev.srcY, ev.brush, state->mode);
                     }
                 }
-                vp->lineLastDabPos = canvasPos;
+                vp->lineLastDabPos = paintPos;
             }
         }
     } else if (state->mode != ePolyStripe && !leftDown) {

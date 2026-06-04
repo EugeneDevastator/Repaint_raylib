@@ -26,6 +26,7 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
     m_toolMode = e.toolMode;
     m_targetType = e.targetType;
     m_targetId = e.targetId;
+    m_layerScale = e.layerScale;
 
     Vector2 start = {e.x, e.y};
     m_lastDabPos = start;
@@ -76,6 +77,8 @@ void StrokeEmitter::emitSegment(Vector2 p0, Vector2 p2, Vector2 ctrl0, Vector2 c
     target.col      = HSLToRGB(GetModVal(&bpQuickHue), GetModVal(&bpQuickSat), GetModVal(&bpQuickLit));
     target.cop      = (toolMode == eSmudge) ? GetModVal(&bpCloneOpacity) : 0.0f;
     target.rad_out *= sizeMul;
+    if (m_layerScale > 0.001f && fabsf(m_layerScale - 1.0f) > 0.0001f)
+        target.rad_out *= m_layerScale;
 
     CollapsedBrush cbFrom = CollapseBrushParams(m_brushFrom, initAngle, toolMode);
     CollapsedBrush cbTo   = CollapseBrushParams(target, initAngle, toolMode);
