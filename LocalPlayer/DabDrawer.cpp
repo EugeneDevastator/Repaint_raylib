@@ -43,14 +43,35 @@ int DabDrawer::DrawPending(int pixelBudget) {
         int cost = (int)(r * r);
         if (cost > budget) break;
 
+        int W = d.rt.texture.width;
+        int H = d.rt.texture.height;
+
         bool savedSeamless = g_seamlessPaint;
         g_seamlessPaint = d.seamless;
-        ApplyCollapsedBrush(d.rt, d.brush, d.x, d.y, d.srcX, d.srcY, d.brushTex);
+
+        if (d.seamless) {
+            float bboxHalf = r * 1.41421356f;
+
+            for (int dy = -1; dy <= 1; dy++) {
+                for (int dx = -1; dx <= 1; dx++) {
+                    float wx = d.x + dx * W;
+                    float wy = d.y + dy * H;
+                    // Skip if the wrapped stamp is entirely outside the canvas
+                    if (wx + bboxHalf < 0 || wx - bboxHalf > W) continue;
+                    if (wy + bboxHalf < 0 || wy - bboxHalf > H) continue;
+                    ApplyCollapsedBrush(d.rt, d.brush, wx, wy, d.srcX, d.srcY, d.brushTex);
+                    drawn++;
+                }
+            }
+        } else {
+            ApplyCollapsedBrush(d.rt, d.brush, d.x, d.y, d.srcX, d.srcY, d.brushTex);
+            drawn++;
+        }
+
         g_seamlessPaint = savedSeamless;
 
         budget -= cost;
         m_head = (m_head + 1) % CAPACITY;
-        drawn++;
     }
     if (m_head == m_tail) m_head = m_tail = 0;
     return drawn;

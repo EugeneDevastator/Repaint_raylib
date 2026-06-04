@@ -57,30 +57,13 @@ static inline float clampf(float v, float lo, float hi) {
 static inline int pool_index(int bucket) {
     return (bucket / 32) - 1;
 }
-static void DrawTextureLooped(
+static void DrawStamp(
     Texture2D src, Rectangle srcRect,
-    float x0, float y0, float w, float h,
-    int canvasW, int canvasH,
-    bool loop)
+    float x0, float y0, float w, float h)
 {
-    if (!loop) {
-        DrawTexturePro(src, srcRect,
-            (Rectangle){x0, y0, w, h},
-            (Vector2){0, 0}, 0.0f, WHITE);
-        return;
-    }
-
-    for (int dy = -1; dy <= 1; dy++) {
-        for (int dx = -1; dx <= 1; dx++) {
-            float tx = x0 + dx * canvasW;
-            float ty = y0 + dy * canvasH;
-            if (tx >= canvasW || ty >= canvasH) continue;
-            if (tx + w <= 0   || ty + h <= 0)  continue;
-            DrawTexturePro(src, srcRect,
-                (Rectangle){tx, ty, w, h},
-                (Vector2){0, 0}, 0.0f, WHITE);
-        }
-    }
+    DrawTexturePro(src, srcRect,
+        (Rectangle){x0, y0, w, h},
+        (Vector2){0, 0}, 0.0f, WHITE);
 }
 
 void BrushBlend_Init(void) {
@@ -425,10 +408,9 @@ void BrushBlend_ApplyStamp(
     BeginShaderMode(brushBlendShader);
     int uSeamlessVal = g_seamlessPaint ? 1 : 0;
     SetShaderValue(brushBlendShader, locSeamless, &uSeamlessVal, SHADER_UNIFORM_INT);
-    DrawTextureLooped(geoRT->texture,
+    DrawStamp(geoRT->texture,
         (Rectangle){0, 0, (float)drawSz, (float)-drawSz},
-        x0, y0, stampSizePx, stampSizePx,
-        W, H, g_seamlessPaint);
+        x0, y0, stampSizePx, stampSizePx);
 
     EndShaderMode();
 
