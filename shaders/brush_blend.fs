@@ -385,15 +385,22 @@ float cloneOpacity = smudgeStrength;
          else
             smudgeRGB = smudgeSample.rgb;
 
-        vec4 smudgeCol = vec4(smudgeRGB, 1);
+        //vec4 smudgeCol = vec4(smudgeRGB, 1);
 
-        //if (smudgeStrength >= 0.9999999) {
+        // just do color application after. as separate pass.
+        // if (smudgeStrength >= 0.9999999) {
             brushFinal = smudgeRGB;
-        //} else {
-//            float w = (1.0 - smudgeStrength) * (1.0 - smudgeStrength);
-  //          brushFinal = applyBlend(bmidx, smudgeCol, brushFinal, w).rgb;
-    //    }
+        // } else {
+        //            float w = (1.0 - smudgeStrength) * (1.0 - smudgeStrength);
+        //          brushFinal = applyBlend(bmidx, smudgeCol, brushFinal, w).rgb;
+        //    }
+
+        // this section works better for linear gamma
+        // float w = cloneOpacity * finalAlpha; // attenuate
+        // finalColor = applyBlend(bmidx, canvas, brushFinal, w);
+
         finalColor = applyBlend(bmidx, canvas, brushFinal, finalAlpha);
+
         // Alpha: treat canvas A as plain channel, lerp smudge alpha into canvas alpha weighted by brush mask
         float blendedA = mix(canvas.a, smudgeA, finalAlpha);
 
@@ -402,6 +409,7 @@ float cloneOpacity = smudgeStrength;
            else
             finalColor.a = blendedA;
 
+			finalColor.a = canvas.a;
         return;
     }
 
