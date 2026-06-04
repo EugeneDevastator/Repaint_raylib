@@ -240,7 +240,10 @@ vec4 sampleCopy(sampler2D tex, vec2 canvasPx) {
     vec2 px = canvasPx - copyOrigin - 0.5;
     vec2 ipx = floor(px);
     vec2 f = fract(px);
-
+					      // Bounds check BEFORE bilinear — return transparent if outside
+    if (px.x < -0.5 || px.y < -0.5 ||
+        px.x >= copySize.x || px.y >= copySize.y)
+        return vec4(0.0); // or canvas color — signals "no data"
     ivec2 maxCoord = ivec2(copySize - vec2(1.0));
     ivec2 c00 = clamp(ivec2(ipx),              ivec2(0), maxCoord);
     ivec2 c10 = clamp(ivec2(ipx) + ivec2(1,0), ivec2(0), maxCoord);
@@ -271,9 +274,16 @@ vec4 sampleCopy(sampler2D tex, vec2 canvasPx) {
         vec3 mixed = mix(mix(tl_lin, tr_lin, f.x), mix(bl_lin, br_lin, f.x), f.y);
         float a = mix(mix(tl.a, tr.a, f.x), mix(bl.a, br.a, f.x), f.y);
         return vec4(sqrt(mixed), a);
-    } else {
-        return mix(mix(tl, tr, f.x), mix(bl, br, f.x), f.y);
-    }
+} else {
+    // Premultiplied bilinear to avoid dark-fringe bleed
+    vec4 tl_p = vec4(tl.rgb * tl.a, tl.a);
+    vec4 tr_p = vec4(tr.rgb * tr.a, tr.a);
+    vec4 bl_p = vec4(bl.rgb * bl.a, bl.a);
+    vec4 br_p = vec4(br.rgb * br.a, br.a);
+    vec4 mixed = mix(mix(tl_p, tr_p, f.x), mix(bl_p, br_p, f.x), f.y);
+    // Un-premultiply
+    return vec4(mixed.a > 0.00001 ? mixed.rgb / mixed.a : mixed.rgb, mixed.a);
+}
 
 }
 // Convert canvas-normalised UV (canvasFragUV) to the stamp-region copy UV
@@ -399,7 +409,24 @@ float cloneOpacity = smudgeStrength;
         // float w = cloneOpacity * finalAlpha; // attenuate
         // finalColor = applyBlend(bmidx, canvas, brushFinal, w);
 
-        finalColor = applyBlend(bmidx, canvas, brushFinal, finalAlpha);
+
+       /// finalColor = applyBlend(bmidx, canvas, brushFinal, finalAlpha);
+// Forced color calcs for smudge.
+    vec3 mixedRGB;
+    if (bmidx == 0) {
+        vec3 labCanvas = rgbToOklab(canvas.rgb);
+        vec3 labSmudge = rgbToOklab(smudgeRGB);
+        mixedRGB = oklabToRgb(mix(labCanvas, labSmudge, finalAlpha));
+    } else if (bmidx == 4) {
+        vec3 linCanvas = canvas.rgb * canvas.rgb;
+        vec3 linSmudge = smudgeRGB * smudgeRGB;
+        mixedRGB = sqrt(mix(linCanvas, linSmudge, finalAlpha));
+    } else {
+        // linear or anything else — straight lerp, no premul
+        mixedRGB = mix(canvas.rgb, smudgeRGB, finalAlpha);
+    }
+
+    finalColor = vec4(mixedRGB, canvas.a);
 
         // Alpha: treat canvas A as plain channel, lerp smudge alpha into canvas alpha weighted by brush mask
         float blendedA = mix(canvas.a, smudgeA, finalAlpha);
