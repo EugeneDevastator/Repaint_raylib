@@ -47,7 +47,7 @@ vec3 srgbToLinear3(vec3 c) { return vec3(srgbToLinear(c.r), srgbToLinear(c.g), s
 vec3 linearToSrgb3(vec3 c) { return vec3(linearToSrgb(c.r), linearToSrgb(c.g), linearToSrgb(c.b)); }
 						   // sRGB -> OKLab
 vec3 rgbToOklab(vec3 c) {
-    vec3 lin = clamp(c, 0.0, 1.0); 
+    vec3 lin = clamp(c, 0.0, 1.0);
     // linear RGB -> LMS (OKLab's cone space)
     float l = 0.4122214708 * lin.r + 0.5363325363 * lin.g + 0.0514459929 * lin.b;
     float m = 0.2119034982 * lin.r + 0.6806995451 * lin.g + 0.1073969566 * lin.b;
@@ -176,17 +176,25 @@ if (mode == 0) { // N-OKLab
 		vec3 canvasPremul = canvas.rgb * canvas.a;
 
 		outA   = brushA + canvas.a * (1.0 - brushA);
-		outRGB = (outA > 0.00001) 
-			? (brushPremul + canvasPremul * (1.0 - brushA)) / outA 
+		outRGB = (outA > 0.00001)
+			? (brushPremul + canvasPremul * (1.0 - brushA)) / outA
 			: brushRGB;
-    } else if (mode == 2) { // EraseA
+    }
+
+        else if (mode == 4) { // N-Gamma
+            vec3 brushLin  = brushRGB * brushRGB;
+            vec3 canvasLin = canvas.rgb * canvas.rgb;
+            outRGB = sqrt(brushLin * brushA + canvasLin * (1.0 - brushA));
+            outA   = brushA + canvas.a * (1.0 - brushA);
+              }
+    else if (mode == 2) { // EraseA
         outRGB = canvas.rgb;
         outA   = canvas.a * (1.0 - brushA);
     } else if (mode == 3) { // EraseColor
         float eraseMask = canvas.a * brushA;
         outRGB = mix(canvas.rgb, brushRGB, eraseMask);
         outA   = canvas.a * (1.0 - brushA * 0.5);
-    } else if (mode == 4) { // Screen
+    } else if (mode == 444) { // Screen
         outRGB = 1.0 - (1.0 - canvas.rgb) * (1.0 - brushPremul);
         outA   = 1.0 - (1.0 - canvas.a) * (1.0 - brushA);
     } else if (mode == 5) { // Color Dodge
@@ -227,31 +235,21 @@ if (mode == 0) { // N-OKLab
 
     return vec4(clamp(outRGB, 0.0, 1.0), clamp(outA, 0.0, 1.0));
 }
-
-// Manual bilinear filtering — avoids hardware sampler precision issues
+// oklab compatible blender
 vec4 sampleCopy(sampler2D tex, vec2 canvasPx) {
-    vec2 px = canvasPx - copyOrigin - 0.5;  // shift: integer coords are pixel centers
+    vec2 px = canvasPx - copyOrigin;
     vec2 ipx = floor(px);
     vec2 f = fract(px);
+					      // Bounds check BEFORE bilinear — return transparent if outside
+    if (px.x < -0.5 || px.y < -0.5 ||
+        px.x >= copySize.x || px.y >= copySize.y)
+        return vec4(0.0); // or canvas color — signals "no data"
 
     ivec2 maxCoord = ivec2(copySize - vec2(1.0));
-    ivec2 c00 = clamp(ivec2(ipx), ivec2(0, 0), maxCoord);
-    ivec2 c10 = clamp(ivec2(ipx + ivec2(1, 0)), ivec2(0, 0), maxCoord);
-    ivec2 c01 = clamp(ivec2(ipx + ivec2(0, 1)), ivec2(0, 0), maxCoord);
-    ivec2 c11 = clamp(ivec2(ipx + ivec2(1, 1)), ivec2(0, 0), maxCoord);
-    vec4 tl = texelFetch(tex, c00, 0);
-    vec4 tr = texelFetch(tex, c10, 0);
-    vec4 bl = texelFetch(tex, c01, 0);
-    vec4 br = texelFetch(tex, c11, 0);
-    return mix(mix(tl, tr, f.x), mix(bl, br, f.x), f.y);
-}
 
-vec4 sampleCopyOklab(sampler2D tex, vec2 canvasPx) {
-    vec2 px = canvasPx - copyOrigin - 0.5;
-    vec2 ipx = floor(px);
-    vec2 f = fract(px);
+    ivec2 c = clamp(ivec2(ipx), ivec2(0), maxCoord);
+    return texelFetch(tex, c, 0);
 
-    ivec2 maxCoord = ivec2(copySize - vec2(1.0));
     ivec2 c00 = clamp(ivec2(ipx),              ivec2(0), maxCoord);
     ivec2 c10 = clamp(ivec2(ipx) + ivec2(1,0), ivec2(0), maxCoord);
     ivec2 c01 = clamp(ivec2(ipx) + ivec2(0,1), ivec2(0), maxCoord);
@@ -262,20 +260,36 @@ vec4 sampleCopyOklab(sampler2D tex, vec2 canvasPx) {
     vec4 bl = texelFetch(tex, c01, 0);
     vec4 br = texelFetch(tex, c11, 0);
 
-    if (bmidx != 0) {
-        // non-oklab: plain linear mix
-        return mix(mix(tl, tr, f.x), mix(bl, br, f.x), f.y);
-    }
+    if (bmidx == 0) {
+        // convert all 4 to Lab, mix, convert back
+        vec3 ll = rgbToOklab(tl.rgb);
+        vec3 lr = rgbToOklab(tr.rgb);
+        vec3 bl2 = rgbToOklab(bl.rgb);
+        vec3 br2 = rgbToOklab(br.rgb);
 
-    // convert all 4 to Lab, mix, convert back
-    vec3 ll = rgbToOklab(tl.rgb);
-    vec3 lr = rgbToOklab(tr.rgb);
-    vec3 bl2 = rgbToOklab(bl.rgb);
-    vec3 br2 = rgbToOklab(br.rgb);
+        vec3 mixed = mix(mix(ll, lr, f.x), mix(bl2, br2, f.x), f.y);
+        float a = mix(mix(tl.a, tr.a, f.x), mix(bl.a, br.a, f.x), f.y);
+        return vec4(oklabToRgb(mixed), a);
+    } else if (bmidx == 4) {
+        // sqrt-gamma bilinear
+        vec3 tl_lin = tl.rgb * tl.rgb;
+        vec3 tr_lin = tr.rgb * tr.rgb;
+        vec3 bl_lin = bl.rgb * bl.rgb;
+        vec3 br_lin = br.rgb * br.rgb;
+        vec3 mixed = mix(mix(tl_lin, tr_lin, f.x), mix(bl_lin, br_lin, f.x), f.y);
+        float a = mix(mix(tl.a, tr.a, f.x), mix(bl.a, br.a, f.x), f.y);
+        return vec4(sqrt(mixed), a);
+} else {
+    // Premultiplied bilinear to avoid dark-fringe bleed
+    vec4 tl_p = vec4(tl.rgb * tl.a, tl.a);
+    vec4 tr_p = vec4(tr.rgb * tr.a, tr.a);
+    vec4 bl_p = vec4(bl.rgb * bl.a, bl.a);
+    vec4 br_p = vec4(br.rgb * br.a, br.a);
+    vec4 mixed = mix(mix(tl_p, tr_p, f.x), mix(bl_p, br_p, f.x), f.y);
+    // Un-premultiply
+    return vec4(mixed.a > 0.00001 ? mixed.rgb / mixed.a : mixed.rgb, mixed.a);
+}
 
-    vec3 mixed = mix(mix(ll, lr, f.x), mix(bl2, br2, f.x), f.y);
-    float a = mix(mix(tl.a, tr.a, f.x), mix(bl.a, br.a, f.x), f.y);
-    return vec4(oklabToRgb(mixed), a);
 }
 // Convert canvas-normalised UV (canvasFragUV) to the stamp-region copy UV
 vec2 toCopyUV(vec2 cuv) {
@@ -289,38 +303,83 @@ void main() {
     vec2 uv       = fragTexCoord;
     vec2 sampleUV = vec2(uv.x, 1.0 - uv.y);
     vec4 geouv    = texture(geoTex, sampleUV);
+        if (geouv.a < 0.000001) {
+    		discard;
+        }
 
-
-    if (geouv.a < 0.5) {
-		discard;
-        //finalColor = canvas;
-        //return;
+    vec4 canvas = uSeamless
+        ? sampleCopy(canvasTex, mod(outCanvasPx, canvasSize))
+        : sampleCopy(canvasTex, outCanvasPx);
+    vec2 localPx = outCanvasPx - copyOrigin - 0.5;
+    if (localPx.x < 0.0 || localPx.y < 0.0 ||
+        localPx.x >= copySize.x || localPx.y >= copySize.y) {
+        // Outside copy region — shouldn't happen but discard
+        discard;
     }
-	vec2 canvasUV = toCopyUV(canvasFragUV);
-	vec4 canvas = sampleCopy(canvasTex, outCanvasPx);
-	vec2 localPx = outCanvasPx - copyOrigin - 0.5;
-	/*
-		if (localPx.x < 0.0 || localPx.y < 0.0 ||
-		localPx.x >= copySize.x || localPx.y >= copySize.y) {
-		// Outside copy region — shouldn't happen but discard
-		discard;
-	}
-*/
+
     float alpha = geouv.a;
 
     // --- texture sampling ---
     float finalAlpha;
     vec3 brushFinal;
 
+    if (hasTexture) {
+        vec2 stUV = geouv.rg;
 
+        if (texNoisemode == 0) {
+            stUV = (canvasFragUV - 0.5) * canvasSize / 256.0 * texScale + userTexOrigin;
+        } else if (texNoisemode == 1) {
+            stUV = geouv.rg * texScale + texOffset;
+        } else {
+            stUV = (geouv.rg - 0.5) * texScale + userTexOrigin;
+        }
+        vec4 texel = texture(brushTex, stUV);
+
+        float userTexA = useLumAsAlpha
+            ? (texel.r + texel.g + texel.b) * (1.0 / 3.0)
+            : texel.a;
+
+        if (texThresh < 0.0)
+            userTexA = 1.0 - userTexA;
+
+        finalAlpha = clamp(applyThreshold(alpha * userTexA, abs(texThresh), texFeather), 0.0, 1.0);
+
+        if (texColorMode == 0) {
+            brushFinal = brushColor.rgb;
+        } else if (texColorMode == 1) {
+            brushFinal = texel.rgb;
+        } else if (texColorMode == 2) {
+            brushFinal = texel.rgb * brushColor.rgb;
+    } else {
+        // lum-color (3): black → brushColor → white via luminance
+        float lum = dot(texel.rgb, vec3(0.299, 0.587, 0.114));
+        if (lum < 0.5)
+            brushFinal = mix(vec3(0.0), brushColor.rgb, lum * 2.0);
+        else
+            brushFinal = mix(brushColor.rgb, vec3(1.0), (lum - 0.5) * 2.0);
+        }
+    } else {
         finalAlpha = alpha;
         brushFinal = brushColor.rgb;
-
+    }
 
     finalAlpha *= opacity;
     if (finalAlpha < 0.00001) { finalColor = canvas; return; }
 
-
+    // ── Erase modes ─────────────────────────────────────────────────
+    if (eraseMode == 1) {
+        // Alpha erase: reduce canvas alpha by brush alpha
+        float newA = canvas.a * (1.0 - finalAlpha);
+        finalColor = vec4(canvas.rgb, newA);
+        return;
+    } else if (eraseMode == 2) {
+        // Color erase: apply color proportional to alpha, then erase
+        float mask = canvas.a * finalAlpha;
+        vec3 erasedRGB = mix(canvas.rgb, brushFinal, mask);
+        float erasedA = canvas.a * (1.0 - finalAlpha * 0.5);
+        finalColor = vec4(erasedRGB, erasedA);
+        return;
+    }
 
 float cloneOpacity = smudgeStrength;
     if (cloneOpacity > 0.000001) {
@@ -330,38 +389,63 @@ float cloneOpacity = smudgeStrength;
         srcPx = mod(srcPx, canvasSize);
     else
         srcPx = clamp(srcPx, copyOrigin, copyOrigin + copySize - vec2(1.0));
-		vec2 smudgePx = outCanvasPx - smudgeOffsetUV * canvasSize; // if offsetUV is normalized
-		
-		
-		vec4 smudgeSample;
-		if(bmidx == 0)
-			smudgeSample = sampleCopyOklab(canvasTex, smudgePx);
-		else
-			smudgeSample = sampleCopy(canvasTex, smudgePx);
-		
-		
+
+        vec4 smudgeSample = sampleCopy(canvasTex, srcPx);
         float smudgeA = smudgeSample.a;
 
-		// gracefully handle transparent layers to not mix with blacks.
-		vec3 smudgeRGB;
-		if (smudgeSample.a < 0.0001)
-			smudgeRGB = canvas.rgb; // fallback: don't darken
-		else
-			smudgeRGB = smudgeSample.rgb;
+// gracefully handle transparent layers to not mix with blacks.
+        vec3 smudgeRGB;
+        if (smudgeA < 0.0000001)
+            smudgeRGB = canvas.rgb;
+         else
+            smudgeRGB = smudgeSample.rgb;
 
-        vec4 smudgeCol = vec4(smudgeRGB, 1);
+        //vec4 smudgeCol = vec4(smudgeRGB, 1);
 
-        brushFinal = smudgeRGB;
+        // just do color application after. as separate pass.
+        // if (smudgeStrength >= 0.9999999) {
+            brushFinal = smudgeRGB;
+        // } else {
+        //            float w = (1.0 - smudgeStrength) * (1.0 - smudgeStrength);
+        //          brushFinal = applyBlend(bmidx, smudgeCol, brushFinal, w).rgb;
+        //    }
 
-        finalColor = applyBlend(bmidx, canvas, brushFinal, finalAlpha);
+        // this section works better for linear gamma
+        // float w = cloneOpacity * finalAlpha; // attenuate
+        // finalColor = applyBlend(bmidx, canvas, brushFinal, w);
+
+
+       /// finalColor = applyBlend(bmidx, canvas, brushFinal, finalAlpha);
+// Forced color calcs for smudge.
+    vec3 mixedRGB;
+    if (bmidx == 0) {
+        vec3 labCanvas = rgbToOklab(canvas.rgb);
+        vec3 labSmudge = rgbToOklab(smudgeRGB);
+        mixedRGB = oklabToRgb(mix(labCanvas, labSmudge, finalAlpha));
+    } else if (bmidx == 4) {
+        vec3 linCanvas = canvas.rgb * canvas.rgb;
+        vec3 linSmudge = smudgeRGB * smudgeRGB;
+        mixedRGB = sqrt(mix(linCanvas, linSmudge, finalAlpha));
+} else {
+    // premultiplied lerp
+    vec3 premulCanvas = canvas.rgb * canvas.a;
+    vec3 premulSmudge = smudgeRGB * smudgeA;
+    vec3 premulMixed = mix(premulCanvas, premulSmudge, finalAlpha);
+    float mixedA = mix(canvas.a, smudgeA, finalAlpha);
+    mixedRGB = mixedA > 0.00001 ? premulMixed / mixedA : premulMixed;
+}
+
+    finalColor = vec4(mixedRGB, canvas.a);
+
         // Alpha: treat canvas A as plain channel, lerp smudge alpha into canvas alpha weighted by brush mask
-        float blendedA = 1;
+        float blendedA = mix(canvas.a, smudgeA, finalAlpha);
 
            if (preserveop > 0.5)
             finalColor.a = canvas.a;
            else
             finalColor.a = blendedA;
 
+			finalColor.a = canvas.a;
         return;
     }
 
