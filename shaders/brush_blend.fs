@@ -237,6 +237,20 @@ if (mode == 0) { // N-OKLab
 }
 // oklab compatible blender
 vec4 sampleCopy(sampler2D tex, vec2 canvasPx) {
+    if (true) // force nearest for now
+    {
+        vec2 px = canvasPx - copyOrigin;
+        vec2 ipx = floor(px);
+        vec2 f = fract(px);
+        // Bounds check BEFORE bilinear — return transparent if outside
+        if (px.x < -0.5 || px.y < -0.5 ||
+            px.x >= copySize.x || px.y >= copySize.y)
+            return vec4(0.0); // or canvas color — signals "no data"
+        ivec2 maxCoord = ivec2(copySize - vec2(1.0));
+        ivec2 c = clamp(ivec2(ipx), ivec2(0), maxCoord);
+        return texelFetch(tex, c, 0);
+    }
+    // vec2 px = canvasPx - copyOrigin - 0.5;
     vec2 px = canvasPx - copyOrigin - 0.5;
     vec2 ipx = floor(px);
     vec2 f = fract(px);
@@ -244,7 +258,9 @@ vec4 sampleCopy(sampler2D tex, vec2 canvasPx) {
     if (px.x < -0.5 || px.y < -0.5 ||
         px.x >= copySize.x || px.y >= copySize.y)
         return vec4(0.0); // or canvas color — signals "no data"
+
     ivec2 maxCoord = ivec2(copySize - vec2(1.0));
+
     ivec2 c00 = clamp(ivec2(ipx),              ivec2(0), maxCoord);
     ivec2 c10 = clamp(ivec2(ipx) + ivec2(1,0), ivec2(0), maxCoord);
     ivec2 c01 = clamp(ivec2(ipx) + ivec2(0,1), ivec2(0), maxCoord);
