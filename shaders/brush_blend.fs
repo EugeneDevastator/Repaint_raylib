@@ -6,6 +6,8 @@ out vec4 finalColor;
 uniform sampler2D geoTex;
 uniform sampler2D canvasTex;
 uniform sampler2D brushTex;
+uniform sampler2D smudgeTex;
+uniform bool     hasSmudge;
 
 uniform vec2  copyOrigin;
 uniform vec2  copySize;
@@ -396,13 +398,21 @@ void main() {
 float cloneOpacity = smudgeStrength;
     if (cloneOpacity > 0.000001) {
 
-    vec2 srcPx = outCanvasPx - smudgeOffsetUV;  // smudgeOffsetUV is now in pixels
-    if (uSeamless)
-        srcPx = mod(srcPx, canvasSize);
-    else
-        srcPx = clamp(srcPx, copyOrigin, copyOrigin + copySize - vec2(1.0));
+    vec2 srcPx;
+    if (hasSmudge) {
+        // smudgeTex is pre-shifted — use same position as canvas read
+        srcPx = uSeamless ? mod(outCanvasPx, canvasSize) : outCanvasPx;
+    } else {
+        srcPx = outCanvasPx - smudgeOffsetUV;
+        if (uSeamless)
+            srcPx = mod(srcPx, canvasSize);
+        else
+            srcPx = clamp(srcPx, copyOrigin, copyOrigin + copySize - vec2(1.0));
+    }
 
-        vec4 smudgeSample = sampleCopy(canvasTex, srcPx);
+        vec4 smudgeSample = hasSmudge
+            ? sampleCopy(smudgeTex, srcPx)
+            : sampleCopy(canvasTex, srcPx);
         float smudgeA = smudgeSample.a;
 
 // gracefully handle transparent layers to not mix with blacks.

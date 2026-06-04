@@ -28,10 +28,15 @@ static int locEraseMode = -1;
 static int locSeamless = -1;
 static int locCopyOrigin = -1, locCopySize = -1;
 static int locGeoTex = -1;
+static int locSmudgeTex = -1;
+static int locHasSmudge = -1;
 static bool inited = false;
 
 static RenderTexture2D canvasCopyRT = {0};
 static int canvasCopyW = 0, canvasCopyH = 0;
+
+static RenderTexture2D smudgeCopyRT = {0};
+static int smudgeCopyW = 0, smudgeCopyH = 0;
 
 #define GEO_POOL_COUNT 64   // slots: 32, 64, 96, ... 2048
 static RenderTexture2D geoPool[GEO_POOL_COUNT] = {0};
@@ -123,6 +128,10 @@ void BrushBlend_Init(void) {
 
     locGeoTex = GetShaderLocation(brushBlendShader, "geoTex");
     if (locGeoTex >= 0) { int u = 0; SetShaderValue(brushBlendShader, locGeoTex, &u, SHADER_UNIFORM_INT); }
+    locSmudgeTex = GetShaderLocation(brushBlendShader, "smudgeTex");
+    if (locSmudgeTex >= 0) { int u = 3; SetShaderValue(brushBlendShader, locSmudgeTex, &u, SHADER_UNIFORM_INT); }
+    locHasSmudge = GetShaderLocation(brushBlendShader, "hasSmudge");
+    if (locHasSmudge >= 0) { int v = 0; SetShaderValue(brushBlendShader, locHasSmudge, &v, SHADER_UNIFORM_INT); }
 
     Image img = GenImageColor(1, 1, WHITE);
     whiteTex = LoadTextureFromImage(img);
@@ -136,6 +145,7 @@ void BrushBlend_Shutdown(void) {
     UnloadShader(brushBlendShader);
     UnloadShader(brushGeoShader);
     if (canvasCopyRT.id > 0) UnloadRenderTexture(canvasCopyRT);
+    if (smudgeCopyRT.id > 0) UnloadRenderTexture(smudgeCopyRT);
     for (int i = 0; i < GEO_POOL_COUNT; i++) {
         if (geoPool[i].id > 0) {
             UnloadRenderTexture(geoPool[i]);
@@ -193,62 +203,84 @@ void BrushBlend_ApplyStamp(
     int ry0 = (int)floorf(y0);
     int rx1 = (int)ceilf(x0 + stampSizePx);
     int ry1 = (int)ceilf(y0 + stampSizePx);
+    bool doSmudge = brush->Realb.cop > 0.0f;
+    int smudgeOffX = 0, smudgeOffY = 0;
+    int cnv_rx0 = rx0, cnv_ry0 = ry0, cnv_rx1 = rx1, cnv_ry1 = ry1; // canvas copy rect
     if (g_seamlessPaint) {
-        // Stamp extends beyond canvas edge — need full canvas in the copy
-        // so the shader's fract(canvasUV) wraps to the correct pixel.
-        if (rx0 < 0 || rx1 > W) { rx0 = 0; rx1 = W; }
-        if (ry0 < 0 || ry1 > H) { ry0 = 0; ry1 = H; }
+        if (rx0 < 0 || rx1 > W) { cnv_rx0 = 0; cnv_rx1 = W; }
+        if (ry0 < 0 || ry1 > H) { cnv_ry0 = 0; cnv_ry1 = H; }
     } else {
-        if (rx0 < 0) rx0 = 0;
-        if (ry0 < 0) ry0 = 0;
-        if (rx1 > W) rx1 = W;
-        if (ry1 > H) ry1 = H;
+        if (rx0 < 0) cnv_rx0 = 0;
+        if (ry0 < 0) cnv_ry0 = 0;
+        if (rx1 > W) cnv_rx1 = W;
+        if (ry1 > H) cnv_ry1 = H;
     }
-    // When smudge is active, expand the copy rect so smudge UVs
-    // (which sample at an offset from the stamp position) land inside
-    // the copied region rather than clamping to the border.
-    if (brush->Realb.cop > 0.0f) {
-        int offX = (int)ceilf(fabsf(stampX - srcX));
-        int offY = (int)ceilf(fabsf(stampY - srcY));
-        int margin = 4;
-        rx0 = (int)fmaxf(0, (float)(rx0 - offX - margin));
-        ry0 = (int)fmaxf(0, (float)(ry0 - offY - margin));
-        rx1 = (int)fminf((float)W, (float)(rx1 + offX + margin));
-        ry1 = (int)fminf((float)H, (float)(ry1 + offY + margin));
-
+    if (doSmudge) {
+        smudgeOffX = (int)ceilf(fabsf(stampX - srcX));
+        smudgeOffY = (int)ceilf(fabsf(stampY - srcY));
+        cnv_rx0 = (int)fmaxf(0, (float)(cnv_rx0 - smudgeOffX));
+        cnv_ry0 = (int)fmaxf(0, (float)(cnv_ry0 - smudgeOffY));
+        cnv_rx1 = (int)fminf((float)W, (float)(cnv_rx1 + smudgeOffX));
+        cnv_ry1 = (int)fminf((float)H, (float)(cnv_ry1 + smudgeOffY));
     }
-    int rW = rx1 - rx0;
-    int rH = ry1 - ry0;
+    int rW = cnv_rx1 - cnv_rx0;
+    int rH = cnv_ry1 - cnv_ry0;
     if (rW <= 0 || rH <= 0) return;
 
-    // -------- Pass 0: partial canvas copy (stamp region only) --------
+    // -------- Pass 0a: canvas copy (stamp region) --------
     if (canvasCopyRT.id == 0 || canvasCopyW != rW || canvasCopyH != rH) {
         if (canvasCopyRT.id > 0) UnloadRenderTexture(canvasCopyRT);
         canvasCopyRT = Load16BitRT(rW, rH);
-        //SetTextureFilter(canvasCopyRT.texture, TEXTURE_FILTER_BILINEAR);
-        rlTextureParameters(canvasCopyRT.texture.id, RL_TEXTURE_MIN_FILTER, RL_TEXTURE_FILTER_NEAREST);
-        rlTextureParameters(canvasCopyRT.texture.id, RL_TEXTURE_MAG_FILTER, RL_TEXTURE_FILTER_NEAREST);
-
+        SetTextureFilter(canvasCopyRT.texture, TEXTURE_FILTER_BILINEAR);
         SetTextureWrap(canvasCopyRT.texture, TEXTURE_WRAP_REPEAT);
         canvasCopyW = rW;
         canvasCopyH = rH;
     }
 
-    // Source: dstRT is OpenGL upside-down, flip Y for texture rect
-    float srcTexY = (float)(H - ry1); // flip to GL tex coord space
-    rlTextureParameters(dstRT.texture.id, RL_TEXTURE_MIN_FILTER, RL_TEXTURE_FILTER_NEAREST);
-    rlTextureParameters(dstRT.texture.id, RL_TEXTURE_MAG_FILTER, RL_TEXTURE_FILTER_NEAREST);
-
+    float srcTexY = (float)(H - cnv_ry1); // GL tex coord space
     BeginTextureMode(canvasCopyRT);
     rlSetBlendMode(RL_BLEND_CUSTOM);
     rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
     ClearBackground((Color){0,0,0,0});
-    DrawTexturePro(
-        dstRT.texture,
-        (Rectangle){(float)rx0, srcTexY, (float)rW, (float)rH},
+    DrawTexturePro(dstRT.texture,
+        (Rectangle){(float)cnv_rx0, srcTexY, (float)rW, (float)rH},
         (Rectangle){0, 0, (float)rW, (float)rH},
         (Vector2){0, 0}, 0.0f, WHITE);
     EndTextureMode();
+
+    // -------- Pass 0b: smudge copy (pre-shifted, GL_REPEAT wraps borders) --------
+    bool hasSmudgeCopy = false;
+    if (doSmudge) {
+        // Source rect shifted by smudge offset: at dest (dx,dy) the copy
+        // contains canvas pixel cnv_rx0+dx-smudgeOffX, cnv_ry0+dy-smudgeOffY
+        // (wrapped via GL_REPEAT on dstRT.texture).
+        int s_rx0 = cnv_rx0 - smudgeOffX;
+        int s_ry1 = cnv_ry1 - smudgeOffY;  // canvas bottom → shift "up" for smudge source
+        float s_srcTexY = (float)(H - s_ry1);
+
+        if (smudgeCopyRT.id == 0 || smudgeCopyW != rW || smudgeCopyH != rH) {
+            if (smudgeCopyRT.id > 0) UnloadRenderTexture(smudgeCopyRT);
+            smudgeCopyRT = Load16BitRT(rW, rH);
+            SetTextureFilter(smudgeCopyRT.texture, TEXTURE_FILTER_BILINEAR);
+            SetTextureWrap(smudgeCopyRT.texture, TEXTURE_WRAP_REPEAT);
+            smudgeCopyW = rW;
+            smudgeCopyH = rH;
+        }
+
+        SetTextureWrap(dstRT.texture, TEXTURE_WRAP_REPEAT);
+
+        BeginTextureMode(smudgeCopyRT);
+        rlSetBlendMode(RL_BLEND_CUSTOM);
+        rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+        ClearBackground((Color){0,0,0,0});
+        DrawTexturePro(dstRT.texture,
+            (Rectangle){(float)s_rx0, s_srcTexY, (float)rW, (float)rH},
+            (Rectangle){0, 0, (float)rW, (float)rH},
+            (Vector2){0, 0}, 0.0f, WHITE);
+        EndTextureMode();
+
+        hasSmudgeCopy = true;
+    }
 
     // -------- Pass 1: geo UV (pool, lazy alloc, never freed until shutdown)
     // Use the already-computed bucket/drawSz from above
@@ -314,12 +346,12 @@ void BrushBlend_ApplyStamp(
     float smudge     = brush->Realb.cop;
     float odx = stampX - srcX;
     float ody = stampY - srcY;
-    float odist = sqrtf(odx * odx + ody * ody);
-    if (odist > 0.0001f && odist < 3.0f) {
-        float scale = 3.0f / odist;
-        odx *= scale;
-        ody *= scale;
-    }
+  //  float odist = sqrtf(odx * odx + ody * ody);
+  //  if (odist > 0.0001f && odist < 3.0f) {
+  //      float scale = 3.0f / odist;
+  //      odx *= scale;
+  //      ody *= scale;
+  //  }
     float offsetUV[2] = { odx, ody };
 
     float col[4] = {
@@ -369,7 +401,7 @@ void BrushBlend_ApplyStamp(
     SetShaderValue(brushBlendShader, locCanvasSize, csz, SHADER_UNIFORM_VEC2);
 
     // Copy sub-region info for the shader
-    float co[2] = { (float)rx0, (float)ry0 };
+    float co[2] = { (float)cnv_rx0, (float)cnv_ry0 };
     SetShaderValue(brushBlendShader, locCopyOrigin, co, SHADER_UNIFORM_VEC2);
     float cs[2] = { (float)rW, (float)rH };
     SetShaderValue(brushBlendShader, locCopySize,  cs, SHADER_UNIFORM_VEC2);
@@ -403,11 +435,17 @@ void BrushBlend_ApplyStamp(
     rlEnableTexture(canvasCopyRT.texture.id);
     rlActiveTextureSlot(2);
     rlEnableTexture(brushTex.id > 0 ? brushTex.id : whiteTex.id);
+    rlActiveTextureSlot(3);
+    rlEnableTexture(hasSmudgeCopy ? smudgeCopyRT.texture.id : whiteTex.id);
     rlActiveTextureSlot(0);
 
     BeginShaderMode(brushBlendShader);
     int uSeamlessVal = g_seamlessPaint ? 1 : 0;
     SetShaderValue(brushBlendShader, locSeamless, &uSeamlessVal, SHADER_UNIFORM_INT);
+    if (locHasSmudge >= 0) {
+        int hsm = hasSmudgeCopy ? 1 : 0;
+        SetShaderValue(brushBlendShader, locHasSmudge, &hsm, SHADER_UNIFORM_INT);
+    }
     DrawStamp(geoRT->texture,
         (Rectangle){0, 0, (float)drawSz, (float)-drawSz},
         x0, y0, stampSizePx, stampSizePx);
@@ -416,6 +454,7 @@ void BrushBlend_ApplyStamp(
 
     rlActiveTextureSlot(1); rlDisableTexture();
     rlActiveTextureSlot(2); rlDisableTexture();
+    rlActiveTextureSlot(3); rlDisableTexture();
     rlActiveTextureSlot(0);
 
     EndTextureMode();

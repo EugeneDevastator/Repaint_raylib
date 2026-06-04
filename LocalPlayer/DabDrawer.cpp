@@ -56,11 +56,11 @@ int DabDrawer::DrawPending(int pixelBudget) {
                 for (int dx = -1; dx <= 1; dx++) {
                     float wx = d.x + dx * W;
                     float wy = d.y + dy * H;
-                    // Skip if the wrapped stamp is entirely outside the canvas
                     if (wx + bboxHalf < 0 || wx - bboxHalf > W) continue;
                     if (wy + bboxHalf < 0 || wy - bboxHalf > H) continue;
-                    ApplyCollapsedBrush(d.rt, d.brush, wx, wy, d.srcX, d.srcY, d.brushTex);
-                    drawn++;
+                    // DabDrawer.cpp
+                   ApplyCollapsedBrush(d.rt, d.brush, wx, wy, d.srcX + dx * W, d.srcY + dy * H, d.brushTex);
+ drawn++;
                 }
             }
         } else {
