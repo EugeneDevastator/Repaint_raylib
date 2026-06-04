@@ -321,13 +321,14 @@ void main() {
     vec4 canvas = uSeamless
         ? sampleCopy(canvasTex, mod(outCanvasPx, canvasSize))
         : sampleCopy(canvasTex, outCanvasPx);
-    vec2 localPx = outCanvasPx - copyOrigin - 0.5;
-    if (localPx.x < 0.0 || localPx.y < 0.0 ||
-        localPx.x >= copySize.x || localPx.y >= copySize.y) {
-        // Outside copy region — shouldn't happen but discard
-        discard;
-    }
 
+   //if (!uSeamless) {
+   //    vec2 localPx = outCanvasPx - copyOrigin - 0.5;
+   //    if (localPx.x < 0.0 || localPx.y < 0.0 ||
+   //        localPx.x >= copySize.x || localPx.y >= copySize.y) {
+   //        discard;
+   //    }
+   //}
     float alpha = geouv.a;
 
     // --- texture sampling ---
