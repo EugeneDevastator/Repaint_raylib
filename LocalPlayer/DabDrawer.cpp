@@ -63,15 +63,35 @@ void EmitDabsFromSegment(DabDrawer* dd, const DrawSegment& seg,
         RenderTexture2D rt;
         Texture2D tex;
         bool seamless;
+        Vector2 segDir;    // normalized segment direction (pos2 - pos1)
+        float segLen;
     };
-    EmitCtx ectx = { dd, rt, brushTex, seamless };
+    Vector2 segVec = { seg.pos2.x - seg.pos1.x, seg.pos2.y - seg.pos1.y };
+    float segLen = sqrtf(segVec.x * segVec.x + segVec.y * segVec.y);
+    Vector2 segDir = segVec;
+    if (segLen > 0.5f) {
+        segDir.x /= segLen;
+        segDir.y /= segLen;
+    } else {
+        segDir.x = 1.0f; segDir.y = 0.0f;
+    }
+    EmitCtx ectx = { dd, rt, brushTex, seamless, segDir, segLen };
 
     auto cb = [](float x, float y, float srcX, float srcY,
                  const CollapsedBrush& cbBrush, void* user) {
         EmitCtx* e = (EmitCtx*)user;
         DabEntry d;
         d.x = x; d.y = y;
-        d.srcX = srcX; d.srcY = srcY;
+
+        // When spacing is tight, push smudge source backward along the segment
+        float dx = x - srcX, dy = y - srcY;
+        float dist = sqrtf(dx * dx + dy * dy);
+        if (dist < 3.0f) {
+            d.srcX = x - e->segDir.x * 3.0f;
+            d.srcY = y - e->segDir.y * 3.0f;
+        } else {
+            d.srcX = srcX; d.srcY = srcY;
+        }
         d.rt = e->rt;
         d.brush = cbBrush;
         d.brushTex = e->tex;
