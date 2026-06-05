@@ -43,31 +43,9 @@ int DabDrawer::DrawPending(int pixelBudget) {
         int cost = (int)(r * r);
         if (cost > budget) break;
 
-        int W = d.rt.texture.width;
-        int H = d.rt.texture.height;
-
         bool savedSeamless = g_seamlessPaint;
         g_seamlessPaint = d.seamless;
-
-        if (d.seamless) {
-            float bboxHalf = r * 1.41421356f;
-
-            for (int dy = -1; dy <= 1; dy++) {
-                for (int dx = -1; dx <= 1; dx++) {
-                    float wx = d.x + dx * W;
-                    float wy = d.y + dy * H;
-                    if (wx + bboxHalf < 0 || wx - bboxHalf > W) continue;
-                    if (wy + bboxHalf < 0 || wy - bboxHalf > H) continue;
-                    // DabDrawer.cpp
-                   ApplyCollapsedBrush(d.rt, d.brush, wx, wy, d.srcX + dx * W, d.srcY + dy * H, d.brushTex);
- drawn++;
-                }
-            }
-        } else {
-            ApplyCollapsedBrush(d.rt, d.brush, d.x, d.y, d.srcX, d.srcY, d.brushTex);
-            drawn++;
-        }
-
+        ApplyCollapsedBrush(d.rt, d.brush, d.x, d.y, d.srcX, d.srcY, d.brushTex);
         g_seamlessPaint = savedSeamless;
 
         budget -= cost;
