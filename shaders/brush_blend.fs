@@ -33,6 +33,7 @@ uniform float pwr;
 uniform int   eraseMode;
 uniform bool  uSeamless;
 in vec2 canvasFragUV;
+in vec2 outCanvasPx;
 
 vec3 rgbToOklab(vec3 c) {
     vec3 lin = c * c;
@@ -245,22 +246,57 @@ void main() {
 float cloneOpacity = smudgeStrength;
     if (cloneOpacity > 0.000001) {
 
-        vec2 smudgeUV = canvasFragUV;
-        smudgeUV.x -= smudgeOffsetUV.x / canvasSize.x;
-        smudgeUV.y += smudgeOffsetUV.y / canvasSize.y;
+        // Smudge source in pixel space with manual bilinear sampling
+        vec2 srcPx = outCanvasPx - smudgeOffsetUV;
+        if (uSeamless)
+            srcPx = mod(srcPx, canvasSize);
+        else
+            srcPx = clamp(srcPx, vec2(0.0), canvasSize - vec2(1.0));
 
-        vec4 smudgeSample = texture(dstTex, smudgeUV);
-        float smudgeA = smudgeSample.a;
+        // GL texel Y = H-1-canvasY
+        vec2 fpx;
+        fpx.x = srcPx.x -0.5;
+        fpx.y = canvasSize.y -0.5 - srcPx.y;
+        vec2 ipx = floor(fpx);
+        vec2 f = fract(fpx);
+        ivec2 maxCoord = ivec2(canvasSize - vec2(1.0));
+        ivec2 c00 = clamp(ivec2(ipx),              ivec2(0), maxCoord);
+        ivec2 c10 = clamp(ivec2(ipx) + ivec2(1,0), ivec2(0), maxCoord);
+        ivec2 c01 = clamp(ivec2(ipx) + ivec2(0,1), ivec2(0), maxCoord);
+        ivec2 c11 = clamp(ivec2(ipx) + ivec2(1,1), ivec2(0), maxCoord);
 
-        vec3 smudgeRGB;
-        if (smudgeA < 0.0000001)
-            smudgeRGB = canvas.rgb;
-         else
-            smudgeRGB = smudgeSample.rgb;
+        vec4 tl = texelFetch(dstTex, c00, 0);
+        vec4 tr = texelFetch(dstTex, c10, 0);
+        vec4 bl = texelFetch(dstTex, c01, 0);
+        vec4 br = texelFetch(dstTex, c11, 0);
+
+        // Blend-mode-aware bilinear interpolation
+        vec3 smudgeRGB; float smudgeA;
+        if (bmidx == 0) {
+            vec3 ll = rgbToOklab(tl.rgb); vec3 lr = rgbToOklab(tr.rgb);
+            vec3 bl2 = rgbToOklab(bl.rgb); vec3 br2 = rgbToOklab(br.rgb);
+            vec3 mixed = mix(mix(ll, lr, f.x), mix(bl2, br2, f.x), f.y);
+            smudgeRGB = oklabToRgb(mixed);
+            smudgeA    = mix(mix(tl.a, tr.a, f.x), mix(bl.a, br.a, f.x), f.y);
+        } else if (bmidx == 1) {
+            vec3 tl_lin = tl.rgb*tl.rgb; vec3 tr_lin = tr.rgb*tr.rgb;
+            vec3 bl_lin = bl.rgb*bl.rgb; vec3 br_lin = br.rgb*br.rgb;
+            vec3 mixed = mix(mix(tl_lin, tr_lin, f.x), mix(bl_lin, br_lin, f.x), f.y);
+            smudgeRGB = sqrt(mixed);
+            smudgeA    = mix(mix(tl.a, tr.a, f.x), mix(bl.a, br.a, f.x), f.y);
+        } else {
+            vec4 tl_p = vec4(tl.rgb*tl.a, tl.a); vec4 tr_p = vec4(tr.rgb*tr.a, tr.a);
+            vec4 bl_p = vec4(bl.rgb*bl.a, bl.a); vec4 br_p = vec4(br.rgb*br.a, br.a);
+            vec4 mixed = mix(mix(tl_p, tr_p, f.x), mix(bl_p, br_p, f.x), f.y);
+            smudgeRGB = mixed.a > 0.00001 ? mixed.rgb / mixed.a : mixed.rgb;
+            smudgeA   = mixed.a;
+        }
+
+        if (smudgeA < 0.0000001) smudgeRGB = canvas.rgb;
 
         brushFinal = smudgeRGB;
 
-        // Manual blend modes for smudge (forced color calcs, no premul)
+        // Blend smudge result with canvas
         vec3 mixedRGB;
         if (bmidx == 0) {
             vec3 labCanvas = rgbToOklab(canvas.rgb);

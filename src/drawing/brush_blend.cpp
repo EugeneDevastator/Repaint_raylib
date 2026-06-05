@@ -272,7 +272,7 @@ void BrushBlend_ApplyStamp(
     float csz[2] = { (float)W, (float)H };
     SetShaderValue(brushBlendShader, locCanvasSize, csz, SHADER_UNIFORM_VEC2);
 
-    float so[2] = { x0, y0 };
+    float so[2] = { stampX, stampY };
     SetShaderValue(brushBlendShader, locStampOffset, so, SHADER_UNIFORM_VEC2);
 
     float radOutEff = stampSizePx / (2.0f * 1.41421356f);
