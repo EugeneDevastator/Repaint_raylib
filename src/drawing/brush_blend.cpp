@@ -213,7 +213,7 @@ void BrushBlend_ApplyStamp(
     SetTextureFilter(geoRT->texture, TEXTURE_FILTER_BILINEAR);
 
     // -------- Pass 2a: blend to intermediate --------
-    RenderTexture2D* intermediateRT = AllocPoolRT(intermediatePool, bucket, true);
+    RenderTexture2D* intermediateRT = AllocPoolRT(intermediatePool, bucket, false);
 
     float opacity    = clampf((float)brush->Realb.opacity, 0.0f, 1.0f);
     float sol        = (float)brush->Realb.sol;
@@ -272,7 +272,7 @@ void BrushBlend_ApplyStamp(
     float csz[2] = { (float)W, (float)H };
     SetShaderValue(brushBlendShader, locCanvasSize, csz, SHADER_UNIFORM_VEC2);
 
-    float so[2] = { stampX, stampY };
+    float so[2] = { x0, y0 };
     SetShaderValue(brushBlendShader, locStampOffset, so, SHADER_UNIFORM_VEC2);
 
     float radOutEff = stampSizePx / (2.0f * 1.41421356f);

@@ -16,10 +16,11 @@ void main() {
 
     float bboxSize = radOut * 1.41421356 * 2.0;
 
-    // canvasPx anchored at stamp center for correct smudge alignment
+    // vertexTexCoord.y=0 is bottom of quad in RT = canvas y0+bboxSize
+    // vertexTexCoord.y=1 is top of quad in RT   = canvas y0
     vec2 canvasPx;
-    canvasPx.x = stampOffset.x + (vertexTexCoord.x - 0.5) * bboxSize;
-    canvasPx.y = stampOffset.y + (0.5 - vertexTexCoord.y) * bboxSize;
+    canvasPx.x = stampOffset.x + vertexTexCoord.x * bboxSize;
+    canvasPx.y = stampOffset.y + (1.0 - vertexTexCoord.y) * bboxSize;
 
     // GL texture sample: y=0 bottom, so flip
     canvasFragUV = vec2(canvasPx.x / canvasSize.x,
