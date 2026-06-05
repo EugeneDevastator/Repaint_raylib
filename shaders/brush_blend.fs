@@ -120,38 +120,43 @@ if (mode == 0) { // N-OKLab
     else blendedLab = brushLab;
     outRGB = oklabToRgb(blendedLab);
     outA   = wTotal;
-} else if (mode == 1) { // N-Linear
+} else if (mode == 1) { // N-Gamma
+    vec3 brushLin  = brushRGB * brushRGB;
+    vec3 canvasLin = canvas.rgb * canvas.rgb;
+    outRGB = sqrt(brushLin * brushA + canvasLin * (1.0 - brushA));
+    outA   = brushA + canvas.a * (1.0 - brushA);
+} else if (mode == 2) { // N-Linear
     vec3 brushPremul  = brushRGB * brushA;
     vec3 canvasPremul = canvas.rgb * canvas.a;
     outA   = brushA + canvas.a * (1.0 - brushA);
     outRGB = (outA > 0.00001)
         ? (brushPremul + canvasPremul * (1.0 - brushA)) / outA
         : brushRGB;
-} else if (mode == 2) {
-    outRGB = canvas.rgb; outA = canvas.a * (1.0 - brushA);
 } else if (mode == 3) {
+    outRGB = canvas.rgb; outA = canvas.a * (1.0 - brushA);
+} else if (mode == 4) {
     float eraseMask = canvas.a * brushA;
     outRGB = mix(canvas.rgb, brushRGB, eraseMask);
     outA   = canvas.a * (1.0 - brushA * 0.5);
-} else if (mode == 4) {
+} else if (mode == 5) {
     outRGB = 1.0 - (1.0 - canvas.rgb) * (1.0 - brushPremul);
     outA   = 1.0 - (1.0 - canvas.a) * (1.0 - brushA);
-} else if (mode == 5) {
+} else if (mode == 6) {
     outRGB = canvas.rgb + brushPremul * (1.0 - canvas.rgb);
     outA   = min(1.0, canvas.a + brushA);
-} else if (mode == 6) {
+} else if (mode == 7) {
     outRGB = max(canvas.rgb, brushPremul);
     outA   = max(canvas.a, brushA);
-} else if (mode == 7) {
+} else if (mode == 8) {
     outRGB = min(canvas.rgb, brushPremul);
     outA   = min(canvas.a, brushA);
-} else if (mode == 8) {
+} else if (mode == 9) {
     outRGB = 1.0 - (1.0 - canvas.rgb) / (brushPremul + 0.001);
     outA   = min(1.0, canvas.a + brushA);
-} else if (mode == 9) {
+} else if (mode == 10) {
     outRGB = canvas.rgb * mix(vec3(1.0), brushRGB, brushA);
     outA   = canvas.a;
-} else if (mode == 10) {
+} else if (mode == 11) {
     vec3 ov;
     if (canvas.rgb.r < 0.5) ov.r = 2.0 * canvas.rgb.r * brushRGB.r;
     else ov.r = 1.0 - 2.0 * (1.0 - canvas.rgb.r) * (1.0 - brushRGB.r);
@@ -161,7 +166,7 @@ if (mode == 0) { // N-OKLab
     else ov.b = 1.0 - 2.0 * (1.0 - canvas.rgb.b) * (1.0 - brushRGB.b);
     outRGB = canvas.rgb * (1.0 - brushA) + ov * brushA;
     outA   = brushA + canvas.a * (1.0 - brushA);
-} else if (mode == 11) {
+} else if (mode == 12) {
     vec3 bHSL = rgb2hsl(brushRGB);
     vec3 cHSL = rgb2hsl(canvas.rgb);
     vec3 col = hsl2rgb(vec3(bHSL.x, bHSL.y, cHSL.z));
