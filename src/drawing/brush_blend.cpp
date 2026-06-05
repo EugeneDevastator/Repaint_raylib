@@ -221,6 +221,12 @@ void BrushBlend_ApplyStamp(
     float preserveop = (brush->Realb.preserveop > 0) ? 1.0f : 0.0f;
     float smudge     = brush->Realb.cop;
     float odx = stampX - srcX, ody = stampY - srcY;
+    float odist = sqrtf(odx * odx + ody * ody);
+    if (odist > 0.0001f && odist < 3.0f) {
+        float scale = 3.0f / odist;
+        odx *= scale;
+        ody *= scale;
+    }
     float offsetUV[2] = { odx, ody };
 
     float col[4] = {

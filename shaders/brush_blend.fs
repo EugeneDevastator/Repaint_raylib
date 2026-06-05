@@ -259,7 +259,21 @@ float cloneOpacity = smudgeStrength;
             smudgeRGB = smudgeSample.rgb;
 
         brushFinal = smudgeRGB;
-        finalColor = applyBlend(bmidx, canvas, brushFinal, finalAlpha);
+
+        // Manual blend modes for smudge (forced color calcs, no premul)
+        vec3 mixedRGB;
+        if (bmidx == 0) {
+            vec3 labCanvas = rgbToOklab(canvas.rgb);
+            vec3 labSmudge = rgbToOklab(smudgeRGB);
+            mixedRGB = oklabToRgb(mix(labCanvas, labSmudge, finalAlpha));
+        } else if (bmidx == 1) {
+            vec3 linCanvas = canvas.rgb * canvas.rgb;
+            vec3 linSmudge = smudgeRGB * smudgeRGB;
+            mixedRGB = sqrt(mix(linCanvas, linSmudge, finalAlpha));
+        } else {
+            mixedRGB = mix(canvas.rgb, smudgeRGB, finalAlpha);
+        }
+        finalColor = vec4(mixedRGB, canvas.a);
 
        float blendedA = mix(canvas.a, smudgeA, finalAlpha);
        if (preserveop > 0.5)
