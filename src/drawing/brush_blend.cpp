@@ -61,7 +61,7 @@ static RenderTexture2D* AllocPoolRT(RenderTexture2D* pool, int bucket, bool poin
         rt.texture.mipmaps = 1;
         rt.depth.id = depId; rt.depth.width = bucket; rt.depth.height = bucket;
         rt.depth.format = 19; rt.depth.mipmaps = 1;
-        SetTextureFilter(rt.texture, pointFilter ? TEXTURE_FILTER_POINT : TEXTURE_FILTER_BILINEAR);
+        SetTextureFilter(rt.texture,TEXTURE_FILTER_POINT);
         SetTextureWrap(rt.texture, TEXTURE_WRAP_CLAMP);
         pool[pidx] = rt;
     }
@@ -324,7 +324,7 @@ void BrushBlend_ApplyStamp(
     EndTextureMode();
 
     // Restore dstRT filter
-    SetTextureFilter(dstRT.texture, TEXTURE_FILTER_BILINEAR);
+    SetTextureFilter(dstRT.texture, RL_TEXTURE_FILTER_NEAREST);
 
     // -------- Pass 2b: blit intermediate to dstRT --------
     BeginTextureMode(dstRT);
