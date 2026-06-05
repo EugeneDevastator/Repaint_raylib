@@ -7,25 +7,23 @@ out vec2 canvasFragUV;
 out vec2 outCanvasPx;
 
 uniform mat4 mvp;
-uniform vec2 stampOffset;
+uniform vec2 blitOrigin;  // floor(x0), floor(y0) — pixel-aligned stamp top-left
+uniform vec2 blitSize;    // floor(stampSizePx) — pixel-aligned stamp size
+uniform vec2 fracShift;   // x0-floor(x0), y0-floor(y0) — sub-pixel offset [0,1)
 uniform vec2 canvasSize;
-uniform float radOut;
 
 void main() {
     fragTexCoord = vertexTexCoord;
 
-    float bboxSize = radOut * 1.41421356 * 2.0;
+    // outCanvasPx: exact canvas pixel position for each fragment
+    // Integer part = correct canvas pixel. Fractional = sub-pixel detail
+    vec2 tp = vec2(vertexTexCoord.x, 1.0 - vertexTexCoord.y);
+    //outCanvasPx = blitOrigin + fracShift + tp * blitSize; //  opencode check this.
+    outCanvasPx = blitOrigin +  tp * blitSize;+
 
-    // vertexTexCoord.y=0 is bottom of quad in RT = canvas y0+bboxSize
-    // vertexTexCoord.y=1 is top of quad in RT   = canvas y0
-    vec2 canvasPx;
-    canvasPx.x = stampOffset.x + vertexTexCoord.x * bboxSize;
-    canvasPx.y = stampOffset.y + (1.0 - vertexTexCoord.y) * bboxSize;
-
-    // GL texture sample: y=0 bottom, so flip
-    canvasFragUV = vec2(canvasPx.x / canvasSize.x,
-                        1.0 - canvasPx.y / canvasSize.y);
-    outCanvasPx = canvasPx;
+    // Normalized for texture noise / other uses
+    canvasFragUV = vec2(outCanvasPx.x / canvasSize.x,
+                        1.0 - outCanvasPx.y / canvasSize.y);
 
     gl_Position = mvp * vec4(vertexPosition, 1.0);
 }

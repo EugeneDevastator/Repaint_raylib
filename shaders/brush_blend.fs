@@ -186,7 +186,13 @@ void main() {
     vec2 sampleUV = vec2(uv.x, 1.0 - uv.y);
     vec4 geouv    = texture(geoTex, sampleUV);
 
-    vec4 canvas = texture(dstTex, canvasFragUV);
+    // Canvas read: floor matches blit's floor(x0/y0) — consistent alignment
+    int cpx = int(floor(outCanvasPx.x));
+    int cpy = int(floor(outCanvasPx.y));
+    cpx = clamp(cpx, 0, int(canvasSize.x) - 1);
+    cpy = clamp(cpy, 0, int(canvasSize.y) - 1);
+    cpy = int(canvasSize.y) - 1 - cpy;
+    vec4 canvas = texelFetch(dstTex, ivec2(cpx, cpy), 0);
 
     if (geouv.a < 0.01) {
         finalColor = canvas;

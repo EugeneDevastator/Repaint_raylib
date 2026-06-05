@@ -20,9 +20,10 @@ static int locUseLumAsAlpha = -1, locTexColorMode = -1;
 static int locTexNoisemode = -1;
 static int locDstTex = -1, locBrushTex = -1;
 static int locStampCenter = -1;
-static int locRadOut = -1;
 static int locCanvasSize = -1;
-static int locStampOffset = -1;
+static int locBlitOrigin = -1;
+static int locBlitSize   = -1;
+static int locFracShift  = -1;
 static int locPwr = -1;
 static int locEraseMode = -1;
 static int locSeamless = -1;
@@ -117,8 +118,9 @@ void BrushBlend_Init(void) {
     locDstTex         = GetShaderLocation(brushBlendShader, "dstTex");
     locBrushTex       = GetShaderLocation(brushBlendShader, "brushTex");
     locStampCenter    = GetShaderLocation(brushBlendShader, "stampCenter");
-    locStampOffset    = GetShaderLocation(brushBlendShader, "stampOffset");
-    locRadOut         = GetShaderLocation(brushBlendShader, "radOut");
+    locBlitOrigin     = GetShaderLocation(brushBlendShader, "blitOrigin");
+    locBlitSize       = GetShaderLocation(brushBlendShader, "blitSize");
+    locFracShift      = GetShaderLocation(brushBlendShader, "fracShift");
     locPwr            = GetShaderLocation(brushBlendShader, "pwr");
     locEraseMode      = GetShaderLocation(brushBlendShader, "eraseMode");
     locSeamless       = GetShaderLocation(brushBlendShader, "uSeamless");
@@ -273,10 +275,14 @@ void BrushBlend_ApplyStamp(
     SetShaderValue(brushBlendShader, locCanvasSize, csz, SHADER_UNIFORM_VEC2);
 
     float so[2] = { x0, y0 };
-    SetShaderValue(brushBlendShader, locStampOffset, so, SHADER_UNIFORM_VEC2);
-
-    float radOutEff = stampSizePx / (2.0f * 1.41421356f);
-    SetShaderValue(brushBlendShader, locRadOut, &radOutEff, SHADER_UNIFORM_FLOAT);
+    int   ix0 = (int)floorf(x0), iy0 = (int)floorf(y0);
+    int   isz = (int)floorf(stampSizePx);
+    float bo[2] = { (float)ix0, (float)iy0 };
+    float bs[2] = { (float)isz, (float)isz };
+    float fs[2] = { x0 - (float)ix0, y0 - (float)iy0 };
+    SetShaderValue(brushBlendShader, locBlitOrigin, bo, SHADER_UNIFORM_VEC2);
+    SetShaderValue(brushBlendShader, locBlitSize,   bs, SHADER_UNIFORM_VEC2);
+    SetShaderValue(brushBlendShader, locFracShift,  fs, SHADER_UNIFORM_VEC2);
 
     float pwr = brush->Realb.pwr;
     SetShaderValue(brushBlendShader, locPwr, &pwr, SHADER_UNIFORM_FLOAT);
@@ -331,20 +337,20 @@ void BrushBlend_ApplyStamp(
     if (g_seamlessPaint) {
         for (int dy = -1; dy <= 1; dy++) {
             for (int dx = -1; dx <= 1; dx++) {
-                float tx = x0 + dx * W;
-                float ty = y0 + dy * H;
+                int tx = ix0 + dx * W;
+                int ty = iy0 + dy * H;
                 if (tx >= W || ty >= H) continue;
-                if (tx + stampSizePx <= 0 || ty + stampSizePx <= 0) continue;
+                if (tx + isz <= 0 || ty + isz <= 0) continue;
                 DrawTexturePro(intermediateRT->texture,
                     (Rectangle){0, 0, (float)drawSz, (float)-drawSz},
-                    (Rectangle){tx, ty, stampSizePx, stampSizePx},
+                    (Rectangle){(float)tx, (float)ty, (float)isz, (float)isz},
                     (Vector2){0, 0}, 0.0f, WHITE);
             }
         }
     } else {
         DrawTexturePro(intermediateRT->texture,
             (Rectangle){0, 0, (float)drawSz, (float)-drawSz},
-            (Rectangle){x0, y0, stampSizePx, stampSizePx},
+            (Rectangle){(float)ix0, (float)iy0, (float)isz, (float)isz},
             (Vector2){0, 0}, 0.0f, WHITE);
     }
 
