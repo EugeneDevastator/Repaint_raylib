@@ -18,7 +18,7 @@ static int locHasTexture = -1;
 static int locTexFeather = -1, locTexThresh = -1;
 static int locUseLumAsAlpha = -1, locTexColorMode = -1;
 static int locTexNoisemode = -1;
-static int locCanvasTex = -1, locBrushTex = -1;
+static int locDstTex = -1, locBrushTex = -1;
 static int locStampCenter = -1;
 static int locRadOut = -1;
 static int locCanvasSize = -1;
@@ -26,54 +26,56 @@ static int locStampOffset = -1;
 static int locPwr = -1;
 static int locEraseMode = -1;
 static int locSeamless = -1;
-static int locCopyOrigin = -1, locCopySize = -1;
 static int locGeoTex = -1;
-static int locSmudgeTex = -1;
-static int locHasSmudge = -1;
 static bool inited = false;
 
-static RenderTexture2D canvasCopyRT = {0};
-static int canvasCopyW = 0, canvasCopyH = 0;
-
-static RenderTexture2D smudgeCopyRT = {0};
-static int smudgeCopyW = 0, smudgeCopyH = 0;
-
-#define GEO_POOL_COUNT 64   // slots: 32, 64, 96, ... 2048
-static RenderTexture2D geoPool[GEO_POOL_COUNT] = {0};
-
+#define POOL_COUNT 64
+static RenderTexture2D geoPool[POOL_COUNT] = {0};
+static RenderTexture2D intermediatePool[POOL_COUNT] = {0};
 static Texture2D whiteTex = {0};
-
-static inline int next_pow2_min32(int v) {
-    int r = 32;
-    while (r < v) r <<= 1;
-    return r;
-}
 
 static inline int next_mult32(int v) {
     if (v <= 32) return 32;
     return ((v + 31) / 32) * 32;
 }
-
 static inline float clampf(float v, float lo, float hi) {
     return v < lo ? lo : (v > hi ? hi : v);
 }
+static inline int pool_index(int bucket) { return (bucket / 32) - 1; }
 
-// returns index 0..63 for bucket sizes 32..2048
-static inline int pool_index(int bucket) {
-    return (bucket / 32) - 1;
+static RenderTexture2D* AllocPoolRT(RenderTexture2D* pool, int bucket, bool pointFilter) {
+    int pidx = pool_index(bucket);
+    if (pool[pidx].id == 0) {
+        unsigned int fboId = rlLoadFramebuffer();
+        rlEnableFramebuffer(fboId);
+        unsigned int texId = rlLoadTexture(NULL, bucket, bucket, RL_PIXELFORMAT_UNCOMPRESSED_R16G16B16A16, 1);
+        unsigned int depId = rlLoadTextureDepth(bucket, bucket, true);
+        rlFramebufferAttach(fboId, texId, RL_ATTACHMENT_COLOR_CHANNEL0, RL_ATTACHMENT_TEXTURE2D, 0);
+        rlFramebufferAttach(fboId, depId, RL_ATTACHMENT_DEPTH, RL_ATTACHMENT_RENDERBUFFER, 0);
+        rlFramebufferComplete(fboId);
+        rlDisableFramebuffer();
+        RenderTexture2D rt = {0};
+        rt.id = fboId; rt.texture.id = texId;
+        rt.texture.width = bucket; rt.texture.height = bucket;
+        rt.texture.format = RL_PIXELFORMAT_UNCOMPRESSED_R16G16B16A16;
+        rt.texture.mipmaps = 1;
+        rt.depth.id = depId; rt.depth.width = bucket; rt.depth.height = bucket;
+        rt.depth.format = 19; rt.depth.mipmaps = 1;
+        SetTextureFilter(rt.texture, pointFilter ? TEXTURE_FILTER_POINT : TEXTURE_FILTER_BILINEAR);
+        SetTextureWrap(rt.texture, TEXTURE_WRAP_CLAMP);
+        pool[pidx] = rt;
+    }
+    return &pool[pidx];
 }
-static void DrawStamp(
-    Texture2D src, Rectangle srcRect,
-    float x0, float y0, float w, float h)
-{
-    DrawTexturePro(src, srcRect,
-        (Rectangle){x0, y0, w, h},
-        (Vector2){0, 0}, 0.0f, WHITE);
+
+static void FreePool(RenderTexture2D* pool) {
+    for (int i = 0; i < POOL_COUNT; i++) {
+        if (pool[i].id > 0) { UnloadRenderTexture(pool[i]); pool[i] = (RenderTexture2D){0}; }
+    }
 }
 
 void BrushBlend_Init(void) {
     if (inited) return;
-
     const char* ad = GetApplicationDirectory();
     char vs[512], fs[512];
 
@@ -112,7 +114,7 @@ void BrushBlend_Init(void) {
     locUseLumAsAlpha  = GetShaderLocation(brushBlendShader, "useLumAsAlpha");
     locTexColorMode   = GetShaderLocation(brushBlendShader, "texColorMode");
     locTexNoisemode   = GetShaderLocation(brushBlendShader, "texNoisemode");
-    locCanvasTex      = GetShaderLocation(brushBlendShader, "canvasTex");
+    locDstTex         = GetShaderLocation(brushBlendShader, "dstTex");
     locBrushTex       = GetShaderLocation(brushBlendShader, "brushTex");
     locStampCenter    = GetShaderLocation(brushBlendShader, "stampCenter");
     locStampOffset    = GetShaderLocation(brushBlendShader, "stampOffset");
@@ -120,23 +122,16 @@ void BrushBlend_Init(void) {
     locPwr            = GetShaderLocation(brushBlendShader, "pwr");
     locEraseMode      = GetShaderLocation(brushBlendShader, "eraseMode");
     locSeamless       = GetShaderLocation(brushBlendShader, "uSeamless");
-    locCopyOrigin     = GetShaderLocation(brushBlendShader, "copyOrigin");
-    locCopySize       = GetShaderLocation(brushBlendShader, "copySize");
 
-    if (locCanvasTex >= 0) { int u = 1; SetShaderValue(brushBlendShader, locCanvasTex, &u, SHADER_UNIFORM_INT); }
-    if (locBrushTex  >= 0) { int u = 2; SetShaderValue(brushBlendShader, locBrushTex,  &u, SHADER_UNIFORM_INT); }
+    if (locDstTex   >= 0) { int u = 1; SetShaderValue(brushBlendShader, locDstTex,   &u, SHADER_UNIFORM_INT); }
+    if (locBrushTex >= 0) { int u = 2; SetShaderValue(brushBlendShader, locBrushTex, &u, SHADER_UNIFORM_INT); }
 
     locGeoTex = GetShaderLocation(brushBlendShader, "geoTex");
     if (locGeoTex >= 0) { int u = 0; SetShaderValue(brushBlendShader, locGeoTex, &u, SHADER_UNIFORM_INT); }
-    locSmudgeTex = GetShaderLocation(brushBlendShader, "smudgeTex");
-    if (locSmudgeTex >= 0) { int u = 3; SetShaderValue(brushBlendShader, locSmudgeTex, &u, SHADER_UNIFORM_INT); }
-    locHasSmudge = GetShaderLocation(brushBlendShader, "hasSmudge");
-    if (locHasSmudge >= 0) { int v = 0; SetShaderValue(brushBlendShader, locHasSmudge, &v, SHADER_UNIFORM_INT); }
 
     Image img = GenImageColor(1, 1, WHITE);
     whiteTex = LoadTextureFromImage(img);
     UnloadImage(img);
-
     inited = true;
 }
 
@@ -144,18 +139,10 @@ void BrushBlend_Shutdown(void) {
     if (!inited) return;
     UnloadShader(brushBlendShader);
     UnloadShader(brushGeoShader);
-    if (canvasCopyRT.id > 0) UnloadRenderTexture(canvasCopyRT);
-    if (smudgeCopyRT.id > 0) UnloadRenderTexture(smudgeCopyRT);
-    for (int i = 0; i < GEO_POOL_COUNT; i++) {
-        if (geoPool[i].id > 0) {
-            UnloadRenderTexture(geoPool[i]);
-            geoPool[i] = (RenderTexture2D){0};
-        }
-    }
+    FreePool(geoPool);
+    FreePool(intermediatePool);
     if (whiteTex.id > 0) UnloadTexture(whiteTex);
-    canvasCopyRT = (RenderTexture2D){0};
-    whiteTex     = (Texture2D){0};
-    canvasCopyW = canvasCopyH = 0;
+    whiteTex = (Texture2D){0};
     inited = false;
 }
 
@@ -175,7 +162,6 @@ void BrushBlend_ApplyStamp(
     float angleRad = (float)brush->Realb.resangle * (float)(M_PI / 180.0);
     float squish   = fmaxf((float)brush->Realb.x2y, 0.01f);
 
-    // ---- Pre-compute stamp rect (needed before Pass 0) ----
     float radOutForGeo = brush->Realb.rad_out;
     if (radOutForGeo < 1.0f) radOutForGeo = 1.0f;
 
@@ -197,115 +183,8 @@ void BrushBlend_ApplyStamp(
     float x0 = stampX - stampSizePx * 0.5f;
     float y0 = stampY - stampSizePx * 0.5f;
 
-    // Dirty rect (clamped to canvas normally; for seamless mode at the
-    // border we expand to the full canvas so wrapped samples are correct)
-    int rx0 = (int)floorf(x0);
-    int ry0 = (int)floorf(y0);
-    int rx1 = (int)ceilf(x0 + stampSizePx);
-    int ry1 = (int)ceilf(y0 + stampSizePx);
-    bool doSmudge = brush->Realb.cop > 0.0f;
-    int smudgeOffX = 0, smudgeOffY = 0;
-    int cnv_rx0 = rx0, cnv_ry0 = ry0, cnv_rx1 = rx1, cnv_ry1 = ry1; // canvas copy rect
-    if (g_seamlessPaint) {
-        if (rx0 < 0 || rx1 > W) { cnv_rx0 = 0; cnv_rx1 = W; }
-        if (ry0 < 0 || ry1 > H) { cnv_ry0 = 0; cnv_ry1 = H; }
-    } else {
-        if (rx0 < 0) cnv_rx0 = 0;
-        if (ry0 < 0) cnv_ry0 = 0;
-        if (rx1 > W) cnv_rx1 = W;
-        if (ry1 > H) cnv_ry1 = H;
-    }
-    if (doSmudge) {
-        smudgeOffX = (int)ceilf(fabsf(stampX - srcX));
-        smudgeOffY = (int)ceilf(fabsf(stampY - srcY));
-        cnv_rx0 = (int)fmaxf(0, (float)(cnv_rx0 - smudgeOffX));
-        cnv_ry0 = (int)fmaxf(0, (float)(cnv_ry0 - smudgeOffY));
-        cnv_rx1 = (int)fminf((float)W, (float)(cnv_rx1 + smudgeOffX));
-        cnv_ry1 = (int)fminf((float)H, (float)(cnv_ry1 + smudgeOffY));
-    }
-    int rW = cnv_rx1 - cnv_rx0;
-    int rH = cnv_ry1 - cnv_ry0;
-    if (rW <= 0 || rH <= 0) return;
-
-    // -------- Pass 0a: canvas copy (stamp region) --------
-    if (canvasCopyRT.id == 0 || canvasCopyW != rW || canvasCopyH != rH) {
-        if (canvasCopyRT.id > 0) UnloadRenderTexture(canvasCopyRT);
-        canvasCopyRT = Load16BitRT(rW, rH);
-        SetTextureFilter(canvasCopyRT.texture, TEXTURE_FILTER_BILINEAR);
-        SetTextureWrap(canvasCopyRT.texture, TEXTURE_WRAP_REPEAT);
-        canvasCopyW = rW;
-        canvasCopyH = rH;
-    }
-
-    float srcTexY = (float)(H - cnv_ry1); // GL tex coord space
-    BeginTextureMode(canvasCopyRT);
-    rlSetBlendMode(RL_BLEND_CUSTOM);
-    rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
-    ClearBackground((Color){0,0,0,0});
-    DrawTexturePro(dstRT.texture,
-        (Rectangle){(float)cnv_rx0, srcTexY, (float)rW, (float)rH},
-        (Rectangle){0, 0, (float)rW, (float)rH},
-        (Vector2){0, 0}, 0.0f, WHITE);
-    EndTextureMode();
-
-    // -------- Pass 0b: smudge copy (pre-shifted, GL_REPEAT wraps borders) --------
-    bool hasSmudgeCopy = false;
-    if (doSmudge) {
-        // Source rect shifted by smudge offset: at dest (dx,dy) the copy
-        // contains canvas pixel cnv_rx0+dx-smudgeOffX, cnv_ry0+dy-smudgeOffY
-        // (wrapped via GL_REPEAT on dstRT.texture).
-        int s_rx0 = cnv_rx0 - smudgeOffX;
-        int s_ry1 = cnv_ry1 - smudgeOffY;  // canvas bottom → shift "up" for smudge source
-        float s_srcTexY = (float)(H - s_ry1);
-
-        if (smudgeCopyRT.id == 0 || smudgeCopyW != rW || smudgeCopyH != rH) {
-            if (smudgeCopyRT.id > 0) UnloadRenderTexture(smudgeCopyRT);
-            smudgeCopyRT = Load16BitRT(rW, rH);
-            SetTextureFilter(smudgeCopyRT.texture, TEXTURE_FILTER_BILINEAR);
-            SetTextureWrap(smudgeCopyRT.texture, TEXTURE_WRAP_REPEAT);
-            smudgeCopyW = rW;
-            smudgeCopyH = rH;
-        }
-
-        SetTextureWrap(dstRT.texture, TEXTURE_WRAP_REPEAT);
-
-        BeginTextureMode(smudgeCopyRT);
-        rlSetBlendMode(RL_BLEND_CUSTOM);
-        rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
-        ClearBackground((Color){0,0,0,0});
-        DrawTexturePro(dstRT.texture,
-            (Rectangle){(float)s_rx0, s_srcTexY, (float)rW, (float)rH},
-            (Rectangle){0, 0, (float)rW, (float)rH},
-            (Vector2){0, 0}, 0.0f, WHITE);
-        EndTextureMode();
-
-        hasSmudgeCopy = true;
-    }
-
-    // -------- Pass 1: geo UV (pool, lazy alloc, never freed until shutdown)
-    // Use the already-computed bucket/drawSz from above
-
-    int pidx = pool_index(bucket);
-    if (geoPool[pidx].id == 0) {
-        // 16-bit float RG — preserves sub-pixel UV precision
-        unsigned int fboId = rlLoadFramebuffer();
-        rlEnableFramebuffer(fboId);
-        unsigned int texId = rlLoadTexture(NULL, bucket, bucket, RL_PIXELFORMAT_UNCOMPRESSED_R16G16B16A16, 1);
-        rlFramebufferAttach(fboId, texId, RL_ATTACHMENT_COLOR_CHANNEL0, RL_ATTACHMENT_TEXTURE2D, 0);
-        rlDisableFramebuffer();
-
-        RenderTexture2D rt = {0};
-        rt.id              = fboId;
-        rt.texture.id      = texId;
-        rt.texture.width   = bucket;
-        rt.texture.height  = bucket;
-        rt.texture.format  = RL_PIXELFORMAT_UNCOMPRESSED_R16G16B16A16;
-        rt.texture.mipmaps = 1;
-        SetTextureFilter(rt.texture, TEXTURE_FILTER_POINT);
-        SetTextureWrap(rt.texture, TEXTURE_WRAP_CLAMP);
-        geoPool[pidx]      = rt;
-    }
-    RenderTexture2D* geoRT = &geoPool[pidx];
+    // -------- Pass 1: geo UV --------
+    RenderTexture2D* geoRT = AllocPoolRT(geoPool, bucket, true);
 
     float drawBboxHalf = (float)drawSz * 0.5f;
     float size = radOutForGeo / drawBboxHalf;
@@ -320,8 +199,6 @@ void BrushBlend_ApplyStamp(
     SetShaderValue(brushGeoShader, locURadIn,  &radInRatio, SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushGeoShader, locUCurve,  &curve,      SHADER_UNIFORM_FLOAT);
 
-    // Geometry pass: render crisp mask with point filtering
-    SetTextureFilter(geoRT->texture, TEXTURE_FILTER_POINT);
     BeginTextureMode(*geoRT);
     ClearBackground((Color){0, 0, 0, 0});
     BeginShaderMode(brushGeoShader);
@@ -332,10 +209,9 @@ void BrushBlend_ApplyStamp(
     EndShaderMode();
     EndTextureMode();
 
-    // Switch to bilinear for sub-pixel blend sampling
-    //SetTextureFilter(geoRT->texture, TEXTURE_FILTER_BILINEAR);
+    // -------- Pass 2a: blend to intermediate --------
+    RenderTexture2D* intermediateRT = AllocPoolRT(intermediatePool, bucket, true);
 
-    // -------- Pass 2: blend
     float opacity    = clampf((float)brush->Realb.opacity, 0.0f, 1.0f);
     float sol        = (float)brush->Realb.sol;
     float sol2op     = (float)brush->Realb.sol2op;
@@ -344,14 +220,7 @@ void BrushBlend_ApplyStamp(
     int   bmidx      = (int)brush->Realb.bmidx;
     float preserveop = (brush->Realb.preserveop > 0) ? 1.0f : 0.0f;
     float smudge     = brush->Realb.cop;
-    float odx = stampX - srcX;
-    float ody = stampY - srcY;
-  //  float odist = sqrtf(odx * odx + ody * ody);
-  //  if (odist > 0.0001f && odist < 3.0f) {
-  //      float scale = 3.0f / odist;
-  //      odx *= scale;
-  //      ody *= scale;
-  //  }
+    float odx = stampX - srcX, ody = stampY - srcY;
     float offsetUV[2] = { odx, ody };
 
     float col[4] = {
@@ -400,20 +269,6 @@ void BrushBlend_ApplyStamp(
     float csz[2] = { (float)W, (float)H };
     SetShaderValue(brushBlendShader, locCanvasSize, csz, SHADER_UNIFORM_VEC2);
 
-    // Copy sub-region info for the shader
-    float co[2] = { (float)cnv_rx0, (float)cnv_ry0 };
-    SetShaderValue(brushBlendShader, locCopyOrigin, co, SHADER_UNIFORM_VEC2);
-    float cs[2] = { (float)rW, (float)rH };
-    SetShaderValue(brushBlendShader, locCopySize,  cs, SHADER_UNIFORM_VEC2);
-
-    // Small-brush opacity adjustment (uses actualRadOut, need it here)
-    if (actualRadOut <= 1.0f && actualRadOut > 0.0f) {
-        if (actualRadOut < 0.5f) {
-            float adjustedOpacity = brush->Realb.opacity * actualRadOut * 2.0f;
-            SetShaderValue(brushBlendShader, locOpacity, &adjustedOpacity, SHADER_UNIFORM_FLOAT);
-        }
-    }
-
     float so[2] = { x0, y0 };
     SetShaderValue(brushBlendShader, locStampOffset, so, SHADER_UNIFORM_VEC2);
 
@@ -426,38 +281,70 @@ void BrushBlend_ApplyStamp(
     int eraseMode = brush->Realb.eraseMode;
     SetShaderValue(brushBlendShader, locEraseMode, &eraseMode, SHADER_UNIFORM_INT);
 
-    // ------------- final blit
-    BeginTextureMode(dstRT);
+    // Set dstRT.texture filter + wrap for shader reads
+    SetTextureFilter(dstRT.texture, TEXTURE_FILTER_POINT);
+    if (g_seamlessPaint)
+        SetTextureWrap(dstRT.texture, TEXTURE_WRAP_REPEAT);
+    else
+        SetTextureWrap(dstRT.texture, TEXTURE_WRAP_CLAMP);
+
+    // Render stamp to intermediate RT
+    BeginTextureMode(*intermediateRT);
     rlSetBlendMode(RL_BLEND_CUSTOM);
     rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+    ClearBackground((Color){0,0,0,0});
 
     rlActiveTextureSlot(1);
-    rlEnableTexture(canvasCopyRT.texture.id);
+    rlEnableTexture(dstRT.texture.id);
     rlActiveTextureSlot(2);
     rlEnableTexture(brushTex.id > 0 ? brushTex.id : whiteTex.id);
-    rlActiveTextureSlot(3);
-    rlEnableTexture(hasSmudgeCopy ? smudgeCopyRT.texture.id : whiteTex.id);
     rlActiveTextureSlot(0);
 
     BeginShaderMode(brushBlendShader);
     int uSeamlessVal = g_seamlessPaint ? 1 : 0;
     SetShaderValue(brushBlendShader, locSeamless, &uSeamlessVal, SHADER_UNIFORM_INT);
-    if (locHasSmudge >= 0) {
-        int hsm = hasSmudgeCopy ? 1 : 0;
-        SetShaderValue(brushBlendShader, locHasSmudge, &hsm, SHADER_UNIFORM_INT);
-    }
-    DrawStamp(geoRT->texture,
+
+    DrawTexturePro(geoRT->texture,
         (Rectangle){0, 0, (float)drawSz, (float)-drawSz},
-        x0, y0, stampSizePx, stampSizePx);
+        (Rectangle){0, 0, (float)drawSz, (float)drawSz},
+        (Vector2){0, 0}, 0.0f, WHITE);
 
     EndShaderMode();
 
     rlActiveTextureSlot(1); rlDisableTexture();
     rlActiveTextureSlot(2); rlDisableTexture();
-    rlActiveTextureSlot(3); rlDisableTexture();
     rlActiveTextureSlot(0);
 
     EndTextureMode();
 
+    // Restore dstRT filter
+    SetTextureFilter(dstRT.texture, TEXTURE_FILTER_BILINEAR);
+
+    // -------- Pass 2b: blit intermediate to dstRT --------
+    BeginTextureMode(dstRT);
+    rlSetBlendMode(RL_BLEND_CUSTOM);
+    rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+
+    if (g_seamlessPaint) {
+        for (int dy = -1; dy <= 1; dy++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                float tx = x0 + dx * W;
+                float ty = y0 + dy * H;
+                if (tx >= W || ty >= H) continue;
+                if (tx + stampSizePx <= 0 || ty + stampSizePx <= 0) continue;
+                DrawTexturePro(intermediateRT->texture,
+                    (Rectangle){0, 0, (float)drawSz, (float)-drawSz},
+                    (Rectangle){tx, ty, stampSizePx, stampSizePx},
+                    (Vector2){0, 0}, 0.0f, WHITE);
+            }
+        }
+    } else {
+        DrawTexturePro(intermediateRT->texture,
+            (Rectangle){0, 0, (float)drawSz, (float)-drawSz},
+            (Rectangle){x0, y0, stampSizePx, stampSizePx},
+            (Vector2){0, 0}, 0.0f, WHITE);
+    }
+
+    EndTextureMode();
     rlSetBlendMode(RL_BLEND_ALPHA);
 }

@@ -4,7 +4,6 @@ in vec3 vertexPosition;
 in vec2 vertexTexCoord;
 out vec2 fragTexCoord;
 out vec2 canvasFragUV;
-out vec2 outCanvasPx;
 
 uniform mat4 mvp;
 uniform vec2 stampOffset;
@@ -25,7 +24,6 @@ void main() {
     // GL texture sample: y=0 bottom, so flip
     canvasFragUV = vec2(canvasPx.x / canvasSize.x,
                         1.0 - canvasPx.y / canvasSize.y);
-    outCanvasPx = canvasPx;
 
     gl_Position = mvp * vec4(vertexPosition, 1.0);
 }
