@@ -198,7 +198,7 @@ void BrushBlend_ApplyStamp(
     float curve      = clampf((float)brush->Realb.crv, 0.0f, 1.0f);
     SetShaderValue(brushGeoShader, locURadIn,  &radInRatio, SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushGeoShader, locUCurve,  &curve,      SHADER_UNIFORM_FLOAT);
-
+    SetTextureFilter(geoRT->texture, RL_TEXTURE_FILTER_NEAREST);
     BeginTextureMode(*geoRT);
     ClearBackground((Color){0, 0, 0, 0});
     BeginShaderMode(brushGeoShader);
@@ -208,6 +208,9 @@ void BrushBlend_ApplyStamp(
         (Vector2){0, 0}, 0.0f, WHITE);
     EndShaderMode();
     EndTextureMode();
+
+    // Switch geo to bilinear for sub-pixel blend sampling
+    SetTextureFilter(geoRT->texture, TEXTURE_FILTER_BILINEAR);
 
     // -------- Pass 2a: blend to intermediate --------
     RenderTexture2D* intermediateRT = AllocPoolRT(intermediatePool, bucket, true);
@@ -287,7 +290,7 @@ void BrushBlend_ApplyStamp(
     int eraseMode = brush->Realb.eraseMode;
     SetShaderValue(brushBlendShader, locEraseMode, &eraseMode, SHADER_UNIFORM_INT);
 
-    // Set dstRT.texture filter + wrap for shader reads
+    // Set dstRT.texture wrap for shader reads
     SetTextureFilter(dstRT.texture, TEXTURE_FILTER_POINT);
     if (g_seamlessPaint)
         SetTextureWrap(dstRT.texture, TEXTURE_WRAP_REPEAT);
