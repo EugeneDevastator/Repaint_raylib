@@ -35,7 +35,7 @@ private:
     float m_layerScale;
 
     Vector2 m_prevSegPos, m_prevSegDir;
-    float m_prevSegLen, m_prevVel;
+    float m_prevSegLen;
     float m_initDir;
     bool  m_initDirSet;
 

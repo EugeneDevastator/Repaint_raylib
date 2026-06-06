@@ -127,6 +127,7 @@ set(SOURCES
     src/network/test_broker.cpp
     # ── external ──────────────────────────────────────────────────────
     dialog/dialog.c
+    raylib_utils/RaylibUtils.c
     ${imgui_SOURCE_DIR}/imgui.cpp
     ${imgui_SOURCE_DIR}/imgui_draw.cpp
     ${imgui_SOURCE_DIR}/imgui_tables.cpp
@@ -150,6 +151,7 @@ endif()
 target_include_directories(repaint PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/dialog
+    ${CMAKE_CURRENT_SOURCE_DIR}/raylib_utils
     ${CMAKE_CURRENT_SOURCE_DIR}/LocalPlayer
     ${imgui_SOURCE_DIR}
     ${rlimgui_SOURCE_DIR}

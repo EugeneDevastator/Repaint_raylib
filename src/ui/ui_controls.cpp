@@ -1,6 +1,13 @@
 #include "repaint.h"
 #include "imgui.h"
 
+// ── Shared blend mode names ──────────────────────────────────────────
+const char* g_blendModeNames[] = {
+    "N-Gamma","N-Linear","N-OKLab","EraseA","EraseColor","Screen",
+    "Color Dodge","Lighten","Darken","Burn","Multiply","Overlay","Color"
+};
+extern const int g_blendModeCount = 13;
+
 static Texture2D penModeTex[PEN_MODE_COUNT];
 static const char* PenIconNames[PEN_MODE_COUNT] = {
     "tct_none", "tct_pressure", "tct_vel", "tct_dir", "tct_rot", "tct_tilt",
@@ -39,7 +46,7 @@ void LoadPenIcons(void) {
         sprintf(path, "resources/%s.png", PenIconNames[i]);
         if (FileExists(path)) {
             Image img = LoadImage(path);
-            ImageResize(&img, 24, 24);
+            ImageResize(&img, 29, 29);
             penModeTex[i] = LoadTextureFromImage(img);
             UnloadImage(img);
         } else {
@@ -85,7 +92,7 @@ void BParam_SetIcon(BParam* bp, const char* filename) {
     sprintf(path, "resources/%s.png", filename);
     if (FileExists(path)) {
         Image img = LoadImage(path);
-        ImageResize(&img, 24, 24);
+        ImageResize(&img, 29, 29);
         bp->iconTex = LoadTextureFromImage(img);
         bp->iconLoaded = bp->iconTex.id > 0;
         UnloadImage(img);

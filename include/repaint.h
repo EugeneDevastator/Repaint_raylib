@@ -38,7 +38,7 @@ typedef enum {
 } eEraseMode;
 
 typedef enum {
-    bmOKLab=0, bmGamma=1, bmLinear=2, bmEraseAlpha=3, bmEraseColor=4,
+    bmGamma=0, bmLinear=1, bmOKLab=2, bmEraseAlpha=3, bmEraseColor=4,
     bmScreen=5, bmDodge=6, bmLighten=7, bmDarken=8,
     bmBurn=9, bmMult=10, bmOvr=11, bmColor=12,
     bmSTOP=13
@@ -71,6 +71,7 @@ typedef struct {
     float mat[6];        // 2×3 affine matrix (row-major: [a,b,tx, c,d,ty])
     int layerW, layerH;  // native resolution of this layer
     bool seamless;       // use seamless merge (3x3 tile wrap) on drop
+    bool instanced;      // shares RT/texture with another layer
 } sLayerProps;
 
 #define MAX_BRUSH_TEX 32
@@ -223,7 +224,6 @@ float GetModVal(BParam* bp);
 float GetModValFor(BParam* bp, float cpar);
 
 extern float colorHue, colorSat, colorLit;
-extern float g_velocity;
 extern int quickPanelMouseMode;
 extern bool g_colorPicking;
 extern Color g_colorPickGrid[25];
@@ -271,6 +271,8 @@ void Changelog_Init(void); void Changelog_Toggle(void); void Changelog_Draw(void
 struct ImDrawList; struct ImVec2;
 void DrawSlider(BParam* bp, int orient, float thick=0, float len=0);
 void DrawRadioGroup(const char* label, int* current, const char* items[], int itemCount);
+extern const char* g_blendModeNames[];
+extern const int   g_blendModeCount;
 
 void QuickPanel_DrawUI(AppState* state);
 void QuickPanel_Init(void); void QuickPanel_Shutdown(void);

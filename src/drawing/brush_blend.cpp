@@ -1,4 +1,5 @@
 #include "repaint.h"
+#include "RaylibUtils.h"
 #include "rlgl.h"
 
 static Shader brushBlendShader = {0};
@@ -82,7 +83,7 @@ void BrushBlend_Init(void) {
 
     snprintf(vs, sizeof(vs), "%sshaders/brush_geo.vs", ad);
     snprintf(fs, sizeof(fs), "%sshaders/brush_geo.fs", ad);
-    brushGeoShader = LoadShader(vs, fs);
+    brushGeoShader = LoadShaderWithIncludes(vs, fs);
     locUAngle  = GetShaderLocation(brushGeoShader, "uAngle");
     locUSquish = GetShaderLocation(brushGeoShader, "uSquish");
     locUSize   = GetShaderLocation(brushGeoShader, "uSize");
@@ -92,7 +93,7 @@ void BrushBlend_Init(void) {
 
     snprintf(vs, sizeof(vs), "%sshaders/brush_blend.vs", ad);
     snprintf(fs, sizeof(fs), "%sshaders/brush_blend.fs", ad);
-    brushBlendShader = LoadShader(vs, fs);
+    brushBlendShader = LoadShaderWithIncludes(vs, fs);
     locCanvasSize     = GetShaderLocation(brushBlendShader, "canvasSize");
     locOpacity        = GetShaderLocation(brushBlendShader, "opacity");
     locRadIn          = GetShaderLocation(brushBlendShader, "radIn");
@@ -203,12 +204,15 @@ void BrushBlend_ApplyStamp(
     SetTextureFilter(geoRT->texture, RL_TEXTURE_FILTER_NEAREST);
     BeginTextureMode(*geoRT);
     ClearBackground((Color){0, 0, 0, 0});
+    rlSetBlendMode(RL_BLEND_CUSTOM);
+    rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);  // write rgba as-is
     BeginShaderMode(brushGeoShader);
     DrawTexturePro(whiteTex,
         (Rectangle){0, 0, 1, 1},
         (Rectangle){0, 0, (float)drawSz, -(float)drawSz},
         (Vector2){0, 0}, 0.0f, WHITE);
     EndShaderMode();
+    rlSetBlendMode(RL_BLEND_ALPHA);  // restore
     EndTextureMode();
 
     // Switch geo to bilinear for sub-pixel blend sampling

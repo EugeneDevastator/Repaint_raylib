@@ -21,7 +21,6 @@ BParam bpSizeMul;
 BParam bpPower;
 BParam bpPerspective;
 
-float g_velocity = 0.0f;
 d_StrokePars g_modPars;
 
 static float ApplyBP(float clipminF, float clipmaxF, float jitter,
