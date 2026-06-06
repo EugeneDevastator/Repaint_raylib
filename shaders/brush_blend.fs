@@ -34,7 +34,8 @@ uniform int   eraseMode;
 uniform bool  uSeamless;
 in vec2 canvasFragUV;
 in vec2 outCanvasPx;
-
+uniform vec2 blitSize;    // floor(stampSizePx) — pixel-aligned stamp size
+uniform vec2 fracShift;   // x0-floor(x0), y0-floor(y0) — sub-pixel offset [0,1)
 #include blend.glsl
 
 float applyThreshold(float combined, float cut, float texFeather) {
@@ -45,8 +46,11 @@ float applyThreshold(float combined, float cut, float texFeather) {
 
 void main() {
     vec2 uv       = fragTexCoord;
-    vec2 sampleUV = vec2(uv.x, 1.0 - uv.y);
-    vec4 geouv    = texture(geoTex, sampleUV);
+    vec2 sampleUV = vec2(
+        uv.x - fracShift.x / blitSize.x,
+        1.0 - uv.y - fracShift.y / blitSize.y
+    );
+    vec4 geouv = texture(geoTex, sampleUV);
 
     // Canvas read: floor matches blit's floor(x0/y0) — consistent alignment
     int cpx = int(floor(outCanvasPx.x));
