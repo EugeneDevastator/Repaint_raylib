@@ -56,6 +56,8 @@ void LayerStack_ProduceCompositeDither8b(Image* dst, int w, int h);
 // ── For viewport/renderer access ─────────────────────────────────────
 bool   LayerStack_PresentInited(void);
 Shader LayerStack_GetPresentShader(void);
+void   LayerStack_SetPresentTexSize(int w, int h);
+void   LayerStack_SetPresentDither(bool on);
 Texture2D LayerStack_GetCheckerTex(void);
 void   LayerStack_SetDirty(void);
 

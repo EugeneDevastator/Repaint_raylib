@@ -20,6 +20,8 @@ static struct {
     int locUnderTex;
     Shader presentShader; bool presentInited;
     int locPresentTex;
+    int locTexSize;
+    int locApplyDither;
     int curCanvasW, curCanvasH;
     RenderTexture2D* finalAcc;
     bool dirty;
@@ -261,13 +263,17 @@ void LayerStack_SyncRTFromImage(int idx) {
 }
 
 // ── Bake / blend helpers ────────────────────────────────────────────
+static void EnsurePresentShader(void);
 static void BakeTransform(RenderTexture2D dst, Texture2D src, const float mat[6], int lw, int lh, int cw, int ch) {
     rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE,RL_ZERO,RL_FUNC_ADD);
     BeginTextureMode(dst); ClearBackground(BLANK);
-    // Negative determinant = flip → triangle winding inverts → disable culling.
-    // Must flush batch while culling is off — raylib batches draw calls and only
-    // executes them on flush, so re-enabling before EndTextureMode's flush would
-    // use the wrong state.
+    // Use perceptual bilinear shader for layer transform sampling
+    EnsurePresentShader();
+    if(LS.presentInited) {
+        BeginShaderMode(LS.presentShader);
+        LayerStack_SetPresentTexSize(lw, lh);
+        LayerStack_SetPresentDither(false);
+    }
     bool flip = (mat[0]*mat[4] - mat[1]*mat[3]) < 0.0f;
     if (flip) { rlDisableBackfaceCulling(); rlDrawRenderBatchActive(); }
     rlPushMatrix();
@@ -276,6 +282,7 @@ static void BakeTransform(RenderTexture2D dst, Texture2D src, const float mat[6]
     DrawTextureRec(src,Rectangle{0,0,(float)lw,(float)-lh},Vector2{0,0},WHITE);
     rlPopMatrix();
     if (flip) { rlDrawRenderBatchActive(); rlEnableBackfaceCulling(); }
+    if(LS.presentInited) EndShaderMode();
     EndTextureMode();
 }
 
@@ -398,6 +405,9 @@ static void EnsurePresentShader(void) {
     if(LS.presentInited) {
         LS.locPresentTex=GetShaderLocation(LS.presentShader,"presentTex");
         if(LS.locPresentTex>=0){ int u=0; SetShaderValue(LS.presentShader,LS.locPresentTex,&u,SHADER_UNIFORM_INT); }
+        LS.locTexSize=GetShaderLocation(LS.presentShader,"texSize");
+        LS.locApplyDither=GetShaderLocation(LS.presentShader,"applyDither");
+        if(LS.locApplyDither>=0){ int v=1; SetShaderValue(LS.presentShader,LS.locApplyDither,&v,SHADER_UNIFORM_INT); }
     }
 }
 
@@ -428,6 +438,12 @@ static RenderTexture2D* CompositeLayersInto(RenderTexture2D& a, RenderTexture2D&
 
 bool LayerStack_PresentInited(void) { return LS.presentInited; }
 Shader LayerStack_GetPresentShader(void) { return LS.presentShader; }
+void LayerStack_SetPresentTexSize(int w, int h) {
+    if(LS.locTexSize>=0){ float ts[2]={(float)w,(float)h}; SetShaderValue(LS.presentShader,LS.locTexSize,ts,SHADER_UNIFORM_VEC2); }
+}
+void LayerStack_SetPresentDither(bool on) {
+    if(LS.locApplyDither>=0){ int v=on?1:0; SetShaderValue(LS.presentShader,LS.locApplyDither,&v,SHADER_UNIFORM_INT); }
+}
 Texture2D LayerStack_GetCheckerTex(void) {
     // Ensure the checker is created at the current render-window size
     int cw=CW(),ch=CH();
@@ -457,6 +473,8 @@ Image LayerStack_CompositeWithDither(void) {
     RenderTexture2D*out=(finalAcc==&a) ? &b : &a;
     BeginTextureMode(*out); ClearBackground(BLANK);
     if(LS.presentInited)BeginShaderMode(LS.presentShader);
+    if(LS.locTexSize>=0){ float ts[2]={(float)cw,(float)ch}; SetShaderValue(LS.presentShader,LS.locTexSize,ts,SHADER_UNIFORM_VEC2); }
+    LayerStack_SetPresentDither(true);
     DrawTextureRec(finalAcc->texture,FullRect(cw,ch),Vector2{0,0},WHITE);
     if(LS.presentInited)EndShaderMode(); EndTextureMode();
     rlSetBlendMode(RL_BLEND_ALPHA);
@@ -556,6 +574,8 @@ void LayerStack_ProduceCompositeDitherView8b(Image* dst, const float viewMat[6],
     // a holds the final 16-bit composite — apply present shader into b, read back as 8-bit
     BeginTextureMode(b); ClearBackground(BLANK);
     if(LS.presentInited)BeginShaderMode(LS.presentShader);
+    if(LS.locTexSize>=0){ float ts[2]={(float)w,(float)h}; SetShaderValue(LS.presentShader,LS.locTexSize,ts,SHADER_UNIFORM_VEC2); }
+    LayerStack_SetPresentDither(true);
     DrawTextureRec(a.texture,FullRect(w,h),Vector2{0,0},WHITE);
     if(LS.presentInited)EndShaderMode(); EndTextureMode();
     *dst=LoadImageFromTexture(b.texture); ImageFlipVertical(dst);

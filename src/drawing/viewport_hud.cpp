@@ -105,7 +105,7 @@ void ViewportHUD_Draw(AppState* state) {
             state->camera.zoom,
             -state->camera.target.y * state->camera.zoom + vOffY};
         LayerStack_ProduceCompositeView(g_viewResRT, vMat, vpW, vpH);
-        if (usePresent) BeginShaderMode(GetPresentShader());
+        if (usePresent) { BeginShaderMode(GetPresentShader()); LayerStack_SetPresentTexSize(vpW, vpH); LayerStack_SetPresentDither(true); }
         DrawTextureRec(g_viewResRT.texture,
             Rectangle{0, 0, (float)vpW, (float)-vpH},
             Vector2{vpBounds.x, vpBounds.y}, WHITE);
@@ -125,7 +125,7 @@ void ViewportHUD_Draw(AppState* state) {
 
         if (g_seamlessPreview) {
             SetTextureWrap(docBlendTex->texture, TEXTURE_WRAP_REPEAT);
-            if (usePresent) BeginShaderMode(GetPresentShader());
+            if (usePresent) { BeginShaderMode(GetPresentShader()); LayerStack_SetPresentTexSize(cw, ch); LayerStack_SetPresentDither(true); }
             for (int dy = -1; dy <= 1; dy++)
                 for (int dx = -1; dx <= 1; dx++)
                     DrawTexturePro(docBlendTex->texture, srcRect,
@@ -133,7 +133,7 @@ void ViewportHUD_Draw(AppState* state) {
                         Vector2{0, 0}, 0.0f, WHITE);
             if (usePresent) EndShaderMode();
         } else {
-            if (usePresent) BeginShaderMode(GetPresentShader());
+            if (usePresent) { BeginShaderMode(GetPresentShader()); LayerStack_SetPresentTexSize(cw, ch); LayerStack_SetPresentDither(true); }
             DrawTexturePro(docBlendTex->texture, srcRect, dstRect, Vector2{0, 0}, 0.0f, WHITE);
             if (usePresent) EndShaderMode();
         }
