@@ -110,7 +110,19 @@ vec4 applyBlend(int mode, vec4 canvas, vec3 brushRGB, float brushA) {
         return vec4(clamp(brushRGB, 0.0, 1.0), clamp(brushA, 0.0, 1.0));
     }
 
-if (mode == 0) { // N-OKLab
+if (mode == 0) { // N-Gamma
+    vec3 brushLin  = brushRGB * brushRGB;
+    vec3 canvasLin = canvas.rgb * canvas.rgb;
+    outRGB = sqrt(brushLin * brushA + canvasLin * (1.0 - brushA));
+    outA   = brushA + canvas.a * (1.0 - brushA);
+} else if (mode == 1) { // N-Linear
+    vec3 brushPremul  = brushRGB * brushA;
+    vec3 canvasPremul = canvas.rgb * canvas.a;
+    outA   = brushA + canvas.a * (1.0 - brushA);
+    outRGB = (outA > 0.00001)
+        ? (brushPremul + canvasPremul * (1.0 - brushA)) / outA
+        : brushRGB;
+} else if (mode == 2) { // N-OKLab
     vec3 brushLab  = rgbToOklab(brushRGB);
     vec3 canvasLab = rgbToOklab(canvas.rgb);
     float wBrush  = brushA;
@@ -121,18 +133,6 @@ if (mode == 0) { // N-OKLab
     else blendedLab = brushLab;
     outRGB = oklabToRgb(blendedLab);
     outA   = wTotal;
-} else if (mode == 1) { // N-Gamma
-    vec3 brushLin  = brushRGB * brushRGB;
-    vec3 canvasLin = canvas.rgb * canvas.rgb;
-    outRGB = sqrt(brushLin * brushA + canvasLin * (1.0 - brushA));
-    outA   = brushA + canvas.a * (1.0 - brushA);
-} else if (mode == 2) { // N-Linear
-    vec3 brushPremul  = brushRGB * brushA;
-    vec3 canvasPremul = canvas.rgb * canvas.a;
-    outA   = brushA + canvas.a * (1.0 - brushA);
-    outRGB = (outA > 0.00001)
-        ? (brushPremul + canvasPremul * (1.0 - brushA)) / outA
-        : brushRGB;
 } else if (mode == 3) {
     outRGB = canvas.rgb; outA = canvas.a * (1.0 - brushA);
 } else if (mode == 4) {
@@ -283,16 +283,16 @@ float cloneOpacity = smudgeStrength;
         // Blend-mode-aware bilinear interpolation
         vec3 smudgeRGB; float smudgeA;
         if (bmidx == 0) {
-            vec3 ll = rgbToOklab(tl.rgb); vec3 lr = rgbToOklab(tr.rgb);
-            vec3 bl2 = rgbToOklab(bl.rgb); vec3 br2 = rgbToOklab(br.rgb);
-            vec3 mixed = mix(mix(ll, lr, f.x), mix(bl2, br2, f.x), f.y);
-            smudgeRGB = oklabToRgb(mixed);
-            smudgeA    = mix(mix(tl.a, tr.a, f.x), mix(bl.a, br.a, f.x), f.y);
-        } else if (bmidx == 1) {
             vec3 tl_lin = tl.rgb*tl.rgb; vec3 tr_lin = tr.rgb*tr.rgb;
             vec3 bl_lin = bl.rgb*bl.rgb; vec3 br_lin = br.rgb*br.rgb;
             vec3 mixed = mix(mix(tl_lin, tr_lin, f.x), mix(bl_lin, br_lin, f.x), f.y);
             smudgeRGB = sqrt(mixed);
+            smudgeA    = mix(mix(tl.a, tr.a, f.x), mix(bl.a, br.a, f.x), f.y);
+        } else if (bmidx == 2) {
+            vec3 ll = rgbToOklab(tl.rgb); vec3 lr = rgbToOklab(tr.rgb);
+            vec3 bl2 = rgbToOklab(bl.rgb); vec3 br2 = rgbToOklab(br.rgb);
+            vec3 mixed = mix(mix(ll, lr, f.x), mix(bl2, br2, f.x), f.y);
+            smudgeRGB = oklabToRgb(mixed);
             smudgeA    = mix(mix(tl.a, tr.a, f.x), mix(bl.a, br.a, f.x), f.y);
         } else {
             vec4 tl_p = vec4(tl.rgb*tl.a, tl.a); vec4 tr_p = vec4(tr.rgb*tr.a, tr.a);
@@ -306,20 +306,7 @@ float cloneOpacity = smudgeStrength;
 
         brushFinal = smudgeRGB;
 
-        // Blend smudge result with canvas
-        vec3 mixedRGB;
-        if (bmidx == 0) {
-            vec3 labCanvas = rgbToOklab(canvas.rgb);
-            vec3 labSmudge = rgbToOklab(smudgeRGB);
-            mixedRGB = oklabToRgb(mix(labCanvas, labSmudge, finalAlpha));
-        } else if (bmidx == 1) {
-            vec3 linCanvas = canvas.rgb * canvas.rgb;
-            vec3 linSmudge = smudgeRGB * smudgeRGB;
-            mixedRGB = sqrt(mix(linCanvas, linSmudge, finalAlpha));
-        } else {
-            mixedRGB = mix(canvas.rgb, smudgeRGB, finalAlpha);
-        }
-        finalColor = vec4(mixedRGB, canvas.a);
+        finalColor = applyBlend(bmidx, canvas, smudgeRGB, finalAlpha);
 
        float blendedA = mix(canvas.a, smudgeA, finalAlpha);
        if (preserveop > 0.5)

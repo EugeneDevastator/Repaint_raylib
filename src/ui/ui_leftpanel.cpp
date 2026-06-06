@@ -52,7 +52,7 @@ void LeftPanel_Draw(AppState* state) {
     // Blend mode
     {
         static const char* blendNames[] = {
-            "N-OKLab","N-Gamma","N-Linear","EraseA","EraseColor","Screen",
+            "N-Gamma","N-Linear","N-OKLab","EraseA","EraseColor","Screen",
             "Color Dodge","Lighten","Darken","Burn","Multiply",
             "Overlay","Color"
         };

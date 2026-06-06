@@ -38,7 +38,7 @@ typedef enum {
 } eEraseMode;
 
 typedef enum {
-    bmOKLab=0, bmGamma=1, bmLinear=2, bmEraseAlpha=3, bmEraseColor=4,
+    bmGamma=0, bmLinear=1, bmOKLab=2, bmEraseAlpha=3, bmEraseColor=4,
     bmScreen=5, bmDodge=6, bmLighten=7, bmDarken=8,
     bmBurn=9, bmMult=10, bmOvr=11, bmColor=12,
     bmSTOP=13

@@ -115,7 +115,7 @@ void LayerPanel_Draw(AppState* state) {
 
     {
         static const char* blendNames[] = {
-            "N-OKLab","N-Gamma","N-Linear","Screen","Color Dodge",
+            "N-Gamma","N-Linear","N-OKLab","Screen","Color Dodge",
             "Lighten","Darken","Burn","Multiply","Overlay","Color"
         };
         int blend = LayerStack_GetProps(state->activeLayer)->blendmode;

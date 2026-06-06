@@ -81,7 +81,15 @@ vec4 applyBlend(int mode, vec4 underLayer, vec3 layerRGB, float layerA) {
         return vec4(clamp(outRGB, 0.0, 1.0), clamp(outA, 0.0, 1.0));
     }
 
-    if (mode == 0) { // N-OKLab
+    if (mode == 0) { // N-Gamma
+        vec3 layerLin = layerRGB * layerRGB;
+        vec3 underLin = underLayer.rgb * underLayer.rgb;
+        outRGB = sqrt(layerLin * layerA + underLin * (1.0 - layerA));
+        outA   = layerA + underLayer.a * (1.0 - layerA);
+    } else if (mode == 1) { // N-Linear
+        outRGB = layerPremul + underLayer.rgb * (1.0 - layerA);
+        outA   = layerA + underLayer.a * (1.0 - layerA);
+    } else if (mode == 2) { // N-OKLab
         vec3 layerLab = rgbToOklab(layerRGB);
         vec3 underLab = rgbToOklab(underLayer.rgb);
         float wLayer  = layerA;
@@ -92,14 +100,6 @@ vec4 applyBlend(int mode, vec4 underLayer, vec3 layerRGB, float layerA) {
         else blendedLab = layerLab;
         outRGB = oklabToRgb(blendedLab);
         outA   = wTotal;
-    } else if (mode == 1) { // N-Gamma
-        vec3 layerLin = layerRGB * layerRGB;
-        vec3 underLin = underLayer.rgb * underLayer.rgb;
-        outRGB = sqrt(layerLin * layerA + underLin * (1.0 - layerA));
-        outA   = layerA + underLayer.a * (1.0 - layerA);
-    } else if (mode == 2) { // N-Linear
-        outRGB = layerPremul + underLayer.rgb * (1.0 - layerA);
-        outA   = layerA + underLayer.a * (1.0 - layerA);
     } else if (mode == 3) { // Screen
         outRGB = 1.0 - (1.0 - underLayer.rgb) * (1.0 - layerPremul);
         outA   = 1.0 - (1.0 - underLayer.a) * (1.0 - layerA);
