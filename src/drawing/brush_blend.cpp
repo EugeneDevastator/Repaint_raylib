@@ -204,12 +204,15 @@ void BrushBlend_ApplyStamp(
     SetTextureFilter(geoRT->texture, RL_TEXTURE_FILTER_NEAREST);
     BeginTextureMode(*geoRT);
     ClearBackground((Color){0, 0, 0, 0});
+    rlSetBlendMode(RL_BLEND_CUSTOM);
+    rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);  // write rgba as-is
     BeginShaderMode(brushGeoShader);
     DrawTexturePro(whiteTex,
         (Rectangle){0, 0, 1, 1},
         (Rectangle){0, 0, (float)drawSz, -(float)drawSz},
         (Vector2){0, 0}, 0.0f, WHITE);
     EndShaderMode();
+    rlSetBlendMode(RL_BLEND_ALPHA);  // restore
     EndTextureMode();
 
     // Switch geo to bilinear for sub-pixel blend sampling
