@@ -1,6 +1,13 @@
 #include "repaint.h"
 #include "imgui.h"
 
+// ── Shared blend mode names ──────────────────────────────────────────
+const char* g_blendModeNames[] = {
+    "N-Gamma","N-Linear","N-OKLab","EraseA","EraseColor","Screen",
+    "Color Dodge","Lighten","Darken","Burn","Multiply","Overlay","Color"
+};
+extern const int g_blendModeCount = 13;
+
 static Texture2D penModeTex[PEN_MODE_COUNT];
 static const char* PenIconNames[PEN_MODE_COUNT] = {
     "tct_none", "tct_pressure", "tct_vel", "tct_dir", "tct_rot", "tct_tilt",

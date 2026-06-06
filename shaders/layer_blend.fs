@@ -100,25 +100,31 @@ vec4 applyBlend(int mode, vec4 underLayer, vec3 layerRGB, float layerA) {
         else blendedLab = layerLab;
         outRGB = oklabToRgb(blendedLab);
         outA   = wTotal;
-    } else if (mode == 3) { // Screen
+    } else if (mode == 3) { // EraseA
+        outRGB = underLayer.rgb; outA = underLayer.a * (1.0 - layerA);
+    } else if (mode == 4) { // EraseColor
+        float eraseMask = underLayer.a * layerA;
+        outRGB = mix(underLayer.rgb, layerRGB, eraseMask);
+        outA   = underLayer.a * (1.0 - layerA * 0.5);
+    } else if (mode == 5) { // Screen
         outRGB = 1.0 - (1.0 - underLayer.rgb) * (1.0 - layerPremul);
         outA   = 1.0 - (1.0 - underLayer.a) * (1.0 - layerA);
-    } else if (mode == 4) { // Color Dodge
+    } else if (mode == 6) { // Color Dodge
         outRGB = underLayer.rgb + layerPremul * (1.0 - underLayer.rgb);
         outA   = min(1.0, underLayer.a + layerA);
-    } else if (mode == 5) { // Lighten
+    } else if (mode == 7) { // Lighten
         outRGB = max(underLayer.rgb, layerPremul);
         outA   = max(underLayer.a, layerA);
-    } else if (mode == 6) { // Darken
+    } else if (mode == 8) { // Darken
         outRGB = min(underLayer.rgb, layerPremul);
         outA   = min(underLayer.a, layerA);
-    } else if (mode == 7) { // Burn
+    } else if (mode == 9) { // Burn
         outRGB = 1.0 - (1.0 - underLayer.rgb) / (layerPremul + 0.001);
         outA   = min(1.0, underLayer.a + layerA);
-    } else if (mode == 8) { // Multiply
+    } else if (mode == 10) { // Multiply
         outRGB = underLayer.rgb * mix(vec3(1.0), layerRGB, layerA);
         outA   = underLayer.a;
-    } else if (mode == 9) { // Overlay
+    } else if (mode == 11) { // Overlay
         vec3 ov;
         if (underLayer.rgb.r < 0.5) ov.r = 2.0 * underLayer.rgb.r * layerRGB.r;
         else ov.r = 1.0 - 2.0 * (1.0 - underLayer.rgb.r) * (1.0 - layerRGB.r);
@@ -128,7 +134,7 @@ vec4 applyBlend(int mode, vec4 underLayer, vec3 layerRGB, float layerA) {
         else ov.b = 1.0 - 2.0 * (1.0 - underLayer.rgb.b) * (1.0 - layerRGB.b);
         outRGB = underLayer.rgb * (1.0 - layerA) + ov * layerA;
         outA   = layerA + underLayer.a * (1.0 - layerA);
-    } else if (mode == 10) { // Color
+    } else if (mode == 12) { // Color
         vec3 lHSL = rgb2hsl(layerRGB);
         vec3 uHSL = rgb2hsl(underLayer.rgb);
         vec3 col = hsl2rgb(vec3(lHSL.x, lHSL.y, uHSL.z));
