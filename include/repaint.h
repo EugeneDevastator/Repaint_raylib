@@ -38,10 +38,10 @@ typedef enum {
 } eEraseMode;
 
 typedef enum {
-    bmGamma=0, bmLinear=1, bmEraseAlpha=2, bmEraseColor=3,
-    bmScreen=4, bmDodge=5, bmLighten=6, bmDarken=7,
-    bmBurn=8, bmMult=9, bmOvr=10, bmColor=11,
-    bmSTOP=12
+    bmOKLab=0, bmGamma=1, bmLinear=2, bmEraseAlpha=3, bmEraseColor=4,
+    bmScreen=5, bmDodge=6, bmLighten=7, bmDarken=8,
+    bmBurn=9, bmMult=10, bmOvr=11, bmColor=12,
+    bmSTOP=13
 } bmBlends;
 
 typedef enum {
@@ -70,6 +70,7 @@ typedef struct {
     char layerName[256];
     float mat[6];        // 2×3 affine matrix (row-major: [a,b,tx, c,d,ty])
     int layerW, layerH;  // native resolution of this layer
+    bool seamless;       // use seamless merge (3x3 tile wrap) on drop
 } sLayerProps;
 
 #define MAX_BRUSH_TEX 32
@@ -131,19 +132,6 @@ public:
     StrokePoint Feed(float x, float y, double time);
 };
 
-struct StrokeEngine {
-    d_Brush segBrushFrom; Vector2 lastDabPos;
-    int dabIndex; bool inStroke;
-    Vector2 prevSegPos, prevSegDir; float prevSegLen, prevVel;
-    float initDir; bool initDirSet;
-
-    // Spline buffer for Smooth mode: throttled input points used as Catmull-Rom control points
-    Vector2 splinePts[256];
-    int splineCount, processedCount;
-    float accumDist;        // path length accumulated since last control point
-    Vector2 lastInputPos;   // previous raw input position (for incremental distance)
-};
-
 #define SMOOTH_MODE_LINEAR 0
 #define SMOOTH_MODE_SMOOTH 1
 
@@ -160,8 +148,8 @@ struct NetSegment {
     Vector2 pos1, pos2, ctrl0, ctrl3;
     CollapsedBrush brushFrom, brushTo;
     uint16_t seed;
-    int layer;
-    uint8_t toolID, seamless;
+    uint8_t layer;       // target layer index
+    uint8_t toolID, seamless;   // pad byte
     float smudgeSrcX, smudgeSrcY;
 };
 
@@ -185,8 +173,9 @@ typedef struct {
     int strokeLen, inputLen;
     bool wasMouseDown, debugShowStamps, rightMouseDown;
     Vector2 lastMousePos; bool inBounds, strokeEnded; int endLayer;
-    ICommandBroker* broker; InputFilter inputFilter; StrokeEngine strokeEng;
+    ICommandBroker* broker; InputFilter inputFilter;
     Vector2 lineLastDabPos;
+    Vector2 m_distortLastDabPos;
 } Viewport;
 
 struct AppState {

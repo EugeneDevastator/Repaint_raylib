@@ -34,6 +34,9 @@ static int is_pen_device(int fd) {
 
 int TabletPlatform_GetHookCount(void)   { return 0; }
 
+int TabletPlatform_DrainMousePos(float*, int) { return 0; }
+void TabletPlatform_ClearMousePos(void) {}
+
 void TabletPlatform_GetDebugInfo(char* buf, size_t sz) {
     snprintf(buf, sz, "Linux evdev — no Windows Ink equivalent");
 }

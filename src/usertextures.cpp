@@ -6,6 +6,7 @@ Texture2D g_defaultBrushTex = {0};
 
 void UserTexture_Init(void) {
     Image img = GenImageColor(16, 16, WHITE);
+    ImageFormat(&img, PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
     g_defaultBrushTex = LoadTextureFromImage(img);
     UnloadImage(img);
     g_activeBrushTex = g_defaultBrushTex;

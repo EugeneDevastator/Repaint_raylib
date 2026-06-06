@@ -17,7 +17,11 @@ static struct {
     Texture2D checkerTex; bool checkerValid;
     Shader blendShader; bool shaderInited;
     int locLayerTex, locLayerAlpha, locBmIdx, locLayerThreshold, locLayerFeather;
+    int locUnderTex;
     Shader presentShader; bool presentInited;
+    int locPresentTex;
+    int locTexSize;
+    int locApplyDither;
     int curCanvasW, curCanvasH;
     RenderTexture2D* finalAcc;
     bool dirty;
@@ -50,6 +54,8 @@ static bool LoadBlendShader(void) {
     LS.locBmIdx=GetShaderLocation(LS.blendShader,"bmidx");
     LS.locLayerThreshold=GetShaderLocation(LS.blendShader,"layerThreshold");
     LS.locLayerFeather=GetShaderLocation(LS.blendShader,"layerFeather");
+    LS.locUnderTex=GetShaderLocation(LS.blendShader,"underTex");
+    if(LS.locUnderTex>=0){ int u=0; SetShaderValue(LS.blendShader,LS.locUnderTex,&u,SHADER_UNIFORM_INT); }
     LS.shaderInited=true; return true;
 }
 
@@ -257,13 +263,17 @@ void LayerStack_SyncRTFromImage(int idx) {
 }
 
 // ── Bake / blend helpers ────────────────────────────────────────────
+static void EnsurePresentShader(void);
 static void BakeTransform(RenderTexture2D dst, Texture2D src, const float mat[6], int lw, int lh, int cw, int ch) {
     rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE,RL_ZERO,RL_FUNC_ADD);
     BeginTextureMode(dst); ClearBackground(BLANK);
-    // Negative determinant = flip → triangle winding inverts → disable culling.
-    // Must flush batch while culling is off — raylib batches draw calls and only
-    // executes them on flush, so re-enabling before EndTextureMode's flush would
-    // use the wrong state.
+    // Use perceptual bilinear shader for layer transform sampling
+    EnsurePresentShader();
+    if(LS.presentInited) {
+        BeginShaderMode(LS.presentShader);
+        LayerStack_SetPresentTexSize(lw, lh);
+        LayerStack_SetPresentDither(false);
+    }
     bool flip = (mat[0]*mat[4] - mat[1]*mat[3]) < 0.0f;
     if (flip) { rlDisableBackfaceCulling(); rlDrawRenderBatchActive(); }
     rlPushMatrix();
@@ -272,6 +282,7 @@ static void BakeTransform(RenderTexture2D dst, Texture2D src, const float mat[6]
     DrawTextureRec(src,Rectangle{0,0,(float)lw,(float)-lh},Vector2{0,0},WHITE);
     rlPopMatrix();
     if (flip) { rlDrawRenderBatchActive(); rlEnableBackfaceCulling(); }
+    if(LS.presentInited) EndShaderMode();
     EndTextureMode();
 }
 
@@ -391,6 +402,13 @@ static void EnsurePresentShader(void) {
     const char* ad=GetApplicationDirectory(); char fs[512];
     snprintf(fs,sizeof(fs),"%sshaders/present.fs",ad);
     LS.presentShader=LoadShader(0,fs); LS.presentInited=LS.presentShader.id>0;
+    if(LS.presentInited) {
+        LS.locPresentTex=GetShaderLocation(LS.presentShader,"presentTex");
+        if(LS.locPresentTex>=0){ int u=0; SetShaderValue(LS.presentShader,LS.locPresentTex,&u,SHADER_UNIFORM_INT); }
+        LS.locTexSize=GetShaderLocation(LS.presentShader,"texSize");
+        LS.locApplyDither=GetShaderLocation(LS.presentShader,"applyDither");
+        if(LS.locApplyDither>=0){ int v=1; SetShaderValue(LS.presentShader,LS.locApplyDither,&v,SHADER_UNIFORM_INT); }
+    }
 }
 
 // ── Helper: run the ping-pong layer blend loop ──
@@ -405,7 +423,20 @@ static RenderTexture2D* CompositeLayersInto(RenderTexture2D& a, RenderTexture2D&
             layerTex=LS.layerTransRT.texture;
         }
         sLayerProps*p=&LS.prop[i];
-        if(LS.shaderInited)
+        if(p->seamless && LS.shaderInited && LS.layerTransRT.id>0) {
+            int lw=p->layerW, lh=p->layerH;
+            SetTextureWrap(LS.rt[i].texture, TEXTURE_WRAP_REPEAT);
+            for(int dy=-1;dy<=1;dy++){
+                for(int dx=-1;dx<=1;dx++){
+                    float tileMat[6];
+                    memcpy(tileMat,p->mat,6*sizeof(float));
+                    tileMat[2]+=dx*(float)lw; tileMat[5]+=dy*(float)lh;
+                    BakeTransform(LS.layerTransRT,LS.rt[i].texture,tileMat,lw,lh,cw,ch);
+                    ApplyBlendShader(*dst,src->texture,LS.layerTransRT.texture,p->op,p->blendmode,p->threshold,p->feather,cw,ch);
+                    RenderTexture2D*tmp=src; src=dst; dst=tmp;
+                }
+            }
+        } else if(LS.shaderInited)
             ApplyBlendShader(*dst,src->texture,layerTex,p->op,p->blendmode,p->threshold,p->feather,cw,ch);
         else {
             BeginTextureMode(*dst); ClearBackground(BLANK);
@@ -420,6 +451,12 @@ static RenderTexture2D* CompositeLayersInto(RenderTexture2D& a, RenderTexture2D&
 
 bool LayerStack_PresentInited(void) { return LS.presentInited; }
 Shader LayerStack_GetPresentShader(void) { return LS.presentShader; }
+void LayerStack_SetPresentTexSize(int w, int h) {
+    if(LS.locTexSize>=0){ float ts[2]={(float)w,(float)h}; SetShaderValue(LS.presentShader,LS.locTexSize,ts,SHADER_UNIFORM_VEC2); }
+}
+void LayerStack_SetPresentDither(bool on) {
+    if(LS.locApplyDither>=0){ int v=on?1:0; SetShaderValue(LS.presentShader,LS.locApplyDither,&v,SHADER_UNIFORM_INT); }
+}
 Texture2D LayerStack_GetCheckerTex(void) {
     // Ensure the checker is created at the current render-window size
     int cw=CW(),ch=CH();
@@ -449,6 +486,8 @@ Image LayerStack_CompositeWithDither(void) {
     RenderTexture2D*out=(finalAcc==&a) ? &b : &a;
     BeginTextureMode(*out); ClearBackground(BLANK);
     if(LS.presentInited)BeginShaderMode(LS.presentShader);
+    if(LS.locTexSize>=0){ float ts[2]={(float)cw,(float)ch}; SetShaderValue(LS.presentShader,LS.locTexSize,ts,SHADER_UNIFORM_VEC2); }
+    LayerStack_SetPresentDither(true);
     DrawTextureRec(finalAcc->texture,FullRect(cw,ch),Vector2{0,0},WHITE);
     if(LS.presentInited)EndShaderMode(); EndTextureMode();
     rlSetBlendMode(RL_BLEND_ALPHA);
@@ -478,22 +517,35 @@ static void _viewBlendLoop(RenderTexture2D dst, RenderTexture2D tmp,
         if(!LS.prop[i].visible||LS.rt[i].id==0) continue;
 
         // Compute combined transform: viewMat * layerMat
+        sLayerProps*p=&LS.prop[i];
         Texture2D layerTex=LS.rt[i].texture;
-        if(transRT.id>0){
+        float cmb[6];
+        bool hasXform = transRT.id>0;
+        if(hasXform){
             float ca=LS.prop[i].mat[0],cb=LS.prop[i].mat[1],ctx=LS.prop[i].mat[2];
             float cc=LS.prop[i].mat[3],cd=LS.prop[i].mat[4],cty=LS.prop[i].mat[5];
-            float cmb[6];
             if(viewMat){
                 cmb[0]=viewMat[0]*ca+viewMat[1]*cc; cmb[1]=viewMat[0]*cb+viewMat[1]*cd; cmb[2]=viewMat[0]*ctx+viewMat[1]*cty+viewMat[2];
                 cmb[3]=viewMat[3]*ca+viewMat[4]*cc; cmb[4]=viewMat[3]*cb+viewMat[4]*cd; cmb[5]=viewMat[3]*ctx+viewMat[4]*cty+viewMat[5];
             }else{
                 cmb[0]=ca; cmb[1]=cb; cmb[2]=ctx; cmb[3]=cc; cmb[4]=cd; cmb[5]=cty;
             }
-            BakeTransform(transRT,LS.rt[i].texture,cmb,LS.prop[i].layerW,LS.prop[i].layerH,w,h);
-            layerTex=transRT.texture;
+            if(!p->seamless) { BakeTransform(transRT,LS.rt[i].texture,cmb,LS.prop[i].layerW,LS.prop[i].layerH,w,h); layerTex=transRT.texture; }
         }
-        sLayerProps*p=&LS.prop[i];
-        if(LS.shaderInited)
+        if(p->seamless && LS.shaderInited && transRT.id>0) {
+            int lw=p->layerW, lh=p->layerH;
+            SetTextureWrap(LS.rt[i].texture, TEXTURE_WRAP_REPEAT);
+            for(int dy=-1;dy<=1;dy++){
+                for(int dx=-1;dx<=1;dx++){
+                    float tileCmb[6];
+                    memcpy(tileCmb,cmb,6*sizeof(float));
+                    tileCmb[2]+=dx*(float)lw; tileCmb[5]+=dy*(float)lh;
+                    BakeTransform(transRT,LS.rt[i].texture,tileCmb,lw,lh,w,h);
+                    ApplyBlendShader(*dstBuf,src->texture,transRT.texture,p->op,p->blendmode,p->threshold,p->feather,w,h);
+                    RenderTexture2D*t=src; src=dstBuf; dstBuf=t;
+                }
+            }
+        } else if(LS.shaderInited)
             ApplyBlendShader(*dstBuf,src->texture,layerTex,p->op,p->blendmode,p->threshold,p->feather,w,h);
         else{
             BeginTextureMode(*dstBuf); ClearBackground(BLANK);
@@ -548,6 +600,8 @@ void LayerStack_ProduceCompositeDitherView8b(Image* dst, const float viewMat[6],
     // a holds the final 16-bit composite — apply present shader into b, read back as 8-bit
     BeginTextureMode(b); ClearBackground(BLANK);
     if(LS.presentInited)BeginShaderMode(LS.presentShader);
+    if(LS.locTexSize>=0){ float ts[2]={(float)w,(float)h}; SetShaderValue(LS.presentShader,LS.locTexSize,ts,SHADER_UNIFORM_VEC2); }
+    LayerStack_SetPresentDither(true);
     DrawTextureRec(a.texture,FullRect(w,h),Vector2{0,0},WHITE);
     if(LS.presentInited)EndShaderMode(); EndTextureMode();
     *dst=LoadImageFromTexture(b.texture); ImageFlipVertical(dst);

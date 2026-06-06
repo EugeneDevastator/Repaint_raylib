@@ -40,19 +40,27 @@ struct CollapsedBrush {
 // ── Segment for the drawer ─────────────────────────────────────────
 struct DrawSegment {
     Vector2 pos1, pos2;
-    Vector2 ctrl0, ctrl3;  // Catmull-Rom tangents (== pos1/pos2 = straight)
+    Vector2 ctrl0, ctrl3;
     CollapsedBrush brushFrom, brush;
     uint8_t Noisemode, tool, seamless;
     uint16_t seed;
     float smudgeSrcX, smudgeSrcY;
+    uint8_t targetType;
+    uint8_t targetId;
+    int dabOffset;
 };
 
-// ── Output dab ─────────────────────────────────────────────────────
-struct DrawDab {
-    float x, y;
-    float srcX, srcY;
-    CollapsedBrush brush;
-};
+// ── Apply a collapsed brush stamp onto a render target ─────────────
+void ApplyCollapsedBrush(RenderTexture2D rt, const CollapsedBrush& cb,
+                         float x, float y, float srcX, float srcY, Texture2D brushTex);
+
+// ── Stateless: draws one segment onto a render target ──────────────
+void DrawOneSegment(const DrawSegment& dseg, RenderTexture2D rt, Texture2D brushTex, bool seamless, int dabOffset);
+
+// ── Segment computation helpers (no rendering) ─────────────────────
+void SegDrawer_SetSegmentStart(float startRad, Vector2 startPos, DrawSegment* seg);
+void SegDrawer_ComputeSegmentEnd(const DrawSegment* seg, int dabOffset, float initialRad,
+                                  Vector2* outLastPos, float* outLastRad);
 
 // ── Segment result ─────────────────────────────────────────────────
 struct SegResult {
@@ -68,12 +76,8 @@ CollapsedBrush BlendBrushes(CollapsedBrush from, CollapsedBrush to, float k);
 void JitterBrush(CollapsedBrush& b, uint16_t baseSeed, int dabIdx);
 
 // ── Linear stroke: places next dab only when distance >= spacing ──
-int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad, DrawDab* out, int maxOut, SegResult* res);
-
-// ── Stateless: draws one segment onto a render target ──────────────
-void DrawOneSegment(const DrawSegment& dseg, RenderTexture2D rt);
-
-// ── Airflow stroke: accumulates overdraw, bursty placement ─────────
-int DrawAirflow(const DrawSegment* seg, float accum, DrawDab* out, int maxOut, SegResult* res);
+int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad,
+               void (*apply)(float x, float y, float srcX, float srcY, const CollapsedBrush& brush, void* user),
+               void* user, int maxOut, SegResult* res);
 
 #endif

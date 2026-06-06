@@ -12,6 +12,9 @@ bool TabletPlatform_Poll(TabletState* out);
 
 // Debug diagnostics (platform-independent)
 int TabletPlatform_GetHookCount(void);
+
+int TabletPlatform_DrainMousePos(float* buf, int maxOut);
+void TabletPlatform_ClearMousePos(void);
 void TabletPlatform_GetDebugInfo(char* buf, size_t sz);
 
 #endif

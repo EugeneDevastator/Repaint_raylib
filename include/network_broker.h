@@ -23,13 +23,13 @@ struct ReceivedPacket {
 };
 
 struct QueuedSegment {
-    RenderTexture2D targetRT;
     Vector2 pos1, pos2, ctrl0, ctrl3;
     CollapsedBrush brushFrom, brushTo;
     uint16_t seed;
     uint8_t  tool, seamless;
     float smudgeSrcX, smudgeSrcY;
-    int activeLayer;
+    uint8_t targetType;  // 0 = layer, 1 = brush texture
+    uint8_t targetId;    // layer index or brushTex index
 };
 
 struct NetworkBroker : ICommandBroker {

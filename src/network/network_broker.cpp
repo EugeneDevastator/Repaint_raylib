@@ -5,6 +5,7 @@
 #include "app_config.h"
 #include "brush_draw.h"
 #include "stroke_engine.h"
+#include "SegmentRenderer.h"
 #include "imgui.h"
 #include <string.h>
 #include <stdlib.h>
@@ -193,9 +194,7 @@ void NetworkBroker::SendLAction(const d_LAction* lact) {
 void NetworkBroker::on_segment(const DrawSegment& seg) {
     int next = (segTail + 1) % CMD_CAPACITY;
     if (next == segHead) return;
-    if (!appState) return;
 
-    int layer = appState->activeLayer;
     QueuedSegment& d = segQueue[segTail];
     d.pos1 = seg.pos1; d.pos2 = seg.pos2;
     d.ctrl0 = seg.ctrl0; d.ctrl3 = seg.ctrl3;
@@ -206,35 +205,19 @@ void NetworkBroker::on_segment(const DrawSegment& seg) {
     d.seamless = seg.seamless;
     d.smudgeSrcX = seg.smudgeSrcX;
     d.smudgeSrcY = seg.smudgeSrcY;
-    d.activeLayer = layer;
-    d.targetRT = LayerStack_GetRT(layer);
+    d.targetType = seg.targetType;
+    d.targetId   = seg.targetId;
     segTail = next;
 }
 
 void NetworkBroker::poll(AppState* st) {
     this->appState = st;
 
+    // Drain segments for remote send (rendering is via SegmentRenderer)
     while (segHead != segTail) {
         QueuedSegment* d = &segQueue[segHead];
-        if (d->targetRT.id != 0 && d->activeLayer >= 0 && d->activeLayer < LayerStack_Count()) {
-            RenderTexture2D rt = LayerStack_GetRT(d->activeLayer);
-            if (rt.id > 0) {
-                DrawSegment dseg;
-                memset(&dseg, 0, sizeof(dseg));
-                dseg.pos1 = d->pos1; dseg.pos2 = d->pos2;
-                dseg.ctrl0 = d->ctrl0; dseg.ctrl3 = d->ctrl3;
-                dseg.brushFrom = d->brushFrom; dseg.brush = d->brushTo;
-                dseg.seed = d->seed; dseg.tool = d->tool;
-                dseg.seamless = d->seamless;
-                dseg.smudgeSrcX = d->smudgeSrcX; dseg.smudgeSrcY = d->smudgeSrcY;
-                dseg.Noisemode = 0;
-
-                DrawOneSegment(dseg, rt);
-
-                if (this->state == NS_CONNECTED)
-                    SendSegment(*d);
-            }
-        }
+        if (this->state == NS_CONNECTED)
+            SendSegment(*d);
         segHead = (segHead + 1) % CMD_CAPACITY;
     }
 
@@ -435,28 +418,27 @@ void NetworkBroker::SendSegment(const QueuedSegment& seg) {
     ns.seamless = seg.seamless;
     ns.smudgeSrcX = seg.smudgeSrcX;
     ns.smudgeSrcY = seg.smudgeSrcY;
-    ns.layer = seg.activeLayer;
+    ns.layer = seg.targetId;
     uint8_t buf[4096];
     size_t sz = Segment_Serialize(ns, buf, sizeof(buf));
     if (sz > 0) SendPacket(sdSegment, buf, (uint32_t)sz);
 }
 
 void NetworkBroker::EnqueueRemoteSegment(const NetSegment& ns) {
-    int next = (segTail + 1) % CMD_CAPACITY;
-    if (next == segHead) return;
-    QueuedSegment& d = segQueue[segTail];
-    d.pos1 = ns.pos1; d.pos2 = ns.pos2;
-    d.ctrl0 = ns.ctrl0; d.ctrl3 = ns.ctrl3;
-    d.brushFrom = ns.brushFrom;
-    d.brushTo  = ns.brushTo;
-    d.seed = ns.seed;
-    d.tool = ns.toolID;
-    d.seamless = ns.seamless;
-    d.smudgeSrcX = ns.smudgeSrcX;
-    d.smudgeSrcY = ns.smudgeSrcY;
-    d.activeLayer = ns.layer;
-    d.targetRT = LayerStack_GetRT(ns.layer);
-    segTail = next;
+    DrawSegment seg;
+    memset(&seg, 0, sizeof(seg));
+    seg.pos1 = ns.pos1; seg.pos2 = ns.pos2;
+    seg.ctrl0 = ns.ctrl0; seg.ctrl3 = ns.ctrl3;
+    seg.brushFrom = ns.brushFrom;
+    seg.brush     = ns.brushTo;
+    seg.seed = ns.seed;
+    seg.tool = ns.toolID;
+    seg.seamless = ns.seamless;
+    seg.smudgeSrcX = ns.smudgeSrcX;
+    seg.smudgeSrcY = ns.smudgeSrcY;
+    seg.targetType = 0;
+    seg.targetId   = ns.layer;
+    if (g_segRenderer) g_segRenderer->Push(seg);
 }
 
 /* ── Config ─────────────────────────────────────────────────────────────── */

@@ -15,6 +15,9 @@
 #include "layerstack.h"
 #include "undo.h"
 #include "replay_recorder.h"
+#include "StrokeEmitter.h"
+#include "SegmentRenderer.h"
+#include "DabDrawer.h"
 #include "external/glad.h"
 #include <time.h>
 
@@ -408,6 +411,7 @@ void App_Init(AppState* state) {
     g_state = state;
 
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
+    SetTraceLogLevel(LOG_WARNING);
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "RePaint");
     MaximizeWindow();
     DrawSplash("Initializing...");
@@ -469,6 +473,15 @@ void App_Init(AppState* state) {
     Viewport_Init(&viewport, viewportBounds);
     viewport.broker = g_useTestBroker ? (ICommandBroker*)&g_testBroker : (ICommandBroker*)&networkBroker;
     g_broker = viewport.broker;
+
+    // LocalPlayer modules
+    static SegmentRenderer s_segRenderer;
+    static StrokeEmitter s_emitter(&s_segRenderer);
+    g_segRenderer = &s_segRenderer;
+    g_emitter = &s_emitter;
+
+    static DabDrawer s_dabDrawer;
+    g_dabDrawer = &s_dabDrawer;
 
     state->undo = new UndoManager();
     g_undoManager = state->undo;
@@ -593,6 +606,15 @@ void App_Draw(AppState* state) {
         networkBroker.showUI = !networkBroker.showUI;
 
     UserTexture_Update(state);
+
+    // Process user input → segments
+    g_emitter->ProcessInputQueue();
+
+    // Emit dabs from pending segments (populates dab queue, no rendering)
+    if (g_segRenderer) g_segRenderer->EmitPending(state, 4, g_dabDrawer);
+
+    // Draw dabs, budget = 256 * 16² = 65536 radius²·px per frame
+    if (g_dabDrawer) g_dabDrawer->DrawPending(65536*32);
 
     if (viewport.broker) viewport.broker->poll(state);
     if (g_recorder) g_recorder->poll(state);

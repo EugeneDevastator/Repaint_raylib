@@ -52,13 +52,13 @@ void LeftPanel_Draw(AppState* state) {
     // Blend mode
     {
         static const char* blendNames[] = {
-            "N-Gamma","N-Linear","EraseA","EraseColor","Screen",
+            "N-OKLab","N-Gamma","N-Linear","EraseA","EraseColor","Screen",
             "Color Dodge","Lighten","Darken","Burn","Multiply",
             "Overlay","Color"
         };
         int blend = (int)state->currentBrush.Realb.bmidx;
-        if (blend < 0 || blend >= 12) blend = 0;
-        DrawRadioGroup("Blend Mode", &blend, blendNames, 12);
+        if (blend < 0 || blend >= 13) blend = 0;
+        DrawRadioGroup("Blend Mode", &blend, blendNames, 13);
         state->currentBrush.Realb.bmidx = (uint8_t)blend;
     }
 

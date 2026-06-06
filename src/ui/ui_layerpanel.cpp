@@ -62,7 +62,7 @@ void LayerPanel_Draw(AppState* state) {
         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
 
     float aw = ImGui::GetContentRegionAvail().x;
-    float bw = (aw - 12.0f) / 5.0f;
+    float bw = (aw - 9.0f) / 4.0f;
     if (ImGui::Button("+Add", ImVec2(bw, 36))) {
         d_LAction lact = {};
         lact.ActID = laAdd;
@@ -78,17 +78,18 @@ void LayerPanel_Draw(AppState* state) {
     }
     ImGui::SameLine();
     if (ImGui::Button("Drop", ImVec2(bw, 36)) && state->activeLayer > 0) {
-        d_LAction lact = {};
-        lact.ActID = laDrop;
-        lact.layer = (int16_t)state->activeLayer;
-        CommitLayerOp(state, &lact);
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Seamless", ImVec2(bw, 36)) && state->activeLayer > 0) {
-        LayerStack_MergeDownSeamless(state->activeLayer);
-        if (state->activeLayer >= LayerStack_Count())
-            state->activeLayer = LayerStack_Count() - 1;
-        layersDirty = true;
+        sLayerProps* lp = LayerStack_GetProps(state->activeLayer);
+        if (lp->seamless) {
+            LayerStack_MergeDownSeamless(state->activeLayer);
+            if (state->activeLayer >= LayerStack_Count())
+                state->activeLayer = LayerStack_Count() - 1;
+            layersDirty = true;
+        } else {
+            d_LAction lact = {};
+            lact.ActID = laDrop;
+            lact.layer = (int16_t)state->activeLayer;
+            CommitLayerOp(state, &lact);
+        }
     }
     ImGui::SameLine();
     if (ImGui::Button("Del", ImVec2(bw, 36)) && LayerStack_Count() > 1) {
@@ -101,19 +102,27 @@ void LayerPanel_Draw(AppState* state) {
     ImGui::Spacing();
 
     {
+        sLayerProps* lp = LayerStack_GetProps(state->activeLayer);
+        if (ImGui::Checkbox("Seamless in Canvas", &lp->seamless))
+            layersDirty = true;
+    }
+
+    ImGui::Spacing();
+
+    {
         static const char* blendNames[] = {
-            "N-Gamma","N-Linear","Screen","Color Dodge",
+            "N-OKLab","N-Gamma","N-Linear","Screen","Color Dodge",
             "Lighten","Darken","Burn","Multiply","Overlay","Color"
         };
         int blend = LayerStack_GetProps(state->activeLayer)->blendmode;
-        if (blend < 0 || blend >= 10) blend = 0;
+        if (blend < 0 || blend >= 11) blend = 0;
         if (g_blendIconLoaded)
             ImGui::Image((ImTextureID)(intptr_t)g_blendModeIcon.id, ImVec2(24, 24));
         else
             ImGui::Dummy(ImVec2(24, 24));
         ImGui::SameLine();
         ImGui::SetNextItemWidth(-1);
-        if (ImGui::Combo("##blend", &blend, blendNames, 10, 10)) {
+        if (ImGui::Combo("##blend", &blend, blendNames, 11, 11)) {
             LayerStack_GetProps(state->activeLayer)->blendmode = blend; layersDirty = true;
             if (networkBroker.IsConnected()) {
                 d_LAction lact = {};

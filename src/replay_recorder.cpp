@@ -82,7 +82,7 @@ void ReplayRecorder::Play(AppState* state) {
             dseg.brushFrom.rad_out_px, dseg.brushFrom.spacing);
         fflush(stdout);
 
-        DrawOneSegment(dseg, rt);
+        DrawOneSegment(dseg, rt, g_activeBrushTex, g_seamlessPaint, 0);
     }
     printf("[REPLAY] Play done\n"); fflush(stdout);
 }
