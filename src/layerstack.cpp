@@ -1,4 +1,5 @@
 #include "layerstack.h"
+#include "RaylibUtils.h"
 #include "undo.h"
 #include "rlgl.h"
 #include <math.h>
@@ -47,7 +48,7 @@ RenderTexture2D Load16BitRT(int w, int h) {
 static bool LoadBlendShader(void) {
     const char* ad=GetApplicationDirectory(); char fs[512];
     snprintf(fs,sizeof(fs),"%sshaders/layer_blend.fs",ad);
-    LS.blendShader=LoadShader(0,fs);
+    LS.blendShader=LoadShaderWithIncludes(0,fs);
     if(LS.blendShader.id==0){ TraceLog(LOG_ERROR,"layer_blend.fs failed"); return false; }
     LS.locLayerTex=GetShaderLocation(LS.blendShader,"layerTex");
     LS.locLayerAlpha=GetShaderLocation(LS.blendShader,"layerAlpha");
@@ -445,7 +446,7 @@ static void EnsurePresentShader(void) {
     if(LS.presentInited) return;
     const char* ad=GetApplicationDirectory(); char fs[512];
     snprintf(fs,sizeof(fs),"%sshaders/present.fs",ad);
-    LS.presentShader=LoadShader(0,fs); LS.presentInited=LS.presentShader.id>0;
+    LS.presentShader=LoadShaderWithIncludes(0,fs); LS.presentInited=LS.presentShader.id>0;
     if(LS.presentInited) {
         LS.locPresentTex=GetShaderLocation(LS.presentShader,"presentTex");
         if(LS.locPresentTex>=0){ int u=0; SetShaderValue(LS.presentShader,LS.locPresentTex,&u,SHADER_UNIFORM_INT); }

@@ -1,4 +1,5 @@
 #include "repaint.h"
+#include "RaylibUtils.h"
 #include "rlgl.h"
 
 static Shader brushBlendShader = {0};
@@ -82,7 +83,7 @@ void BrushBlend_Init(void) {
 
     snprintf(vs, sizeof(vs), "%sshaders/brush_geo.vs", ad);
     snprintf(fs, sizeof(fs), "%sshaders/brush_geo.fs", ad);
-    brushGeoShader = LoadShader(vs, fs);
+    brushGeoShader = LoadShaderWithIncludes(vs, fs);
     locUAngle  = GetShaderLocation(brushGeoShader, "uAngle");
     locUSquish = GetShaderLocation(brushGeoShader, "uSquish");
     locUSize   = GetShaderLocation(brushGeoShader, "uSize");
@@ -92,7 +93,7 @@ void BrushBlend_Init(void) {
 
     snprintf(vs, sizeof(vs), "%sshaders/brush_blend.vs", ad);
     snprintf(fs, sizeof(fs), "%sshaders/brush_blend.fs", ad);
-    brushBlendShader = LoadShader(vs, fs);
+    brushBlendShader = LoadShaderWithIncludes(vs, fs);
     locCanvasSize     = GetShaderLocation(brushBlendShader, "canvasSize");
     locOpacity        = GetShaderLocation(brushBlendShader, "opacity");
     locRadIn          = GetShaderLocation(brushBlendShader, "radIn");
