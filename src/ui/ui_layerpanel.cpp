@@ -62,7 +62,7 @@ void LayerPanel_Draw(AppState* state) {
         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
 
     float aw = ImGui::GetContentRegionAvail().x;
-    float bw = (aw - 9.0f) / 4.0f;
+    float bw = (aw - 12.0f) / 5.0f;
     if (ImGui::Button("+Add", ImVec2(bw, 36))) {
         d_LAction lact = {};
         lact.ActID = laAdd;
@@ -75,6 +75,10 @@ void LayerPanel_Draw(AppState* state) {
         lact.ActID = laDup;
         lact.layer = (int16_t)state->activeLayer;
         CommitLayerOp(state, &lact);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Inst", ImVec2(bw, 36)) && LayerStack_Count() < 64 && state->activeLayer >= 0) {
+        LayerStack_DuplicateAsInstance(state->activeLayer);
     }
     ImGui::SameLine();
     if (ImGui::Button("Drop", ImVec2(bw, 36)) && state->activeLayer > 0) {

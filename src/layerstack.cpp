@@ -61,8 +61,18 @@ static bool LoadBlendShader(void) {
 
 // ── Helper: unload a single slot's GPU/CPU resources (no array shift) ──
 static void UnloadLayerSlotResources(int idx) {
-    if(LS.rt[idx].id>0)UnloadRenderTexture(LS.rt[idx]);
-    if(LS.tex[idx].id>0)UnloadTexture(LS.tex[idx]);
+    // Check if any other layer shares this RT — skip unloading if so
+    bool shared = false;
+    if(LS.rt[idx].id>0) {
+        for(int j=0;j<LS.count;j++) {
+            if(j!=idx && LS.rt[j].id==LS.rt[idx].id) { shared=true; break; }
+        }
+    }
+    if(!shared) {
+        if(LS.rt[idx].id>0) UnloadRenderTexture(LS.rt[idx]);
+        if(LS.tex[idx].id>0 && LS.tex[idx].id!=LS.rt[idx].texture.id)
+            UnloadTexture(LS.tex[idx]);
+    }
     UnloadImage(LS.img[idx]);
 }
 
@@ -206,6 +216,22 @@ void LayerStack_DuplicateLayer(int idx) {
     LS.rt[di]=Load16BitRT(lw,lh);
     CopyRT(LS.rt[di],LS.rt[idx],lw,lh);
     LS.tex[di]=LoadTextureFromImage(LS.img[di]);
+    LS.count++; LS.dirty=true;
+}
+
+void LayerStack_DuplicateAsInstance(int idx) {
+    if(idx<0||idx>=LS.count) return;
+    int n=LS.count; ReallocArrays(n+1);
+    ShiftLayersUp(n,idx+1);
+    int di=idx+1;
+    LS.img[di]=ImageCopy(LS.img[idx]);
+    LS.prop[di]=LS.prop[idx];
+    LS.prop[di].instanced=true;
+    snprintf(LS.prop[di].layerName, sizeof(LS.prop[di].layerName),
+             "%s(INST)", LS.prop[idx].layerName);
+    // Share RT and tex with the original
+    LS.rt[di]=LS.rt[idx];
+    LS.tex[di]=LS.tex[idx];
     LS.count++; LS.dirty=true;
 }
 
