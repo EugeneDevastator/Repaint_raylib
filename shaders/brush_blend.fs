@@ -189,6 +189,10 @@ void main() {
     // Canvas read: floor matches blit's floor(x0/y0) — consistent alignment
     int cpx = int(floor(outCanvasPx.x));
     int cpy = int(floor(outCanvasPx.y));
+    if (uSeamless) {
+        cpx = int(mod(float(cpx), canvasSize.x));
+        cpy = int(mod(float(cpy), canvasSize.y));
+    }
     cpx = clamp(cpx, 0, int(canvasSize.x) - 1);
     cpy = clamp(cpy, 0, int(canvasSize.y) - 1);
     cpy = int(canvasSize.y) - 1 - cpy;
