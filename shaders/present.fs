@@ -17,7 +17,7 @@ float hash21(vec2 p) {
 }
 
 void main() {
-    vec4 col = gammaBilinear(presentTex, fragTexCoord * texSize, texSize);
+    vec4 col = sampleBilinear(presentTex, fragTexCoord * texSize, texSize, 0, false);
 
     // Spatial dither — breaks up banding (screen only)
     float off = 0.0;

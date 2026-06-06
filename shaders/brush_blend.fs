@@ -117,72 +117,26 @@ void main() {
 
 float cloneOpacity = smudgeStrength;
     if (cloneOpacity > 0.000001) {
-
-        // Smudge source in pixel space with manual bilinear sampling
         vec2 srcPx = outCanvasPx - smudgeOffsetUV;
         if (uSeamless)
             srcPx = mod(srcPx, canvasSize);
         else
             srcPx = clamp(srcPx, vec2(0.0), canvasSize - vec2(1.0));
 
-        // GL texel Y = H-1-canvasY
-        vec2 fpx;
-        fpx.x = srcPx.x -0.5;
-        fpx.y = canvasSize.y -0.5 - srcPx.y;
-        vec2 ipx = floor(fpx);
-        vec2 f = fract(fpx);
-        ivec2 c00, c10, c01, c11;
-        if (uSeamless) {
-            ivec2 sz = ivec2(canvasSize);
-            c00 = ivec2(mod(ipx,                  vec2(sz)));
-            c10 = ivec2(mod(ipx + vec2(1,0),      vec2(sz)));
-            c01 = ivec2(mod(ipx + vec2(0,1),      vec2(sz)));
-            c11 = ivec2(mod(ipx + vec2(1,1),      vec2(sz)));
-        } else {
-            ivec2 maxCoord = ivec2(canvasSize - vec2(1.0));
-            c00 = clamp(ivec2(ipx),              ivec2(0), maxCoord);
-            c10 = clamp(ivec2(ipx) + ivec2(1,0), ivec2(0), maxCoord);
-            c01 = clamp(ivec2(ipx) + ivec2(0,1), ivec2(0), maxCoord);
-            c11 = clamp(ivec2(ipx) + ivec2(1,1), ivec2(0), maxCoord);
-        }
+        vec4 smudge = sampleBilinear(dstTex, vec2(srcPx.x, canvasSize.y - srcPx.y), canvasSize, bmidx, uSeamless);
 
-        vec4 tl = texelFetch(dstTex, c00, 0);
-        vec4 tr = texelFetch(dstTex, c10, 0);
-        vec4 bl = texelFetch(dstTex, c01, 0);
-        vec4 br = texelFetch(dstTex, c11, 0);
-
-        // Blend-mode-aware bilinear interpolation
-        vec3 smudgeRGB; float smudgeA;
-        if (bmidx == 0) {
-            vec3 tl_lin = tl.rgb*tl.rgb; vec3 tr_lin = tr.rgb*tr.rgb;
-            vec3 bl_lin = bl.rgb*bl.rgb; vec3 br_lin = br.rgb*br.rgb;
-            vec3 mixed = mix(mix(tl_lin, tr_lin, f.x), mix(bl_lin, br_lin, f.x), f.y);
-            smudgeRGB = sqrt(mixed);
-            smudgeA    = mix(mix(tl.a, tr.a, f.x), mix(bl.a, br.a, f.x), f.y);
-        } else if (bmidx == 2) {
-            vec3 ll = rgbToOklab(tl.rgb); vec3 lr = rgbToOklab(tr.rgb);
-            vec3 bl2 = rgbToOklab(bl.rgb); vec3 br2 = rgbToOklab(br.rgb);
-            vec3 mixed = mix(mix(ll, lr, f.x), mix(bl2, br2, f.x), f.y);
-            smudgeRGB = oklabToRgb(mixed);
-            smudgeA    = mix(mix(tl.a, tr.a, f.x), mix(bl.a, br.a, f.x), f.y);
-        } else {
-            vec4 tl_p = vec4(tl.rgb*tl.a, tl.a); vec4 tr_p = vec4(tr.rgb*tr.a, tr.a);
-            vec4 bl_p = vec4(bl.rgb*bl.a, bl.a); vec4 br_p = vec4(br.rgb*br.a, br.a);
-            vec4 mixed = mix(mix(tl_p, tr_p, f.x), mix(bl_p, br_p, f.x), f.y);
-            smudgeRGB = mixed.a > 0.00001 ? mixed.rgb / mixed.a : mixed.rgb;
-            smudgeA   = mixed.a;
-        }
+        vec3 smudgeRGB = smudge.rgb;
+        float smudgeA  = smudge.a;
 
         if (smudgeA < 0.0000001) smudgeRGB = canvas.rgb;
-
         brushFinal = smudgeRGB;
 
         finalColor = applyBlend(bmidx, canvas, smudgeRGB, finalAlpha);
 
-       float blendedA = mix(canvas.a, smudgeA, finalAlpha);
-       if (preserveop > 0.5)
+        float blendedA = mix(canvas.a, smudgeA, finalAlpha);
+        if (preserveop > 0.5)
             finalColor.a = canvas.a;
-       else
+        else
             finalColor.a = blendedA;
 
         return;
