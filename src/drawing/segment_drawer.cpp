@@ -199,16 +199,14 @@ static float FindNextDabPosition(float lastRad, float lastPos,
     return lastPos + step;
 }
 
-// ── Catmull-Rom ────────────────────────────────────────────────────
-static Vector2 CatmullRom(Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, float t) {
+// ── Cubic Bezier ───────────────────────────────────────────────────
+static Vector2 CubicBezier(Vector2 p0, Vector2 c0, Vector2 c1, Vector2 p1, float t) {
+    float u = 1.0f - t;
+    float u2 = u * u, u3 = u2 * u;
     float t2 = t * t, t3 = t2 * t;
     return Vector2{
-        0.5f * ((2.0f * p1.x) + (-p0.x + p2.x) * t +
-                (2.0f * p0.x - 5.0f * p1.x + 4.0f * p2.x - p3.x) * t2 +
-                (-p0.x + 3.0f * p1.x - 3.0f * p2.x + p3.x) * t3),
-        0.5f * ((2.0f * p1.y) + (-p0.y + p2.y) * t +
-                (2.0f * p0.y - 5.0f * p1.y + 4.0f * p2.y - p3.y) * t2 +
-                (-p0.y + 3.0f * p1.y - 3.0f * p2.y + p3.y) * t3)
+        u3 * p0.x + 3.0f * u2 * t * c0.x + 3.0f * u * t2 * c1.x + t3 * p1.x,
+        u3 * p0.y + 3.0f * u2 * t * c0.y + 3.0f * u * t2 * c1.y + t3 * p1.y
     };
 }
 
@@ -271,7 +269,7 @@ int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad,
         totalLen = 0;
         for (int i = 0; i <= 64; i++) {
             float t = (float)i / 64.0f;
-            curvePts[i] = CatmullRom(seg->ctrl0, from, to, seg->ctrl3, t);
+            curvePts[i] = CubicBezier(from, seg->ctrl0, seg->ctrl3, to, t);
             if (i > 0)
                 totalLen += sqrtf((curvePts[i].x - curvePts[i-1].x) * (curvePts[i].x - curvePts[i-1].x) +
                                    (curvePts[i].y - curvePts[i-1].y) * (curvePts[i].y - curvePts[i-1].y));

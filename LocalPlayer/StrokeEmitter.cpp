@@ -45,7 +45,7 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
     m_segEpCount = 0;
 }
 
-void StrokeEmitter::emitSegment(Vector2 p0, Vector2 p2, Vector2 ctrl0, Vector2 ctrl3,
+void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 ctrl3,
                                const d_RealBrush& brush, float initAngle, int toolMode) {
     float segDx = p2.x - m_lastDabPos.x;
     float segDy = p2.y - m_lastDabPos.y;
@@ -83,11 +83,24 @@ void StrokeEmitter::emitSegment(Vector2 p0, Vector2 p2, Vector2 ctrl0, Vector2 c
     CollapsedBrush cbFrom = CollapseBrushParams(m_brushFrom, initAngle, toolMode);
     CollapsedBrush cbTo   = CollapseBrushParams(target, initAngle, toolMode);
 
+    // Rebase ctrl0 from spline point p1 to actual segment start m_lastDabPos,
+    // rescaling handle length to the actual segment length.
+    // (dabs don't land exactly on spline points, so segLen differs from the
+    //  spline segment length used at the call site to compute ctrl0's direction.)
+    float hLen = segLen * 0.33f;
+    Vector2 c0dir = {ctrl0.x - p1.x, ctrl0.y - p1.y};
+    float c0l = sqrtf(c0dir.x*c0dir.x + c0dir.y*c0dir.y);
+    Vector2 actualCtrl0 = m_lastDabPos;
+    if (c0l > 0.001f) {
+        actualCtrl0.x = m_lastDabPos.x + c0dir.x/c0l * hLen;
+        actualCtrl0.y = m_lastDabPos.y + c0dir.y/c0l * hLen;
+    }
+
     DrawSegment dseg;
     memset(&dseg, 0, sizeof(dseg));
     dseg.pos1      = m_lastDabPos;
     dseg.pos2      = p2;
-    dseg.ctrl0     = ctrl0;
+    dseg.ctrl0     = actualCtrl0;
     dseg.ctrl3     = ctrl3;
     dseg.brushFrom = cbFrom;
     dseg.brush     = cbTo;
@@ -133,7 +146,13 @@ void StrokeEmitter::handlePoint(const InputEntry& e) {
     m_prevVel = e.velocity;
 
     if (g_strokeSmoothingMode == SMOOTH_MODE_LINEAR) {
-        emitSegment(pos, pos, m_lastDabPos, pos, m_brushFrom, m_initAngle, m_toolMode);
+        float lineLen = Dist2D(m_lastDabPos, pos);
+        float hLen = lineLen * 0.33f;
+        Vector2 dir = {pos.x - m_lastDabPos.x, pos.y - m_lastDabPos.y};
+        if (lineLen > 0.001f) { dir.x /= lineLen; dir.y /= lineLen; }
+        Vector2 c0 = {m_lastDabPos.x + dir.x * hLen, m_lastDabPos.y + dir.y * hLen};
+        Vector2 c3 = {pos.x - dir.x * hLen, pos.y - dir.y * hLen};
+        emitSegment(m_lastDabPos, pos, c0, c3, m_brushFrom, m_initAngle, m_toolMode);
         return;
     }
 
@@ -170,7 +189,17 @@ void StrokeEmitter::handlePoint(const InputEntry& e) {
         }
         float segLen = Dist2D(p1, p2);
         if (segLen < 0.5f) { m_processedCount = seg + 1; continue; }
-        emitSegment(p0, p2, p0, p3, m_brushFrom, m_initAngle, m_toolMode);
+        {
+            float hLen = segLen * 0.33f;
+            Vector2 t1 = {p2.x - p0.x, p2.y - p0.y};
+            float t1l = sqrtf(t1.x*t1.x + t1.y*t1.y);
+            Vector2 t2 = {p3.x - p1.x, p3.y - p1.y};
+            float t2l = sqrtf(t2.x*t2.x + t2.y*t2.y);
+            Vector2 c0 = p1, c3 = p2;
+            if (t1l > 0.001f) { c0.x = p1.x + t1.x/t1l * hLen; c0.y = p1.y + t1.y/t1l * hLen; }
+            if (t2l > 0.001f) { c3.x = p2.x - t2.x/t2l * hLen; c3.y = p2.y - t2.y/t2l * hLen; }
+            emitSegment(p1, p2, c0, c3, m_brushFrom, m_initAngle, m_toolMode);
+        }
         m_processedCount = seg + 1;
     }
 }
@@ -196,7 +225,17 @@ void StrokeEmitter::flushSmoothing(const d_RealBrush& brush, float initAngle, in
         }
         float segLen = Dist2D(p1, p2);
         if (segLen < 0.5f) continue;
-        emitSegment(p0, p2, p0, p3, brush, initAngle, toolMode);
+        {
+            float hLen = segLen * 0.33f;
+            Vector2 t1 = {p2.x - p0.x, p2.y - p0.y};
+            float t1l = sqrtf(t1.x*t1.x + t1.y*t1.y);
+            Vector2 t2 = {p3.x - p1.x, p3.y - p1.y};
+            float t2l = sqrtf(t2.x*t2.x + t2.y*t2.y);
+            Vector2 c0 = p1, c3 = p2;
+            if (t1l > 0.001f) { c0.x = p1.x + t1.x/t1l * hLen; c0.y = p1.y + t1.y/t1l * hLen; }
+            if (t2l > 0.001f) { c3.x = p2.x - t2.x/t2l * hLen; c3.y = p2.y - t2.y/t2l * hLen; }
+            emitSegment(p1, p2, c0, c3, brush, initAngle, toolMode);
+        }
     }
 }
 
