@@ -103,7 +103,7 @@ void LayerPanel_Draw(AppState* state) {
 
     {
         sLayerProps* lp = LayerStack_GetProps(state->activeLayer);
-        if (ImGui::Checkbox("Seamless Drop", &lp->seamless))
+        if (ImGui::Checkbox("Seamless in Canvas", &lp->seamless))
             layersDirty = true;
     }
 

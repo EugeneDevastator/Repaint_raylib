@@ -423,7 +423,20 @@ static RenderTexture2D* CompositeLayersInto(RenderTexture2D& a, RenderTexture2D&
             layerTex=LS.layerTransRT.texture;
         }
         sLayerProps*p=&LS.prop[i];
-        if(LS.shaderInited)
+        if(p->seamless && LS.shaderInited && LS.layerTransRT.id>0) {
+            int lw=p->layerW, lh=p->layerH;
+            SetTextureWrap(LS.rt[i].texture, TEXTURE_WRAP_REPEAT);
+            for(int dy=-1;dy<=1;dy++){
+                for(int dx=-1;dx<=1;dx++){
+                    float tileMat[6];
+                    memcpy(tileMat,p->mat,6*sizeof(float));
+                    tileMat[2]+=dx*(float)lw; tileMat[5]+=dy*(float)lh;
+                    BakeTransform(LS.layerTransRT,LS.rt[i].texture,tileMat,lw,lh,cw,ch);
+                    ApplyBlendShader(*dst,src->texture,LS.layerTransRT.texture,p->op,p->blendmode,p->threshold,p->feather,cw,ch);
+                    RenderTexture2D*tmp=src; src=dst; dst=tmp;
+                }
+            }
+        } else if(LS.shaderInited)
             ApplyBlendShader(*dst,src->texture,layerTex,p->op,p->blendmode,p->threshold,p->feather,cw,ch);
         else {
             BeginTextureMode(*dst); ClearBackground(BLANK);
@@ -504,22 +517,35 @@ static void _viewBlendLoop(RenderTexture2D dst, RenderTexture2D tmp,
         if(!LS.prop[i].visible||LS.rt[i].id==0) continue;
 
         // Compute combined transform: viewMat * layerMat
+        sLayerProps*p=&LS.prop[i];
         Texture2D layerTex=LS.rt[i].texture;
-        if(transRT.id>0){
+        float cmb[6];
+        bool hasXform = transRT.id>0;
+        if(hasXform){
             float ca=LS.prop[i].mat[0],cb=LS.prop[i].mat[1],ctx=LS.prop[i].mat[2];
             float cc=LS.prop[i].mat[3],cd=LS.prop[i].mat[4],cty=LS.prop[i].mat[5];
-            float cmb[6];
             if(viewMat){
                 cmb[0]=viewMat[0]*ca+viewMat[1]*cc; cmb[1]=viewMat[0]*cb+viewMat[1]*cd; cmb[2]=viewMat[0]*ctx+viewMat[1]*cty+viewMat[2];
                 cmb[3]=viewMat[3]*ca+viewMat[4]*cc; cmb[4]=viewMat[3]*cb+viewMat[4]*cd; cmb[5]=viewMat[3]*ctx+viewMat[4]*cty+viewMat[5];
             }else{
                 cmb[0]=ca; cmb[1]=cb; cmb[2]=ctx; cmb[3]=cc; cmb[4]=cd; cmb[5]=cty;
             }
-            BakeTransform(transRT,LS.rt[i].texture,cmb,LS.prop[i].layerW,LS.prop[i].layerH,w,h);
-            layerTex=transRT.texture;
+            if(!p->seamless) { BakeTransform(transRT,LS.rt[i].texture,cmb,LS.prop[i].layerW,LS.prop[i].layerH,w,h); layerTex=transRT.texture; }
         }
-        sLayerProps*p=&LS.prop[i];
-        if(LS.shaderInited)
+        if(p->seamless && LS.shaderInited && transRT.id>0) {
+            int lw=p->layerW, lh=p->layerH;
+            SetTextureWrap(LS.rt[i].texture, TEXTURE_WRAP_REPEAT);
+            for(int dy=-1;dy<=1;dy++){
+                for(int dx=-1;dx<=1;dx++){
+                    float tileCmb[6];
+                    memcpy(tileCmb,cmb,6*sizeof(float));
+                    tileCmb[2]+=dx*(float)lw; tileCmb[5]+=dy*(float)lh;
+                    BakeTransform(transRT,LS.rt[i].texture,tileCmb,lw,lh,w,h);
+                    ApplyBlendShader(*dstBuf,src->texture,transRT.texture,p->op,p->blendmode,p->threshold,p->feather,w,h);
+                    RenderTexture2D*t=src; src=dstBuf; dstBuf=t;
+                }
+            }
+        } else if(LS.shaderInited)
             ApplyBlendShader(*dstBuf,src->texture,layerTex,p->op,p->blendmode,p->threshold,p->feather,w,h);
         else{
             BeginTextureMode(*dstBuf); ClearBackground(BLANK);
