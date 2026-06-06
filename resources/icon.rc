@@ -1,3 +1,3 @@
 #include <windows.h>
 
-IDI_ICON1 ICON "resources/reicon.ico"
+IDI_ICON1 ICON "reicon.ico"

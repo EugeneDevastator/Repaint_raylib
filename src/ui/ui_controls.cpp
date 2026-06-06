@@ -46,7 +46,7 @@ void LoadPenIcons(void) {
         sprintf(path, "resources/%s.png", PenIconNames[i]);
         if (FileExists(path)) {
             Image img = LoadImage(path);
-            ImageResize(&img, 24, 24);
+            ImageResize(&img, 29, 29);
             penModeTex[i] = LoadTextureFromImage(img);
             UnloadImage(img);
         } else {
@@ -92,7 +92,7 @@ void BParam_SetIcon(BParam* bp, const char* filename) {
     sprintf(path, "resources/%s.png", filename);
     if (FileExists(path)) {
         Image img = LoadImage(path);
-        ImageResize(&img, 24, 24);
+        ImageResize(&img, 29, 29);
         bp->iconTex = LoadTextureFromImage(img);
         bp->iconLoaded = bp->iconTex.id > 0;
         UnloadImage(img);
