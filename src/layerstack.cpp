@@ -346,6 +346,12 @@ static Texture2D GetTransformedTop(int idx) {
 }
 
 // ── Merge down ────────────────────────────────────────────────────────
+static bool IsRTShared(int idx) {
+    if(!LS.rt[idx].id) return false;
+    for(int j=0;j<LS.count;j++) if(j!=idx && LS.rt[j].id==LS.rt[idx].id) return true;
+    return false;
+}
+
 static void MergeDownImpl(int idx, bool seamless) {
     if(!LS.shaderInited||idx<=0||idx>=LS.count||LS.rt[idx].id==0||LS.rt[idx-1].id==0) return;
     int cw=CW(),ch=CH(),bw=LS.prop[idx-1].layerW,bh=LS.prop[idx-1].layerH;
@@ -354,11 +360,17 @@ static void MergeDownImpl(int idx, bool seamless) {
 
     if(!seamless) {
         Texture2D topTex=GetTransformedTop(idx);
+        bool bottomShared = IsRTShared(idx-1);
         RenderTexture2D mergedRT=Load16BitRT(bw,bh);
         ApplyBlendShader(mergedRT,LS.rt[idx-1].texture,topTex,p->op,p->blendmode,p->threshold,p->feather,bw,bh);
-        RenderTexture2D oldRT=LS.rt[idx-1]; LS.rt[idx-1]=mergedRT;
-        RebuildLayerImageAndTex(idx-1,mergedRT);
-        UnloadRenderTexture(oldRT);
+        if(bottomShared) {
+            CopyRT(LS.rt[idx-1], mergedRT, bw, bh);
+            UnloadRenderTexture(mergedRT);
+        } else {
+            RenderTexture2D oldRT=LS.rt[idx-1]; LS.rt[idx-1]=mergedRT;
+            RebuildLayerImageAndTex(idx-1,mergedRT);
+            UnloadRenderTexture(oldRT);
+        }
         RemoveLayerSlot(idx);
         return;
     }
@@ -391,9 +403,15 @@ static void MergeDownImpl(int idx, bool seamless) {
     // src holds the final blended result
     RenderTexture2D mergedRT=*src;
     UnloadRenderTexture(*dst);
-    RenderTexture2D oldRT=LS.rt[idx-1]; LS.rt[idx-1]=mergedRT;
-    RebuildLayerImageAndTex(idx-1,mergedRT);
-    UnloadRenderTexture(oldRT);
+    bool bottomShared = IsRTShared(idx-1);
+    if(bottomShared) {
+        CopyRT(LS.rt[idx-1], mergedRT, bw, bh);
+        UnloadRenderTexture(mergedRT);
+    } else {
+        RenderTexture2D oldRT=LS.rt[idx-1]; LS.rt[idx-1]=mergedRT;
+        RebuildLayerImageAndTex(idx-1,mergedRT);
+        UnloadRenderTexture(oldRT);
+    }
     RemoveLayerSlot(idx);
     if (g_undoManager) g_undoManager->InvalidateAll();
 }
