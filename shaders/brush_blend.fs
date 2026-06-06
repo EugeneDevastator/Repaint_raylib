@@ -131,11 +131,20 @@ float cloneOpacity = smudgeStrength;
         fpx.y = canvasSize.y -0.5 - srcPx.y;
         vec2 ipx = floor(fpx);
         vec2 f = fract(fpx);
-        ivec2 maxCoord = ivec2(canvasSize - vec2(1.0));
-        ivec2 c00 = clamp(ivec2(ipx),              ivec2(0), maxCoord);
-        ivec2 c10 = clamp(ivec2(ipx) + ivec2(1,0), ivec2(0), maxCoord);
-        ivec2 c01 = clamp(ivec2(ipx) + ivec2(0,1), ivec2(0), maxCoord);
-        ivec2 c11 = clamp(ivec2(ipx) + ivec2(1,1), ivec2(0), maxCoord);
+        ivec2 c00, c10, c01, c11;
+        if (uSeamless) {
+            ivec2 sz = ivec2(canvasSize);
+            c00 = ivec2(mod(ipx,                  vec2(sz)));
+            c10 = ivec2(mod(ipx + vec2(1,0),      vec2(sz)));
+            c01 = ivec2(mod(ipx + vec2(0,1),      vec2(sz)));
+            c11 = ivec2(mod(ipx + vec2(1,1),      vec2(sz)));
+        } else {
+            ivec2 maxCoord = ivec2(canvasSize - vec2(1.0));
+            c00 = clamp(ivec2(ipx),              ivec2(0), maxCoord);
+            c10 = clamp(ivec2(ipx) + ivec2(1,0), ivec2(0), maxCoord);
+            c01 = clamp(ivec2(ipx) + ivec2(0,1), ivec2(0), maxCoord);
+            c11 = clamp(ivec2(ipx) + ivec2(1,1), ivec2(0), maxCoord);
+        }
 
         vec4 tl = texelFetch(dstTex, c00, 0);
         vec4 tr = texelFetch(dstTex, c10, 0);
