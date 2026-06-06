@@ -87,6 +87,10 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             for (int dx = -2; dx <= 2; dx++) {
                 int px = cx + dx, py = cy + dy;
                 Color c = {0, 0, 0, 0};
+                if (g_seamlessPaint) {
+                    px = ((px % state->doc.width) + state->doc.width) % state->doc.width;
+                    py = ((py % state->doc.height) + state->doc.height) % state->doc.height;
+                }
                 if (px >= 0 && px < state->doc.width && py >= 0 && py < state->doc.height) {
                     for (int li = 0; li < LayerStack_Count(); li++) {
                         if (!LayerStack_GetProps(li)->visible) continue;
