@@ -62,7 +62,7 @@ void LayerPanel_Draw(AppState* state) {
         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
 
     float aw = ImGui::GetContentRegionAvail().x;
-    float bw = (aw - 12.0f) / 5.0f;
+    float bw = (aw - 9.0f) / 4.0f;
     if (ImGui::Button("+Add", ImVec2(bw, 36))) {
         d_LAction lact = {};
         lact.ActID = laAdd;
@@ -78,17 +78,18 @@ void LayerPanel_Draw(AppState* state) {
     }
     ImGui::SameLine();
     if (ImGui::Button("Drop", ImVec2(bw, 36)) && state->activeLayer > 0) {
-        d_LAction lact = {};
-        lact.ActID = laDrop;
-        lact.layer = (int16_t)state->activeLayer;
-        CommitLayerOp(state, &lact);
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Seamless", ImVec2(bw, 36)) && state->activeLayer > 0) {
-        LayerStack_MergeDownSeamless(state->activeLayer);
-        if (state->activeLayer >= LayerStack_Count())
-            state->activeLayer = LayerStack_Count() - 1;
-        layersDirty = true;
+        sLayerProps* lp = LayerStack_GetProps(state->activeLayer);
+        if (lp->seamless) {
+            LayerStack_MergeDownSeamless(state->activeLayer);
+            if (state->activeLayer >= LayerStack_Count())
+                state->activeLayer = LayerStack_Count() - 1;
+            layersDirty = true;
+        } else {
+            d_LAction lact = {};
+            lact.ActID = laDrop;
+            lact.layer = (int16_t)state->activeLayer;
+            CommitLayerOp(state, &lact);
+        }
     }
     ImGui::SameLine();
     if (ImGui::Button("Del", ImVec2(bw, 36)) && LayerStack_Count() > 1) {
@@ -96,6 +97,14 @@ void LayerPanel_Draw(AppState* state) {
         lact.ActID = laDel;
         lact.layer = (int16_t)state->activeLayer;
         CommitLayerOp(state, &lact);
+    }
+
+    ImGui::Spacing();
+
+    {
+        sLayerProps* lp = LayerStack_GetProps(state->activeLayer);
+        if (ImGui::Checkbox("Seamless Drop", &lp->seamless))
+            layersDirty = true;
     }
 
     ImGui::Spacing();

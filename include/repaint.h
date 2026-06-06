@@ -70,6 +70,7 @@ typedef struct {
     char layerName[256];
     float mat[6];        // 2×3 affine matrix (row-major: [a,b,tx, c,d,ty])
     int layerW, layerH;  // native resolution of this layer
+    bool seamless;       // use seamless merge (3x3 tile wrap) on drop
 } sLayerProps;
 
 #define MAX_BRUSH_TEX 32
