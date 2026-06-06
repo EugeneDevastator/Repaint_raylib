@@ -148,9 +148,7 @@ void ViewportHUD_Draw(AppState* state) {
         bool paramsChanged = (currentHash != g_lastPreviewHash);
 
         if (paramsChanged || g_lastPreviewHash == 0 || (g_frameCounter % g_previewUpdateInterval) == 0) {
-            // Scale brush radius by zoom so preview matches on-screen size
             d_RealBrush zoomBrush = state->currentBrush.Realb;
-            zoomBrush.rad_out *= state->camera.zoom;
 
             Texture2D bt = {0};
             if (state->activeBrushTex >= 0 && state->activeBrushTex < state->brushTexCount)
@@ -163,7 +161,7 @@ void ViewportHUD_Draw(AppState* state) {
                 Camera2D prevCam = {};
                 prevCam.target = state->camera.target;
                 prevCam.offset = Vector2{PREVIEW_SZ * 0.5f, PREVIEW_SZ * 0.5f};
-                prevCam.zoom   = state->camera.zoom;
+                prevCam.zoom   = 1.0f;
                 BeginMode2D(prevCam);
                 rlSetBlendMode(RL_BLEND_CUSTOM);
                 rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
@@ -180,14 +178,14 @@ void ViewportHUD_Draw(AppState* state) {
             g_lastPreviewHash = currentHash;
         }
 
-        // Display the preview quad
-        float hh = PREVIEW_SZ * 0.5f;
+        // Display the preview quad — scale by zoom so brush size matches viewport canvas
+        float previewScreenSz = (float)PREVIEW_SZ * state->camera.zoom;
+        float hh = previewScreenSz * 0.5f;
         float px = vpBounds.x + vpBounds.width * 0.5f - hh;
         float py = vpBounds.y + vpBounds.height * 0.5f - hh;
-        // Draw preview over the canvas — transparent bg lets canvas show through
         DrawTexturePro(g_previewRT.texture,
             Rectangle{0, 0, (float)PREVIEW_SZ, (float)-PREVIEW_SZ},
-            Rectangle{px, py, (float)PREVIEW_SZ, (float)PREVIEW_SZ},
+            Rectangle{px, py, previewScreenSz, previewScreenSz},
             Vector2{0, 0}, 0.0f, WHITE);
     }
 
