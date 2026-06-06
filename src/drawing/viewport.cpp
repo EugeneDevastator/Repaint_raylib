@@ -225,6 +225,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     be.targetType = 1;
                     be.targetId = state->activeBrushTex;
                     be.layerScale = 1.0f;
+                    be.timestamp = GetTime();
                     g_inputQueue.AddEntry(be);
 
                     vp->wasMouseDown = true;
@@ -274,6 +275,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     be.targetType = 0;
                     be.targetId = active;
                     be.layerScale = layerScale;
+                    be.timestamp = GetTime();
                     g_inputQueue.AddEntry(be);
 
                     state->currentBrush.Realb.rad_out = origRad;

@@ -13,7 +13,6 @@ StrokeEmitter::StrokeEmitter(SegmentRenderer* renderer)
     m_processedCount = 0;
     m_accumDist = 0;
     m_initDirSet = false;
-    m_prevVel = 0;
     m_prevSegLen = 0;
 }
 
@@ -34,7 +33,7 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
     m_prevSegPos = start;
     m_prevSegDir = Vector2{0, 0};
     m_prevSegLen = 0;
-    m_prevVel = 0;
+    g_modPars.Pars[csVel] = 0.0f;
     m_initDirSet = false;
     m_splineCount = 1;
     m_processedCount = 0;
@@ -52,7 +51,6 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
     float segLen = sqrtf(segDx*segDx + segDy*segDy);
     float dirAng = AtanXY(segDx, segDy);
 
-    g_modPars.Pars[csVel] = 0;
     g_modPars.Pars[csDir] = RngConv(dirAng, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
     if (!m_initDirSet && segLen > 0.5f) { m_initDir = dirAng; m_initDirSet = true; }
     g_modPars.Pars[csIdir] = RngConv(m_initDir, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
@@ -143,7 +141,9 @@ void StrokeEmitter::handlePoint(const InputEntry& e) {
     g_modPars.Pars[csVtilt]    = e.tiltY;
     g_modPars.Pars[csXtilt]    = e.tiltX;
     g_modPars.Pars[csYtilt]    = e.tiltY;
-    m_prevVel = e.velocity;
+
+    // Velocity from input filter (already smoothed in Feed())
+    g_modPars.Pars[csVel] = e.velocity;
 
     if (g_strokeSmoothingMode == SMOOTH_MODE_LINEAR) {
         float lineLen = Dist2D(m_lastDabPos, pos);

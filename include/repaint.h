@@ -224,7 +224,6 @@ float GetModVal(BParam* bp);
 float GetModValFor(BParam* bp, float cpar);
 
 extern float colorHue, colorSat, colorLit;
-extern float g_velocity;
 extern int quickPanelMouseMode;
 extern bool g_colorPicking;
 extern Color g_colorPickGrid[25];

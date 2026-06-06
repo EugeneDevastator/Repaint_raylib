@@ -136,21 +136,6 @@ static char g_currentFilePath[1024] = "";
 static Font g_dialogFont = {0};
 
 void UpdateUI(AppState* state) {
-    // ── Track mouse velocity (canvas-space) ──
-    {
-        static Vector2 lastVelPos = {0, 0};
-        Vector2 mp = GetMousePosition();
-        float dz = state->camera.zoom;
-        float dxv = (mp.x - lastVelPos.x) / dz;
-        float dyv = (mp.y - lastVelPos.y) / dz;
-        lastVelPos = mp;
-        float distV = sqrtf(dxv * dxv + dyv * dyv);
-        float rawVel = fminf(distV / 20.0f, 1.0f);
-        g_velocity = g_velocity * 0.7f + rawVel * 0.3f;
-    }
-    // Refresh g_modPars for non-tablet modulators each frame
-    g_modPars.Pars[csVel] = g_velocity;
-
     Vector2 mousePos = GetMousePosition();
 
     if (IsKeyPressed(KEY_TAB))
