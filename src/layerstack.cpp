@@ -61,8 +61,18 @@ static bool LoadBlendShader(void) {
 
 // ── Helper: unload a single slot's GPU/CPU resources (no array shift) ──
 static void UnloadLayerSlotResources(int idx) {
-    if(LS.rt[idx].id>0)UnloadRenderTexture(LS.rt[idx]);
-    if(LS.tex[idx].id>0)UnloadTexture(LS.tex[idx]);
+    // Check if any other layer shares this RT — skip unloading if so
+    bool shared = false;
+    if(LS.rt[idx].id>0) {
+        for(int j=0;j<LS.count;j++) {
+            if(j!=idx && LS.rt[j].id==LS.rt[idx].id) { shared=true; break; }
+        }
+    }
+    if(!shared) {
+        if(LS.rt[idx].id>0) UnloadRenderTexture(LS.rt[idx]);
+        if(LS.tex[idx].id>0 && LS.tex[idx].id!=LS.rt[idx].texture.id)
+            UnloadTexture(LS.tex[idx]);
+    }
     UnloadImage(LS.img[idx]);
 }
 
@@ -209,6 +219,22 @@ void LayerStack_DuplicateLayer(int idx) {
     LS.count++; LS.dirty=true;
 }
 
+void LayerStack_DuplicateAsInstance(int idx) {
+    if(idx<0||idx>=LS.count) return;
+    int n=LS.count; ReallocArrays(n+1);
+    ShiftLayersUp(n,idx+1);
+    int di=idx+1;
+    LS.img[di]=ImageCopy(LS.img[idx]);
+    LS.prop[di]=LS.prop[idx];
+    LS.prop[di].instanced=true;
+    snprintf(LS.prop[di].layerName, sizeof(LS.prop[di].layerName),
+             "%s(INST)", LS.prop[idx].layerName);
+    // Share RT and tex with the original
+    LS.rt[di]=LS.rt[idx];
+    LS.tex[di]=LS.tex[idx];
+    LS.count++; LS.dirty=true;
+}
+
 void LayerStack_MoveLayer(int from, int to) {
     if(from<0||from>=LS.count||to<0||to>=LS.count||from==to) return;
     RenderTexture2D mvRT=LS.rt[from]; Texture2D mvTex=LS.tex[from];
@@ -320,6 +346,12 @@ static Texture2D GetTransformedTop(int idx) {
 }
 
 // ── Merge down ────────────────────────────────────────────────────────
+static bool IsRTShared(int idx) {
+    if(!LS.rt[idx].id) return false;
+    for(int j=0;j<LS.count;j++) if(j!=idx && LS.rt[j].id==LS.rt[idx].id) return true;
+    return false;
+}
+
 static void MergeDownImpl(int idx, bool seamless) {
     if(!LS.shaderInited||idx<=0||idx>=LS.count||LS.rt[idx].id==0||LS.rt[idx-1].id==0) return;
     int cw=CW(),ch=CH(),bw=LS.prop[idx-1].layerW,bh=LS.prop[idx-1].layerH;
@@ -328,11 +360,17 @@ static void MergeDownImpl(int idx, bool seamless) {
 
     if(!seamless) {
         Texture2D topTex=GetTransformedTop(idx);
+        bool bottomShared = IsRTShared(idx-1);
         RenderTexture2D mergedRT=Load16BitRT(bw,bh);
         ApplyBlendShader(mergedRT,LS.rt[idx-1].texture,topTex,p->op,p->blendmode,p->threshold,p->feather,bw,bh);
-        RenderTexture2D oldRT=LS.rt[idx-1]; LS.rt[idx-1]=mergedRT;
-        RebuildLayerImageAndTex(idx-1,mergedRT);
-        UnloadRenderTexture(oldRT);
+        if(bottomShared) {
+            CopyRT(LS.rt[idx-1], mergedRT, bw, bh);
+            UnloadRenderTexture(mergedRT);
+        } else {
+            RenderTexture2D oldRT=LS.rt[idx-1]; LS.rt[idx-1]=mergedRT;
+            RebuildLayerImageAndTex(idx-1,mergedRT);
+            UnloadRenderTexture(oldRT);
+        }
         RemoveLayerSlot(idx);
         return;
     }
@@ -365,9 +403,15 @@ static void MergeDownImpl(int idx, bool seamless) {
     // src holds the final blended result
     RenderTexture2D mergedRT=*src;
     UnloadRenderTexture(*dst);
-    RenderTexture2D oldRT=LS.rt[idx-1]; LS.rt[idx-1]=mergedRT;
-    RebuildLayerImageAndTex(idx-1,mergedRT);
-    UnloadRenderTexture(oldRT);
+    bool bottomShared = IsRTShared(idx-1);
+    if(bottomShared) {
+        CopyRT(LS.rt[idx-1], mergedRT, bw, bh);
+        UnloadRenderTexture(mergedRT);
+    } else {
+        RenderTexture2D oldRT=LS.rt[idx-1]; LS.rt[idx-1]=mergedRT;
+        RebuildLayerImageAndTex(idx-1,mergedRT);
+        UnloadRenderTexture(oldRT);
+    }
     RemoveLayerSlot(idx);
     if (g_undoManager) g_undoManager->InvalidateAll();
 }
