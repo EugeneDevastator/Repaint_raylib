@@ -69,7 +69,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
     if (wheel != 0) {
         Vector2 worldBefore = GetScreenToWorld2D(mousePos, state->camera);
         state->camera.zoom += wheel * 0.1f;
-        state->camera.zoom = fmaxf(0.1f, fminf(5.0f, state->camera.zoom));
+        state->camera.zoom = fmaxf(0.1f, fminf(128.0f, state->camera.zoom));
         Vector2 worldAfter = GetScreenToWorld2D(mousePos, state->camera);
         state->camera.target.x += worldBefore.x - worldAfter.x;
         state->camera.target.y += worldBefore.y - worldAfter.y;

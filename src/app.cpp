@@ -265,26 +265,46 @@ static void OnOpenResult(DialogResult r) {
                 g_recorder->Load(rpPath);
             }
         } else {
-            // Failed to load as repaint — try loading as replay, then make default canvas
-            int w = 800, h = 600;
-            g_state->doc = Doc_New(w, h);
-            g_state->activeLayer = 0;
-            g_state->camera.target = Vector2{(float)w * 0.5f, (float)h * 0.5f};
-            g_state->camera.zoom = 1.0f;
-            LayerStack_SetRenderWindow(w, h);
-            int idx = LayerStack_Add(w, h);
-            Image* img = LayerStack_GetImage(idx);
-            UnloadImage(*img);
-            *img = GenImageColor(w, h, WHITE);
-            ImageFormat(img, PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
-            LayerStack_SyncRTFromImage(idx);
-            layersDirty = true;
-            if (g_recorder) {
-                g_recorder->Reset(w, h);
-                // Try loading as a replay file (user may have opened .re.play directly)
-                g_recorder->Load(r.output);
-                if (!g_recorder->m_segs.empty()) {
-                    // Also try the .re.play appended version
+            // Try as a standard image (PNG, JPEG, BMP, GIF, etc.)
+            Image img = LoadImage(r.output);
+            if (img.data != NULL) {
+                int w = img.width, h = img.height;
+                if (img.format != PIXELFORMAT_UNCOMPRESSED_R16G16B16A16) {
+                    ImageFormat(&img, PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
+                } else {
+                    // Already 16-bit; ensure proper byte order / no extra work
+                }
+                g_state->doc = Doc_New(w, h);
+                g_state->activeLayer = 0;
+                g_state->camera.target = Vector2{(float)w * 0.5f, (float)h * 0.5f};
+                g_state->camera.zoom = 1.0f;
+                LayerStack_SetRenderWindow(w, h);
+                int idx = LayerStack_Add(w, h);
+                Image* layerImg = LayerStack_GetImage(idx);
+                UnloadImage(*layerImg);
+                *layerImg = img;  // transfer ownership
+                LayerStack_SyncRTFromImage(idx);
+                layersDirty = true;
+                // Don't set g_currentFilePath — imported images should be
+                // saved as .re.png via Save As before they can be reloaded.
+            } else {
+                // Failed to load as repaint or image — try replay, then make default canvas
+                int w = 800, h = 600;
+                g_state->doc = Doc_New(w, h);
+                g_state->activeLayer = 0;
+                g_state->camera.target = Vector2{(float)w * 0.5f, (float)h * 0.5f};
+                g_state->camera.zoom = 1.0f;
+                LayerStack_SetRenderWindow(w, h);
+                int idx = LayerStack_Add(w, h);
+                Image* layerImg = LayerStack_GetImage(idx);
+                UnloadImage(*layerImg);
+                *layerImg = GenImageColor(w, h, WHITE);
+                ImageFormat(layerImg, PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
+                LayerStack_SyncRTFromImage(idx);
+                layersDirty = true;
+                if (g_recorder) {
+                    g_recorder->Reset(w, h);
+                    g_recorder->Load(r.output);
                 }
             }
         }
@@ -341,7 +361,7 @@ void App_FileNew(void) {
 }
 
 void App_FileOpen(void) {
-    DialogOpen_Init(&g_fileDlg, "Open", ".re.png", OnOpenResult);
+    DialogOpen_Init(&g_fileDlg, "Open", ".re.png/.png", OnOpenResult);
 }
 
 void App_FileSave(void) {
