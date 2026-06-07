@@ -24,7 +24,7 @@ typedef struct {
 typedef void (*DialogCallback)(DialogResult result);
 
 typedef struct {
-    int type;  // 0=none, 1=open, 2=saveas, 3=yesno — public read-only
+    int type;  // 0=none, 1=open, 2=saveas, 3=yesno, 4=buttonchoice — public read-only
     DialogCallback _callback;
     char _currentDir[DIALOG_PATH_MAX];
     char _filter[64];
@@ -62,6 +62,8 @@ typedef struct {
     bool _filterActive;
 	int   repeatKey;
 	float repeatTimer;
+    int _btnCount;
+    char _btnLabels[8][64];
 } DialogState;
 
 void DialogOpen_Init(DialogState* dlg, const char* title,
@@ -71,6 +73,8 @@ void DialogSaveAs_Init(DialogState* dlg, const char* title,
                        DialogCallback cb);
 void DialogYesNo_Init(DialogState* dlg, const char* message,
                       DialogCallback cb);
+void DialogButtonChoice_Init(DialogState* dlg, const char* title, const char* message,
+                              DialogCallback cb, const char* btn1, ...);
 void DialogSetFont(DialogState* dlg, Font font, int defaultSize);
 void Dialog_Draw(DialogState* dlg);
 void Dialog_MakeDir(const char* path);

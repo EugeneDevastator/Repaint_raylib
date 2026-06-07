@@ -15,6 +15,7 @@
 #include "layerstack.h"
 #include "undo.h"
 #include "replay_recorder.h"
+#include "user_content_receiver.h"
 #include "StrokeEmitter.h"
 #include "SegmentRenderer.h"
 #include "DabDrawer.h"
@@ -56,8 +57,8 @@ static void DrawNotification(void) {
     float tx = (sw - tw) * 0.5f;
     float ty = 16.0f;
     // Shadow (offset by 1px)
-    DrawTextEx(f, g_notif.text, (Vector2){tx + 1, ty + 1}, (float)sz, 2, BLACK);
-    DrawTextEx(f, g_notif.text, (Vector2){tx, ty}, (float)sz, 2, WHITE);
+    DrawTextEx(f, g_notif.text, Vector2{tx + 1, ty + 1}, (float)sz, 2, BLACK);
+    DrawTextEx(f, g_notif.text, Vector2{tx, ty}, (float)sz, 2, WHITE);
 }
 
 void SyncImGuiInput(void) {
@@ -108,14 +109,14 @@ static void DrawSplash(const char* msg) {
         UnloadImage(img);
     }
     BeginDrawing();
-    ClearBackground((Color){35, 35, 40, 255});
+    ClearBackground(Color{35, 35, 40, 255});
     if (g_splashTex.id > 0) {
         float scale = fminf(sw / (float)g_splashTex.width, sh / (float)g_splashTex.height) * 0.7f;
         float x = (sw - g_splashTex.width * scale) * 0.5f;
         float y = (sh - g_splashTex.height * scale) * 0.5f - 30;
         DrawTextureEx(g_splashTex, Vector2{x, y}, 0.0f, scale, WHITE);
     }
-    DrawText(msg, sw / 2 - MeasureText(msg, 20) / 2, sh / 2 + 80, 20, (Color){230, 230, 240, 255});
+    DrawText(msg, sw / 2 - MeasureText(msg, 20) / 2, sh / 2 + 80, 20, Color{230, 230, 240, 255});
     EndDrawing();
 }
 
@@ -451,15 +452,15 @@ void App_Init(AppState* state) {
     Changelog_Init();
     DrawSplash("Creating canvas...");
 
-    state->doc = Doc_New(800, 600);
+    state->doc = Doc_New(1024, 768);
     state->activeLayer = 0;
     LayerStack_Init();
-    LayerStack_SetRenderWindow(800, 600);
-    int idx = LayerStack_Add(800, 600);
+    LayerStack_SetRenderWindow(1024, 768);
+    int idx = LayerStack_Add(1024, 768);
     // First layer is the canvas background — fill with white
     Image* img = LayerStack_GetImage(idx);
     UnloadImage(*img);
-    *img = GenImageColor(800, 600, WHITE);
+    *img = GenImageColor(1024, 768, WHITE);
     ImageFormat(img, PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
     Texture2D tmp = LoadTextureFromImage(*img);
     RenderTexture2D rt = LayerStack_GetRT(idx);
@@ -563,12 +564,10 @@ void App_Init(AppState* state) {
 
     g_currentFilePath[0] = '\0';
 
+    UserContent_Init();
+
     /* Load default brush preset */
     Preset_ApplyDefault(state);
-
-    // Show new-canvas dialog on startup so user goes through same flow as File > New
-    g_newCanvasActive = true;
-    g_newCanvasConfirm = false;
 }
 
 /* ── App_Draw ──────────────────────────────────────────────────────────── */
@@ -596,6 +595,9 @@ void App_Draw(AppState* state) {
 
     BeginDrawing();
     ClearBackground(Color{220, 220, 220, 255});
+
+    /* Check dropped files */
+    UserContent_Update(state);
 
     /* If dialog active, draw it modelly — skip viewport/imgui entirely */
     if (g_fileDlg.type != 0) {

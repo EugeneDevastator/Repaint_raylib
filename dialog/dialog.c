@@ -6,6 +6,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <time.h>
+#include <stdarg.h>
 
 #define ITEM_H      44
 #define TITLE_H     40
@@ -646,6 +647,37 @@ static void _drawYesNo(DialogState* d) {
     }
 }
 
+/* ── ButtonChoice dialog ── */
+
+static void _drawButtonChoice(DialogState* d) {
+    int sw = GetScreenWidth(), sh = GetScreenHeight();
+    int ww = 440, wh = 180, wx = (sw-ww)/2, wy = (sh-wh)/2;
+    Rectangle win = {(float)wx, (float)wy, (float)ww, (float)wh};
+    DrawRectangleRec(win, _winBg); DrawRectangleLinesEx(win, 1, _border);
+    DrawRectangle(wx, wy, ww, TITLE_H, _titleBg);
+    _drawText(d->_font, d->_title, wx+PAD, wy+(TITLE_H-d->_fontSize)/2, d->_fontSize, _white);
+    Rectangle xR = {win.x + win.width - TITLE_H, win.y, TITLE_H, TITLE_H};
+    if (_btn(d, xR, "X")) { _closeCancel(d); return; }
+    float tw = _measureText(d->_font, d->_message, d->_fontSize);
+    _drawText(d->_font, d->_message, wx+(int)(ww-tw)/2, wy+TITLE_H+12, d->_fontSize, _text);
+    int btnY = wy + wh - BTN_H - 12;
+    int btnW = 100;
+    int gap = 6;
+    int totalW = d->_btnCount * btnW + (d->_btnCount - 1) * gap;
+    int bx = wx + (ww - totalW) / 2;
+    for (int i = 0; i < d->_btnCount; i++) {
+        Rectangle bR = {(float)(bx + i * (btnW + gap)), (float)btnY, (float)btnW, BTN_H};
+        if (_btn(d, bR, d->_btnLabels[i])) {
+            DialogResult r = _makeResult(); r.success = true;
+            snprintf(r.output, DIALOG_PATH_MAX, "%s", d->_btnLabels[i]);
+            d->type = 0;
+            if (d->_callback) d->_callback(r);
+            return;
+        }
+    }
+    if (IsKeyPressed(KEY_ESCAPE)) { _closeCancel(d); }
+}
+
 /* ── Public API ── */
 
 void DialogSetFont(DialogState* dlg, Font font, int sz) {
@@ -686,10 +718,30 @@ void DialogYesNo_Init(DialogState* d, const char* message, DialogCallback cb) {
     if (message) snprintf(d->_message, sizeof(d->_message), "%s", message);
 }
 
+void DialogButtonChoice_Init(DialogState* d, const char* title, const char* message,
+                              DialogCallback cb, const char* btn1, ...) {
+    memset(d, 0, sizeof(*d)); d->type = 4; d->_callback = cb;
+    _initCommon(d);
+    if (title)   snprintf(d->_title,   sizeof(d->_title),   "%s", title);
+    if (message) snprintf(d->_message, sizeof(d->_message), "%s", message);
+
+    va_list args;
+    va_start(args, btn1);
+    const char* label = btn1;
+    d->_btnCount = 0;
+    while (label != NULL && d->_btnCount < 8) {
+        snprintf(d->_btnLabels[d->_btnCount], sizeof(d->_btnLabels[0]), "%s", label);
+        d->_btnCount++;
+        label = va_arg(args, const char*);
+    }
+    va_end(args);
+}
+
 void Dialog_Draw(DialogState* d) {
     if (!d->type) return;
     DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), _overlay);
     if (d->type == 3) _drawYesNo(d);
+    else if (d->type == 4) _drawButtonChoice(d);
     else _drawFileDialog(d);
 }
 
