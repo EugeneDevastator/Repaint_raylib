@@ -6,6 +6,7 @@
 #include <cstdlib>
 
 extern DialogState g_fileDlg;
+extern char g_fileWorkingDir[1024];
 
 static char s_pendingPath[1024] = "";
 static AppState* s_state = NULL;
@@ -27,6 +28,18 @@ static void ImportImage(Image img) {
     UnloadImage(*layerImg);
     *layerImg = img;
     LayerStack_SyncRTFromImage(idx);
+}
+
+static void _updateWorkingDir(const char* path) {
+    if (!path || !path[0]) return;
+    const char* sep = strrchr(path, '/');
+    const char* sep2 = strrchr(path, '\\');
+    if (sep2 > sep) sep = sep2;
+    if (!sep) return;
+    size_t len = sep - path;
+    if (len >= sizeof(g_fileWorkingDir)) len = sizeof(g_fileWorkingDir) - 1;
+    memcpy(g_fileWorkingDir, path, len);
+    g_fileWorkingDir[len] = '\0';
 }
 
 /* ── Drop callback ──────────────────────────────────────────────────── */
@@ -59,6 +72,7 @@ static void OnDropResult(DialogResult r) {
             UnloadImage(img);
         }
     }
+    _updateWorkingDir(s_pendingPath);
     s_pendingPath[0] = '\0';
 }
 
@@ -84,6 +98,7 @@ static void OnPasteResult(DialogResult r) {
         img.mipmaps  = 1;
         s_clipboardPixels = NULL;   // img now owns the data
     } else {
+        _updateWorkingDir(s_pendingPath);
         img = LoadImage(s_pendingPath);
         s_pendingPath[0] = '\0';
     }
@@ -125,8 +140,8 @@ static void ClipboardImageHandler(int w, int h, const unsigned char* rgba) {
     s_clipboardW = w;
     s_clipboardH = h;
 
-    DialogButtonChoice_Init(&g_fileDlg, "Paste Image",
-        NULL,
+    DialogButtonChoice_Init(&g_fileDlg, "Pick your option",
+        "Paste image content",
         OnPasteResult, "New Doc", "Add Layer", "Cancel", NULL);
 }
 
@@ -136,8 +151,8 @@ static void ClipboardFileHandler(const char* path) {
     strncpy(s_pendingPath, path, sizeof(s_pendingPath) - 1);
     s_pendingPath[sizeof(s_pendingPath) - 1] = '\0';
 
-    DialogButtonChoice_Init(&g_fileDlg, "Paste Image",
-        NULL,
+    DialogButtonChoice_Init(&g_fileDlg, "Pick your option",
+        "Open as file",
         OnPasteResult, "New Doc", "Add Layer", "Cancel", NULL);
 }
 
@@ -161,8 +176,8 @@ void UserContent_Update(AppState* state) {
             FilePathList files = LoadDroppedFiles();
             if (files.count > 0 && files.paths[0] && files.paths[0][0]) {
                 strncpy(s_pendingPath, files.paths[0], sizeof(s_pendingPath) - 1);
-                DialogButtonChoice_Init(&g_fileDlg, "Open File",
-                    "file format incorrect",
+                DialogButtonChoice_Init(&g_fileDlg, "Pick your option",
+                    "Open as file",
                     OnDropResult, "New Doc", "Add Layer", "Cancel", NULL);
             }
             UnloadDroppedFiles(files);

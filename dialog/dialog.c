@@ -124,7 +124,16 @@ static void _navInto(DialogState* d, const char* path) {
     if (DirectoryExists(path)) { snprintf(d->_currentDir, DIALOG_PATH_MAX, "%s", path); _trimSlash(d->_currentDir); _loadDir(d); }
 }
 
-static void _initDir(DialogState* d) {
+static void _initDir(DialogState* d, const char* startDir) {
+    if (startDir && startDir[0] && DirectoryExists(startDir)) {
+        size_t dl = strlen(startDir);
+        if (dl >= DIALOG_PATH_MAX) dl = DIALOG_PATH_MAX - 1;
+        memcpy(d->_currentDir, startDir, dl);
+        d->_currentDir[dl] = '\0';
+        _loadDir(d);
+        return;
+    }
+
     char app[DIALOG_PATH_MAX];
     snprintf(app, sizeof(app), "%s", GetApplicationDirectory());
     _trimSlash(app);
@@ -690,17 +699,19 @@ static void _initCommon(DialogState* d) {
     d->_fontSize = _persistFontSize;
 }
 
-void DialogOpen_Init(DialogState* d, const char* title, const char* filter, DialogCallback cb) {
+void DialogOpen_Init(DialogState* d, const char* title, const char* filter,
+                     const char* startDir, DialogCallback cb) {
     memset(d, 0, sizeof(*d)); d->type = 1; d->_callback = cb;
     _initCommon(d);
     if (title)  snprintf(d->_title,  sizeof(d->_title),  "%s", title);
     if (filter) snprintf(d->_filter, sizeof(d->_filter), "%s", filter);
     d->_filterActive = true;  // focus the text input immediately
-    _initDir(d);
+    _initDir(d, startDir);
 }
 
 void DialogSaveAs_Init(DialogState* d, const char* title, const char* filter,
-                       const char* defaultName, DialogCallback cb) {
+                       const char* defaultName, const char* startDir,
+                       DialogCallback cb) {
     memset(d, 0, sizeof(*d)); d->type = 2; d->_callback = cb; d->_textActive = true;
     _initCommon(d);
     if (title)  snprintf(d->_title,  sizeof(d->_title),  "%s", title);
@@ -709,7 +720,7 @@ void DialogSaveAs_Init(DialogState* d, const char* title, const char* filter,
         snprintf(d->_textInput, sizeof(d->_textInput), "%s", defaultName);
         d->_textLen = (int)strlen(defaultName); d->_cursorPos = d->_textLen;
     }
-    _initDir(d);
+    _initDir(d, startDir);
 }
 
 void DialogYesNo_Init(DialogState* d, const char* message, DialogCallback cb) {

@@ -227,6 +227,20 @@ bool App_IsDialogActive(void) {
     return g_fileDlg.type != 0 || g_newCanvasActive;
 }
 
+char g_fileWorkingDir[1024] = "";
+
+static void _updateWorkingDir(const char* path) {
+    if (!path || !path[0]) return;
+    const char* sep = strrchr(path, '/');
+    const char* sep2 = strrchr(path, '\\');
+    if (sep2 > sep) sep = sep2;
+    if (!sep) return;
+    size_t len = sep - path;
+    if (len >= sizeof(g_fileWorkingDir)) len = sizeof(g_fileWorkingDir) - 1;
+    memcpy(g_fileWorkingDir, path, len);
+    g_fileWorkingDir[len] = '\0';
+}
+
 /* ── Callbacks ─────────────────────────────────────────────────────────── */
 
 static void OnOpenResult(DialogResult r) {
@@ -294,6 +308,7 @@ static void OnOpenResult(DialogResult r) {
                 }
             }
         }
+        _updateWorkingDir(r.output);
     }
 }
 
@@ -309,6 +324,7 @@ static void OnSaveResult(DialogResult r) {
                 snprintf(rpPath, sizeof(rpPath), "%s.re.play", r.output);
                 g_recorder->Save(rpPath);
             }
+            _updateWorkingDir(r.output);
         }
     }
 }
@@ -347,7 +363,8 @@ void App_FileNew(void) {
 }
 
 void App_FileOpen(void) {
-    DialogOpen_Init(&g_fileDlg, "Open", ".re.png/.png", OnOpenResult);
+    DialogOpen_Init(&g_fileDlg, "Open", ".re.png/.png",
+                    g_fileWorkingDir[0] ? g_fileWorkingDir : NULL, OnOpenResult);
 }
 
 void App_FileSave(void) {
@@ -366,7 +383,8 @@ void App_FileSave(void) {
 void App_FileSaveAs(void) {
     const char* name = "untitled";
     if (g_currentFilePath[0]) name = GetFileNameWithoutExt(g_currentFilePath);
-    DialogSaveAs_Init(&g_fileDlg, "Save As", ".re.png", name, OnSaveResult);
+    DialogSaveAs_Init(&g_fileDlg, "Save As", ".re.png", name,
+                      g_fileWorkingDir[0] ? g_fileWorkingDir : NULL, OnSaveResult);
 }
 
 void App_FileReload(void) {

@@ -67,9 +67,11 @@ typedef struct {
 } DialogState;
 
 void DialogOpen_Init(DialogState* dlg, const char* title,
-                     const char* filter, DialogCallback cb);
+                     const char* filter, const char* startDir,
+                     DialogCallback cb);
 void DialogSaveAs_Init(DialogState* dlg, const char* title,
                        const char* filter, const char* defaultName,
+                       const char* startDir,
                        DialogCallback cb);
 void DialogYesNo_Init(DialogState* dlg, const char* message,
                       DialogCallback cb);
