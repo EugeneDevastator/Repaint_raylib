@@ -633,6 +633,49 @@ void App_Draw(AppState* state) {
     // ── Module GL draws (viewport canvas + overlays) ──
     g_moduleStack.DrawGL();
 
+    // ── Color picker readback from GPU composite ────────────────────
+    if (g_colorPicking) {
+        const int ps = 5;
+        static RenderTexture2D pickSub = {0};
+        if (pickSub.id == 0 || pickSub.texture.width != ps || pickSub.texture.height != ps) {
+            if (pickSub.id != 0) UnloadRenderTexture(pickSub);
+            pickSub = LoadRenderTexture(ps, ps);
+        }
+
+        Color picked = {0,0,0,0};
+        int gi = 0;
+
+        Image screen = LoadImageFromScreen();
+        if (screen.data) {
+            int sw = screen.width, sh = screen.height;
+            int sx = g_colorPickScreenX - 2, sy = g_colorPickScreenY - 2;
+            if (sx < 0) sx = 0; if (sy < 0) sy = 0;
+            if (sx + ps > sw) sx = sw - ps; if (sy + ps > sh) sy = sh - ps;
+            for (int py = 0; py < ps; py++)
+                for (int px = 0; px < ps; px++) {
+                    Color c = GetImageColor(screen, sx + px, sy + py);
+                    g_colorPickGrid[gi++] = c;
+                    if (px == 2 && py == 2) picked = c;
+                }
+        }
+        UnloadImage(screen);
+
+        if (gi > 0 && picked.a > 0) {
+            float tH, tS, tL;
+            RGBToHSL(picked, tH, tS, tL);
+            float spd = 0.5f;
+            float dh = tH - colorHue;
+            if (dh > 0.5f) dh -= 1.0f; else if (dh < -0.5f) dh += 1.0f;
+            colorHue += dh * spd;
+            if (colorHue < 0.0f) colorHue += 1.0f; else if (colorHue > 1.0f) colorHue -= 1.0f;
+            colorSat += (tS - colorSat) * spd;
+            colorLit += (tL - colorLit) * spd;
+            bpQuickHue.user.clipmaxF = colorHue;
+            bpQuickSat.user.clipmaxF = colorSat;
+            bpQuickLit.user.clipmaxF = colorLit;
+        }
+    }
+
     rlImGuiBegin();
     SyncImGuiInput();
 

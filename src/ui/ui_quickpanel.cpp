@@ -11,6 +11,8 @@ void ToolBox_Draw(AppState* state, Rectangle vp);
 int quickPanelMouseMode = 0;
 bool g_colorPicking = false;
 Color g_colorPickGrid[25] = {};
+int g_colorPickScreenX = 0, g_colorPickScreenY = 0;
+Rectangle g_colorPickVpBounds = {0, 0, 0, 0};
 
 // ── Brush presets state ───────────────────────────────────────────────
 static BrushPreset g_presetUser[BRUSH_PRESET_MAX];

@@ -227,6 +227,8 @@ extern float colorHue, colorSat, colorLit;
 extern int quickPanelMouseMode;
 extern bool g_colorPicking;
 extern Color g_colorPickGrid[25];
+extern int g_colorPickScreenX, g_colorPickScreenY;
+extern Rectangle g_colorPickVpBounds;
 extern float g_pivotCursorX, g_pivotCursorY;
 extern bool g_seamlessPaint;
 extern bool g_seamlessPreview;
