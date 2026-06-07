@@ -256,13 +256,6 @@ static void OnOpenResult(DialogResult r) {
             };
             LayerStack_SetRenderWindow(g_state->doc.width, g_state->doc.height);
             layersDirty = true;
-            // Load associated replay file
-            if (g_recorder) {
-                g_recorder->Reset(g_state->doc.width, g_state->doc.height);
-                char rpPath[1024];
-                snprintf(rpPath, sizeof(rpPath), "%s.re.play", r.output);
-                g_recorder->Load(rpPath);
-            }
         } else {
             // Try as a standard image (PNG, JPEG, BMP, GIF, etc.)
             Image img = LoadImage(r.output);
