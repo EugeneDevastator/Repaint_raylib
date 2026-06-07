@@ -5,7 +5,6 @@
 #include <string.h>
 #include <cstdlib>
 
-extern DialogState g_fileDlg;
 extern char g_fileWorkingDir[1024];
 
 static char s_pendingPath[1024] = "";
@@ -131,7 +130,7 @@ static void OnPasteResult(DialogResult r) {
 }
 
 static void ClipboardImageHandler(int w, int h, const unsigned char* rgba) {
-    if (g_fileDlg.type != 0) return;
+    if (Dialog_IsActive()) return;
 
     free(s_clipboardPixels);
     s_clipboardPixels = (unsigned char*)malloc(w * h * 4);
@@ -140,18 +139,18 @@ static void ClipboardImageHandler(int w, int h, const unsigned char* rgba) {
     s_clipboardW = w;
     s_clipboardH = h;
 
-    DialogButtonChoice_Init(&g_fileDlg, "Pick your option",
+    DialogButtonChoice_Init("Pick your option",
         "Paste image content",
         OnPasteResult, "New Doc", "Add Layer", "Cancel", NULL);
 }
 
 static void ClipboardFileHandler(const char* path) {
-    if (g_fileDlg.type != 0) return;
+    if (Dialog_IsActive()) return;
 
     strncpy(s_pendingPath, path, sizeof(s_pendingPath) - 1);
     s_pendingPath[sizeof(s_pendingPath) - 1] = '\0';
 
-    DialogButtonChoice_Init(&g_fileDlg, "Pick your option",
+    DialogButtonChoice_Init("Pick your option",
         "Open as file",
         OnPasteResult, "New Doc", "Add Layer", "Cancel", NULL);
 }
@@ -169,14 +168,14 @@ void UserContent_Init(void) {
 void UserContent_Update(AppState* state) {
     s_state = state;
 
-    if (g_fileDlg.type != 0) return;
+    if (Dialog_IsActive()) return;
 
     if (s_pendingPath[0] == '\0') {
         if (IsFileDropped()) {
             FilePathList files = LoadDroppedFiles();
             if (files.count > 0 && files.paths[0] && files.paths[0][0]) {
                 strncpy(s_pendingPath, files.paths[0], sizeof(s_pendingPath) - 1);
-                DialogButtonChoice_Init(&g_fileDlg, "Pick your option",
+                DialogButtonChoice_Init("Pick your option",
                     "Open as file",
                     OnDropResult, "New Doc", "Add Layer", "Cancel", NULL);
             }

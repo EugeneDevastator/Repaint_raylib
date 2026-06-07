@@ -8,6 +8,51 @@
 #include <time.h>
 #include <stdarg.h>
 
+typedef struct {
+    int type;
+    DialogCallback _callback;
+    char _currentDir[DIALOG_PATH_MAX];
+    char _filter[64];
+    FilePathList _files;
+    int _scrollOffset;
+    int _leftScrollOffset;
+    int _selectedIndex;
+    bool _dirDirty;
+    char _textInput[DIALOG_PATH_MAX];
+    int _cursorPos;
+    int _textLen;
+    bool _textActive;
+    char _message[512];
+    char _title[128];
+    Rectangle _bounds;
+    bool _prevMouseDown;
+    bool _leftPrevMouseDown;
+    double _lastClickTime;
+    int _lastClickedIdx;
+    bool _scrollGrabbed;
+    int _scrollGrabY;
+    int _scrollStartOff;
+    bool _leftScrollGrabbed;
+    int _leftScrollGrabY;
+    int _leftScrollStartOff;
+    Font _font;
+    int _fontSize;
+    char _pathPreview[DIALOG_PATH_MAX];
+    bool _confirmOverwrite;
+    char _overwritePath[DIALOG_PATH_MAX];
+    int _sortColumn;
+    int _sortDesc;
+    char _filterBuf[256];
+    int _filterLen;
+    bool _filterActive;
+    int   repeatKey;
+    float repeatTimer;
+    int _btnCount;
+    char _btnLabels[8][64];
+} DialogState;
+
+static DialogState g_dlg = {0};
+
 #define ITEM_H      44
 #define TITLE_H     40
 #define DIRBAR_H    36
@@ -79,61 +124,52 @@ static bool _matchFilter(const char* path, const char* filter) {
     return strstr(name, filter) != NULL;
 }
 
-static bool _itemVisible(DialogState* d, int i) {
-    if (DirectoryExists(d->_files.paths[i])) return false;
+static bool _itemVisible(int i) {
+    if (DirectoryExists(g_dlg._files.paths[i])) return false;
     // Text input IS the filter — no separate extension matching
-    return _matchFilter(d->_files.paths[i], d->_filterBuf);
+    return _matchFilter(g_dlg._files.paths[i], g_dlg._filterBuf);
 }
 
-static void _visPath(DialogState* d, int idx, char* out, int sz) {
+static void _visPath(int idx, char* out, int sz) {
     int v = 0;
-    for (int i = 0; i < (int)d->_files.count; i++) {
-        if (!_itemVisible(d, i)) continue;
-        if (v == idx) { snprintf(out, sz, "%s", d->_files.paths[i]); return; }
+    for (int i = 0; i < (int)g_dlg._files.count; i++) {
+        if (!_itemVisible(i)) continue;
+        if (v == idx) { snprintf(out, sz, "%s", g_dlg._files.paths[i]); return; }
         v++;
     }
     out[0] = '\0';
 }
 
-static int _visCount(DialogState* d) {
+static int _visCount(void) {
     int c = 0;
-    for (int i = 0; i < (int)d->_files.count; i++)
-        if (_itemVisible(d, i)) c++;
+    for (int i = 0; i < (int)g_dlg._files.count; i++)
+        if (_itemVisible(i)) c++;
     return c;
 }
 
-static void _loadDir(DialogState* d) {
-    if (d->_files.paths) { UnloadDirectoryFiles(d->_files); d->_files.paths = NULL; }
-    d->_files = LoadDirectoryFilesEx(d->_currentDir, "*.*", false);
-    _sortCol = d->_sortColumn;
-    _sortDesc = d->_sortDesc;
-    if (d->_files.count > 1)
-        qsort(d->_files.paths, d->_files.count, sizeof(char*), _sortPath);
-    d->_scrollOffset = d->_leftScrollOffset = 0;
-    d->_selectedIndex = -1;
-    snprintf(d->_pathPreview, DIALOG_PATH_MAX, "%s", d->_currentDir);
+static void _loadDir(void) {
+    if (g_dlg._files.paths) { UnloadDirectoryFiles(g_dlg._files); g_dlg._files.paths = NULL; }
+    g_dlg._files = LoadDirectoryFilesEx(g_dlg._currentDir, "*.*", false);
+    _sortCol = g_dlg._sortColumn;
+    _sortDesc = g_dlg._sortDesc;
+    if (g_dlg._files.count > 1)
+        qsort(g_dlg._files.paths, g_dlg._files.count, sizeof(char*), _sortPath);
+    g_dlg._scrollOffset = g_dlg._leftScrollOffset = 0;
+    g_dlg._selectedIndex = -1;
+    snprintf(g_dlg._pathPreview, DIALOG_PATH_MAX, "%s", g_dlg._currentDir);
 }
 
 
-static void _navUp(DialogState* d) {
-    const char* p = GetPrevDirectoryPath(d->_currentDir);
-    if (p && p[0]) { snprintf(d->_currentDir, DIALOG_PATH_MAX, "%s", p); _trimSlash(d->_currentDir); _loadDir(d); }
+static void _navUp(void) {
+    const char* p = GetPrevDirectoryPath(g_dlg._currentDir);
+    if (p && p[0]) { snprintf(g_dlg._currentDir, DIALOG_PATH_MAX, "%s", p); _trimSlash(g_dlg._currentDir); _loadDir(); }
 }
 
-static void _navInto(DialogState* d, const char* path) {
-    if (DirectoryExists(path)) { snprintf(d->_currentDir, DIALOG_PATH_MAX, "%s", path); _trimSlash(d->_currentDir); _loadDir(d); }
+static void _navInto(const char* path) {
+    if (DirectoryExists(path)) { snprintf(g_dlg._currentDir, DIALOG_PATH_MAX, "%s", path); _trimSlash(g_dlg._currentDir); _loadDir(); }
 }
 
-static void _initDir(DialogState* d, const char* startDir) {
-    if (startDir && startDir[0] && DirectoryExists(startDir)) {
-        size_t dl = strlen(startDir);
-        if (dl >= DIALOG_PATH_MAX) dl = DIALOG_PATH_MAX - 1;
-        memcpy(d->_currentDir, startDir, dl);
-        d->_currentDir[dl] = '\0';
-        _loadDir(d);
-        return;
-    }
-
+static void _initDir(void) {
     char app[DIALOG_PATH_MAX];
     snprintf(app, sizeof(app), "%s", GetApplicationDirectory());
     _trimSlash(app);
@@ -150,9 +186,9 @@ static void _initDir(DialogState* d, const char* startDir) {
     const char* dir = (app[0] && DirectoryExists(saves)) ? saves : app;
     size_t dl = strlen(dir);
     if (dl >= DIALOG_PATH_MAX) dl = DIALOG_PATH_MAX - 1;
-    memcpy(d->_currentDir, dir, dl);
-    d->_currentDir[dl] = '\0';
-    _loadDir(d);
+    memcpy(g_dlg._currentDir, dir, dl);
+    g_dlg._currentDir[dl] = '\0';
+    _loadDir();
 }
 
 /* ── Draw helpers ── */
@@ -175,29 +211,29 @@ static DialogResult _makeResult(void) {
     DialogResult r; memset(&r, 0, sizeof(r)); r.wasClosed = true; return r;
 }
 
-static void _closeOk(DialogState* d, const char* path) {
+static void _closeOk(const char* path) {
     DialogResult r = _makeResult(); r.success = true;
     snprintf(r.output, DIALOG_PATH_MAX, "%s", path);
-    d->type = 0;
-    if (d->_callback) d->_callback(r);
+    g_dlg.type = 0;
+    if (g_dlg._callback) g_dlg._callback(r);
 }
 
-static void _closeCancel(DialogState* d) {
-    DialogResult r = _makeResult(); d->type = 0;
-    if (d->_callback) d->_callback(r);
+static void _closeCancel(void) {
+    DialogResult r = _makeResult(); g_dlg.type = 0;
+    if (g_dlg._callback) g_dlg._callback(r);
 }
 
-static int _btn(DialogState* d, Rectangle r, const char* label) {
+static int _btn(Rectangle r, const char* label) {
     Vector2 mp = GetMousePosition();
     bool hov = CheckCollisionPointRec(mp, r);
     bool dn  = hov && IsMouseButtonDown(MOUSE_LEFT_BUTTON);
     DrawRectangleRec(r, dn ? _btnPrs : hov ? _btnHov : _btnBg);
     DrawRectangleLinesEx(r, 1, _border);
-    float tw = _measureText(d->_font, label, d->_fontSize);
-    _drawText(d->_font, label,
+    float tw = _measureText(g_dlg._font, label, g_dlg._fontSize);
+    _drawText(g_dlg._font, label,
               (int)(r.x + (r.width  - tw)          / 2),
-              (int)(r.y + (r.height - d->_fontSize) / 2),
-              d->_fontSize, _text);
+              (int)(r.y + (r.height - g_dlg._fontSize) / 2),
+              g_dlg._fontSize, _text);
     return hov && IsMouseButtonReleased(MOUSE_LEFT_BUTTON);
 }
 
@@ -248,7 +284,7 @@ static void _handleKey(char* buf, int* cur, int* len, int k) {
     else if (k == KEY_END)                    *cur = *len;
 }
 
-static void _textField(DialogState* d, Rectangle r, char* buf, int maxLen,
+static void _textField(Rectangle r, char* buf, int maxLen,
                        int* cur, int* len, bool active) {
     DrawRectangleRec(r, _inpBg);
     DrawRectangleLinesEx(r, 1, active ? _titleBg : _inpBd);
@@ -272,81 +308,81 @@ static void _textField(DialogState* d, Rectangle r, char* buf, int maxLen,
         for (int i = 0; i < 6; i++) {
             if (IsKeyPressed(keys[i])) {
                 _handleKey(buf, cur, len, keys[i]);
-                d->repeatKey   = keys[i];
-                d->repeatTimer = 0.5f;
+                g_dlg.repeatKey   = keys[i];
+                g_dlg.repeatTimer = 0.5f;
             }
         }
-        if (d->repeatKey && IsKeyDown(d->repeatKey)) {
-            d->repeatTimer -= GetFrameTime();
-            if (d->repeatTimer <= 0.0f) {
-                _handleKey(buf, cur, len, d->repeatKey);
-                d->repeatTimer = 0.05f;
+        if (g_dlg.repeatKey && IsKeyDown(g_dlg.repeatKey)) {
+            g_dlg.repeatTimer -= GetFrameTime();
+            if (g_dlg.repeatTimer <= 0.0f) {
+                _handleKey(buf, cur, len, g_dlg.repeatKey);
+                g_dlg.repeatTimer = 0.05f;
             }
         } else {
-            d->repeatKey = 0;
+            g_dlg.repeatKey = 0;
         }
     }
 
     int tx = (int)r.x + 6;
-    int ty = (int)r.y + ((int)r.height - d->_fontSize) / 2;
-    _drawText(d->_font, buf, tx, ty, d->_fontSize, _text);
+    int ty = (int)r.y + ((int)r.height - g_dlg._fontSize) / 2;
+    _drawText(g_dlg._font, buf, tx, ty, g_dlg._fontSize, _text);
 
     if (active && (int)(GetTime() * 2) % 2 == 0) {
         char tmp[DIALOG_PATH_MAX];
         snprintf(tmp, sizeof(tmp), "%.*s", *cur, buf);
-        DrawRectangle(tx + (int)_measureText(d->_font, tmp, d->_fontSize),
-                      ty, 1, d->_fontSize, _text);
+        DrawRectangle(tx + (int)_measureText(g_dlg._font, tmp, g_dlg._fontSize),
+                      ty, 1, g_dlg._fontSize, _text);
     }
 }
 
 /* ── Left pane: folders only ── */
 
-static void _drawLeftPane(DialogState* d, Rectangle a) {
+static void _drawLeftPane(Rectangle a) {
     Vector2 mp = GetMousePosition();
     bool md = IsMouseButtonDown(MOUSE_LEFT_BUTTON);
-    bool pressed = md && !d->_leftPrevMouseDown;
-    d->_leftPrevMouseDown = md;
+    bool pressed = md && !g_dlg._leftPrevMouseDown;
+    g_dlg._leftPrevMouseDown = md;
 
     int dirs = 0;
-    for (int i = 0; i < (int)d->_files.count; i++)
-        if (DirectoryExists(d->_files.paths[i])) dirs++;
+    for (int i = 0; i < (int)g_dlg._files.count; i++)
+        if (DirectoryExists(g_dlg._files.paths[i])) dirs++;
     int totalH = (1 + dirs) * ITEM_H;
     int viewH = (int)a.height;
     int maxOff = totalH > viewH ? totalH - viewH : 0;
 
     float wheel = GetMouseWheelMove();
     if (wheel && CheckCollisionPointRec(mp, a)) {
-        d->_leftScrollOffset -= (int)(wheel * ITEM_H * 3);
-        if (d->_leftScrollOffset < 0) d->_leftScrollOffset = 0;
-        if (d->_leftScrollOffset > maxOff) d->_leftScrollOffset = maxOff;
+        g_dlg._leftScrollOffset -= (int)(wheel * ITEM_H * 3);
+        if (g_dlg._leftScrollOffset < 0) g_dlg._leftScrollOffset = 0;
+        if (g_dlg._leftScrollOffset > maxOff) g_dlg._leftScrollOffset = maxOff;
     }
 
     BeginScissorMode((int)a.x, (int)a.y, (int)a.width, viewH);
-    int y0 = (int)a.y - d->_leftScrollOffset;
+    int y0 = (int)a.y - g_dlg._leftScrollOffset;
 
     /* [..] row */
     Rectangle ir = {a.x, (float)y0, a.width - SCROLL_W, ITEM_H};
     if (CheckCollisionPointRec(mp, ir)) DrawRectangleRec(ir, _hovBg);
-    _drawText(d->_font, "[..]", (int)a.x+6, y0+(ITEM_H-d->_fontSize)/2, d->_fontSize, _textDim);
-    if (pressed && CheckCollisionPointRec(mp, ir)) { EndScissorMode(); _navUp(d); return; }
+    _drawText(g_dlg._font, "[..]", (int)a.x+6, y0+(ITEM_H-g_dlg._fontSize)/2, g_dlg._fontSize, _textDim);
+    if (pressed && CheckCollisionPointRec(mp, ir)) { EndScissorMode(); _navUp(); return; }
 
     /* Directory rows */
     int di = 0;
-    for (int i = 0; i < (int)d->_files.count; i++) {
-        if (!DirectoryExists(d->_files.paths[i])) continue;
+    for (int i = 0; i < (int)g_dlg._files.count; i++) {
+        if (!DirectoryExists(g_dlg._files.paths[i])) continue;
         int y = y0 + (1 + di) * ITEM_H; di++;
         if (y + ITEM_H <= (int)a.y || y >= (int)(a.y + viewH)) continue;
         Rectangle ir2 = {a.x, (float)y, a.width - SCROLL_W, ITEM_H};
         if (CheckCollisionPointRec(mp, ir2)) DrawRectangleRec(ir2, _hovBg);
-        _drawText(d->_font, GetFileName(d->_files.paths[i]),
-                  (int)a.x+6, y+(ITEM_H-d->_fontSize)/2, d->_fontSize, _text);
-        if (pressed && CheckCollisionPointRec(mp, ir2)) { EndScissorMode(); _navInto(d, d->_files.paths[i]); return; }
+        _drawText(g_dlg._font, GetFileName(g_dlg._files.paths[i]),
+                  (int)a.x+6, y+(ITEM_H-g_dlg._fontSize)/2, g_dlg._fontSize, _text);
+        if (pressed && CheckCollisionPointRec(mp, ir2)) { EndScissorMode(); _navInto(g_dlg._files.paths[i]); return; }
     }
     EndScissorMode();
 
     _scrollbar((int)(a.x + a.width - SCROLL_W), (int)a.y, viewH, totalH, viewH,
-               &d->_leftScrollOffset, &d->_leftScrollGrabbed,
-               &d->_leftScrollGrabY, &d->_leftScrollStartOff, pressed);
+               &g_dlg._leftScrollOffset, &g_dlg._leftScrollGrabbed,
+               &g_dlg._leftScrollGrabY, &g_dlg._leftScrollStartOff, pressed);
 }
 
 /* ── Right pane: files only ── */
@@ -363,44 +399,44 @@ static void _fmtDate(long ts_raw, char* out, int sz) {
         snprintf(out, sz, "---");
 }
 
-static void _drawRightPane(DialogState* d, Rectangle a) {
+static void _drawRightPane(Rectangle a) {
     Vector2 mp = GetMousePosition();
     bool md = IsMouseButtonDown(MOUSE_LEFT_BUTTON);
-    bool pressed = md && !d->_prevMouseDown;
-    d->_prevMouseDown = md;
+    bool pressed = md && !g_dlg._prevMouseDown;
+    g_dlg._prevMouseDown = md;
 
     /* ── Filter text field (same height as file entries) ── */
     Rectangle fr = {a.x + 2, a.y + 2, a.width - SCROLL_W - 4, ITEM_H};
     bool filterHov = CheckCollisionPointRec(mp, fr);
-    if (d->type == 1) d->_filterActive = true;  // open dialog: always capture
-    if (d->_filterActive && pressed && !filterHov && !d->_textActive) {
+    if (g_dlg.type == 1) g_dlg._filterActive = true;  // open dialog: always capture
+    if (g_dlg._filterActive && pressed && !filterHov && !g_dlg._textActive) {
         // clicking elsewhere keeps it active, but Escape or Tab deactivates
-        d->_filterActive = (d->type == 2);
+        g_dlg._filterActive = (g_dlg.type == 2);
     }
-    if (d->_filterActive) {
+    if (g_dlg._filterActive) {
         int c;
         while ((c = GetCharPressed()) > 0) {
-            if (c >= 32 && c < 127 && d->_filterLen < 255) {
-                d->_filterBuf[d->_filterLen++] = (char)c;
-                d->_filterBuf[d->_filterLen] = '\0';
-                d->_scrollOffset = 0;
-                d->_selectedIndex = -1;
+            if (c >= 32 && c < 127 && g_dlg._filterLen < 255) {
+                g_dlg._filterBuf[g_dlg._filterLen++] = (char)c;
+                g_dlg._filterBuf[g_dlg._filterLen] = '\0';
+                g_dlg._scrollOffset = 0;
+                g_dlg._selectedIndex = -1;
             }
         }
-        if (IsKeyPressed(KEY_BACKSPACE) && d->_filterLen > 0) {
-            d->_filterBuf[--d->_filterLen] = '\0';
-            d->_scrollOffset = 0;
-            d->_selectedIndex = -1;
+        if (IsKeyPressed(KEY_BACKSPACE) && g_dlg._filterLen > 0) {
+            g_dlg._filterBuf[--g_dlg._filterLen] = '\0';
+            g_dlg._scrollOffset = 0;
+            g_dlg._selectedIndex = -1;
         }
-        if (IsKeyPressed(KEY_ESCAPE)) { d->_filterActive = false; d->_filterBuf[0] = '\0'; d->_filterLen = 0; }
+        if (IsKeyPressed(KEY_ESCAPE)) { g_dlg._filterActive = false; g_dlg._filterBuf[0] = '\0'; g_dlg._filterLen = 0; }
     }
     DrawRectangleRec(fr, _white);
     DrawRectangleLinesEx(fr, 1, _titleBg);
-    int fty = (int)fr.y + ((int)fr.height - d->_fontSize) / 2;
-    if (d->_filterLen > 0)
-        _drawText(d->_font, d->_filterBuf, (int)fr.x + 4, fty, d->_fontSize, _text);
+    int fty = (int)fr.y + ((int)fr.height - g_dlg._fontSize) / 2;
+    if (g_dlg._filterLen > 0)
+        _drawText(g_dlg._font, g_dlg._filterBuf, (int)fr.x + 4, fty, g_dlg._fontSize, _text);
     else
-        _drawText(d->_font, "filter...", (int)fr.x + 4, fty, d->_fontSize, _textDim);
+        _drawText(g_dlg._font, "filter...", (int)fr.x + 4, fty, g_dlg._fontSize, _textDim);
 
     /* ── Column headers ── */
     int headY = (int)(a.y + fr.height + 4);
@@ -410,14 +446,14 @@ static void _drawRightPane(DialogState* d, Rectangle a) {
     Rectangle dateH = {a.x + 2 + nameW, (float)headY, (float)dateW, ITEM_H};
 
     if (pressed && CheckCollisionPointRec(mp, nameH)) {
-        if (d->_sortColumn == 0) d->_sortDesc = !d->_sortDesc;
-        else { d->_sortColumn = 0; d->_sortDesc = 0; }
-        _loadDir(d); return;
+        if (g_dlg._sortColumn == 0) g_dlg._sortDesc = !g_dlg._sortDesc;
+        else { g_dlg._sortColumn = 0; g_dlg._sortDesc = 0; }
+        _loadDir(); return;
     }
     if (pressed && CheckCollisionPointRec(mp, dateH)) {
-        if (d->_sortColumn == 1) d->_sortDesc = !d->_sortDesc;
-        else { d->_sortColumn = 1; d->_sortDesc = 0; }
-        _loadDir(d); return;
+        if (g_dlg._sortColumn == 1) g_dlg._sortDesc = !g_dlg._sortDesc;
+        else { g_dlg._sortColumn = 1; g_dlg._sortDesc = 0; }
+        _loadDir(); return;
     }
 
     DrawRectangleRec(nameH, _hovBg);
@@ -427,82 +463,82 @@ static void _drawRightPane(DialogState* d, Rectangle a) {
     DrawLine((int)(nameH.x + nameH.width), (int)nameH.y, (int)(nameH.x + nameH.width), (int)(nameH.y + nameH.height), _border);
 
     char nameLabel[48];
-    snprintf(nameLabel, sizeof(nameLabel), "Name%s", (d->_sortColumn == 0) ? (d->_sortDesc ? " \xe2\x96\xb4" : " \xe2\x96\xbe") : "");
-    _drawText(d->_font, nameLabel, (int)nameH.x + 4, (int)nameH.y + ((int)nameH.height - d->_fontSize) / 2, d->_fontSize, _text);
+    snprintf(nameLabel, sizeof(nameLabel), "Name%s", (g_dlg._sortColumn == 0) ? (g_dlg._sortDesc ? " \xe2\x96\xb4" : " \xe2\x96\xbe") : "");
+    _drawText(g_dlg._font, nameLabel, (int)nameH.x + 4, (int)nameH.y + ((int)nameH.height - g_dlg._fontSize) / 2, g_dlg._fontSize, _text);
 
     char dateLabel[48];
-    snprintf(dateLabel, sizeof(dateLabel), "Date%s", (d->_sortColumn == 1) ? (d->_sortDesc ? " \xe2\x96\xb4" : " \xe2\x96\xbe") : "");
-    _drawText(d->_font, dateLabel, (int)dateH.x + 4, (int)dateH.y + ((int)dateH.height - d->_fontSize) / 2, d->_fontSize, _text);
+    snprintf(dateLabel, sizeof(dateLabel), "Date%s", (g_dlg._sortColumn == 1) ? (g_dlg._sortDesc ? " \xe2\x96\xb4" : " \xe2\x96\xbe") : "");
+    _drawText(g_dlg._font, dateLabel, (int)dateH.x + 4, (int)dateH.y + ((int)dateH.height - g_dlg._fontSize) / 2, g_dlg._fontSize, _text);
 
     /* ── File list area ── */
     int listY = (int)(headY + nameH.height + 2);
     int listH = (int)(a.y + a.height - listY);
-    int totalH = _visCount(d) * ITEM_H;
+    int totalH = _visCount() * ITEM_H;
     int viewH = listH;
     int maxOff = totalH > viewH ? totalH - viewH : 0;
 
     float wheel = GetMouseWheelMove();
     if (wheel && CheckCollisionPointRec(mp, (Rectangle){a.x, (float)listY, a.width - SCROLL_W, (float)listH})) {
-        d->_scrollOffset -= (int)(wheel * ITEM_H * 3);
-        if (d->_scrollOffset < 0) d->_scrollOffset = 0;
-        if (d->_scrollOffset > maxOff) d->_scrollOffset = maxOff;
+        g_dlg._scrollOffset -= (int)(wheel * ITEM_H * 3);
+        if (g_dlg._scrollOffset < 0) g_dlg._scrollOffset = 0;
+        if (g_dlg._scrollOffset > maxOff) g_dlg._scrollOffset = maxOff;
     }
 
     /* Keyboard navigation */
-    int tv = _visCount(d);
+    int tv = _visCount();
     if (tv > 0) {
-        if (IsKeyPressed(KEY_DOWN) && d->_selectedIndex < tv-1) {
-            d->_selectedIndex++;
-            _visPath(d, d->_selectedIndex, d->_pathPreview, DIALOG_PATH_MAX);
-            int sy = d->_selectedIndex * ITEM_H - d->_scrollOffset;
-            if (sy + ITEM_H > viewH) d->_scrollOffset = d->_selectedIndex * ITEM_H - viewH + ITEM_H;
+        if (IsKeyPressed(KEY_DOWN) && g_dlg._selectedIndex < tv-1) {
+            g_dlg._selectedIndex++;
+            _visPath(g_dlg._selectedIndex, g_dlg._pathPreview, DIALOG_PATH_MAX);
+            int sy = g_dlg._selectedIndex * ITEM_H - g_dlg._scrollOffset;
+            if (sy + ITEM_H > viewH) g_dlg._scrollOffset = g_dlg._selectedIndex * ITEM_H - viewH + ITEM_H;
         }
-        if (IsKeyPressed(KEY_UP) && d->_selectedIndex > 0) {
-            d->_selectedIndex--;
-            _visPath(d, d->_selectedIndex, d->_pathPreview, DIALOG_PATH_MAX);
-            int sy = d->_selectedIndex * ITEM_H - d->_scrollOffset;
-            if (sy < 0) d->_scrollOffset = d->_selectedIndex * ITEM_H;
+        if (IsKeyPressed(KEY_UP) && g_dlg._selectedIndex > 0) {
+            g_dlg._selectedIndex--;
+            _visPath(g_dlg._selectedIndex, g_dlg._pathPreview, DIALOG_PATH_MAX);
+            int sy = g_dlg._selectedIndex * ITEM_H - g_dlg._scrollOffset;
+            if (sy < 0) g_dlg._scrollOffset = g_dlg._selectedIndex * ITEM_H;
         }
     }
 
     BeginScissorMode((int)a.x, listY, (int)(a.width - SCROLL_W), listH);
-    int y0 = listY - d->_scrollOffset;
+    int y0 = listY - g_dlg._scrollOffset;
     int vi = 0;
 
-    for (int i = 0; i < (int)d->_files.count; i++) {
-        if (!_itemVisible(d, i)) continue;
+    for (int i = 0; i < (int)g_dlg._files.count; i++) {
+        if (!_itemVisible(i)) continue;
         int y = y0 + vi * ITEM_H;
         if (y + ITEM_H > listY && y < listY + listH) {
             Rectangle ir = {a.x, (float)y, a.width - SCROLL_W, ITEM_H};
             bool hov = CheckCollisionPointRec(mp, ir);
-            bool sel = (vi == d->_selectedIndex);
+            bool sel = (vi == g_dlg._selectedIndex);
             if (sel) DrawRectangleRec(ir, _selBg);
             else if (hov) DrawRectangleRec(ir, _hovBg);
 
             /* Name column */
             char dateStr[48];
-            _fmtDate(GetFileModTime(d->_files.paths[i]), dateStr, sizeof(dateStr));
-            _drawText(d->_font, GetFileName(d->_files.paths[i]),
-                      (int)a.x + 6, y + (ITEM_H - d->_fontSize) / 2, d->_fontSize, _text);
-            _drawText(d->_font, dateStr,
-                      (int)(a.x + nameW + 2), y + (ITEM_H - d->_fontSize) / 2, d->_fontSize, _textDim);
+            _fmtDate(GetFileModTime(g_dlg._files.paths[i]), dateStr, sizeof(dateStr));
+            _drawText(g_dlg._font, GetFileName(g_dlg._files.paths[i]),
+                      (int)a.x + 6, y + (ITEM_H - g_dlg._fontSize) / 2, g_dlg._fontSize, _text);
+            _drawText(g_dlg._font, dateStr,
+                      (int)(a.x + nameW + 2), y + (ITEM_H - g_dlg._fontSize) / 2, g_dlg._fontSize, _textDim);
 
             if (pressed && hov) {
                 double now = GetTime();
-                bool dbl = (now - d->_lastClickTime < DBLCK_TIME && d->_lastClickedIdx == vi);
-                d->_lastClickTime = now; d->_lastClickedIdx = vi;
+                bool dbl = (now - g_dlg._lastClickTime < DBLCK_TIME && g_dlg._lastClickedIdx == vi);
+                g_dlg._lastClickTime = now; g_dlg._lastClickedIdx = vi;
                 if (dbl) {
                     char path[DIALOG_PATH_MAX];
-                    _visPath(d, vi, path, DIALOG_PATH_MAX);
-                    EndScissorMode(); _closeOk(d, path); return;
+                    _visPath(vi, path, DIALOG_PATH_MAX);
+                    EndScissorMode(); _closeOk(path); return;
                 }
-                d->_selectedIndex = vi;
-                _visPath(d, vi, d->_pathPreview, DIALOG_PATH_MAX);
-                if (d->type == 2 && d->_pathPreview[0]) {
-                    snprintf(d->_textInput, DIALOG_PATH_MAX, "%s",
-                             GetFileName(d->_pathPreview));
-                    d->_textLen = (int)strlen(d->_textInput);
-                    d->_cursorPos = d->_textLen; d->_textActive = true;
+                g_dlg._selectedIndex = vi;
+                _visPath(vi, g_dlg._pathPreview, DIALOG_PATH_MAX);
+                if (g_dlg.type == 2 && g_dlg._pathPreview[0]) {
+                    snprintf(g_dlg._textInput, DIALOG_PATH_MAX, "%s",
+                             GetFileName(g_dlg._pathPreview));
+                    g_dlg._textLen = (int)strlen(g_dlg._textInput);
+                    g_dlg._cursorPos = g_dlg._textLen; g_dlg._textActive = true;
                 }
             }
         }
@@ -511,56 +547,56 @@ static void _drawRightPane(DialogState* d, Rectangle a) {
     EndScissorMode();
 
     _scrollbar((int)(a.x + a.width - SCROLL_W), listY, viewH, totalH, viewH,
-               &d->_scrollOffset, &d->_scrollGrabbed,
-               &d->_scrollGrabY, &d->_scrollStartOff, pressed);
+               &g_dlg._scrollOffset, &g_dlg._scrollGrabbed,
+               &g_dlg._scrollGrabY, &g_dlg._scrollStartOff, pressed);
 }
 
 /* ── File dialog ── */
 
-static void _drawFileDialog(DialogState* d) {
+static void _drawFileDialog(void) {
     int sw = GetScreenWidth(), sh = GetScreenHeight();
     int winW = sw*8/10, winH = sh*8/10;
     int wx = (sw - winW)/2, wy = (sh - winH)/2;
     Rectangle win = {(float)wx, (float)wy, (float)winW, (float)winH};
-    d->_bounds = win;
+    g_dlg._bounds = win;
 
     DrawRectangleRec(win, _winBg);
     DrawRectangleLinesEx(win, 1, _border);
     DrawRectangle(wx, wy, winW, TITLE_H, _titleBg);
-    _drawText(d->_font, d->_title, wx+PAD, wy+(TITLE_H-d->_fontSize)/2, d->_fontSize, _white);
+    _drawText(g_dlg._font, g_dlg._title, wx+PAD, wy+(TITLE_H-g_dlg._fontSize)/2, g_dlg._fontSize, _white);
 
     Rectangle xR = {win.x + win.width - TITLE_H, win.y, TITLE_H, TITLE_H};
-    if (_btn(d, xR, "X")) { _closeCancel(d); return; }
+    if (_btn(xR, "X")) { _closeCancel(); return; }
 
     /* Overwrite confirm overlay */
-    if (d->_confirmOverwrite) {
+    if (g_dlg._confirmOverwrite) {
         Rectangle ov = {win.x+1, (float)(wy+TITLE_H), win.width-2, win.height-TITLE_H-2};
         DrawRectangleRec(ov, (Color){232,232,232,240});
         int bw=360, bh=120, bx=wx+(winW-bw)/2, by=wy+(winH-bh)/2-10;
         Rectangle box = {(float)bx, (float)by, (float)bw, (float)bh};
         DrawRectangleRec(box, _winBg); DrawRectangleLinesEx(box, 1, _border);
         char msg[512];
-        snprintf(msg, sizeof(msg), "Overwrite \"%s\"?", GetFileName(d->_overwritePath));
-        float tw = _measureText(d->_font, msg, d->_fontSize);
-        _drawText(d->_font, msg, bx+(int)(bw-tw)/2, by+12, d->_fontSize, _text);
+        snprintf(msg, sizeof(msg), "Overwrite \"%s\"?", GetFileName(g_dlg._overwritePath));
+        float tw = _measureText(g_dlg._font, msg, g_dlg._fontSize);
+        _drawText(g_dlg._font, msg, bx+(int)(bw-tw)/2, by+12, g_dlg._fontSize, _text);
         int btnY = by + bh - BTN_H - 10;
         Rectangle yR = {(float)(bx+bw/2-BTN_W-6), (float)btnY, BTN_W, BTN_H};
         Rectangle nR = {(float)(bx+bw/2+6),        (float)btnY, BTN_W, BTN_H};
-        if (_btn(d, yR, "Yes") || IsKeyPressed(KEY_ENTER)) {
-            d->_confirmOverwrite = false;
-            _closeOk(d, d->_overwritePath);
-        } else if (_btn(d, nR, "No") || IsKeyPressed(KEY_ESCAPE))
-            d->_confirmOverwrite = false;
+        if (_btn(yR, "Yes") || IsKeyPressed(KEY_ENTER)) {
+            g_dlg._confirmOverwrite = false;
+            _closeOk(g_dlg._overwritePath);
+        } else if (_btn(nR, "No") || IsKeyPressed(KEY_ESCAPE))
+            g_dlg._confirmOverwrite = false;
         return;
     }
 
     /* Dir bar */
     int dirY = wy + TITLE_H;
     Rectangle upR = {(float)wx+PAD, (float)dirY+(DIRBAR_H-BTN_H)/2, 38, BTN_H};
-    if (_btn(d, upR, "^")) { _navUp(d); return; }
+    if (_btn(upR, "^")) { _navUp(); return; }
     int dtx = (int)upR.x + (int)upR.width + PAD;
     BeginScissorMode(dtx, dirY, winW-(dtx-wx)-PAD, DIRBAR_H);
-    _drawText(d->_font, d->_currentDir, dtx, dirY+(DIRBAR_H-d->_fontSize)/2, d->_fontSize, _textDim);
+    _drawText(g_dlg._font, g_dlg._currentDir, dtx, dirY+(DIRBAR_H-g_dlg._fontSize)/2, g_dlg._fontSize, _textDim);
     EndScissorMode();
     DrawLine(wx, dirY+DIRBAR_H, wx+winW, dirY+DIRBAR_H, _border);
 
@@ -569,64 +605,64 @@ static void _drawFileDialog(DialogState* d) {
 
     Rectangle leftR = {(float)wx+2, (float)contentY, (float)LEFT_PANE-2, (float)contentH};
     DrawRectangleRec(leftR, _winBg); DrawRectangleLinesEx(leftR, 1, _border);
-    _drawLeftPane(d, (Rectangle){leftR.x+1, leftR.y+1, leftR.width-2, leftR.height-2});
+    _drawLeftPane((Rectangle){leftR.x+1, leftR.y+1, leftR.width-2, leftR.height-2});
     DrawLine(wx+LEFT_PANE, contentY, wx+LEFT_PANE, contentY+contentH, _border);
 
     Rectangle rightR = {(float)(wx+LEFT_PANE+1), (float)contentY,
                         (float)(winW-LEFT_PANE-3), (float)contentH};
-    _drawRightPane(d, rightR);
+    _drawRightPane(rightR);
 
     int pathY = contentY + contentH + 2;
     DrawLine(wx, pathY, wx+winW, pathY, _border);
     BeginScissorMode(wx+PAD, pathY+2, winW-PAD*2, PATHBAR_H-4);
-    _drawText(d->_font, d->_pathPreview, wx+PAD,
-              pathY+2+(PATHBAR_H-4-d->_fontSize)/2, d->_fontSize, _textDim);
+    _drawText(g_dlg._font, g_dlg._pathPreview, wx+PAD,
+              pathY+2+(PATHBAR_H-4-g_dlg._fontSize)/2, g_dlg._fontSize, _textDim);
     EndScissorMode();
 
     int botY = pathY + PATHBAR_H;
     DrawLine(wx, botY, wx+winW, botY, _border);
 
-    if (d->type == 2) {
+    if (g_dlg.type == 2) {
         int inpW = winW - (BTN_W*2 + PAD*4);
         Rectangle inpR  = {(float)(wx+PAD),              (float)botY+(BOTTOM_H-BTN_H)/2, (float)inpW, BTN_H};
         Rectangle saveR = {(float)(wx+PAD+inpW+PAD),     (float)botY+(BOTTOM_H-BTN_H)/2, BTN_W, BTN_H};
         Rectangle canR  = {(float)(wx+winW-BTN_W-PAD),   (float)botY+(BOTTOM_H-BTN_H)/2, BTN_W, BTN_H};
-        _textField(d, inpR, d->_textInput, DIALOG_PATH_MAX,
-                   &d->_cursorPos, &d->_textLen, d->_textActive);
+        _textField(inpR, g_dlg._textInput, DIALOG_PATH_MAX,
+                   &g_dlg._cursorPos, &g_dlg._textLen, g_dlg._textActive);
         if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
-            d->_textActive = CheckCollisionPointRec(GetMousePosition(), inpR);
-        if (_btn(d, saveR, "Save") || (d->_textActive && IsKeyPressed(KEY_ENTER))) {
+            g_dlg._textActive = CheckCollisionPointRec(GetMousePosition(), inpR);
+        if (_btn(saveR, "Save") || (g_dlg._textActive && IsKeyPressed(KEY_ENTER))) {
             char fname[DIALOG_PATH_MAX];
-            snprintf(fname, sizeof(fname), "%s", d->_textInput);
-            if (d->_filter[0] == '.' && !_matchExt(fname, d->_filter)) {
+            snprintf(fname, sizeof(fname), "%s", g_dlg._textInput);
+            if (g_dlg._filter[0] == '.' && !_matchExt(fname, g_dlg._filter)) {
                 int fl = (int)strlen(fname);
-                snprintf(fname+fl, DIALOG_PATH_MAX-fl, "%s", d->_filter);
+                snprintf(fname+fl, DIALOG_PATH_MAX-fl, "%s", g_dlg._filter);
             }
             if (fname[0]) {
 				char full[DIALOG_PATH_MAX * 2 + 1];
-				snprintf(full, sizeof(full), "%s/%s", d->_currentDir, fname);
+				snprintf(full, sizeof(full), "%s/%s", g_dlg._currentDir, fname);
 				if (FileExists(full)) {
-					strncpy(d->_overwritePath, full, DIALOG_PATH_MAX-1);
-					d->_overwritePath[DIALOG_PATH_MAX-1] = '\0';
-					d->_confirmOverwrite = true;
+					strncpy(g_dlg._overwritePath, full, DIALOG_PATH_MAX-1);
+					g_dlg._overwritePath[DIALOG_PATH_MAX-1] = '\0';
+					g_dlg._confirmOverwrite = true;
 				} else if (full[0]) {
-					_closeOk(d, full);
+					_closeOk(full);
 				}
             }
             return;
         }
-        if (_btn(d, canR, "Cancel") || IsKeyPressed(KEY_ESCAPE)) { _closeCancel(d); return; }
+        if (_btn(canR, "Cancel") || IsKeyPressed(KEY_ESCAPE)) { _closeCancel(); return; }
     } else {
         int bax = winW - (BTN_W*2 + PAD*3);
         Rectangle openR = {(float)(wx+bax),          (float)botY+(BOTTOM_H-BTN_H)/2, BTN_W, BTN_H};
         Rectangle canR  = {(float)(wx+bax+BTN_W+PAD),(float)botY+(BOTTOM_H-BTN_H)/2, BTN_W, BTN_H};
-        if (_btn(d, canR, "Cancel") || IsKeyPressed(KEY_ESCAPE)) { _closeCancel(d); return; }
-        if (_btn(d, openR, "Open") || IsKeyPressed(KEY_ENTER)) {
-            if (d->_selectedIndex >= 0) {
+        if (_btn(canR, "Cancel") || IsKeyPressed(KEY_ESCAPE)) { _closeCancel(); return; }
+        if (_btn(openR, "Open") || IsKeyPressed(KEY_ENTER)) {
+            if (g_dlg._selectedIndex >= 0) {
                 char path[DIALOG_PATH_MAX];
-                _visPath(d, d->_selectedIndex, path, DIALOG_PATH_MAX);
-                if (path[0] && DirectoryExists(path)) { _navInto(d, path); return; }
-                if (path[0]) { _closeOk(d, path); return; }
+                _visPath(g_dlg._selectedIndex, path, DIALOG_PATH_MAX);
+                if (path[0] && DirectoryExists(path)) { _navInto(path); return; }
+                if (path[0]) { _closeOk(path); return; }
             }
         }
     }
@@ -634,126 +670,142 @@ static void _drawFileDialog(DialogState* d) {
 
 /* ── YesNo dialog ── */
 
-static void _drawYesNo(DialogState* d) {
+static void _drawYesNo(void) {
     int sw = GetScreenWidth(), sh = GetScreenHeight();
     int ww = 440, wh = 180, wx = (sw-ww)/2, wy = (sh-wh)/2;
     Rectangle win = {(float)wx, (float)wy, (float)ww, (float)wh};
     DrawRectangleRec(win, _winBg); DrawRectangleLinesEx(win, 1, _border);
     DrawRectangle(wx, wy, ww, TITLE_H, _titleBg);
-    _drawText(d->_font, "Confirm", wx+PAD, wy+(TITLE_H-d->_fontSize)/2, d->_fontSize, _white);
+    _drawText(g_dlg._font, "Confirm", wx+PAD, wy+(TITLE_H-g_dlg._fontSize)/2, g_dlg._fontSize, _white);
     Rectangle xR = {win.x + win.width - TITLE_H, win.y, TITLE_H, TITLE_H};
-    if (_btn(d, xR, "X")) { _closeCancel(d); return; }
-    float tw = _measureText(d->_font, d->_message, d->_fontSize);
-    _drawText(d->_font, d->_message, wx+(int)(ww-tw)/2, wy+TITLE_H+12, d->_fontSize, _text);
+    if (_btn(xR, "X")) { _closeCancel(); return; }
+    float tw = _measureText(g_dlg._font, g_dlg._message, g_dlg._fontSize);
+    _drawText(g_dlg._font, g_dlg._message, wx+(int)(ww-tw)/2, wy+TITLE_H+12, g_dlg._fontSize, _text);
     int btnY = wy + wh - BTN_H - 12;
     Rectangle yR = {(float)(wx+ww/2-BTN_W-6), (float)btnY, BTN_W, BTN_H};
     Rectangle nR = {(float)(wx+ww/2+6),        (float)btnY, BTN_W, BTN_H};
-    if (_btn(d, yR, "Yes") || IsKeyPressed(KEY_ENTER)) {
-        DialogResult r = _makeResult(); r.success = true; d->type = 0;
-        if (d->_callback) d->_callback(r);
-    } else if (_btn(d, nR, "No") || IsKeyPressed(KEY_ESCAPE)) {
-        _closeCancel(d);
+    if (_btn(yR, "Yes") || IsKeyPressed(KEY_ENTER)) {
+        DialogResult r = _makeResult(); r.success = true; g_dlg.type = 0;
+        if (g_dlg._callback) g_dlg._callback(r);
+    } else if (_btn(nR, "No") || IsKeyPressed(KEY_ESCAPE)) {
+        _closeCancel();
     }
 }
 
 /* ── ButtonChoice dialog ── */
 
-static void _drawButtonChoice(DialogState* d) {
+static void _drawButtonChoice(void) {
     int sw = GetScreenWidth(), sh = GetScreenHeight();
     int ww = 440, wh = 180, wx = (sw-ww)/2, wy = (sh-wh)/2;
     Rectangle win = {(float)wx, (float)wy, (float)ww, (float)wh};
     DrawRectangleRec(win, _winBg); DrawRectangleLinesEx(win, 1, _border);
     DrawRectangle(wx, wy, ww, TITLE_H, _titleBg);
-    _drawText(d->_font, d->_title, wx+PAD, wy+(TITLE_H-d->_fontSize)/2, d->_fontSize, _white);
+    _drawText(g_dlg._font, g_dlg._title, wx+PAD, wy+(TITLE_H-g_dlg._fontSize)/2, g_dlg._fontSize, _white);
     Rectangle xR = {win.x + win.width - TITLE_H, win.y, TITLE_H, TITLE_H};
-    if (_btn(d, xR, "X")) { _closeCancel(d); return; }
-    float tw = _measureText(d->_font, d->_message, d->_fontSize);
-    _drawText(d->_font, d->_message, wx+(int)(ww-tw)/2, wy+TITLE_H+12, d->_fontSize, _text);
+    if (_btn(xR, "X")) { _closeCancel(); return; }
+    float tw = _measureText(g_dlg._font, g_dlg._message, g_dlg._fontSize);
+    _drawText(g_dlg._font, g_dlg._message, wx+(int)(ww-tw)/2, wy+TITLE_H+12, g_dlg._fontSize, _text);
     int btnY = wy + wh - BTN_H - 12;
     int btnW = 100;
     int gap = 6;
-    int totalW = d->_btnCount * btnW + (d->_btnCount - 1) * gap;
+    int totalW = g_dlg._btnCount * btnW + (g_dlg._btnCount - 1) * gap;
     int bx = wx + (ww - totalW) / 2;
-    for (int i = 0; i < d->_btnCount; i++) {
+    for (int i = 0; i < g_dlg._btnCount; i++) {
         Rectangle bR = {(float)(bx + i * (btnW + gap)), (float)btnY, (float)btnW, BTN_H};
-        if (_btn(d, bR, d->_btnLabels[i])) {
+        if (_btn(bR, g_dlg._btnLabels[i])) {
             DialogResult r = _makeResult(); r.success = true;
-            snprintf(r.output, DIALOG_PATH_MAX, "%s", d->_btnLabels[i]);
-            d->type = 0;
-            if (d->_callback) d->_callback(r);
+            snprintf(r.output, DIALOG_PATH_MAX, "%s", g_dlg._btnLabels[i]);
+            g_dlg.type = 0;
+            if (g_dlg._callback) g_dlg._callback(r);
             return;
         }
     }
-    if (IsKeyPressed(KEY_ESCAPE)) { _closeCancel(d); }
+    if (IsKeyPressed(KEY_ESCAPE)) { _closeCancel(); }
 }
 
 /* ── Public API ── */
 
-void DialogSetFont(DialogState* dlg, Font font, int sz) {
+void DialogSetFont(Font font, int sz) {
     _persistFont = font; _persistFontSize = sz > 0 ? sz : 20;
-    dlg->_font = font; dlg->_fontSize = _persistFontSize;
+    g_dlg._font = font; g_dlg._fontSize = _persistFontSize;
 }
 
-static void _initCommon(DialogState* d) {
-    d->_font = _persistFont.texture.id > 0 ? _persistFont : GetFontDefault();
-    d->_fontSize = _persistFontSize;
+static void _initCommon(void) {
+    g_dlg._font = _persistFont.texture.id > 0 ? _persistFont : GetFontDefault();
+    g_dlg._fontSize = _persistFontSize;
 }
 
-void DialogOpen_Init(DialogState* d, const char* title, const char* filter,
+void DialogOpen_Init(const char* title, const char* filter,
                      const char* startDir, DialogCallback cb) {
-    memset(d, 0, sizeof(*d)); d->type = 1; d->_callback = cb;
-    _initCommon(d);
-    if (title)  snprintf(d->_title,  sizeof(d->_title),  "%s", title);
-    if (filter) snprintf(d->_filter, sizeof(d->_filter), "%s", filter);
-    d->_filterActive = true;  // focus the text input immediately
-    _initDir(d, startDir);
+    memset(&g_dlg, 0, sizeof(g_dlg)); g_dlg.type = 1; g_dlg._callback = cb;
+    _initCommon();
+    if (title)  snprintf(g_dlg._title,  sizeof(g_dlg._title),  "%s", title);
+    if (filter) snprintf(g_dlg._filter, sizeof(g_dlg._filter), "%s", filter);
+    g_dlg._filterActive = true;
+    _initDir();
+    if (startDir && startDir[0] && DirectoryExists(startDir)) {
+        size_t dl = strlen(startDir);
+        if (dl >= DIALOG_PATH_MAX) dl = DIALOG_PATH_MAX - 1;
+        memcpy(g_dlg._currentDir, startDir, dl);
+        g_dlg._currentDir[dl] = '\0';
+        _loadDir();
+    }
 }
 
-void DialogSaveAs_Init(DialogState* d, const char* title, const char* filter,
+void DialogSaveAs_Init(const char* title, const char* filter,
                        const char* defaultName, const char* startDir,
                        DialogCallback cb) {
-    memset(d, 0, sizeof(*d)); d->type = 2; d->_callback = cb; d->_textActive = true;
-    _initCommon(d);
-    if (title)  snprintf(d->_title,  sizeof(d->_title),  "%s", title);
-    if (filter) snprintf(d->_filter, sizeof(d->_filter), "%s", filter);
+    memset(&g_dlg, 0, sizeof(g_dlg)); g_dlg.type = 2; g_dlg._callback = cb; g_dlg._textActive = true;
+    _initCommon();
+    if (title)  snprintf(g_dlg._title,  sizeof(g_dlg._title),  "%s", title);
+    if (filter) snprintf(g_dlg._filter, sizeof(g_dlg._filter), "%s", filter);
     if (defaultName) {
-        snprintf(d->_textInput, sizeof(d->_textInput), "%s", defaultName);
-        d->_textLen = (int)strlen(defaultName); d->_cursorPos = d->_textLen;
+        snprintf(g_dlg._textInput, sizeof(g_dlg._textInput), "%s", defaultName);
+        g_dlg._textLen = (int)strlen(defaultName); g_dlg._cursorPos = g_dlg._textLen;
     }
-    _initDir(d, startDir);
+    _initDir();
+    if (startDir && startDir[0] && DirectoryExists(startDir)) {
+        size_t dl = strlen(startDir);
+        if (dl >= DIALOG_PATH_MAX) dl = DIALOG_PATH_MAX - 1;
+        memcpy(g_dlg._currentDir, startDir, dl);
+        g_dlg._currentDir[dl] = '\0';
+        _loadDir();
+    }
 }
 
-void DialogYesNo_Init(DialogState* d, const char* message, DialogCallback cb) {
-    memset(d, 0, sizeof(*d)); d->type = 3; d->_callback = cb;
-    _initCommon(d);
-    if (message) snprintf(d->_message, sizeof(d->_message), "%s", message);
+void DialogYesNo_Init(const char* message, DialogCallback cb) {
+    memset(&g_dlg, 0, sizeof(g_dlg)); g_dlg.type = 3; g_dlg._callback = cb;
+    _initCommon();
+    if (message) snprintf(g_dlg._message, sizeof(g_dlg._message), "%s", message);
 }
 
-void DialogButtonChoice_Init(DialogState* d, const char* title, const char* message,
+void DialogButtonChoice_Init(const char* title, const char* message,
                               DialogCallback cb, const char* btn1, ...) {
-    memset(d, 0, sizeof(*d)); d->type = 4; d->_callback = cb;
-    _initCommon(d);
-    if (title)   snprintf(d->_title,   sizeof(d->_title),   "%s", title);
-    if (message) snprintf(d->_message, sizeof(d->_message), "%s", message);
+    memset(&g_dlg, 0, sizeof(g_dlg)); g_dlg.type = 4; g_dlg._callback = cb;
+    _initCommon();
+    if (title)   snprintf(g_dlg._title,   sizeof(g_dlg._title),   "%s", title);
+    if (message) snprintf(g_dlg._message, sizeof(g_dlg._message), "%s", message);
 
     va_list args;
     va_start(args, btn1);
     const char* label = btn1;
-    d->_btnCount = 0;
-    while (label != NULL && d->_btnCount < 8) {
-        snprintf(d->_btnLabels[d->_btnCount], sizeof(d->_btnLabels[0]), "%s", label);
-        d->_btnCount++;
+    g_dlg._btnCount = 0;
+    while (label != NULL && g_dlg._btnCount < 8) {
+        snprintf(g_dlg._btnLabels[g_dlg._btnCount], sizeof(g_dlg._btnLabels[0]), "%s", label);
+        g_dlg._btnCount++;
         label = va_arg(args, const char*);
     }
     va_end(args);
 }
 
-void Dialog_Draw(DialogState* d) {
-    if (!d->type) return;
+void Dialog_Draw(void) {
+    if (!g_dlg.type) return;
     DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), _overlay);
-    if (d->type == 3) _drawYesNo(d);
-    else if (d->type == 4) _drawButtonChoice(d);
-    else _drawFileDialog(d);
+    if (g_dlg.type == 3) _drawYesNo();
+    else if (g_dlg.type == 4) _drawButtonChoice();
+    else _drawFileDialog();
 }
 
-void Dialog_MakeDir(const char* path) { MakeDirectory(path); }
+bool Dialog_IsActive(void) {
+    return g_dlg.type != 0;
+}

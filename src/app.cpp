@@ -122,7 +122,6 @@ static void DrawSplash(const char* msg) {
 
 /* ── File dialog / path state ──────────────────────────────────────────── */
 static AppState* g_state = NULL;
-DialogState g_fileDlg;
 
 /* ── New canvas dialog state ───────────────────────────────────────────── */
 static bool g_newCanvasActive = false;
@@ -224,7 +223,7 @@ void UpdateUI(AppState* state) {
 NetworkBroker networkBroker;
 
 bool App_IsDialogActive(void) {
-    return g_fileDlg.type != 0 || g_newCanvasActive;
+    return Dialog_IsActive() || g_newCanvasActive;
 }
 
 char g_fileWorkingDir[1024] = "";
@@ -363,7 +362,7 @@ void App_FileNew(void) {
 }
 
 void App_FileOpen(void) {
-    DialogOpen_Init(&g_fileDlg, "Open", ".re.png/.png",
+    DialogOpen_Init("Open", ".re.png/.png",
                     g_fileWorkingDir[0] ? g_fileWorkingDir : NULL, OnOpenResult);
 }
 
@@ -383,7 +382,7 @@ void App_FileSave(void) {
 void App_FileSaveAs(void) {
     const char* name = "untitled";
     if (g_currentFilePath[0]) name = GetFileNameWithoutExt(g_currentFilePath);
-    DialogSaveAs_Init(&g_fileDlg, "Save As", ".re.png", name,
+    DialogSaveAs_Init("Save As", ".re.png", name,
                       g_fileWorkingDir[0] ? g_fileWorkingDir : NULL, OnSaveResult);
 }
 
@@ -572,13 +571,13 @@ void App_Init(AppState* state) {
     /* Create default directories */
     const char* ad = GetApplicationDirectory();
     char p[1024];
-    snprintf(p, sizeof(p), "%sSaves", ad); Dialog_MakeDir(p);
-    snprintf(p, sizeof(p), "%sSnaps", ad); Dialog_MakeDir(p);
+    snprintf(p, sizeof(p), "%sSaves", ad); MakeDirectory(p);
+    snprintf(p, sizeof(p), "%sSnaps", ad); MakeDirectory(p);
 
     /* Load custom dialog font — bilinear filter for smooth OTF rendering */
     g_dialogFont = LoadFontEx("resources/Cadman_Roman.otf", 28, 0, 0);
     SetTextureFilter(g_dialogFont.texture, TEXTURE_FILTER_BILINEAR);
-    DialogSetFont(&g_fileDlg, g_dialogFont, 26);
+    DialogSetFont(g_dialogFont, 26);
 
     g_currentFilePath[0] = '\0';
 
@@ -618,8 +617,8 @@ void App_Draw(AppState* state) {
     UserContent_Update(state);
 
     /* If dialog active, draw it modelly — skip viewport/imgui entirely */
-    if (g_fileDlg.type != 0) {
-        Dialog_Draw(&g_fileDlg);
+    if (Dialog_IsActive()) {
+        Dialog_Draw();
         EndDrawing();
         return;
     }
