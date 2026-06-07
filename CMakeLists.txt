@@ -107,6 +107,7 @@ set(SOURCES
     # ── sensors ───────────────────────────────────────────────────────
     src/sensors/tablet.cpp
     src/sensors/input_filter.cpp
+    src/sensors/clipboard.cpp
     # ── drawing ───────────────────────────────────────────────────────
     src/drawing/brush_blend.cpp
     src/drawing/brush_tex.cpp
@@ -139,7 +140,7 @@ set(SOURCES
 add_executable(repaint ${SOURCES})
 
 if(WIN32)
-    target_sources(repaint PRIVATE resources/icon.rc src/sensors/tablet_win.cpp src/sensors/platform_utils_win.cpp)
+    target_sources(repaint PRIVATE resources/icon.rc src/sensors/tablet_win.cpp src/sensors/platform_utils_win.cpp src/sensors/clipboard_win.cpp)
     target_compile_definitions(repaint PRIVATE WINVER=0x0602 _WIN32_WINNT=0x0602)
     target_link_libraries(repaint PRIVATE opengl32 gdi32 winmm user32)
     if(MINGW)

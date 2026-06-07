@@ -3,6 +3,7 @@
 #include "network_broker.h"
 #include "tablet.h"
 #include "platform_utils.h"
+#include "platform_clipboard.h"
 #include <pthread.h>
 
 typedef struct GLFWwindow GLFWwindow;
@@ -49,6 +50,7 @@ int main() {
     SetExitKey(KEY_NULL);
     while (!WindowShouldClose()) {
         Tablet_UpdateModulators();
+        Clipboard_Update();
         if (!App_IsDialogActive()) {
             UpdateUI(&state);
             viewport.broker = g_useTestBroker
