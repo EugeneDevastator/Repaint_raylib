@@ -81,10 +81,8 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
     CollapsedBrush cbFrom = CollapseBrushParams(m_brushFrom, initAngle, toolMode);
     CollapsedBrush cbTo   = CollapseBrushParams(target, initAngle, toolMode);
 
-    // Rebase ctrl0 from spline point p1 to actual segment start m_lastDabPos,
-    // rescaling handle length to the actual segment length.
-    // (dabs don't land exactly on spline points, so segLen differs from the
-    //  spline segment length used at the call site to compute ctrl0's direction.)
+    // Rebase ctrl0 from p1 to m_lastDabPos, and ctrl3 from p2 to the actual
+    // segment end, rescaling both handle lengths to the actual segment length.
     float hLen = segLen * 0.33f;
     Vector2 c0dir = {ctrl0.x - p1.x, ctrl0.y - p1.y};
     float c0l = sqrtf(c0dir.x*c0dir.x + c0dir.y*c0dir.y);
@@ -93,13 +91,20 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
         actualCtrl0.x = m_lastDabPos.x + c0dir.x/c0l * hLen;
         actualCtrl0.y = m_lastDabPos.y + c0dir.y/c0l * hLen;
     }
+    Vector2 c3dir = {ctrl3.x - p2.x, ctrl3.y - p2.y};
+    float c3l = sqrtf(c3dir.x*c3dir.x + c3dir.y*c3dir.y);
+    Vector2 actualCtrl3 = p2;
+    if (c3l > 0.001f) {
+        actualCtrl3.x = p2.x + c3dir.x/c3l * hLen;
+        actualCtrl3.y = p2.y + c3dir.y/c3l * hLen;
+    }
 
     DrawSegment dseg;
     memset(&dseg, 0, sizeof(dseg));
     dseg.pos1      = m_lastDabPos;
     dseg.pos2      = p2;
     dseg.ctrl0     = actualCtrl0;
-    dseg.ctrl3     = ctrl3;
+    dseg.ctrl3     = actualCtrl3;
     dseg.brushFrom = cbFrom;
     dseg.brush     = cbTo;
     dseg.Noisemode = 0;
