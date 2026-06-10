@@ -57,6 +57,7 @@ struct SegmentData {
     float smudgeSrcX, smudgeSrcY;
     uint8_t targetType, targetId;
     int dabOffset;
+    float initAngle;    // base angle for per-dab rotation modulation; 0 = use baked resangle
 };
 
 // ── Stateless: draws one segment onto a render target ──────────────

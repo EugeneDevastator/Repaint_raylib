@@ -85,7 +85,6 @@ void ViewportHUD_Draw(AppState* state) {
             dstRect, Vector2{0, 0}, 0.0f, WHITE);
         DrawTexturePro(state->brushTex[state->activeBrushTex].rt.texture,
             Rectangle{0, 0, (float)tw, (float)-th}, dstRect, Vector2{0, 0}, 0.0f, WHITE);
-        return;
     }
 
     bool usePresent = GetPresentInited();
@@ -159,7 +158,7 @@ void ViewportHUD_Draw(AppState* state) {
             // Copy the visible canvas area as background (needed for smudge, harmless for paint)
             BeginTextureMode(g_previewRT);
             ClearBackground(BLANK);
-            if (!g_useViewRes) {
+            if (!g_useViewRes && docBlendTex) {
                 Camera2D prevCam = {};
                 prevCam.target = state->camera.target;
                 prevCam.offset = Vector2{PREVIEW_SZ * 0.5f, PREVIEW_SZ * 0.5f};
@@ -172,8 +171,9 @@ void ViewportHUD_Draw(AppState* state) {
                     Vector2{0, 0}, WHITE);
                 EndMode2D();
             }
-            // Draw preview strokes on top
+            // Draw preview strokes on top (same modulation flow as real stroke)
             StrokeEngine_DrawPreview(g_previewRT, bt, &zoomBrush, state->mode,
+                                     state->initialAngle,
                                      PREVIEW_SZ * 0.5f, PREVIEW_SZ * 0.5f);
             EndTextureMode();
 

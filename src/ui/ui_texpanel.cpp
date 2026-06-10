@@ -272,7 +272,7 @@ void TexPanelModule::DrawGUI(const DrawRect& rect) {
         Texture2D thumb = BrushTex_GetThumb(state, ti);
         bool isSel = (g_texPanelSelected == ti);
         if (isSel) ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.3f, 0.7f, 1.0f, 1.0f));
-        if (thumb.id > 0 && ImGui::ImageButton("##t", (ImTextureID)(intptr_t)thumb.id, ImVec2(texSz, texSz))) {
+        if (thumb.id > 0 && ImGui::ImageButton("##t", (ImTextureID)(intptr_t)thumb.id, ImVec2(texSz, texSz), ImVec2(0,1), ImVec2(1,0))) {
             g_texPanelSelected = ti; state->activeBrushTex = ti; state->editTexMode = 0;
         }
         if (isSel) ImGui::PopStyleColor();
@@ -290,7 +290,7 @@ void TexPanelModule::DrawGUI(const DrawRect& rect) {
         Texture2D thumb = BrushTex_GetThumb(state, ti);
         bool isSel = (g_texPanelSelected == ti);
         if (isSel) ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.3f, 0.7f, 1.0f, 1.0f));
-        if (thumb.id > 0 && ImGui::ImageButton("##t", (ImTextureID)(intptr_t)thumb.id, ImVec2(texSz, texSz))) {
+        if (thumb.id > 0 && ImGui::ImageButton("##t", (ImTextureID)(intptr_t)thumb.id, ImVec2(texSz, texSz), ImVec2(0,1), ImVec2(1,0))) {
             g_texPanelSelected = ti; state->activeBrushTex = ti; state->editTexMode = 0;
         }
         if (isSel) ImGui::PopStyleColor();

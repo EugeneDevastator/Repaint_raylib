@@ -64,17 +64,7 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
     m_prevSegDir = Vector2{segDx, segDy};
     m_prevSegLen = segLen;
 
-    d_RealBrush target = brush;
-    float sizeMul = powf(16.0f, BParam_GetValue(&bpSizeMul) / 128.0f - 1.0f);
-    target.rad_out  = GetModVal(&bpSize);
-    target.radInRatio = GetModVal(&bpHardness);
-    target.crv      = GetModVal(&bpCurvature);
-    target.opacity  = GetModVal(&bpOpacity);
-    target.resangle = fmodf(initAngle + GetModVal(&bpAngle), 360.0f);
-    target.x2y      = GetModVal(&bpScaleRel);
-    target.col      = HSLToRGB(GetModVal(&bpQuickHue), GetModVal(&bpQuickSat), GetModVal(&bpQuickLit));
-    target.cop      = (toolMode == eSmudge) ? GetModVal(&bpCloneOpacity) : 0.0f;
-    target.rad_out *= sizeMul;
+    d_RealBrush target = ModulateBrushParams(brush, initAngle, toolMode);
     if (m_layerScale > 0.001f && fabsf(m_layerScale - 1.0f) > 0.0001f)
         target.rad_out *= m_layerScale;
 
@@ -116,6 +106,7 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
     dseg.targetType = m_targetType;
     dseg.targetId   = m_targetId;
     dseg.dabOffset  = 0;
+    dseg.initAngle  = initAngle;
 
     SegDrawer_SetSegmentStart(m_lastDabRad, m_lastDabPos, &dseg);
 
@@ -264,11 +255,24 @@ void StrokeEmitter::handleEnd() {
         dseg.targetType = m_targetType;
         dseg.targetId   = m_targetId;
         dseg.dabOffset  = 0;
+        dseg.initAngle  = m_initAngle;
 
         m_renderer->Push(dseg);
         if (g_recorder) g_recorder->on_segment(dseg);
         if (g_broker) g_broker->on_segment(dseg);
     }
+
+    // Reset global modulators to neutral so the next frame's UI brush
+    // computation (app.cpp:196) reads clean values.
+    g_modPars.Pars[csDir]    = 0.5f;
+    g_modPars.Pars[csIdir]   = 0.5f;
+    g_modPars.Pars[csCrv]    = 0.5f;
+    g_modPars.Pars[csAcc]    = 1.0f;
+    g_modPars.Pars[csLenpx]  = 1.0f;
+    g_modPars.Pars[csHVdir]  = 0.5f;
+    g_modPars.Pars[csRelang] = 0.5f;
+    g_modPars.Pars[csVel]    = 1.0f;
+    g_modPars.Pars[csPressure] = 1.0f;
 
     m_active = false;
     m_splineCount = 0;

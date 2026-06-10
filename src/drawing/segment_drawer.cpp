@@ -1,5 +1,7 @@
+#define _USE_MATH_DEFINES
 #include "brush_draw.h"
 #include "repaint.h"
+#include "brush_preset.h"
 #include <math.h>
 #include <string.h>
 
@@ -74,7 +76,13 @@ CollapsedBrush BlendBrushes(CollapsedBrush from, CollapsedBrush to, float k) {
     r.radInRatio = lerp(from.radInRatio, to.radInRatio, k);
     r.scale_x    = lerp(from.scale_x, to.scale_x, k);
     r.scale_y    = lerp(from.scale_y, to.scale_y, k);
-    r.resangle   = lerp((float)from.resangle, (float)to.resangle, k);
+    {   // angle-aware lerp — shortest path around the circle
+        float a = from.resangle, b = to.resangle;
+        float diff = fmodf(b - a, 360.0f);
+        if (diff > 180.0f) diff -= 360.0f;
+        if (diff < -180.0f) diff += 360.0f;
+        r.resangle = fmodf(a + diff * k + 360.0f, 360.0f);
+    }
     r.pwr        = lerp(from.pwr, to.pwr, k);
     r.opacity    = lerp(from.opacity, to.opacity, k);
     r.cop        = lerp(from.cop, to.cop, k);
@@ -332,6 +340,22 @@ int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
         if (k > 1.0f) k = 1.0f;
         CollapsedBrush dabCB = BlendBrushes(seg.brushFrom, seg.brush, k);
         dabCB.rad_out_px = nextRadUnJit;
+
+        // Per-dab rotation: use curve tangent direction if initAngle is set
+        if (seg.initAngle != 0.0f) {
+            float t = nextArc / totalLen;
+            if (t < 0) t = 0; if (t > 1) t = 1;
+            int idx = (int)(t * 64);
+            if (idx < 0) idx = 0; if (idx > 63) idx = 63;
+            float tx = curvePts[idx+1].x - curvePts[idx].x;
+            float ty = curvePts[idx+1].y - curvePts[idx].y;
+            if (tx != 0 || ty != 0) {
+                float dirAng = AtanXY(tx, ty);
+                g_modPars.Pars[csDir] = RngConv(dirAng, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
+                dabCB.resangle = fmodf(seg.initAngle + GetModVal(&bpAngle), 360.0f);
+            }
+        }
+
         JitterBrush(dabCB, seg.brushFrom.baseSeed, dabOffset + count);
 
         if (apply) apply(pos.x, pos.y, lastSrcX, lastSrcY, dabCB, user);
