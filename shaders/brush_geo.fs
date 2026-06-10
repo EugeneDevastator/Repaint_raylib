@@ -16,8 +16,10 @@ float applyRadialFalloff(float d) {
     float a = 1.0;
     if (d > innerT) {
         float edgeRange = 1.0 - innerT;
-        if (edgeRange > 0.001)
+        if (edgeRange > 0.00001)
             a = 1.0 - (d - innerT) / edgeRange;
+		else
+		    return 0;
     }
     a = clamp(a, 0.0, 1.0);
     float crvt = uCurve * 2.0 - 1.0;
