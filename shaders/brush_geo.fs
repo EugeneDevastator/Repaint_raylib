@@ -11,8 +11,8 @@ uniform float uRadIn;
 uniform float uCurve;
 
 float applyRadialFalloff(float d) {
-    if (d < 0.00000001) return 0.0;
-    float innerT = clamp(uRadIn, 0.0, 1.0);
+    if (d < 0.00001) return 0.0;
+    float innerT = clamp(uRadIn, 0.0, 0.99);
     float a = 1.0;
     if (d > innerT) {
         float edgeRange = 1.0 - innerT;
