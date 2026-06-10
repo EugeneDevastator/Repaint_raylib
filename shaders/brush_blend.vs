@@ -18,7 +18,6 @@ void main() {
     // outCanvasPx: exact canvas pixel position for each fragment
     // Integer part = correct canvas pixel. Fractional = sub-pixel detail
     vec2 tp = vec2(vertexTexCoord.x, 1.0 - vertexTexCoord.y);
-    //outCanvasPx = blitOrigin + fracShift + tp * blitSize; //  opencode check this.
     outCanvasPx = blitOrigin + tp * blitSize;
 
     // Normalized for texture noise / other uses
