@@ -38,7 +38,7 @@ int SegmentRenderer::RenderPending(AppState* state, int maxPerFrame) {
         }
 
         if (rt.id != 0)
-            DrawOneSegment(seg, rt, brushTex, seg.seamless != 0, seg.dabOffset);
+            DrawOneSegment(seg, rt, brushTex, seg.seamless != 0, seg.dabOffset, seg.pixelPerfect != 0);
 
         m_head = (m_head + 1) % CAPACITY;
         rendered++;
@@ -73,7 +73,7 @@ int SegmentRenderer::EmitPending(AppState* state, int maxSegments, DabDrawer* dd
         }
 
         if (rt.id != 0)
-            EmitDabsFromSegment(dd, seg, rt, brushTex, seg.seamless != 0, seg.dabOffset);
+            EmitDabsFromSegment(dd, seg, rt, brushTex, seg.seamless != 0, seg.pixelPerfect != 0, seg.dabOffset);
 
         m_head = (m_head + 1) % CAPACITY;
         emitted++;

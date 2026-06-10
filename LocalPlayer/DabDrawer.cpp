@@ -43,10 +43,7 @@ int DabDrawer::DrawPending(int pixelBudget) {
         int cost = (int)(r * r);
         if (cost > budget) break;
 
-        bool savedSeamless = g_seamlessPaint;
-        g_seamlessPaint = d.seamless;
-        ApplyCollapsedBrush(d.rt, d.brush, d.x, d.y, d.srcX, d.srcY, d.brushTex);
-        g_seamlessPaint = savedSeamless;
+        ApplyCollapsedBrush(d.rt, d.brush, d.x, d.y, d.srcX, d.srcY, d.brushTex, d.seamless, d.pixelPerfect);
 
         budget -= cost;
         m_head = (m_head + 1) % CAPACITY;
@@ -56,15 +53,16 @@ int DabDrawer::DrawPending(int pixelBudget) {
 }
 
 void EmitDabsFromSegment(DabDrawer* dd, const DrawSegment& seg,
-    RenderTexture2D rt, Texture2D brushTex, bool seamless, int dabOffset)
+    RenderTexture2D rt, Texture2D brushTex, bool seamless, bool pixelPerfect, int dabOffset)
 {
     struct EmitCtx {
         DabDrawer* dd;
         RenderTexture2D rt;
         Texture2D tex;
         bool seamless;
+        bool pixelPerfect;
     };
-    EmitCtx ectx = { dd, rt, brushTex, seamless };
+    EmitCtx ectx = { dd, rt, brushTex, seamless, pixelPerfect };
 
     auto cb = [](float x, float y, float srcX, float srcY,
                  const CollapsedBrush& cbBrush, void* user) {
@@ -76,6 +74,7 @@ void EmitDabsFromSegment(DabDrawer* dd, const DrawSegment& seg,
         d.brush = cbBrush;
         d.brushTex = e->tex;
         d.seamless = e->seamless;
+        d.pixelPerfect = e->pixelPerfect;
         e->dd->Push(d);
     };
 

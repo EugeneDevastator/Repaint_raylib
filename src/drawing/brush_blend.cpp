@@ -156,7 +156,8 @@ void BrushBlend_ApplyStamp(
     d_Brush* brush,
     Texture2D brushTex,
     float stampX, float stampY,
-    float srcX,   float srcY
+    float srcX,   float srcY,
+    bool seamless, bool pixelPerfect
 ) {
     if (!inited || dstRT.id == 0) return;
 
@@ -285,9 +286,8 @@ void BrushBlend_ApplyStamp(
     int   isz = (int)floorf(stampSizePx);
     float bo[2] = { (float)ix0, (float)iy0 };
     float bs[2] = { (float)isz, (float)isz };
-    extern bool g_pixelPerfect;
     float fs[2] = { x0 - (float)ix0, y0 - (float)iy0 };
-    if (g_pixelPerfect) { fs[0] = fs[1] = 0.0f; }
+    if (pixelPerfect) { fs[0] = fs[1] = 0.0f; }
     SetShaderValue(brushBlendShader, locBlitOrigin, bo, SHADER_UNIFORM_VEC2);
     SetShaderValue(brushBlendShader, locBlitSize,   bs, SHADER_UNIFORM_VEC2);
     SetShaderValue(brushBlendShader, locFracShift,  fs, SHADER_UNIFORM_VEC2);
@@ -300,7 +300,7 @@ void BrushBlend_ApplyStamp(
 
     // Set dstRT.texture wrap for shader reads
     SetTextureFilter(dstRT.texture, TEXTURE_FILTER_POINT);
-    if (g_seamlessPaint)
+    if (seamless)
         SetTextureWrap(dstRT.texture, TEXTURE_WRAP_REPEAT);
     else
         SetTextureWrap(dstRT.texture, TEXTURE_WRAP_CLAMP);
@@ -318,9 +318,9 @@ void BrushBlend_ApplyStamp(
     rlActiveTextureSlot(0);
 
     BeginShaderMode(brushBlendShader);
-    int uSeamlessVal = g_seamlessPaint ? 1 : 0;
+    int uSeamlessVal = seamless ? 1 : 0;
     SetShaderValue(brushBlendShader, locSeamless, &uSeamlessVal, SHADER_UNIFORM_INT);
-    int uPpVal = g_pixelPerfect ? 1 : 0;
+    int uPpVal = pixelPerfect ? 1 : 0;
     SetShaderValue(brushBlendShader, locPixelPerfect, &uPpVal, SHADER_UNIFORM_INT);
 
     DrawTexturePro(geoRT->texture,
@@ -344,7 +344,7 @@ void BrushBlend_ApplyStamp(
     rlSetBlendMode(RL_BLEND_CUSTOM);
     rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
 
-    if (g_seamlessPaint) {
+    if (seamless) {
         for (int dy = -1; dy <= 1; dy++) {
             for (int dx = -1; dx <= 1; dx++) {
                 int tx = ix0 + dx * W;

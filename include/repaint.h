@@ -150,7 +150,7 @@ struct NetSegment {
     CollapsedBrush brushFrom, brushTo;
     uint16_t seed;
     uint8_t layer;       // target layer index
-    uint8_t toolID, seamless;   // pad byte
+    uint8_t toolID, seamless, pixelPerfect;
     float smudgeSrcX, smudgeSrcY;
 };
 
@@ -208,7 +208,8 @@ Document Doc_New(int w, int h);
 void BrushBlend_Init(void);
 void BrushBlend_Shutdown(void);
 void BrushBlend_ApplyStamp(RenderTexture2D dstRT, d_Brush* brush,
-    Texture2D brushTex, float stampX, float stampY, float srcX, float srcY);
+    Texture2D brushTex, float stampX, float stampY, float srcX, float srcY,
+    bool seamless, bool pixelPerfect);
 
 void DualSlider_Init(DualSlider* slider);
 void BParam_Init(BParam* bp, int id, const char* name, float outMin, float outMax, float outDef);

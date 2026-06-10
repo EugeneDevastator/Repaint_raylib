@@ -42,7 +42,7 @@ struct DrawSegment {
     Vector2 pos1, pos2;
     Vector2 ctrl0, ctrl3;
     CollapsedBrush brushFrom, brush;
-    uint8_t Noisemode, tool, seamless;
+    uint8_t Noisemode, tool, seamless, pixelPerfect;
     uint16_t seed;
     float smudgeSrcX, smudgeSrcY;
     uint8_t targetType;
@@ -52,10 +52,11 @@ struct DrawSegment {
 
 // ── Apply a collapsed brush stamp onto a render target ─────────────
 void ApplyCollapsedBrush(RenderTexture2D rt, const CollapsedBrush& cb,
-                         float x, float y, float srcX, float srcY, Texture2D brushTex);
+                         float x, float y, float srcX, float srcY, Texture2D brushTex,
+                         bool seamless, bool pixelPerfect);
 
 // ── Stateless: draws one segment onto a render target ──────────────
-void DrawOneSegment(const DrawSegment& dseg, RenderTexture2D rt, Texture2D brushTex, bool seamless, int dabOffset);
+void DrawOneSegment(const DrawSegment& dseg, RenderTexture2D rt, Texture2D brushTex, bool seamless, int dabOffset, bool pixelPerfect = false);
 
 // ── Segment computation helpers (no rendering) ─────────────────────
 void SegDrawer_SetSegmentStart(float startRad, Vector2 startPos, DrawSegment* seg);

@@ -9,6 +9,7 @@ struct DabEntry {
     CollapsedBrush brush;
     Texture2D brushTex;
     bool seamless;
+    bool pixelPerfect;
 };
 
 class DabDrawer {
@@ -32,6 +33,6 @@ private:
 extern DabDrawer* g_dabDrawer;
 
 void EmitDabsFromSegment(DabDrawer* dd, const DrawSegment& seg,
-    RenderTexture2D rt, Texture2D brushTex, bool seamless, int dabOffset);
+    RenderTexture2D rt, Texture2D brushTex, bool seamless, bool pixelPerfect, int dabOffset);
 
 #endif

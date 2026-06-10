@@ -359,9 +359,8 @@ int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad,
 
 // ── ApplyCollapsedBrush ─────────────────────────────────────────────
 void ApplyCollapsedBrush(RenderTexture2D rt, const CollapsedBrush& cb,
-                         float x, float y, float srcX, float srcY, Texture2D brushTex) {
-    extern bool g_pixelPerfect;
-    if (g_pixelPerfect) { x = roundf(x); y = roundf(y); srcX = roundf(srcX); srcY = roundf(srcY); }
+                         float x, float y, float srcX, float srcY, Texture2D brushTex,
+                         bool seamless, bool pixelPerfect) {
     d_Brush tb; memset(&tb, 0, sizeof(tb));
     tb.Realb.rad_out = cb.rad_out_px;
     tb.Realb.radInRatio = cb.radInRatio;
@@ -387,26 +386,21 @@ void ApplyCollapsedBrush(RenderTexture2D rt, const CollapsedBrush& cb,
     tb.Realb.userTexOriginX = cb.userTexOriginX;
     tb.Realb.userTexOriginY = cb.userTexOriginY;
     tb.Realb.userTexDirection = cb.userTexDirection;
-    BrushBlend_ApplyStamp(rt, &tb, brushTex, x, y, srcX, srcY);
+    BrushBlend_ApplyStamp(rt, &tb, brushTex, x, y, srcX, srcY, seamless, pixelPerfect);
 }
 
 // ── DrawOneSegment ─────────────────────────────────────────────────
-void DrawOneSegment(const DrawSegment& dseg, RenderTexture2D rt, Texture2D brushTex, bool seamless, int dabOffset) {
-    bool savedSeamless = g_seamlessPaint;
-    g_seamlessPaint = seamless;
-
-    struct UserData { RenderTexture2D* rt; Texture2D tex; };
-    UserData ud = {&rt, brushTex};
+void DrawOneSegment(const DrawSegment& dseg, RenderTexture2D rt, Texture2D brushTex, bool seamless, int dabOffset, bool pixelPerfect) {
+    struct UserData { RenderTexture2D* rt; Texture2D tex; bool seamless; bool pixelPerfect; };
+    UserData ud = {&rt, brushTex, seamless, pixelPerfect};
 
     auto cb = [](float x, float y, float srcX, float srcY, const CollapsedBrush& brush, void* user) {
         UserData* ud = (UserData*)user;
-        ApplyCollapsedBrush(*ud->rt, brush, x, y, srcX, srcY, ud->tex);
+        ApplyCollapsedBrush(*ud->rt, brush, x, y, srcX, srcY, ud->tex, ud->seamless, ud->pixelPerfect);
     };
 
     SegResult r;
     DrawLinear(&dseg, dabOffset, 0.0f, cb, &ud, 65536, &r);
-
-    g_seamlessPaint = savedSeamless;
 }
 
 // ── SegDrawer helpers (computation only, no rendering) ─────────────

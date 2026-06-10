@@ -110,6 +110,7 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
     dseg.Noisemode = 0;
     dseg.tool      = (uint8_t)toolMode;
     dseg.seamless  = g_seamlessPaint ? 1 : 0;
+    dseg.pixelPerfect = g_pixelPerfect ? 1 : 0;
     dseg.seed      = m_seed;
     dseg.smudgeSrcX = m_lastDabPos.x;
     dseg.smudgeSrcY = m_lastDabPos.y;
@@ -257,6 +258,7 @@ void StrokeEmitter::handleEnd() {
         dseg.brushFrom = dseg.brush = cb;
         dseg.tool = eSingleStamp;
         dseg.seamless = g_seamlessPaint ? 1 : 0;
+        dseg.pixelPerfect = g_pixelPerfect ? 1 : 0;
         dseg.seed = m_seed;
         dseg.smudgeSrcX = m_lastDabPos.x;
         dseg.smudgeSrcY = m_lastDabPos.y;

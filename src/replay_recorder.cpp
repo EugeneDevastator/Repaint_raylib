@@ -4,7 +4,7 @@
 #include <stdio.h>
 
 #define RPL_MAGIC "RPLREP"
-#define RPL_VER 5
+#define RPL_VER 6
 
 void ReplayRecorder::on_segment(const DrawSegment& seg) {
     if (m_playing) return;
@@ -16,6 +16,7 @@ void ReplayRecorder::on_segment(const DrawSegment& seg) {
     s.seed = seg.seed;
     s.toolID = seg.tool;
     s.seamless = seg.seamless;
+    s.pixelPerfect = seg.pixelPerfect;
     s.smudgeSrcX = seg.smudgeSrcX;
     s.smudgeSrcY = seg.smudgeSrcY;
     s.layer = 0;
@@ -73,6 +74,7 @@ void ReplayRecorder::Play(AppState* state) {
         dseg.seed = ns.seed;
         dseg.tool = ns.toolID;
         dseg.seamless = ns.seamless;
+        dseg.pixelPerfect = ns.pixelPerfect;
         dseg.smudgeSrcX = ns.smudgeSrcX * sx;
         dseg.smudgeSrcY = ns.smudgeSrcY * sy;
         dseg.Noisemode = 0;
@@ -82,7 +84,7 @@ void ReplayRecorder::Play(AppState* state) {
             dseg.brushFrom.rad_out_px, dseg.brushFrom.spacing);
         fflush(stdout);
 
-        DrawOneSegment(dseg, rt, g_activeBrushTex, g_seamlessPaint, 0);
+        DrawOneSegment(dseg, rt, g_activeBrushTex, dseg.seamless != 0, 0, dseg.pixelPerfect != 0);
     }
     printf("[REPLAY] Play done\n"); fflush(stdout);
 }
@@ -112,6 +114,7 @@ bool ReplayRecorder::Save(const char* path) {
         fwrite(&ns.seed, sizeof(uint16_t), 1, f);
         fwrite(&ns.toolID, sizeof(uint8_t), 1, f);
         fwrite(&ns.seamless, sizeof(uint8_t), 1, f);
+        fwrite(&ns.pixelPerfect, sizeof(uint8_t), 1, f);
         fwrite(&ns.smudgeSrcX, sizeof(float), 1, f);
         fwrite(&ns.smudgeSrcY, sizeof(float), 1, f);
     }
@@ -130,7 +133,7 @@ bool ReplayRecorder::Load(const char* path) {
         fclose(f); return false;
     }
     uint32_t ver;
-    if (fread(&ver, 4, 1, f) != 1 || ver != RPL_VER) {
+    if (fread(&ver, 4, 1, f) != 1 || ver < 5 || ver > RPL_VER) {
         printf("[REPLAY] bad ver: %d\n", (int)ver); fflush(stdout);
         fclose(f); return false;
     }
@@ -155,6 +158,11 @@ bool ReplayRecorder::Load(const char* path) {
         if (fread(&ns.seed, sizeof(uint16_t), 1, f) != 1) break;
         if (fread(&ns.toolID, sizeof(uint8_t), 1, f) != 1) break;
         if (fread(&ns.seamless, sizeof(uint8_t), 1, f) != 1) break;
+        if (ver >= 6) {
+            if (fread(&ns.pixelPerfect, sizeof(uint8_t), 1, f) != 1) break;
+        } else {
+            ns.pixelPerfect = 0;
+        }
         if (fread(&ns.smudgeSrcX, sizeof(float), 1, f) != 1) break;
         if (fread(&ns.smudgeSrcY, sizeof(float), 1, f) != 1) break;
         printf("[RPLOAD] seg %d: p1=(%.1f,%.1f) p2=(%.1f,%.1f) rad=%.1f spacing=%.2f col=(%d,%d,%d)\n",
