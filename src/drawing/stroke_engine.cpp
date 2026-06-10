@@ -143,13 +143,17 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex,
     seed.initAngle = initialAngle;
     DrawOneSegment(seed, dstRT, brushTex, seed.seamless != 0, 0, false);
 
-    // Path segment (same flow as real stroke segment)
+    // Path segment with a curve so per-dab rotation modulation is visible
     Vector2 start = {cx, cy};
     Vector2 end   = {cx + segLen * dirX, cy + segLen * dirY};
+    Vector2 mid   = {(start.x + end.x) * 0.5f, (start.y + end.y) * 0.5f};
+    float perpX = -dirY * segLen * 0.25f, perpY = dirX * segLen * 0.25f;
+    Vector2 c0 = {mid.x + perpX, mid.y + perpY};
+    Vector2 c3 = {mid.x - perpX, mid.y - perpY};
     SegmentData s;
     memset(&s, 0, sizeof(s));
     s.pos1 = start; s.pos2 = end;
-    s.ctrl0 = s.ctrl3 = s.pos1;
+    s.ctrl0 = c0; s.ctrl3 = c3;
     s.brushFrom = cbFull; s.brush = cbTiny;
     s.seed = baseBrush->seed;
     s.tool = (uint8_t)toolMode;
