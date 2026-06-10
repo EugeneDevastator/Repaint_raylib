@@ -161,10 +161,16 @@ void UpdateUI(AppState* state) {
 
     // Undo / Redo
     if (IsKeyDown(KEY_LEFT_CONTROL) && !IsKeyDown(KEY_LEFT_SHIFT) && IsKeyPressed(KEY_Z)) {
-        if (state->undo) state->undo->Undo(state, state->activeLayer);
+        if (state->undo) {
+            int idx = state->editTexMode ? state->activeBrushTex : state->activeLayer;
+            state->undo->Undo(state, idx, state->editTexMode);
+        }
     }
     if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyDown(KEY_LEFT_SHIFT) && IsKeyPressed(KEY_Z)) {
-        if (state->undo) state->undo->Redo(state, state->activeLayer);
+        if (state->undo) {
+            int idx = state->editTexMode ? state->activeBrushTex : state->activeLayer;
+            state->undo->Redo(state, idx, state->editTexMode);
+        }
     }
 
     // Replay confirmation popup

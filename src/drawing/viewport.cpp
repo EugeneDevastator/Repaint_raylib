@@ -177,6 +177,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             if (!vp->wasMouseDown) {
                 if (vp->inBounds && leftDown) {
                     Modulators_SnapRunState();
+                    if (state->undo) state->undo->Snapshot(state, state->activeBrushTex, true);
 
                     InputEntry be;
                     be.type = InputEntry::Begin;

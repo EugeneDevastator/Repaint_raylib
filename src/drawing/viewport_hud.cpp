@@ -90,6 +90,7 @@ void ViewportHUD_Draw(AppState* state) {
 
     bool usePresent = GetPresentInited();
     RenderTexture2D* docBlendTex = NULL;
+    if (!state->editTexMode) {
 
     if (g_useViewRes) {
         // Viewport-sized RT — recreate only when viewport changes size
@@ -137,6 +138,7 @@ void ViewportHUD_Draw(AppState* state) {
             DrawTexturePro(docBlendTex->texture, srcRect, dstRect, Vector2{0, 0}, 0.0f, WHITE);
             if (usePresent) EndShaderMode();
         }
+    }
     }
 
     // ── Brush preview overlay (quick HUD) ────────────────────────────
