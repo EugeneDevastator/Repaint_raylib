@@ -32,6 +32,7 @@ uniform vec2  canvasSize;
 uniform float pwr;
 uniform int   eraseMode;
 uniform bool  uSeamless;
+uniform bool  uPixelPerfect;
 in vec2 canvasFragUV;
 in vec2 outCanvasPx;
 uniform vec2 blitSize;    // floor(stampSizePx) — pixel-aligned stamp size
@@ -127,7 +128,14 @@ float cloneOpacity = smudgeStrength;
         else
             srcPx = clamp(srcPx, vec2(0.0), canvasSize - vec2(1.0));
 
-        vec4 smudge = sampleBilinear(dstTex, vec2(srcPx.x, canvasSize.y - srcPx.y), canvasSize, bmidx, uSeamless);
+        vec4 smudge;
+        if (uPixelPerfect) {
+            ivec2 pp = ivec2(clamp(srcPx, vec2(0.0), canvasSize - vec2(1.0)));
+            pp.y = int(canvasSize.y) - 1 - pp.y;
+            smudge = texelFetch(dstTex, pp, 0);
+        } else {
+            smudge = sampleBilinear(dstTex, vec2(srcPx.x, canvasSize.y - srcPx.y), canvasSize, bmidx, uSeamless);
+        }
 
         vec3 smudgeRGB = smudge.rgb;
         float smudgeA  = smudge.a;

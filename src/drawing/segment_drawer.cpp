@@ -360,6 +360,8 @@ int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad,
 // ── ApplyCollapsedBrush ─────────────────────────────────────────────
 void ApplyCollapsedBrush(RenderTexture2D rt, const CollapsedBrush& cb,
                          float x, float y, float srcX, float srcY, Texture2D brushTex) {
+    extern bool g_pixelPerfect;
+    if (g_pixelPerfect) { x = roundf(x); y = roundf(y); srcX = roundf(srcX); srcY = roundf(srcY); }
     d_Brush tb; memset(&tb, 0, sizeof(tb));
     tb.Realb.rad_out = cb.rad_out_px;
     tb.Realb.radInRatio = cb.radInRatio;

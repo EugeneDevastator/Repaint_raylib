@@ -99,6 +99,7 @@ bool g_useViewRes = false;
 UndoManager* g_undoManager = nullptr;
 ReplayRecorder* g_recorder = nullptr;
 bool g_replayPopupActive = false;
+bool g_pixelPerfect = false;
 float g_pivotCursorX = 0.0f, g_pivotCursorY = 0.0f;
 
 static void DrawSplash(const char* msg) {

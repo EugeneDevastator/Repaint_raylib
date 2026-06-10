@@ -28,6 +28,7 @@ static int locFracShift  = -1;
 static int locPwr = -1;
 static int locEraseMode = -1;
 static int locSeamless = -1;
+static int locPixelPerfect = -1;
 static int locGeoTex = -1;
 static bool inited = false;
 
@@ -125,6 +126,7 @@ void BrushBlend_Init(void) {
     locPwr            = GetShaderLocation(brushBlendShader, "pwr");
     locEraseMode      = GetShaderLocation(brushBlendShader, "eraseMode");
     locSeamless       = GetShaderLocation(brushBlendShader, "uSeamless");
+    locPixelPerfect   = GetShaderLocation(brushBlendShader, "uPixelPerfect");
 
     if (locDstTex   >= 0) { int u = 1; SetShaderValue(brushBlendShader, locDstTex,   &u, SHADER_UNIFORM_INT); }
     if (locBrushTex >= 0) { int u = 2; SetShaderValue(brushBlendShader, locBrushTex, &u, SHADER_UNIFORM_INT); }
@@ -283,7 +285,9 @@ void BrushBlend_ApplyStamp(
     int   isz = (int)floorf(stampSizePx);
     float bo[2] = { (float)ix0, (float)iy0 };
     float bs[2] = { (float)isz, (float)isz };
+    extern bool g_pixelPerfect;
     float fs[2] = { x0 - (float)ix0, y0 - (float)iy0 };
+    if (g_pixelPerfect) { fs[0] = fs[1] = 0.0f; }
     SetShaderValue(brushBlendShader, locBlitOrigin, bo, SHADER_UNIFORM_VEC2);
     SetShaderValue(brushBlendShader, locBlitSize,   bs, SHADER_UNIFORM_VEC2);
     SetShaderValue(brushBlendShader, locFracShift,  fs, SHADER_UNIFORM_VEC2);
@@ -316,6 +320,8 @@ void BrushBlend_ApplyStamp(
     BeginShaderMode(brushBlendShader);
     int uSeamlessVal = g_seamlessPaint ? 1 : 0;
     SetShaderValue(brushBlendShader, locSeamless, &uSeamlessVal, SHADER_UNIFORM_INT);
+    int uPpVal = g_pixelPerfect ? 1 : 0;
+    SetShaderValue(brushBlendShader, locPixelPerfect, &uPpVal, SHADER_UNIFORM_INT);
 
     DrawTexturePro(geoRT->texture,
         (Rectangle){0, 0, (float)drawSz, (float)-drawSz},

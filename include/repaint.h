@@ -232,6 +232,7 @@ extern Rectangle g_colorPickVpBounds;
 extern float g_pivotCursorX, g_pivotCursorY;
 extern bool g_seamlessPaint;
 extern bool g_seamlessPreview;
+extern bool g_pixelPerfect;
 extern int g_texScaleMode;  // 0 = brush scale, 1 = global scale
 extern int g_texPanelAreaY; // y-coordinate for the texture panel in the Quick HUD
 #define HUD_NONE 0

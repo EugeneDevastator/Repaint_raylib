@@ -66,6 +66,9 @@ void LeftPanel_Draw(AppState* state) {
     ImGui::Checkbox("Preserve Layer Alpha", (bool*)&preserve);
     state->currentBrush.Realb.preserveop = (uint8_t)preserve;
 
+    extern bool g_pixelPerfect;
+    ImGui::Checkbox("Pixel Perfect", &g_pixelPerfect);
+
     extern int g_strokeSmoothingMode;
     extern float g_strokeThrottle;
     ImGui::Text("Smoothing");
