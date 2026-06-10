@@ -22,16 +22,6 @@ struct ReceivedPacket {
     uint32_t size;
 };
 
-struct QueuedSegment {
-    Vector2 pos1, pos2, ctrl0, ctrl3;
-    CollapsedBrush brushFrom, brushTo;
-    uint16_t seed;
-    uint8_t  tool, seamless;
-    float smudgeSrcX, smudgeSrcY;
-    uint8_t targetType;  // 0 = layer, 1 = brush texture
-    uint8_t targetId;    // layer index or brushTex index
-};
-
 struct NetworkBroker : ICommandBroker {
     static const int CMD_CAPACITY  = 4096;
     static const int RECV_BUF_SIZE = 65536;
@@ -46,7 +36,7 @@ struct NetworkBroker : ICommandBroker {
     char statusMsg[2048];
     bool showUI;
 
-    QueuedSegment segQueue[CMD_CAPACITY];
+    SegmentData segQueue[CMD_CAPACITY];
     volatile int segHead;
     volatile int segTail;
 
@@ -69,7 +59,7 @@ struct NetworkBroker : ICommandBroker {
     NetworkBroker();
     ~NetworkBroker();
 
-    void on_segment(const DrawSegment& seg) override;
+    void on_segment(const SegmentData& seg) override;
     void poll(AppState* state) override;
 
     bool Connect(const char* addr, int port);
@@ -78,7 +68,7 @@ struct NetworkBroker : ICommandBroker {
 
     void SendPacket(uint8_t hid, const uint8_t* data, uint32_t size);
     void SendAction(const d_Action* act);
-    void SendSegment(const QueuedSegment& seg);
+    void SendSegment(const SegmentData& seg);
     void SendLAction(const d_LAction* lact);
 
     void LoadConfig(const char* path);
@@ -88,7 +78,7 @@ struct NetworkBroker : ICommandBroker {
 private:
     static void RecvThreadFunc(NetworkBroker* self);
     void ProcessReceived(uint8_t hid, uint8_t* data, uint32_t size);
-    void EnqueueRemoteSegment(const NetSegment& ns);
+    void EnqueueRemoteSegment(const SegmentData& seg);
 };
 
 extern NetworkBroker networkBroker;

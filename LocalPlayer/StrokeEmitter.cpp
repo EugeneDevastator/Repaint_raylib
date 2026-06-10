@@ -99,7 +99,7 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
         actualCtrl3.y = p2.y + c3dir.y/c3l * hLen;
     }
 
-    DrawSegment dseg;
+    SegmentData dseg;
     memset(&dseg, 0, sizeof(dseg));
     dseg.pos1      = m_lastDabPos;
     dseg.pos2      = p2;
@@ -107,7 +107,6 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
     dseg.ctrl3     = actualCtrl3;
     dseg.brushFrom = cbFrom;
     dseg.brush     = cbTo;
-    dseg.Noisemode = 0;
     dseg.tool      = (uint8_t)toolMode;
     dseg.seamless  = g_seamlessPaint ? 1 : 0;
     dseg.pixelPerfect = g_pixelPerfect ? 1 : 0;
@@ -130,7 +129,7 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
     if (g_recorder) g_recorder->on_segment(dseg);
     if (g_broker) g_broker->on_segment(dseg);
 
-    SegDrawer_ComputeSegmentEnd(&dseg, 0, m_lastDabRad, &m_lastDabPos, &m_lastDabRad);
+    SegDrawer_ComputeSegmentEnd(dseg, 0, m_lastDabRad, &m_lastDabPos, &m_lastDabRad);
 
     m_brushFrom = target;
     m_emittedAny = true;
@@ -251,7 +250,7 @@ void StrokeEmitter::handleEnd() {
 
     if (!m_emittedAny) {
         CollapsedBrush cb = CollapseBrushParams(m_brushFrom, m_initAngle, m_toolMode);
-        DrawSegment dseg;
+    SegmentData dseg;
         memset(&dseg, 0, sizeof(dseg));
         dseg.pos1 = dseg.pos2 = m_lastDabPos;
         dseg.ctrl0 = dseg.ctrl3 = dseg.pos1;

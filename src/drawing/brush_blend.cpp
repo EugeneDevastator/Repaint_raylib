@@ -153,7 +153,7 @@ void BrushBlend_Shutdown(void) {
 
 void BrushBlend_ApplyStamp(
     RenderTexture2D dstRT,
-    d_Brush* brush,
+    const CollapsedBrush& brush,
     Texture2D brushTex,
     float stampX, float stampY,
     float srcX,   float srcY,
@@ -164,11 +164,11 @@ void BrushBlend_ApplyStamp(
     int W = dstRT.texture.width;
     int H = dstRT.texture.height;
 
-    float radOut   = fmaxf(brush->Realb.rad_out, 0.001f);
-    float angleRad = (float)brush->Realb.resangle * (float)(M_PI / 180.0);
-    float squish   = fmaxf((float)brush->Realb.x2y, 0.01f);
+    float radOut   = fmaxf(brush.rad_out_px, 0.001f);
+    float angleRad = (float)brush.resangle * (float)(M_PI / 180.0);
+    float squish   = fmaxf((float)brush.scale_y, 0.01f);
 
-    float radOutForGeo = brush->Realb.rad_out;
+    float radOutForGeo = brush.rad_out_px;
     if (radOutForGeo < 1.0f) radOutForGeo = 1.0f;
 
     float bboxHalf = radOutForGeo * 1.41421356f;
@@ -179,7 +179,7 @@ void BrushBlend_ApplyStamp(
     int drawSz = bucket;
 
     float stampSizePx = (float)drawSz;
-    float actualRadOut = brush->Realb.rad_out;
+    float actualRadOut = brush.rad_out_px;
     if (actualRadOut <= 1.0f && actualRadOut > 0.0f) {
         float ratio = actualRadOut / radOutForGeo;
         stampSizePx = (float)drawSz * ratio;
@@ -198,10 +198,10 @@ void BrushBlend_ApplyStamp(
     SetShaderValue(brushGeoShader, locUAngle,  &angleRad, SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushGeoShader, locUSquish, &squish,   SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushGeoShader, locUSize,   &size,     SHADER_UNIFORM_FLOAT);
-    float persp = brush->Realb.perspective;
+    float persp = brush.perspective;
     SetShaderValue(brushGeoShader, locUPerspective, &persp, SHADER_UNIFORM_FLOAT);
-    float radInRatio = brush->Realb.radInRatio;
-    float curve      = clampf((float)brush->Realb.crv, 0.0f, 1.0f);
+    float radInRatio = brush.radInRatio;
+    float curve      = clampf((float)brush.crv, 0.0f, 1.0f);
     SetShaderValue(brushGeoShader, locURadIn,  &radInRatio, SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushGeoShader, locUCurve,  &curve,      SHADER_UNIFORM_FLOAT);
     SetTextureFilter(geoRT->texture, RL_TEXTURE_FILTER_NEAREST);
@@ -224,41 +224,40 @@ void BrushBlend_ApplyStamp(
     // -------- Pass 2a: blend to intermediate --------
     RenderTexture2D* intermediateRT = AllocPoolRT(intermediatePool, bucket, false);
 
-    float opacity    = clampf((float)brush->Realb.opacity, 0.0f, 1.0f);
-    float sol        = (float)brush->Realb.sol;
-    float sol2op     = (float)brush->Realb.sol2op;
-    float seed       = (float)brush->Realb.seed + (float)rand()/(float)RAND_MAX
+    float opacity    = clampf((float)brush.opacity, 0.0f, 1.0f);
+    float seed       = (float)brush.baseSeed + (float)rand()/(float)RAND_MAX
                        + stampX * 0.01f + stampY * 7.13f;
-    int   bmidx      = (int)brush->Realb.bmidx;
-    float preserveop = (brush->Realb.preserveop > 0) ? 1.0f : 0.0f;
-    float smudge     = brush->Realb.cop;
+    int   bmidx      = (int)brush.bmidx;
+    float preserveop = (brush.preserveop > 0) ? 1.0f : 0.0f;
+    float smudge     = brush.cop;
     float odx = stampX - srcX, ody = stampY - srcY;
     float offsetUV[2] = { odx, ody };
 
     float col[4] = {
-        brush->Realb.col.r / 255.0f,
-        brush->Realb.col.g / 255.0f,
-        brush->Realb.col.b / 255.0f,
-        brush->Realb.col.a / 255.0f
+        brush.col.r / 255.0f,
+        brush.col.g / 255.0f,
+        brush.col.b / 255.0f,
+        brush.col.a / 255.0f
     };
-    float tbv = brush->Realb.texBlendVal;
-    float tf  = brush->Realb.texFeather;
-    float tt  = brush->Realb.texThresh;
-    float ts  = brush->Realb.texScale;
+    float tbv = brush.texBlendVal;
+    float tf  = brush.texFeather;
+    float tt  = brush.texThresh;
+    float ts  = brush.texScale;
     float texOff[2] = {0.0f, 0.0f};
-    if (brush->Realb.texNoisemode == 1) {
+    if (brush.texNoisemode == 1) {
         texOff[0] = ((float)rand()/(float)RAND_MAX - 0.5f) * 0.3f;
         texOff[1] = ((float)rand()/(float)RAND_MAX - 0.5f) * 0.3f;
     }
-    int useLum = brush->Realb.useTexLumAsAlpha ? 1 : 0;
-    int cm  = (int)brush->Realb.texColorMode;
-    int tnm = (int)brush->Realb.texNoisemode;
+    int useLum = brush.useTexLumAsAlpha ? 1 : 0;
+    int cm  = (int)brush.texColorMode;
+    int tnm = (int)brush.texNoisemode;
     float sc[2] = { stampX / (float)W, (float)(H - stampY) / (float)H };
 
     SetShaderValue(brushBlendShader, locOpacity,        &opacity,    SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locBrushColor,     col,         SHADER_UNIFORM_VEC4);
-    SetShaderValue(brushBlendShader, locSol,            &sol,        SHADER_UNIFORM_FLOAT);
-    SetShaderValue(brushBlendShader, locSol2op,         &sol2op,     SHADER_UNIFORM_FLOAT);
+    float zero = 0.0f;
+    SetShaderValue(brushBlendShader, locSol,            &zero,       SHADER_UNIFORM_FLOAT);
+    SetShaderValue(brushBlendShader, locSol2op,         &zero,       SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locSeed,           &seed,       SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locBmidx,          &bmidx,      SHADER_UNIFORM_INT);
     SetShaderValue(brushBlendShader, locPreserveOp,     &preserveop, SHADER_UNIFORM_FLOAT);
@@ -267,7 +266,7 @@ void BrushBlend_ApplyStamp(
     SetShaderValue(brushBlendShader, locTexBlendVal,    &tbv,        SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locTexScale,       &ts,         SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locTexOffset,      texOff,      SHADER_UNIFORM_VEC2);
-    { float uo[2] = { brush->Realb.userTexOriginX, 1.0f - brush->Realb.userTexOriginY };
+    { float uo[2] = { brush.userTexOriginX, 1.0f - brush.userTexOriginY };
       SetShaderValue(brushBlendShader, locUserTexOrigin, uo,          SHADER_UNIFORM_VEC2); }
     { int hasTex = (brushTex.id > 0 && brushTex.id != whiteTex.id && brushTex.id != g_defaultBrushTex.id) ? 1 : 0;
       SetShaderValue(brushBlendShader, locHasTexture, &hasTex,         SHADER_UNIFORM_INT); }
@@ -292,10 +291,10 @@ void BrushBlend_ApplyStamp(
     SetShaderValue(brushBlendShader, locBlitSize,   bs, SHADER_UNIFORM_VEC2);
     SetShaderValue(brushBlendShader, locFracShift,  fs, SHADER_UNIFORM_VEC2);
 
-    float pwr = brush->Realb.pwr;
+    float pwr = brush.pwr;
     SetShaderValue(brushBlendShader, locPwr, &pwr, SHADER_UNIFORM_FLOAT);
 
-    int eraseMode = brush->Realb.eraseMode;
+    int eraseMode = brush.eraseMode;
     SetShaderValue(brushBlendShader, locEraseMode, &eraseMode, SHADER_UNIFORM_INT);
 
     // Set dstRT.texture wrap for shader reads

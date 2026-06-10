@@ -145,17 +145,8 @@ struct AppState;
 struct ReplayRecorder;
 extern ReplayRecorder* g_recorder;
 
-struct NetSegment {
-    Vector2 pos1, pos2, ctrl0, ctrl3;
-    CollapsedBrush brushFrom, brushTo;
-    uint16_t seed;
-    uint8_t layer;       // target layer index
-    uint8_t toolID, seamless, pixelPerfect;
-    float smudgeSrcX, smudgeSrcY;
-};
-
 struct ICommandBroker {
-    virtual void on_segment(const DrawSegment& seg) = 0;
+    virtual void on_segment(const SegmentData& seg) = 0;
     virtual void poll(AppState* state) = 0;
     virtual ~ICommandBroker() = default;
 };
@@ -207,7 +198,7 @@ Document Doc_New(int w, int h);
 
 void BrushBlend_Init(void);
 void BrushBlend_Shutdown(void);
-void BrushBlend_ApplyStamp(RenderTexture2D dstRT, d_Brush* brush,
+void BrushBlend_ApplyStamp(RenderTexture2D dstRT, const CollapsedBrush& brush,
     Texture2D brushTex, float stampX, float stampY, float srcX, float srcY,
     bool seamless, bool pixelPerfect);
 

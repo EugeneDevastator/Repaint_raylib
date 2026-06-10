@@ -1,4 +1,5 @@
 #include "test_broker.h"
+#include "stroke_engine.h"
 
 TestBroker g_testBroker;
 bool g_useTestBroker = false;
@@ -9,7 +10,7 @@ TestBroker::TestBroker() {
     appState = NULL;
 }
 
-void TestBroker::on_segment(const DrawSegment& seg) {
+void TestBroker::on_segment(const SegmentData& seg) {
     if (!appState) return;
     int target = (seg.targetType == 1) ? seg.targetId : appState->activeLayer;
 
@@ -50,9 +51,8 @@ void TestBroker::poll(AppState* state) {
         }
 
         if (rt.id > 0) {
-            d_Brush brush = {};
-            brush.Realb = d->brush;
-            BrushBlend_ApplyStamp(rt, &brush, g_activeBrushTex, d->x, d->y, d->srcX, d->srcY, false, false);
+            CollapsedBrush cb = CollapseBrushParams(d->brush, 0.0f, eBrush);
+            BrushBlend_ApplyStamp(rt, cb, g_activeBrushTex, d->x, d->y, d->srcX, d->srcY, false, false);
         }
         head = (head + 1) % CMD_CAPACITY;
     }

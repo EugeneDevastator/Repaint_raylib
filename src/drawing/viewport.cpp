@@ -11,7 +11,7 @@
 
 static void PushDabSegment(ICommandBroker* b, float x, float y, float srcX, float srcY, const d_RealBrush& brush, int toolMode) {
     CollapsedBrush cb = CollapseBrushParams(brush, 0.0f, toolMode);
-    DrawSegment s; memset(&s, 0, sizeof(s));
+    SegmentData s; memset(&s, 0, sizeof(s));
     s.pos1 = Vector2{x, y};
     s.pos2 = Vector2{srcX, srcY};
     s.ctrl0 = s.ctrl3 = s.pos1;

@@ -37,30 +37,34 @@ struct CollapsedBrush {
     uint16_t baseSeed;
 };
 
-// ── Segment for the drawer ─────────────────────────────────────────
-struct DrawSegment {
+// ── Per-dab payload (resolved at draw time by DabDrawer) ───────────
+struct DabData {
+    float x, y, srcX, srcY;
+    CollapsedBrush brush;
+    uint8_t targetType;   // 0=layer, 1=brushTex
+    uint8_t targetId;     // layer index or brush texture index
+    bool seamless;
+    bool pixelPerfect;
+};
+
+// ── Unified segment struct (replaces DrawSegment + NetSegment) ─────
+struct SegmentData {
     Vector2 pos1, pos2;
     Vector2 ctrl0, ctrl3;
     CollapsedBrush brushFrom, brush;
-    uint8_t Noisemode, tool, seamless, pixelPerfect;
+    uint8_t tool, seamless, pixelPerfect;
     uint16_t seed;
     float smudgeSrcX, smudgeSrcY;
-    uint8_t targetType;
-    uint8_t targetId;
+    uint8_t targetType, targetId;
     int dabOffset;
 };
 
-// ── Apply a collapsed brush stamp onto a render target ─────────────
-void ApplyCollapsedBrush(RenderTexture2D rt, const CollapsedBrush& cb,
-                         float x, float y, float srcX, float srcY, Texture2D brushTex,
-                         bool seamless, bool pixelPerfect);
-
 // ── Stateless: draws one segment onto a render target ──────────────
-void DrawOneSegment(const DrawSegment& dseg, RenderTexture2D rt, Texture2D brushTex, bool seamless, int dabOffset, bool pixelPerfect = false);
+void DrawOneSegment(const SegmentData& dseg, RenderTexture2D rt, Texture2D brushTex, bool seamless, int dabOffset, bool pixelPerfect = false);
 
 // ── Segment computation helpers (no rendering) ─────────────────────
-void SegDrawer_SetSegmentStart(float startRad, Vector2 startPos, DrawSegment* seg);
-void SegDrawer_ComputeSegmentEnd(const DrawSegment* seg, int dabOffset, float initialRad,
+void SegDrawer_SetSegmentStart(float startRad, Vector2 startPos, SegmentData* seg);
+void SegDrawer_ComputeSegmentEnd(const SegmentData& seg, int dabOffset, float initialRad,
                                   Vector2* outLastPos, float* outLastRad);
 
 // ── Segment result ─────────────────────────────────────────────────
@@ -77,7 +81,7 @@ CollapsedBrush BlendBrushes(CollapsedBrush from, CollapsedBrush to, float k);
 void JitterBrush(CollapsedBrush& b, uint16_t baseSeed, int dabIdx);
 
 // ── Linear stroke: places next dab only when distance >= spacing ──
-int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad,
+int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
                void (*apply)(float x, float y, float srcX, float srcY, const CollapsedBrush& brush, void* user),
                void* user, int maxOut, SegResult* res);
 

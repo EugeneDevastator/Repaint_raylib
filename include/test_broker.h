@@ -20,7 +20,7 @@ struct TestBroker : ICommandBroker {
 
     TestBroker();
     AppState* appState;
-    void on_segment(const DrawSegment& seg) override;
+    void on_segment(const SegmentData& seg) override;
     void poll(AppState* state) override;
 };
 

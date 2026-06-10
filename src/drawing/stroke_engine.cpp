@@ -72,7 +72,7 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex,
     CollapsedBrush cbTiny = cbFull;
     cbTiny.rad_out_px = 1.0f;
 
-    DrawSegment seed;
+    SegmentData seed;
     memset(&seed, 0, sizeof(seed));
     seed.pos1 = seed.pos2 = Vector2{cx, cy};
     seed.ctrl0 = seed.ctrl3 = seed.pos1;
@@ -84,7 +84,7 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex,
     seed.smudgeSrcY = cy;
     DrawOneSegment(seed, dstRT, brushTex, seed.seamless != 0, 0, false);
 
-    DrawSegment s;
+    SegmentData s;
     memset(&s, 0, sizeof(s));
     s.pos1 = start; s.pos2 = end;
     s.brushFrom = cbFull; s.brush = cbTiny;
