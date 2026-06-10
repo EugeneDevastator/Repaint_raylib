@@ -60,7 +60,7 @@ void Modulators_Init(void) {
     bpHardness.user.clipmaxF = 0.5f;
     BParam_SetIcon(&bpHardness, "ctlrrel");
 
-    BParam_Init(&bpSpacing, 3, "Spacing", 0.0f, 1.0f, 0.3f);
+    BParam_Init(&bpSpacing, 3, "Spacing", 0.0f, 2.0f, 0.3f);
     strncpy(bpSpacing.tooltip, "Distance between successive dabs as fraction of brush diameter", sizeof(bpSpacing.tooltip) - 1);
     BParam_SetIcon(&bpSpacing, "ctlspc");
 
