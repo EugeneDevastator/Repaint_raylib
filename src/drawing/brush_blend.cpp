@@ -1,5 +1,10 @@
-#include "repaint.h"
+
+#include <cmath>
+#include <cstdio>
+
+#include "brush_draw.h"
 #include "RaylibUtils.h"
+#include "repaint.h" // remove this dependency and g_defaultBrushTex
 #include "rlgl.h"
 
 static Shader brushBlendShader = {0};
@@ -134,7 +139,7 @@ void BrushBlend_Init(void) {
     locGeoTex = GetShaderLocation(brushBlendShader, "geoTex");
     if (locGeoTex >= 0) { int u = 0; SetShaderValue(brushBlendShader, locGeoTex, &u, SHADER_UNIFORM_INT); }
 
-    Image img = GenImageColor(1, 1, WHITE);
+    Image img = GenImageColor(1, 1, WHITE); // make it at least 4x4 for gpu compatibility and adjust usage, because changing it here is not enough
     whiteTex = LoadTextureFromImage(img);
     UnloadImage(img);
     inited = true;
@@ -268,7 +273,7 @@ void BrushBlend_ApplyStamp(
     SetShaderValue(brushBlendShader, locTexOffset,      texOff,      SHADER_UNIFORM_VEC2);
     { float uo[2] = { brush.userTexOriginX, 1.0f - brush.userTexOriginY };
       SetShaderValue(brushBlendShader, locUserTexOrigin, uo,          SHADER_UNIFORM_VEC2); }
-    { int hasTex = (brushTex.id > 0 && brushTex.id != whiteTex.id && brushTex.id != g_defaultBrushTex.id) ? 1 : 0;
+    { int hasTex = (brushTex.id > 0 && brushTex.id != whiteTex.id&& brushTex.id != g_defaultBrushTex.id) ? 1 : 0;
       SetShaderValue(brushBlendShader, locHasTexture, &hasTex,         SHADER_UNIFORM_INT); }
     SetShaderValue(brushBlendShader, locTexFeather,     &tf,         SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locTexThresh,      &tt,         SHADER_UNIFORM_FLOAT);
