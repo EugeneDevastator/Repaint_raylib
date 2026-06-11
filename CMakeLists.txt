@@ -120,8 +120,7 @@ set(SOURCES
     # ── LocalPlayer ─────────────────────────────────────────────────────
     LocalPlayer/InputQueue.cpp
     LocalPlayer/StrokeEmitter.cpp
-    LocalPlayer/SegmentRenderer.cpp
-    LocalPlayer/DabDrawer.cpp
+    LocalPlayer/StrokeThrottle.cpp
     # ── network ───────────────────────────────────────────────────────
     src/network/serialize.cpp
     src/network/network_broker.cpp

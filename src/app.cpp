@@ -18,8 +18,7 @@
 #include "replay_recorder.h"
 #include "user_content_receiver.h"
 #include "StrokeEmitter.h"
-#include "SegmentRenderer.h"
-#include "DabDrawer.h"
+#include "StrokeThrottle.h"
 #include "external/glad.h"
 #include <time.h>
 
@@ -499,13 +498,10 @@ void App_Init(AppState* state) {
     g_broker = viewport.broker;
 
     // LocalPlayer modules
-    static SegmentRenderer s_segRenderer;
-    static StrokeEmitter s_emitter(&s_segRenderer);
-    g_segRenderer = &s_segRenderer;
+    static StrokeThrottle s_throttle;
+    static StrokeEmitter s_emitter(&s_throttle);
+    g_throttle = &s_throttle;
     g_emitter = &s_emitter;
-
-    static DabDrawer s_dabDrawer;
-    g_dabDrawer = &s_dabDrawer;
 
     state->undo = new UndoManager();
     g_undoManager = state->undo;
@@ -635,11 +631,8 @@ void App_Draw(AppState* state) {
     // Process user input → segments
     g_emitter->ProcessInputQueue();
 
-    // Emit dabs from pending segments (populates dab queue, no rendering)
-    if (g_segRenderer) g_segRenderer->EmitPending(4, g_dabDrawer);
-
-    // Draw dabs, budget = 256 * 16² = 65536 radius²·px per frame
-    if (g_dabDrawer) g_dabDrawer->DrawPending(state, 65536*32);
+    // Unpack + render dabs with per-frame pixel budget
+    if (g_throttle) g_throttle->DrawPending(state, 65536*32);
 
     if (viewport.broker) viewport.broker->poll(state);
     if (g_recorder) g_recorder->poll(state);

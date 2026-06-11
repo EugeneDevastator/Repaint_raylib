@@ -139,7 +139,7 @@ void BrushBlend_Init(void) {
     locGeoTex = GetShaderLocation(brushBlendShader, "geoTex");
     if (locGeoTex >= 0) { int u = 0; SetShaderValue(brushBlendShader, locGeoTex, &u, SHADER_UNIFORM_INT); }
 
-    Image img = GenImageColor(1, 1, WHITE); // brush is invisible if we make it 4x4
+    Image img = GenImageColor(4, 4, WHITE);
     whiteTex = LoadTextureFromImage(img);
     UnloadImage(img);
     inited = true;
@@ -216,7 +216,7 @@ void BrushBlend_ApplyStamp(
     rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);  // write rgba as-is
     BeginShaderMode(brushGeoShader);
     DrawTexturePro(whiteTex,
-        (Rectangle){0, 0, 1, 1},
+        (Rectangle){0, 0, (float)whiteTex.width, (float)whiteTex.height},
         (Rectangle){0, 0, (float)drawSz, -(float)drawSz},
         (Vector2){0, 0}, 0.0f, WHITE);
     EndShaderMode();

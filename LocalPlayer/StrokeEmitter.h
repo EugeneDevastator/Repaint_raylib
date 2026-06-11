@@ -4,11 +4,12 @@
 #include "brush_draw.h"
 #include "repaint.h"
 #include "InputQueue.h"
-#include "SegmentRenderer.h"
+
+class StrokeThrottle;
 
 class StrokeEmitter {
 public:
-    StrokeEmitter(SegmentRenderer* renderer);
+    StrokeEmitter(StrokeThrottle* throttle);
     void ProcessInputQueue();
 
     Vector2 m_lastDabPos;  // public for Distort/Contrast debug
@@ -22,7 +23,7 @@ public:
     int m_splineCount;
 
 private:
-    SegmentRenderer* m_renderer;
+    StrokeThrottle* m_throttle;
 
     bool m_active;
     d_RealBrush m_brushFrom;

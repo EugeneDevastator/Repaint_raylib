@@ -5,6 +5,8 @@
 #include "brush_preset.h"
 #include <math.h>
 #include <string.h>
+#include <vector>
+
 
 // ── HSL conversion (matches the UI-side functions) ──────────────────
 static float HueToRGB_Local(float p, float q, float t) {
@@ -253,9 +255,8 @@ static float JitterRadius(float unjitteredRad, float jitRange,
 
 // ── DrawLinear ─────────────────────────────────────────────────────
 int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
-               void (*apply)(float x, float y, float srcX, float srcY, const CollapsedBrush& brush, void* user),
-               void* user, int maxOut, SegResult* res) {
-    if (maxOut <= 0 || !res) return 0;
+               DabPoint* outPoints, int maxOut, SegResult* res) {
+    if (!res) return 0;
     Vector2 from = seg.pos1;
     res->lastDabPos = from;
     res->lastRadOut = seg.brushFrom.rad_out_px;
@@ -266,7 +267,11 @@ int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
     if (stdist < 0.001f) return 0;
 
     if (seg.tool == eSingleStamp) {
-        if (apply) apply(from.x, from.y, seg.smudgeSrcX, seg.smudgeSrcY, seg.brushFrom, user);
+        if (outPoints) {
+            outPoints[0].x = from.x; outPoints[0].y = from.y;
+            outPoints[0].srcX = seg.smudgeSrcX; outPoints[0].srcY = seg.smudgeSrcY;
+            outPoints[0].brush = seg.brushFrom;
+        }
         res->lastDabPos = Vector2{from.x, from.y};
         res->lastRadOut = seg.brushFrom.rad_out_px;
         return 1;
@@ -359,7 +364,13 @@ int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
 
         JitterBrush(dabCB, seg.brushFrom.baseSeed, dabOffset + count);
 
-        if (apply) apply(pos.x, pos.y, lastSrcX, lastSrcY, dabCB, user);
+        if (outPoints) {
+            outPoints[count].x = pos.x;
+            outPoints[count].y = pos.y;
+            outPoints[count].srcX = lastSrcX;
+            outPoints[count].srcY = lastSrcY;
+            outPoints[count].brush = dabCB;
+        }
         lastSrcX = pos.x;
         lastSrcY = pos.y;
 
@@ -390,18 +401,15 @@ int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
 }
 
 
-// ── DrawOneSegment ─────────────────────────────────────────────────
-void DrawOneSegment(const SegmentData& dseg, RenderTexture2D rt, Texture2D brushTex, bool useTexture, bool seamless, int dabOffset, bool pixelPerfect) {
-    struct UserData { RenderTexture2D* rt; Texture2D tex; bool useTexture; bool seamless; bool pixelPerfect; };
-    UserData ud = {&rt, brushTex, useTexture, seamless, pixelPerfect};
-
-    auto cb = [](float x, float y, float srcX, float srcY, const CollapsedBrush& brush, void* user) {
-        UserData* ud = (UserData*)user;
-        BrushBlend_ApplyStamp(*ud->rt, brush, ud->tex, ud->useTexture, x, y, srcX, srcY, ud->seamless, ud->pixelPerfect);
-    };
-
+// ── DrawSegment ────────────────────────────────────────────────────
+void DrawSegment(const SegmentData& dseg, RenderTexture2D rt, Texture2D brushTex, bool useTexture, bool seamless, int dabOffset, bool pixelPerfect) {
+    std::vector<DabPoint> pts(65536);
     SegResult r;
-    DrawLinear(dseg, dabOffset, 0.0f, cb, &ud, 65536, &r);
+    int cnt = DrawLinear(dseg, dabOffset, 0.0f, pts.data(), (int)pts.size(), &r);
+    for (int i = 0; i < cnt; i++)
+        BrushBlend_ApplyStamp(rt, pts[i].brush, brushTex, useTexture,
+                              pts[i].x, pts[i].y, pts[i].srcX, pts[i].srcY,
+                              seamless, pixelPerfect);
 }
 
 // ── SegDrawer helpers (computation only, no rendering) ─────────────
@@ -415,7 +423,7 @@ void SegDrawer_SetSegmentStart(float startRad, Vector2 startPos, SegmentData* se
 void SegDrawer_ComputeSegmentEnd(const SegmentData& seg, int dabOffset, float initialRad,
                                   Vector2* outLastPos, float* outLastRad) {
     SegResult r;
-    DrawLinear(seg, dabOffset, initialRad, nullptr, nullptr, 65536, &r);
+    DrawLinear(seg, dabOffset, initialRad, nullptr, 65536, &r);
     *outLastPos = r.lastDabPos;
     *outLastRad = r.lastRadOut;
 }

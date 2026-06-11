@@ -1,4 +1,5 @@
 #include "StrokeEmitter.h"
+#include "StrokeThrottle.h"
 #include "stroke_engine.h"
 #include "replay_recorder.h"
 #include "brush_draw.h"
@@ -7,8 +8,8 @@
 
 StrokeEmitter* g_emitter = nullptr;
 
-StrokeEmitter::StrokeEmitter(SegmentRenderer* renderer)
-    : m_renderer(renderer), m_active(false), m_emittedAny(false) {
+StrokeEmitter::StrokeEmitter(StrokeThrottle* throttle)
+    : m_throttle(throttle), m_active(false), m_emittedAny(false) {
     m_splineCount = 0;
     m_processedCount = 0;
     m_accumDist = 0;
@@ -117,7 +118,7 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
         m_segEndpoints[m_segEpCount++] = dseg.pos2;
     }
 
-    m_renderer->Push(dseg);
+    m_throttle->Push(dseg);
 
     if (g_recorder) g_recorder->on_segment(dseg);
     if (g_broker) g_broker->on_segment(dseg);
@@ -260,7 +261,7 @@ void StrokeEmitter::handleEnd() {
         dseg.dabOffset  = 0;
         dseg.initAngle  = m_initAngle;
 
-        m_renderer->Push(dseg);
+        m_throttle->Push(dseg);
         if (g_recorder) g_recorder->on_segment(dseg);
         if (g_broker) g_broker->on_segment(dseg);
     }

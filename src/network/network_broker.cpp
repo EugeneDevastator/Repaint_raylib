@@ -5,7 +5,7 @@
 #include "app_config.h"
 #include "brush_draw.h"
 #include "stroke_engine.h"
-#include "SegmentRenderer.h"
+#include "StrokeThrottle.h"
 #include "imgui.h"
 #include <string.h>
 #include <stdlib.h>
@@ -201,7 +201,7 @@ void NetworkBroker::on_segment(const SegmentData& seg) {
 void NetworkBroker::poll(AppState* st) {
     this->appState = st;
 
-    // Drain segments for remote send (rendering is via SegmentRenderer)
+    // Drain segments for remote send (rendering is via StrokeThrottle)
     while (segHead != segTail) {
         SegmentData& d = segQueue[segHead];
         if (this->state == NS_CONNECTED)
@@ -402,7 +402,7 @@ void NetworkBroker::SendSegment(const SegmentData& seg) {
 }
 
 void NetworkBroker::EnqueueRemoteSegment(const SegmentData& seg) {
-    if (g_segRenderer) g_segRenderer->Push(seg);
+    if (g_throttle) g_throttle->Push(seg);
 }
 
 /* ── Config ─────────────────────────────────────────────────────────────── */
