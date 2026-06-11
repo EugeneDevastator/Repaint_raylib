@@ -13,7 +13,7 @@ CollapsedBrush CollapseBrushParams(const d_RealBrush& uiBrush, float initialAngl
 // ── Utilities ──
 // Draws a preview stamp + path simulating what emitSegment produces.
 // initialAngle is the user-set base angle (state->initialAngle).
-void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex,
+void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex, bool useTexture,
                               const d_RealBrush* baseBrush, int toolMode,
                               float initialAngle, float cx, float cy);
 

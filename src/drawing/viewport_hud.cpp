@@ -152,8 +152,11 @@ void ViewportHUD_Draw(AppState* state) {
             d_RealBrush zoomBrush = state->currentBrush.Realb;
 
             Texture2D bt = {0};
-            if (state->activeBrushTex >= 0 && state->activeBrushTex < state->brushTexCount)
+            bool useTex = false;
+            if (state->activeBrushTex >= 0 && state->activeBrushTex < state->brushTexCount) {
                 bt = state->brushTex[state->activeBrushTex].rt.texture;
+                useTex = true;
+            }
 
             // Copy the visible canvas area as background (needed for smudge, harmless for paint)
             BeginTextureMode(g_previewRT);
@@ -172,7 +175,7 @@ void ViewportHUD_Draw(AppState* state) {
                 EndMode2D();
             }
             // Draw preview strokes on top (same modulation flow as real stroke)
-            StrokeEngine_DrawPreview(g_previewRT, bt, &zoomBrush, state->mode,
+            StrokeEngine_DrawPreview(g_previewRT, bt, useTex, &zoomBrush, state->mode,
                                      state->initialAngle,
                                      PREVIEW_SZ * 0.5f, PREVIEW_SZ * 0.5f);
             EndTextureMode();

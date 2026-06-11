@@ -66,7 +66,7 @@ d_RealBrush ModulateBrushParams(const d_RealBrush& brush, float initAngle, int t
     return target;
 }
 
-void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex,
+void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex, bool useTexture,
                               const d_RealBrush* baseBrush, int toolMode,
                               float initialAngle, float cx, float cy) {
     float spacingVal = BParam_GetValue(&bpSpacing);
@@ -141,7 +141,7 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex,
     seed.smudgeSrcX = cx;
     seed.smudgeSrcY = cy;
     seed.initAngle = initialAngle;
-    DrawOneSegment(seed, dstRT, brushTex, seed.seamless != 0, 0, false);
+    DrawOneSegment(seed, dstRT, brushTex, useTexture, seed.seamless != 0, 0, false);
 
     // Path segment with a curve so per-dab rotation modulation is visible
     Vector2 start = {cx, cy};
@@ -161,5 +161,5 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex,
     s.smudgeSrcX = cx;
     s.smudgeSrcY = cy;
     s.initAngle = initialAngle;
-    DrawOneSegment(s, dstRT, brushTex, s.seamless != 0, 0);
+    DrawOneSegment(s, dstRT, brushTex, useTexture, s.seamless != 0, 0);
 }

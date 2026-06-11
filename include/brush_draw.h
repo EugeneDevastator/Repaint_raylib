@@ -43,6 +43,7 @@ struct DabData {
     CollapsedBrush brush;
     uint8_t targetType;   // 0=layer, 1=brushTex
     uint8_t targetId;     // layer index or brush texture index
+    uint8_t userTexIdx;   // 0 = no texture, 1+ = (index+1) into state->brushTex[]
     bool seamless;
     bool pixelPerfect;
 };
@@ -56,12 +57,13 @@ struct SegmentData {
     uint16_t seed;
     float smudgeSrcX, smudgeSrcY;
     uint8_t targetType, targetId;
+    uint8_t userTexIdx;   // 0 = no texture, 1+ = (index+1) into state->brushTex[]
     int dabOffset;
     float initAngle;    // base angle for per-dab rotation modulation; 0 = use baked resangle
 };
 
 // ── Stateless: draws one segment onto a render target ──────────────
-void DrawOneSegment(const SegmentData& dseg, RenderTexture2D rt, Texture2D brushTex, bool seamless, int dabOffset, bool pixelPerfect = false);
+void DrawOneSegment(const SegmentData& dseg, RenderTexture2D rt, Texture2D brushTex, bool useTexture, bool seamless, int dabOffset, bool pixelPerfect = false);
 
 // ── Segment computation helpers (no rendering) ─────────────────────
 void SegDrawer_SetSegmentStart(float startRad, Vector2 startPos, SegmentData* seg);

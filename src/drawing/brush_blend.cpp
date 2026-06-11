@@ -4,8 +4,8 @@
 
 #include "brush_draw.h"
 #include "RaylibUtils.h"
-#include "repaint.h" // remove this dependency and g_defaultBrushTex
 #include "rlgl.h"
+#include "brush_blend.h"
 
 static Shader brushBlendShader = {0};
 static Shader brushGeoShader   = {0};
@@ -139,7 +139,7 @@ void BrushBlend_Init(void) {
     locGeoTex = GetShaderLocation(brushBlendShader, "geoTex");
     if (locGeoTex >= 0) { int u = 0; SetShaderValue(brushBlendShader, locGeoTex, &u, SHADER_UNIFORM_INT); }
 
-    Image img = GenImageColor(1, 1, WHITE); // make it at least 4x4 for gpu compatibility and adjust usage, because changing it here is not enough
+    Image img = GenImageColor(1, 1, WHITE); // brush is invisible if we make it 4x4
     whiteTex = LoadTextureFromImage(img);
     UnloadImage(img);
     inited = true;
@@ -159,7 +159,7 @@ void BrushBlend_Shutdown(void) {
 void BrushBlend_ApplyStamp(
     RenderTexture2D dstRT,
     const CollapsedBrush& brush,
-    Texture2D brushTex,
+    Texture2D brushTex, bool useTexture,
     float stampX, float stampY,
     float srcX,   float srcY,
     bool seamless, bool pixelPerfect
@@ -170,7 +170,7 @@ void BrushBlend_ApplyStamp(
     int H = dstRT.texture.height;
 
     float radOut   = fmaxf(brush.rad_out_px, 0.001f);
-    float angleRad = (float)brush.resangle * (float)(M_PI / 180.0);
+    float angleRad = (float)brush.resangle * (3.14159265f / 180.0f);
     float squish   = fmaxf((float)brush.scale_y, 0.01f);
 
     float radOutForGeo = brush.rad_out_px;
@@ -273,7 +273,7 @@ void BrushBlend_ApplyStamp(
     SetShaderValue(brushBlendShader, locTexOffset,      texOff,      SHADER_UNIFORM_VEC2);
     { float uo[2] = { brush.userTexOriginX, 1.0f - brush.userTexOriginY };
       SetShaderValue(brushBlendShader, locUserTexOrigin, uo,          SHADER_UNIFORM_VEC2); }
-    { int hasTex = (brushTex.id > 0 && brushTex.id != whiteTex.id&& brushTex.id != g_defaultBrushTex.id) ? 1 : 0;
+    { int hasTex = useTexture ? 1 : 0;
       SetShaderValue(brushBlendShader, locHasTexture, &hasTex,         SHADER_UNIFORM_INT); }
     SetShaderValue(brushBlendShader, locTexFeather,     &tf,         SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locTexThresh,      &tt,         SHADER_UNIFORM_FLOAT);

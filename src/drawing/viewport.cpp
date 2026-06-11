@@ -17,6 +17,7 @@ static void PushDabSegment(ICommandBroker* b, float x, float y, float srcX, floa
     s.ctrl0 = s.ctrl3 = s.pos1;
     s.brushFrom = s.brush = cb;
     s.seed = brush.seed;
+    s.userTexIdx = 0;
     if (b) b->on_segment(s);
 }
 
@@ -187,6 +188,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     be.toolMode = state->mode;
                     be.targetType = 1;
                     be.targetId = state->activeBrushTex;
+                    be.userTexIdx = 0;     // no pattern texture when editing a stamp
                     be.layerScale = 1.0f;
                     be.timestamp = GetTime();
                     g_inputQueue.AddEntry(be);
@@ -237,6 +239,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     be.toolMode = state->mode;
                     be.targetType = 0;
                     be.targetId = active;
+                    be.userTexIdx = (state->activeBrushTex >= 0) ? (uint8_t)(state->activeBrushTex + 1) : 0;
                     be.layerScale = layerScale;
                     be.timestamp = GetTime();
                     g_inputQueue.AddEntry(be);

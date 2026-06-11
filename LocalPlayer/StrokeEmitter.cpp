@@ -25,6 +25,7 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
     m_toolMode = e.toolMode;
     m_targetType = e.targetType;
     m_targetId = e.targetId;
+    m_userTexIdx = e.userTexIdx;
     m_layerScale = e.layerScale;
 
     Vector2 start = {e.x, e.y};
@@ -105,6 +106,7 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
     dseg.smudgeSrcY = m_lastDabPos.y;
     dseg.targetType = m_targetType;
     dseg.targetId   = m_targetId;
+    dseg.userTexIdx = m_userTexIdx;
     dseg.dabOffset  = 0;
     dseg.initAngle  = initAngle;
 
@@ -254,6 +256,7 @@ void StrokeEmitter::handleEnd() {
         dseg.smudgeSrcY = m_lastDabPos.y;
         dseg.targetType = m_targetType;
         dseg.targetId   = m_targetId;
+        dseg.userTexIdx = m_userTexIdx;
         dseg.dabOffset  = 0;
         dseg.initAngle  = m_initAngle;
 

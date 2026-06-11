@@ -20,6 +20,7 @@ struct InputEntry {
     int toolMode;
     uint8_t targetType;
     uint8_t targetId;
+    uint8_t userTexIdx;   // 0 = no texture, 1+ = (index+1) into state->brushTex[]
     float layerScale;
 };
 

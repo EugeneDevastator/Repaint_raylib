@@ -1,5 +1,6 @@
 #define _USE_MATH_DEFINES
 #include "brush_draw.h"
+#include "brush_blend.h"
 #include "repaint.h"
 #include "brush_preset.h"
 #include <math.h>
@@ -390,13 +391,13 @@ int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
 
 
 // ── DrawOneSegment ─────────────────────────────────────────────────
-void DrawOneSegment(const SegmentData& dseg, RenderTexture2D rt, Texture2D brushTex, bool seamless, int dabOffset, bool pixelPerfect) {
-    struct UserData { RenderTexture2D* rt; Texture2D tex; bool seamless; bool pixelPerfect; };
-    UserData ud = {&rt, brushTex, seamless, pixelPerfect};
+void DrawOneSegment(const SegmentData& dseg, RenderTexture2D rt, Texture2D brushTex, bool useTexture, bool seamless, int dabOffset, bool pixelPerfect) {
+    struct UserData { RenderTexture2D* rt; Texture2D tex; bool useTexture; bool seamless; bool pixelPerfect; };
+    UserData ud = {&rt, brushTex, useTexture, seamless, pixelPerfect};
 
     auto cb = [](float x, float y, float srcX, float srcY, const CollapsedBrush& brush, void* user) {
         UserData* ud = (UserData*)user;
-        BrushBlend_ApplyStamp(*ud->rt, brush, ud->tex, x, y, srcX, srcY, ud->seamless, ud->pixelPerfect);
+        BrushBlend_ApplyStamp(*ud->rt, brush, ud->tex, ud->useTexture, x, y, srcX, srcY, ud->seamless, ud->pixelPerfect);
     };
 
     SegResult r;

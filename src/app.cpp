@@ -1,4 +1,5 @@
 #include "repaint.h"
+#include "brush_blend.h"
 #include "brush_preset.h"
 #include "rlgl.h"
 #include "imgui.h"

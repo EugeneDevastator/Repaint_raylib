@@ -30,6 +30,7 @@ private:
     uint16_t m_seed;
     uint8_t m_targetType;
     uint8_t m_targetId;
+    uint8_t m_userTexIdx;
     float m_initAngle;
     int   m_toolMode;
     float m_layerScale;

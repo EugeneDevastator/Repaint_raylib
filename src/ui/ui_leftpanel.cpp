@@ -1,4 +1,5 @@
 #include "ui_leftpanel.h"
+#include "brush_blend.h"
 #include "rlImGui.h"
 #include "imgui.h"
 #include "imgui_internal.h"

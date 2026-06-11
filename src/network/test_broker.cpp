@@ -1,5 +1,6 @@
 #include "test_broker.h"
 #include "stroke_engine.h"
+#include "brush_blend.h"
 
 TestBroker g_testBroker;
 bool g_useTestBroker = false;
@@ -24,6 +25,7 @@ void TestBroker::on_segment(const SegmentData& seg) {
     queue[tail].brush = appState->currentBrush.Realb;
     queue[tail].targetType = seg.targetType;
     queue[tail].targetId = target;
+    queue[tail].userTexIdx = seg.userTexIdx;
     tail = next;
 
     next = (tail + 1) % CMD_CAPACITY;
@@ -36,6 +38,7 @@ void TestBroker::on_segment(const SegmentData& seg) {
     queue[tail].brush = appState->currentBrush.Realb;
     queue[tail].targetType = seg.targetType;
     queue[tail].targetId = target;
+    queue[tail].userTexIdx = seg.userTexIdx;
     tail = next;
 }
 
@@ -52,7 +55,13 @@ void TestBroker::poll(AppState* state) {
 
         if (rt.id > 0) {
             CollapsedBrush cb = CollapseBrushParams(d->brush, 0.0f, eBrush);
-            BrushBlend_ApplyStamp(rt, cb, g_activeBrushTex, d->x, d->y, d->srcX, d->srcY, false, false);
+            Texture2D brushTex = {0};
+            bool useTexture = false;
+            if (d->userTexIdx > 0 && (d->userTexIdx - 1u) < (uint8_t)state->brushTexCount) {
+                brushTex = state->brushTex[d->userTexIdx - 1].rt.texture;
+                useTexture = true;
+            }
+            BrushBlend_ApplyStamp(rt, cb, brushTex, useTexture, d->x, d->y, d->srcX, d->srcY, false, false);
         }
         head = (head + 1) % CMD_CAPACITY;
     }

@@ -65,7 +65,13 @@ void ReplayRecorder::Play(AppState* state) {
             dseg.brushFrom.rad_out_px, dseg.brushFrom.spacing);
         fflush(stdout);
 
-        DrawOneSegment(dseg, rt, g_activeBrushTex, dseg.seamless != 0, 0, dseg.pixelPerfect != 0);
+        Texture2D replayTex = {0};
+        bool replayUseTex = false;
+        if (state->activeBrushTex >= 0 && state->activeBrushTex < state->brushTexCount) {
+            replayTex = state->brushTex[state->activeBrushTex].rt.texture;
+            replayUseTex = true;
+        }
+        DrawOneSegment(dseg, rt, replayTex, replayUseTex, dseg.seamless != 0, 0, dseg.pixelPerfect != 0);
     }
     printf("[REPLAY] Play done\n"); fflush(stdout);
 }
