@@ -5,7 +5,6 @@
 #include "brush_preset.h"
 #include <math.h>
 #include <string.h>
-#include <vector>
 
 
 // ── HSL conversion (matches the UI-side functions) ──────────────────
@@ -403,9 +402,9 @@ int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
 
 // ── DrawSegment ────────────────────────────────────────────────────
 void DrawSegment(const SegmentData& dseg, RenderTexture2D rt, Texture2D brushTex, bool useTexture, bool seamless, int dabOffset, bool pixelPerfect) {
-    std::vector<DabPoint> pts(65536);
+    static DabPoint pts[65536];
     SegResult r;
-    int cnt = DrawLinear(dseg, dabOffset, 0.0f, pts.data(), (int)pts.size(), &r);
+    int cnt = DrawLinear(dseg, dabOffset, 0.0f, pts, 65536, &r);
     for (int i = 0; i < cnt; i++)
         BrushBlend_ApplyStamp(rt, pts[i].brush, brushTex, useTexture,
                               pts[i].x, pts[i].y, pts[i].srcX, pts[i].srcY,
