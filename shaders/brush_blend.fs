@@ -123,10 +123,10 @@ void main() {
 float cloneOpacity = smudgeStrength;
     if (cloneOpacity > 0.000001) {
         vec2 srcPx = outCanvasPx - smudgeOffsetUV;
-        if (uSeamless)
-            srcPx = mod(srcPx, canvasSize);
-        else
-            srcPx = clamp(srcPx, vec2(0.0), canvasSize - vec2(1.0));
+       // if (uSeamless)
+       //     srcPx = mod(srcPx, canvasSize);
+       // else
+       //     srcPx = clamp(srcPx, vec2(0.0), canvasSize - vec2(1.0));
 
         vec4 smudge;
         if (uPixelPerfect) {
@@ -134,7 +134,7 @@ float cloneOpacity = smudgeStrength;
             pp.y = int(canvasSize.y) - 1 - pp.y;
             smudge = texelFetch(dstTex, pp, 0);
         } else {
-            smudge = sampleBilinear(dstTex, vec2(srcPx.x, canvasSize.y - srcPx.y), canvasSize, bmidx, uSeamless);
+            smudge = sampleBilinear(dstTex, vec2(srcPx.x, canvasSize.y - srcPx.y), canvasSize, 1, uSeamless);
         }
 
         vec3 smudgeRGB = smudge.rgb;

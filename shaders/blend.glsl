@@ -78,7 +78,8 @@ vec4 applyBlend(int mode, vec4 dst, vec3 srcRGB, float srcA) {
     if (mode == 0) {
         vec3 srcLin = srcRGB*srcRGB;
         vec3 dstLin = dst.rgb*dst.rgb;
-        outRGB = sqrt(mix(srcLin,dstLin,1-srcA));
+        vec3 wei = vec3(1.0006);
+        outRGB = sqrt(wei*mix(srcLin,dstLin,1-srcA));
         outA   = srcA + dst.a*(1.0 - srcA);
     } else if (mode == 1) {
         vec3 dstPremul = dst.rgb*dst.a;
@@ -153,20 +154,22 @@ vec4 sampleBilinear(sampler2D tex, vec2 px, vec2 texSize, int bmidx, bool seamle
     vec2 fpx = px - vec2(0.5);
     vec2 ipx = floor(fpx);
     vec2 f   = fract(fpx);
-    //f.y=1.0-f.y;
-    vec3 bias = vec3(0.00048);
-    bias = vec3(0.000028);
-    vec3 wei = vec3(1.0006);
+
+    float w00 = (1.0-f.x)*(1.0-f.y);
+    float w10 =     f.x  *(1.0-f.y);
+    float w01 = (1.0-f.x)*    f.y;
+    float w11 =     f.x  *    f.y;
+
     ivec2 c00, c10, c01, c11;
     if (seamless) {
         ivec2 sz = ivec2(texSize);
-        c00 = ivec2(mod(ipx+ ivec2(0,0),                  vec2(sz)));
-        c10 = ivec2(mod(ipx + vec2(1,0),      vec2(sz)));
-        c01 = ivec2(mod(ipx + vec2(0,1),      vec2(sz)));
-        c11 = ivec2(mod(ipx + vec2(1,1),      vec2(sz)));
+        c00 = ivec2(mod(ipx + vec2(0,0), vec2(sz)));
+        c10 = ivec2(mod(ipx + vec2(1,0), vec2(sz)));
+        c01 = ivec2(mod(ipx + vec2(0,1), vec2(sz)));
+        c11 = ivec2(mod(ipx + vec2(1,1), vec2(sz)));
     } else {
         ivec2 maxC = ivec2(texSize - vec2(1.0));
-        c00 = clamp(ivec2(ipx) + ivec2(0,0),              ivec2(0), maxC);
+        c00 = clamp(ivec2(ipx) + ivec2(0,0), ivec2(0), maxC);
         c10 = clamp(ivec2(ipx) + ivec2(1,0), ivec2(0), maxC);
         c01 = clamp(ivec2(ipx) + ivec2(0,1), ivec2(0), maxC);
         c11 = clamp(ivec2(ipx) + ivec2(1,1), ivec2(0), maxC);
@@ -183,10 +186,17 @@ vec4 sampleBilinear(sampler2D tex, vec2 px, vec2 texSize, int bmidx, bool seamle
         vec3 bl_g = bl.rgb*bl.rgb;
         vec3 br_g = br.rgb*br.rgb;
 
-        vec3 mixed = mix(mix(tl_g, tr_g, f.x), mix(bl_g, br_g, f.x), f.y);
-        float a    = mix(mix(tl.a, tr.a, f.x), mix(bl.a, br.a, f.x), f.y);
-        return vec4(sqrt(mixed*wei), a);
-    } else if (bmidx == 2) {
+        vec3 accum = tl_g*w00 + tr_g*w10 + bl_g*w01 + br_g*w11;
+        float wsum = w00 + w10 + w01 + w11;
+
+        vec3 linear_mix = tl.rgb*w00 + tr.rgb*w10 + bl.rgb*w01 + br.rgb*w11;
+        vec3 gamma_mix  = sqrt(accum / wsum);
+        vec3 result = gamma_mix * (dot(linear_mix, vec3(0.333)) / (dot(gamma_mix, vec3(0.333)) + 1e-6));
+
+        float a = (tl.a*w00 + tr.a*w10 + bl.a*w01 + br.a*w11) / wsum;
+        return vec4(result, a);
+    }
+    else if (bmidx == 2) {
         vec3 ll = rgbToOklab(tl.rgb);
         vec3 lr = rgbToOklab(tr.rgb);
         vec3 bl2 = rgbToOklab(bl.rgb);
@@ -194,13 +204,21 @@ vec4 sampleBilinear(sampler2D tex, vec2 px, vec2 texSize, int bmidx, bool seamle
         vec3 mixed = mix(mix(ll, lr, f.x), mix(bl2, br2, f.x), f.y);
         float a    = mix(mix(tl.a, tr.a, f.x), mix(bl.a, br.a, f.x), f.y);
         return vec4(oklabToRgb(mixed), a);
-    } else {
-        vec4 tl_p = vec4(tl.rgb*tl.a, tl.a);
-        vec4 tr_p = vec4(tr.rgb*tr.a, tr.a);
-        vec4 bl_p = vec4(bl.rgb*bl.a, bl.a);
-        vec4 br_p = vec4(br.rgb*br.a, br.a);
-        vec4 mixed = mix(mix(tl_p, tr_p, f.x), mix(bl_p, br_p, f.x), f.y);
-        vec3 rgb = mixed.a > 0.00001 ? mixed.rgb / mixed.a : mixed.rgb;
-        return vec4(rgb, mixed.a);
+    }  else {
+        float w00 = (1.0-f.x)*(1.0-f.y);
+        float w10 =     f.x  *(1.0-f.y);
+        float w01 = (1.0-f.x)*    f.y;
+        float w11 =     f.x  *    f.y;
+
+        vec3 wei = vec3(1.00028); // tune this
+
+        //vec3 accum = tl_g*w00 + tr_g*w10 + bl_g*w01 + br_g*w11;
+        float wsum = w00 + w10 + w01 + w11;
+
+        vec3 linear_mix = tl.rgb*w00 + tr.rgb*w10 + bl.rgb*w01 + br.rgb*w11;
+
+        float a = (tl.a*w00 + tr.a*w10 + bl.a*w01 + br.a*w11) / wsum;
+
+        return vec4(linear_mix * wei, a);
     }
 }
