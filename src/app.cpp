@@ -1,4 +1,5 @@
 #include "repaint.h"
+#include "brush_blend.h"
 #include "brush_preset.h"
 #include "rlgl.h"
 #include "imgui.h"
@@ -15,9 +16,9 @@
 #include "layerstack.h"
 #include "undo.h"
 #include "replay_recorder.h"
+#include "user_content_receiver.h"
 #include "StrokeEmitter.h"
-#include "SegmentRenderer.h"
-#include "DabDrawer.h"
+#include "StrokeThrottle.h"
 #include "external/glad.h"
 #include <time.h>
 
@@ -56,8 +57,8 @@ static void DrawNotification(void) {
     float tx = (sw - tw) * 0.5f;
     float ty = 16.0f;
     // Shadow (offset by 1px)
-    DrawTextEx(f, g_notif.text, (Vector2){tx + 1, ty + 1}, (float)sz, 2, BLACK);
-    DrawTextEx(f, g_notif.text, (Vector2){tx, ty}, (float)sz, 2, WHITE);
+    DrawTextEx(f, g_notif.text, Vector2{tx + 1, ty + 1}, (float)sz, 2, BLACK);
+    DrawTextEx(f, g_notif.text, Vector2{tx, ty}, (float)sz, 2, WHITE);
 }
 
 void SyncImGuiInput(void) {
@@ -98,6 +99,7 @@ bool g_useViewRes = false;
 UndoManager* g_undoManager = nullptr;
 ReplayRecorder* g_recorder = nullptr;
 bool g_replayPopupActive = false;
+bool g_pixelPerfect = false;
 float g_pivotCursorX = 0.0f, g_pivotCursorY = 0.0f;
 
 static void DrawSplash(const char* msg) {
@@ -108,20 +110,19 @@ static void DrawSplash(const char* msg) {
         UnloadImage(img);
     }
     BeginDrawing();
-    ClearBackground((Color){35, 35, 40, 255});
+    ClearBackground(Color{35, 35, 40, 255});
     if (g_splashTex.id > 0) {
         float scale = fminf(sw / (float)g_splashTex.width, sh / (float)g_splashTex.height) * 0.7f;
         float x = (sw - g_splashTex.width * scale) * 0.5f;
         float y = (sh - g_splashTex.height * scale) * 0.5f - 30;
         DrawTextureEx(g_splashTex, Vector2{x, y}, 0.0f, scale, WHITE);
     }
-    DrawText(msg, sw / 2 - MeasureText(msg, 20) / 2, sh / 2 + 80, 20, (Color){230, 230, 240, 255});
+    DrawText(msg, sw / 2 - MeasureText(msg, 20) / 2, sh / 2 + 80, 20, Color{230, 230, 240, 255});
     EndDrawing();
 }
 
 /* ── File dialog / path state ──────────────────────────────────────────── */
 static AppState* g_state = NULL;
-DialogState g_fileDlg;
 
 /* ── New canvas dialog state ───────────────────────────────────────────── */
 static bool g_newCanvasActive = false;
@@ -160,10 +161,16 @@ void UpdateUI(AppState* state) {
 
     // Undo / Redo
     if (IsKeyDown(KEY_LEFT_CONTROL) && !IsKeyDown(KEY_LEFT_SHIFT) && IsKeyPressed(KEY_Z)) {
-        if (state->undo) state->undo->Undo(state, state->activeLayer);
+        if (state->undo) {
+            int idx = state->editTexMode ? state->activeBrushTex : state->activeLayer;
+            state->undo->Undo(state, idx, state->editTexMode);
+        }
     }
     if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyDown(KEY_LEFT_SHIFT) && IsKeyPressed(KEY_Z)) {
-        if (state->undo) state->undo->Redo(state, state->activeLayer);
+        if (state->undo) {
+            int idx = state->editTexMode ? state->activeBrushTex : state->activeLayer;
+            state->undo->Redo(state, idx, state->editTexMode);
+        }
     }
 
     // Replay confirmation popup
@@ -223,7 +230,21 @@ void UpdateUI(AppState* state) {
 NetworkBroker networkBroker;
 
 bool App_IsDialogActive(void) {
-    return g_fileDlg.type != 0 || g_newCanvasActive;
+    return Dialog_IsActive() || g_newCanvasActive;
+}
+
+char g_fileWorkingDir[1024] = "";
+
+static void _updateWorkingDir(const char* path) {
+    if (!path || !path[0]) return;
+    const char* sep = strrchr(path, '/');
+    const char* sep2 = strrchr(path, '\\');
+    if (sep2 > sep) sep = sep2;
+    if (!sep) return;
+    size_t len = sep - path;
+    if (len >= sizeof(g_fileWorkingDir)) len = sizeof(g_fileWorkingDir) - 1;
+    memcpy(g_fileWorkingDir, path, len);
+    g_fileWorkingDir[len] = '\0';
 }
 
 /* ── Callbacks ─────────────────────────────────────────────────────────── */
@@ -242,13 +263,6 @@ static void OnOpenResult(DialogResult r) {
             };
             LayerStack_SetRenderWindow(g_state->doc.width, g_state->doc.height);
             layersDirty = true;
-            // Load associated replay file
-            if (g_recorder) {
-                g_recorder->Reset(g_state->doc.width, g_state->doc.height);
-                char rpPath[1024];
-                snprintf(rpPath, sizeof(rpPath), "%s.re.play", r.output);
-                g_recorder->Load(rpPath);
-            }
         } else {
             // Try as a standard image (PNG, JPEG, BMP, GIF, etc.)
             Image img = LoadImage(r.output);
@@ -293,6 +307,7 @@ static void OnOpenResult(DialogResult r) {
                 }
             }
         }
+        _updateWorkingDir(r.output);
     }
 }
 
@@ -308,6 +323,7 @@ static void OnSaveResult(DialogResult r) {
                 snprintf(rpPath, sizeof(rpPath), "%s.re.play", r.output);
                 g_recorder->Save(rpPath);
             }
+            _updateWorkingDir(r.output);
         }
     }
 }
@@ -346,7 +362,8 @@ void App_FileNew(void) {
 }
 
 void App_FileOpen(void) {
-    DialogOpen_Init(&g_fileDlg, "Open", ".re.png/.png", OnOpenResult);
+    DialogOpen_Init("Open", ".re.png/.png",
+                    g_fileWorkingDir[0] ? g_fileWorkingDir : NULL, OnOpenResult);
 }
 
 void App_FileSave(void) {
@@ -365,7 +382,8 @@ void App_FileSave(void) {
 void App_FileSaveAs(void) {
     const char* name = "untitled";
     if (g_currentFilePath[0]) name = GetFileNameWithoutExt(g_currentFilePath);
-    DialogSaveAs_Init(&g_fileDlg, "Save As", ".re.png", name, OnSaveResult);
+    DialogSaveAs_Init("Save As", ".re.png", name,
+                      g_fileWorkingDir[0] ? g_fileWorkingDir : NULL, OnSaveResult);
 }
 
 void App_FileReload(void) {
@@ -451,15 +469,15 @@ void App_Init(AppState* state) {
     Changelog_Init();
     DrawSplash("Creating canvas...");
 
-    state->doc = Doc_New(800, 600);
+    state->doc = Doc_New(1024, 768);
     state->activeLayer = 0;
     LayerStack_Init();
-    LayerStack_SetRenderWindow(800, 600);
-    int idx = LayerStack_Add(800, 600);
+    LayerStack_SetRenderWindow(1024, 768);
+    int idx = LayerStack_Add(1024, 768);
     // First layer is the canvas background — fill with white
     Image* img = LayerStack_GetImage(idx);
     UnloadImage(*img);
-    *img = GenImageColor(800, 600, WHITE);
+    *img = GenImageColor(1024, 768, WHITE);
     ImageFormat(img, PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
     Texture2D tmp = LoadTextureFromImage(*img);
     RenderTexture2D rt = LayerStack_GetRT(idx);
@@ -480,13 +498,10 @@ void App_Init(AppState* state) {
     g_broker = viewport.broker;
 
     // LocalPlayer modules
-    static SegmentRenderer s_segRenderer;
-    static StrokeEmitter s_emitter(&s_segRenderer);
-    g_segRenderer = &s_segRenderer;
+    static StrokeThrottle s_throttle;
+    static StrokeEmitter s_emitter(&s_throttle);
+    g_throttle = &s_throttle;
     g_emitter = &s_emitter;
-
-    static DabDrawer s_dabDrawer;
-    g_dabDrawer = &s_dabDrawer;
 
     state->undo = new UndoManager();
     g_undoManager = state->undo;
@@ -553,22 +568,20 @@ void App_Init(AppState* state) {
     /* Create default directories */
     const char* ad = GetApplicationDirectory();
     char p[1024];
-    snprintf(p, sizeof(p), "%sSaves", ad); Dialog_MakeDir(p);
-    snprintf(p, sizeof(p), "%sSnaps", ad); Dialog_MakeDir(p);
+    snprintf(p, sizeof(p), "%sSaves", ad); MakeDirectory(p);
+    snprintf(p, sizeof(p), "%sSnaps", ad); MakeDirectory(p);
 
     /* Load custom dialog font — bilinear filter for smooth OTF rendering */
     g_dialogFont = LoadFontEx("resources/Cadman_Roman.otf", 28, 0, 0);
     SetTextureFilter(g_dialogFont.texture, TEXTURE_FILTER_BILINEAR);
-    DialogSetFont(&g_fileDlg, g_dialogFont, 26);
+    DialogSetFont(g_dialogFont, 26);
 
     g_currentFilePath[0] = '\0';
 
+    UserContent_Init();
+
     /* Load default brush preset */
     Preset_ApplyDefault(state);
-
-    // Show new-canvas dialog on startup so user goes through same flow as File > New
-    g_newCanvasActive = true;
-    g_newCanvasConfirm = false;
 }
 
 /* ── App_Draw ──────────────────────────────────────────────────────────── */
@@ -597,9 +610,12 @@ void App_Draw(AppState* state) {
     BeginDrawing();
     ClearBackground(Color{220, 220, 220, 255});
 
+    /* Check dropped files */
+    UserContent_Update(state);
+
     /* If dialog active, draw it modelly — skip viewport/imgui entirely */
-    if (g_fileDlg.type != 0) {
-        Dialog_Draw(&g_fileDlg);
+    if (Dialog_IsActive()) {
+        Dialog_Draw();
         EndDrawing();
         return;
     }
@@ -615,11 +631,8 @@ void App_Draw(AppState* state) {
     // Process user input → segments
     g_emitter->ProcessInputQueue();
 
-    // Emit dabs from pending segments (populates dab queue, no rendering)
-    if (g_segRenderer) g_segRenderer->EmitPending(state, 4, g_dabDrawer);
-
-    // Draw dabs, budget = 256 * 16² = 65536 radius²·px per frame
-    if (g_dabDrawer) g_dabDrawer->DrawPending(65536*32);
+    // Unpack + render dabs with per-frame pixel budget
+    if (g_throttle) g_throttle->DrawPending(state, 65536*32);
 
     if (viewport.broker) viewport.broker->poll(state);
     if (g_recorder) g_recorder->poll(state);
@@ -630,6 +643,49 @@ void App_Draw(AppState* state) {
 
     // ── Module GL draws (viewport canvas + overlays) ──
     g_moduleStack.DrawGL();
+
+    // ── Color picker readback from GPU composite ────────────────────
+    if (g_colorPicking) {
+        const int ps = 5;
+        static RenderTexture2D pickSub = {0};
+        if (pickSub.id == 0 || pickSub.texture.width != ps || pickSub.texture.height != ps) {
+            if (pickSub.id != 0) UnloadRenderTexture(pickSub);
+            pickSub = LoadRenderTexture(ps, ps);
+        }
+
+        Color picked = {0,0,0,0};
+        int gi = 0;
+
+        Image screen = LoadImageFromScreen();
+        if (screen.data) {
+            int sw = screen.width, sh = screen.height;
+            int sx = g_colorPickScreenX - 2, sy = g_colorPickScreenY - 2;
+            if (sx < 0) sx = 0; if (sy < 0) sy = 0;
+            if (sx + ps > sw) sx = sw - ps; if (sy + ps > sh) sy = sh - ps;
+            for (int py = 0; py < ps; py++)
+                for (int px = 0; px < ps; px++) {
+                    Color c = GetImageColor(screen, sx + px, sy + py);
+                    g_colorPickGrid[gi++] = c;
+                    if (px == 2 && py == 2) picked = c;
+                }
+        }
+        UnloadImage(screen);
+
+        if (gi > 0 && picked.a > 0) {
+            float tH, tS, tL;
+            RGBToHSL(picked, tH, tS, tL);
+            float spd = 0.5f;
+            float dh = tH - colorHue;
+            if (dh > 0.5f) dh -= 1.0f; else if (dh < -0.5f) dh += 1.0f;
+            colorHue += dh * spd;
+            if (colorHue < 0.0f) colorHue += 1.0f; else if (colorHue > 1.0f) colorHue -= 1.0f;
+            colorSat += (tS - colorSat) * spd;
+            colorLit += (tL - colorLit) * spd;
+            bpQuickHue.user.clipmaxF = colorHue;
+            bpQuickSat.user.clipmaxF = colorSat;
+            bpQuickLit.user.clipmaxF = colorLit;
+        }
+    }
 
     rlImGuiBegin();
     SyncImGuiInput();

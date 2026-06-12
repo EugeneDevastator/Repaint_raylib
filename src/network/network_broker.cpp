@@ -5,7 +5,7 @@
 #include "app_config.h"
 #include "brush_draw.h"
 #include "stroke_engine.h"
-#include "SegmentRenderer.h"
+#include "StrokeThrottle.h"
 #include "imgui.h"
 #include <string.h>
 #include <stdlib.h>
@@ -191,33 +191,21 @@ void NetworkBroker::SendLAction(const d_LAction* lact) {
 
 /* ── ICommandBroker ─────────────────────────────────────────────────────── */
 
-void NetworkBroker::on_segment(const DrawSegment& seg) {
+void NetworkBroker::on_segment(const SegmentData& seg) {
     int next = (segTail + 1) % CMD_CAPACITY;
     if (next == segHead) return;
-
-    QueuedSegment& d = segQueue[segTail];
-    d.pos1 = seg.pos1; d.pos2 = seg.pos2;
-    d.ctrl0 = seg.ctrl0; d.ctrl3 = seg.ctrl3;
-    d.brushFrom = seg.brushFrom;
-    d.brushTo  = seg.brush;
-    d.seed = seg.seed;
-    d.tool = seg.tool;
-    d.seamless = seg.seamless;
-    d.smudgeSrcX = seg.smudgeSrcX;
-    d.smudgeSrcY = seg.smudgeSrcY;
-    d.targetType = seg.targetType;
-    d.targetId   = seg.targetId;
+    segQueue[segTail] = seg;
     segTail = next;
 }
 
 void NetworkBroker::poll(AppState* st) {
     this->appState = st;
 
-    // Drain segments for remote send (rendering is via SegmentRenderer)
+    // Drain segments for remote send (rendering is via StrokeThrottle)
     while (segHead != segTail) {
-        QueuedSegment* d = &segQueue[segHead];
+        SegmentData& d = segQueue[segHead];
         if (this->state == NS_CONNECTED)
-            SendSegment(*d);
+            SendSegment(d);
         segHead = (segHead + 1) % CMD_CAPACITY;
     }
 
@@ -260,30 +248,31 @@ void NetworkBroker::ProcessReceived(uint8_t hid, uint8_t* data, uint32_t size) {
         if (!appState) break;
         d_Action act;
         if (Action_Deserialize(&act, data, size)) {
-            NetSegment ns;
-            memset(&ns, 0, sizeof(ns));
-            ns.pos1 = act.Stroke.pos1;
-            ns.pos2 = act.Stroke.pos2;
-            ns.ctrl0 = ns.pos1;
-            ns.ctrl3 = ns.pos2;
-            ns.brushFrom = CollapseBrushParams(act.Brush.Realb, 0.0f, act.ToolID);
-            ns.brushTo = ns.brushFrom;
-            ns.seed = act.Brush.Realb.seed;
-            ns.toolID = act.ToolID;
-            ns.seamless = 0;
-            ns.smudgeSrcX = ns.pos1.x;
-            ns.smudgeSrcY = ns.pos1.y;
-            ns.layer = act.layer;
-            EnqueueRemoteSegment(ns);
+            SegmentData seg;
+            memset(&seg, 0, sizeof(seg));
+            seg.pos1 = act.Stroke.pos1;
+            seg.pos2 = act.Stroke.pos2;
+            seg.ctrl0 = seg.pos1;
+            seg.ctrl3 = seg.pos2;
+            seg.brushFrom = CollapseBrushParams(act.Brush.Realb, 0.0f, act.ToolID);
+            seg.brush = seg.brushFrom;
+            seg.seed = act.Brush.Realb.seed;
+            seg.tool = act.ToolID;
+            seg.seamless = 0;
+            seg.smudgeSrcX = seg.pos1.x;
+            seg.smudgeSrcY = seg.pos1.y;
+            seg.targetType = 0;
+            seg.targetId = act.layer;
+            EnqueueRemoteSegment(seg);
         }
         break;
     }
 
     case sdSegment: {
         if (!appState) break;
-        NetSegment ns;
-        if (Segment_Deserialize(&ns, data, size))
-            EnqueueRemoteSegment(ns);
+        SegmentData seg;
+        if (Segment_Deserialize(&seg, data, size))
+            EnqueueRemoteSegment(seg);
         break;
     }
 
@@ -406,39 +395,14 @@ void NetworkBroker::ProcessReceived(uint8_t hid, uint8_t* data, uint32_t size) {
     }
 }
 
-void NetworkBroker::SendSegment(const QueuedSegment& seg) {
-    NetSegment ns;
-    memset(&ns, 0, sizeof(ns));
-    ns.pos1 = seg.pos1; ns.pos2 = seg.pos2;
-    ns.ctrl0 = seg.ctrl0; ns.ctrl3 = seg.ctrl3;
-    ns.brushFrom = seg.brushFrom;
-    ns.brushTo  = seg.brushTo;
-    ns.seed = seg.seed;
-    ns.toolID = seg.tool;
-    ns.seamless = seg.seamless;
-    ns.smudgeSrcX = seg.smudgeSrcX;
-    ns.smudgeSrcY = seg.smudgeSrcY;
-    ns.layer = seg.targetId;
+void NetworkBroker::SendSegment(const SegmentData& seg) {
     uint8_t buf[4096];
-    size_t sz = Segment_Serialize(ns, buf, sizeof(buf));
+    size_t sz = Segment_Serialize(seg, buf, sizeof(buf));
     if (sz > 0) SendPacket(sdSegment, buf, (uint32_t)sz);
 }
 
-void NetworkBroker::EnqueueRemoteSegment(const NetSegment& ns) {
-    DrawSegment seg;
-    memset(&seg, 0, sizeof(seg));
-    seg.pos1 = ns.pos1; seg.pos2 = ns.pos2;
-    seg.ctrl0 = ns.ctrl0; seg.ctrl3 = ns.ctrl3;
-    seg.brushFrom = ns.brushFrom;
-    seg.brush     = ns.brushTo;
-    seg.seed = ns.seed;
-    seg.tool = ns.toolID;
-    seg.seamless = ns.seamless;
-    seg.smudgeSrcX = ns.smudgeSrcX;
-    seg.smudgeSrcY = ns.smudgeSrcY;
-    seg.targetType = 0;
-    seg.targetId   = ns.layer;
-    if (g_segRenderer) g_segRenderer->Push(seg);
+void NetworkBroker::EnqueueRemoteSegment(const SegmentData& seg) {
+    if (g_throttle) g_throttle->Push(seg);
 }
 
 /* ── Config ─────────────────────────────────────────────────────────────── */

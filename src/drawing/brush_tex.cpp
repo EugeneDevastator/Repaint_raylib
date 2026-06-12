@@ -40,6 +40,7 @@ void BrushTex_Init(AppState* state) {
 
             Image img = LoadImage(path);
             ImageResize(&img, TEX_DIM, TEX_DIM);
+            ImageFormat(&img, PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
 
             int idx = BrushTex_Add(state, texName, img.width, img.height);
             if (idx >= 0) {
@@ -71,6 +72,7 @@ int BrushTex_Add(AppState* state, const char* name, int w, int h) {
     bt->h = h;
     bt->rt = Load16BitRT(w, h);
     bt->cpuImage = GenImageColor(w, h, BLANK);
+    ImageFormat(&bt->cpuImage, PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
     // Upload blank CPU image to RT — this properly initialises the GPU texture
     // even if ClearBackground + BeginTextureMode target an incomplete FBO.
     bt->dirty = true;

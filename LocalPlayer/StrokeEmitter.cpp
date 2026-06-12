@@ -1,4 +1,5 @@
 #include "StrokeEmitter.h"
+#include "StrokeThrottle.h"
 #include "stroke_engine.h"
 #include "replay_recorder.h"
 #include "brush_draw.h"
@@ -7,8 +8,8 @@
 
 StrokeEmitter* g_emitter = nullptr;
 
-StrokeEmitter::StrokeEmitter(SegmentRenderer* renderer)
-    : m_renderer(renderer), m_active(false), m_emittedAny(false) {
+StrokeEmitter::StrokeEmitter(StrokeThrottle* throttle)
+    : m_throttle(throttle), m_active(false), m_emittedAny(false) {
     m_splineCount = 0;
     m_processedCount = 0;
     m_accumDist = 0;
@@ -25,6 +26,7 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
     m_toolMode = e.toolMode;
     m_targetType = e.targetType;
     m_targetId = e.targetId;
+    m_userTexIdx = e.userTexIdx;
     m_layerScale = e.layerScale;
 
     Vector2 start = {e.x, e.y};
@@ -64,27 +66,15 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
     m_prevSegDir = Vector2{segDx, segDy};
     m_prevSegLen = segLen;
 
-    d_RealBrush target = brush;
-    float sizeMul = powf(16.0f, BParam_GetValue(&bpSizeMul) / 128.0f - 1.0f);
-    target.rad_out  = GetModVal(&bpSize);
-    target.radInRatio = GetModVal(&bpHardness);
-    target.crv      = GetModVal(&bpCurvature);
-    target.opacity  = GetModVal(&bpOpacity);
-    target.resangle = fmodf(initAngle + GetModVal(&bpAngle), 360.0f);
-    target.x2y      = GetModVal(&bpScaleRel);
-    target.col      = HSLToRGB(GetModVal(&bpQuickHue), GetModVal(&bpQuickSat), GetModVal(&bpQuickLit));
-    target.cop      = (toolMode == eSmudge) ? GetModVal(&bpCloneOpacity) : 0.0f;
-    target.rad_out *= sizeMul;
+    d_RealBrush target = ModulateBrushParams(brush, initAngle, toolMode);
     if (m_layerScale > 0.001f && fabsf(m_layerScale - 1.0f) > 0.0001f)
         target.rad_out *= m_layerScale;
 
     CollapsedBrush cbFrom = CollapseBrushParams(m_brushFrom, initAngle, toolMode);
     CollapsedBrush cbTo   = CollapseBrushParams(target, initAngle, toolMode);
 
-    // Rebase ctrl0 from spline point p1 to actual segment start m_lastDabPos,
-    // rescaling handle length to the actual segment length.
-    // (dabs don't land exactly on spline points, so segLen differs from the
-    //  spline segment length used at the call site to compute ctrl0's direction.)
+    // Rebase ctrl0 from p1 to m_lastDabPos, and ctrl3 from p2 to the actual
+    // segment end, rescaling both handle lengths to the actual segment length.
     float hLen = segLen * 0.33f;
     Vector2 c0dir = {ctrl0.x - p1.x, ctrl0.y - p1.y};
     float c0l = sqrtf(c0dir.x*c0dir.x + c0dir.y*c0dir.y);
@@ -93,24 +83,33 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
         actualCtrl0.x = m_lastDabPos.x + c0dir.x/c0l * hLen;
         actualCtrl0.y = m_lastDabPos.y + c0dir.y/c0l * hLen;
     }
+    Vector2 c3dir = {ctrl3.x - p2.x, ctrl3.y - p2.y};
+    float c3l = sqrtf(c3dir.x*c3dir.x + c3dir.y*c3dir.y);
+    Vector2 actualCtrl3 = p2;
+    if (c3l > 0.001f) {
+        actualCtrl3.x = p2.x + c3dir.x/c3l * hLen;
+        actualCtrl3.y = p2.y + c3dir.y/c3l * hLen;
+    }
 
-    DrawSegment dseg;
+    SegmentData dseg;
     memset(&dseg, 0, sizeof(dseg));
     dseg.pos1      = m_lastDabPos;
     dseg.pos2      = p2;
     dseg.ctrl0     = actualCtrl0;
-    dseg.ctrl3     = ctrl3;
+    dseg.ctrl3     = actualCtrl3;
     dseg.brushFrom = cbFrom;
     dseg.brush     = cbTo;
-    dseg.Noisemode = 0;
     dseg.tool      = (uint8_t)toolMode;
     dseg.seamless  = g_seamlessPaint ? 1 : 0;
+    dseg.pixelPerfect = g_pixelPerfect ? 1 : 0;
     dseg.seed      = m_seed;
     dseg.smudgeSrcX = m_lastDabPos.x;
     dseg.smudgeSrcY = m_lastDabPos.y;
     dseg.targetType = m_targetType;
     dseg.targetId   = m_targetId;
+    dseg.userTexIdx = m_userTexIdx;
     dseg.dabOffset  = 0;
+    dseg.initAngle  = initAngle;
 
     SegDrawer_SetSegmentStart(m_lastDabRad, m_lastDabPos, &dseg);
 
@@ -119,12 +118,12 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
         m_segEndpoints[m_segEpCount++] = dseg.pos2;
     }
 
-    m_renderer->Push(dseg);
+    m_throttle->Push(dseg);
 
     if (g_recorder) g_recorder->on_segment(dseg);
     if (g_broker) g_broker->on_segment(dseg);
 
-    SegDrawer_ComputeSegmentEnd(&dseg, 0, m_lastDabRad, &m_lastDabPos, &m_lastDabRad);
+    SegDrawer_ComputeSegmentEnd(dseg, 0, m_lastDabRad, &m_lastDabPos, &m_lastDabRad);
 
     m_brushFrom = target;
     m_emittedAny = true;
@@ -245,24 +244,39 @@ void StrokeEmitter::handleEnd() {
 
     if (!m_emittedAny) {
         CollapsedBrush cb = CollapseBrushParams(m_brushFrom, m_initAngle, m_toolMode);
-        DrawSegment dseg;
+    SegmentData dseg;
         memset(&dseg, 0, sizeof(dseg));
         dseg.pos1 = dseg.pos2 = m_lastDabPos;
         dseg.ctrl0 = dseg.ctrl3 = dseg.pos1;
         dseg.brushFrom = dseg.brush = cb;
         dseg.tool = eSingleStamp;
         dseg.seamless = g_seamlessPaint ? 1 : 0;
+        dseg.pixelPerfect = g_pixelPerfect ? 1 : 0;
         dseg.seed = m_seed;
         dseg.smudgeSrcX = m_lastDabPos.x;
         dseg.smudgeSrcY = m_lastDabPos.y;
         dseg.targetType = m_targetType;
         dseg.targetId   = m_targetId;
+        dseg.userTexIdx = m_userTexIdx;
         dseg.dabOffset  = 0;
+        dseg.initAngle  = m_initAngle;
 
-        m_renderer->Push(dseg);
+        m_throttle->Push(dseg);
         if (g_recorder) g_recorder->on_segment(dseg);
         if (g_broker) g_broker->on_segment(dseg);
     }
+
+    // Reset global modulators to neutral so the next frame's UI brush
+    // computation (app.cpp:196) reads clean values.
+    g_modPars.Pars[csDir]    = 0.5f;
+    g_modPars.Pars[csIdir]   = 0.5f;
+    g_modPars.Pars[csCrv]    = 0.5f;
+    g_modPars.Pars[csAcc]    = 1.0f;
+    g_modPars.Pars[csLenpx]  = 1.0f;
+    g_modPars.Pars[csHVdir]  = 0.5f;
+    g_modPars.Pars[csRelang] = 0.5f;
+    g_modPars.Pars[csVel]    = 1.0f;
+    g_modPars.Pars[csPressure] = 1.0f;
 
     m_active = false;
     m_splineCount = 0;

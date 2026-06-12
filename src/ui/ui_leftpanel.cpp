@@ -1,4 +1,5 @@
 #include "ui_leftpanel.h"
+#include "brush_blend.h"
 #include "rlImGui.h"
 #include "imgui.h"
 #include "imgui_internal.h"
@@ -65,6 +66,9 @@ void LeftPanel_Draw(AppState* state) {
     int preserve = state->currentBrush.Realb.preserveop;
     ImGui::Checkbox("Preserve Layer Alpha", (bool*)&preserve);
     state->currentBrush.Realb.preserveop = (uint8_t)preserve;
+
+    extern bool g_pixelPerfect;
+    ImGui::Checkbox("Pixel Perfect", &g_pixelPerfect);
 
     extern int g_strokeSmoothingMode;
     extern float g_strokeThrottle;

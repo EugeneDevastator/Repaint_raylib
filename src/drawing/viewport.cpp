@@ -11,12 +11,13 @@
 
 static void PushDabSegment(ICommandBroker* b, float x, float y, float srcX, float srcY, const d_RealBrush& brush, int toolMode) {
     CollapsedBrush cb = CollapseBrushParams(brush, 0.0f, toolMode);
-    DrawSegment s; memset(&s, 0, sizeof(s));
+    SegmentData s; memset(&s, 0, sizeof(s));
     s.pos1 = Vector2{x, y};
     s.pos2 = Vector2{srcX, srcY};
     s.ctrl0 = s.ctrl3 = s.pos1;
     s.brushFrom = s.brush = cb;
     s.seed = brush.seed;
+    s.userTexIdx = 0;
     if (b) b->on_segment(s);
 }
 
@@ -76,50 +77,12 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         layersDirty = true;
     }
 
-    // Color picker
+    // Color picker — position stored here, actual pixel readback in App_Draw after composite is rendered
     if (IsKeyDown(KEY_LEFT_ALT) && IsMouseButtonDown(MOUSE_LEFT_BUTTON) && vp->inBounds) {
         g_colorPicking = true;
-        Vector2 cp = GetScreenToWorld2D(mousePos, state->camera);
-        int cx = (int)cp.x, cy = (int)cp.y;
-        Color picked = {0, 0, 0, 0};
-        int gi = 0;
-        for (int dy = -2; dy <= 2; dy++) {
-            for (int dx = -2; dx <= 2; dx++) {
-                int px = cx + dx, py = cy + dy;
-                Color c = {0, 0, 0, 0};
-                if (px >= 0 && px < state->doc.width && py >= 0 && py < state->doc.height) {
-                    for (int li = 0; li < LayerStack_Count(); li++) {
-                        if (!LayerStack_GetProps(li)->visible) continue;
-                        Color sp = GetImageColor(*LayerStack_GetImage(li), px, py);
-                        float sa = sp.a / 255.0f * LayerStack_GetProps(li)->op;
-                        float da = c.a / 255.0f;
-                        float outa = sa + da * (1.0f - sa);
-                        if (outa > 0.0f) {
-                            c.r = (uint8_t)((sp.r * sa + c.r * da * (1.0f - sa)) / outa);
-                            c.g = (uint8_t)((sp.g * sa + c.g * da * (1.0f - sa)) / outa);
-                            c.b = (uint8_t)((sp.b * sa + c.b * da * (1.0f - sa)) / outa);
-                            c.a = (uint8_t)(outa * 255.0f);
-                        }
-                    }
-                }
-                g_colorPickGrid[gi++] = c;
-                if (dy == 0 && dx == 0) picked = c;
-            }
-        }
-        if (picked.a > 0) {
-            float tH, tS, tL;
-            RGBToHSL(picked, tH, tS, tL);
-            float spd = 0.5f;
-            float dh = tH - colorHue;
-            if (dh > 0.5f) dh -= 1.0f; else if (dh < -0.5f) dh += 1.0f;
-            colorHue += dh * spd;
-            if (colorHue < 0.0f) colorHue += 1.0f; else if (colorHue > 1.0f) colorHue -= 1.0f;
-            colorSat += (tS - colorSat) * spd;
-            colorLit += (tL - colorLit) * spd;
-            bpQuickHue.user.clipmaxF = colorHue;
-            bpQuickSat.user.clipmaxF = colorSat;
-            bpQuickLit.user.clipmaxF = colorLit;
-        }
+        g_colorPickScreenX = (int)mousePos.x;
+        g_colorPickScreenY = (int)mousePos.y;
+        g_colorPickVpBounds = vp->bounds;
     } else {
         g_colorPicking = false;
     }
@@ -215,6 +178,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             if (!vp->wasMouseDown) {
                 if (vp->inBounds && leftDown) {
                     Modulators_SnapRunState();
+                    if (state->undo) state->undo->Snapshot(state, state->activeBrushTex, true);
 
                     InputEntry be;
                     be.type = InputEntry::Begin;
@@ -224,6 +188,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     be.toolMode = state->mode;
                     be.targetType = 1;
                     be.targetId = state->activeBrushTex;
+                    be.userTexIdx = 0;     // no pattern texture when editing a stamp
                     be.layerScale = 1.0f;
                     be.timestamp = GetTime();
                     g_inputQueue.AddEntry(be);
@@ -274,6 +239,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     be.toolMode = state->mode;
                     be.targetType = 0;
                     be.targetId = active;
+                    be.userTexIdx = (state->activeBrushTex >= 0) ? (uint8_t)(state->activeBrushTex + 1) : 0;
                     be.layerScale = layerScale;
                     be.timestamp = GetTime();
                     g_inputQueue.AddEntry(be);

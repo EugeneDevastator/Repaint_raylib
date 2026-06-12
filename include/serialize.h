@@ -15,7 +15,7 @@ size_t LAction_Serialize(d_LAction* la, uint8_t* buf, size_t cap);
 bool LAction_Deserialize(d_LAction* la, uint8_t* buf, size_t len);
 size_t LayerProps_Serialize(sLayerProps* lp, uint8_t* buf, size_t cap);
 bool LayerProps_Deserialize(sLayerProps* lp, uint8_t* buf, size_t len);
-size_t Segment_Serialize(const NetSegment& ns, uint8_t* buf, size_t cap);
-bool Segment_Deserialize(NetSegment* ns, uint8_t* buf, size_t len);
+size_t Segment_Serialize(const SegmentData& seg, uint8_t* buf, size_t cap);
+bool Segment_Deserialize(SegmentData* seg, uint8_t* buf, size_t len);
 
 #endif

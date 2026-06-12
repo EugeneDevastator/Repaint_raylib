@@ -103,9 +103,11 @@ set(SOURCES
     src/ui/ui_texpanel.cpp
     src/undo.cpp
     src/replay_recorder.cpp
+    src/user_content_receiver.cpp
     # ── sensors ───────────────────────────────────────────────────────
     src/sensors/tablet.cpp
     src/sensors/input_filter.cpp
+    src/sensors/clipboard.cpp
     # ── drawing ───────────────────────────────────────────────────────
     src/drawing/brush_blend.cpp
     src/drawing/brush_tex.cpp
@@ -118,8 +120,7 @@ set(SOURCES
     # ── LocalPlayer ─────────────────────────────────────────────────────
     LocalPlayer/InputQueue.cpp
     LocalPlayer/StrokeEmitter.cpp
-    LocalPlayer/SegmentRenderer.cpp
-    LocalPlayer/DabDrawer.cpp
+    LocalPlayer/StrokeThrottle.cpp
     # ── network ───────────────────────────────────────────────────────
     src/network/serialize.cpp
     src/network/network_broker.cpp
@@ -138,14 +139,14 @@ set(SOURCES
 add_executable(repaint ${SOURCES})
 
 if(WIN32)
-    target_sources(repaint PRIVATE resources/icon.rc src/sensors/tablet_win.cpp src/sensors/platform_utils_win.cpp)
+    target_sources(repaint PRIVATE resources/icon.rc src/sensors/tablet_win.cpp src/sensors/platform_utils_win.cpp src/sensors/clipboard_win.cpp)
     target_compile_definitions(repaint PRIVATE WINVER=0x0602 _WIN32_WINNT=0x0602)
     target_link_libraries(repaint PRIVATE opengl32 gdi32 winmm user32)
     if(MINGW)
         target_link_options(repaint PRIVATE "-Wl,--allow-multiple-definition")
     endif()
 else()
-    target_sources(repaint PRIVATE src/sensors/tablet_lnx.cpp src/sensors/platform_utils_lnx.cpp)
+    target_sources(repaint PRIVATE src/sensors/tablet_lnx.cpp src/sensors/platform_utils_lnx.cpp src/sensors/clipboard_lnx.cpp)
 endif()
 
 target_include_directories(repaint PRIVATE

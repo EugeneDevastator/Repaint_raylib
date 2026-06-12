@@ -1,7 +1,11 @@
+#define _USE_MATH_DEFINES
 #include "brush_draw.h"
+#include "brush_blend.h"
 #include "repaint.h"
+#include "brush_preset.h"
 #include <math.h>
 #include <string.h>
+
 
 // ── HSL conversion (matches the UI-side functions) ──────────────────
 static float HueToRGB_Local(float p, float q, float t) {
@@ -74,7 +78,13 @@ CollapsedBrush BlendBrushes(CollapsedBrush from, CollapsedBrush to, float k) {
     r.radInRatio = lerp(from.radInRatio, to.radInRatio, k);
     r.scale_x    = lerp(from.scale_x, to.scale_x, k);
     r.scale_y    = lerp(from.scale_y, to.scale_y, k);
-    r.resangle   = lerp((float)from.resangle, (float)to.resangle, k);
+    {   // angle-aware lerp — shortest path around the circle
+        float a = from.resangle, b = to.resangle;
+        float diff = fmodf(b - a, 360.0f);
+        if (diff > 180.0f) diff -= 360.0f;
+        if (diff < -180.0f) diff += 360.0f;
+        r.resangle = fmodf(a + diff * k + 360.0f, 360.0f);
+    }
     r.pwr        = lerp(from.pwr, to.pwr, k);
     r.opacity    = lerp(from.opacity, to.opacity, k);
     r.cop        = lerp(from.cop, to.cop, k);
@@ -232,35 +242,48 @@ static Vector2 WalkArc(Vector2* pts, int n, float& arcPos, float step, float tot
     return pts[n-1];
 }
 
+// ── Deterministic jittered radius (avoids full blend+jitter) ───────
+static float JitterRadius(float unjitteredRad, float jitRange,
+                          uint16_t baseSeed, int dabIdx) {
+    float dr = RawRnd(baseSeed + (uint16_t)(dabIdx * 7 + 1), 1024) / 1024.0f * 2.0f - 1.0f;
+    float r = unjitteredRad + dr * jitRange;
+    float radMin = fmaxf(0.5f, unjitteredRad - jitRange);
+    float radMax = fmaxf(radMin + 0.001f, unjitteredRad + jitRange);
+    return fmaxf(radMin, fminf(radMax, r));
+}
+
 // ── DrawLinear ─────────────────────────────────────────────────────
-int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad,
-               void (*apply)(float x, float y, float srcX, float srcY, const CollapsedBrush& brush, void* user),
-               void* user, int maxOut, SegResult* res) {
-    if (maxOut <= 0 || !res) return 0;
-    Vector2 from = seg->pos1;
+int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
+               DabPoint* outPoints, int maxOut, SegResult* res) {
+    if (!res) return 0;
+    Vector2 from = seg.pos1;
     res->lastDabPos = from;
-    res->lastRadOut = seg->brushFrom.rad_out_px;
+    res->lastRadOut = seg.brushFrom.rad_out_px;
     res->overdraw = 0.0f;
 
-    Vector2 to = seg->pos2;
+    Vector2 to = seg.pos2;
     float stdist = sqrtf((to.x - from.x) * (to.x - from.x) + (to.y - from.y) * (to.y - from.y));
     if (stdist < 0.001f) return 0;
 
-    if (seg->tool == eSingleStamp) {
-        if (apply) apply(from.x, from.y, seg->smudgeSrcX, seg->smudgeSrcY, seg->brushFrom, user);
+    if (seg.tool == eSingleStamp) {
+        if (outPoints) {
+            outPoints[0].x = from.x; outPoints[0].y = from.y;
+            outPoints[0].srcX = seg.smudgeSrcX; outPoints[0].srcY = seg.smudgeSrcY;
+            outPoints[0].brush = seg.brushFrom;
+        }
         res->lastDabPos = Vector2{from.x, from.y};
-        res->lastRadOut = seg->brushFrom.rad_out_px;
+        res->lastRadOut = seg.brushFrom.rad_out_px;
         return 1;
     }
 
-    bool isCurved = (seg->ctrl0.x != from.x || seg->ctrl0.y != from.y ||
-                     seg->ctrl3.x != to.x   || seg->ctrl3.y != to.y);
+    bool isCurved = (seg.ctrl0.x != from.x || seg.ctrl0.y != from.y ||
+                     seg.ctrl3.x != to.x   || seg.ctrl3.y != to.y);
 
-    float spacingMult = seg->brushFrom.spacing;
+    float spacingMult = seg.brushFrom.spacing;
     if (spacingMult < 0.0f) spacingMult = 0.0f;
 
-    float rFrom = seg->brushFrom.rad_out_px;
-    float rTo   = seg->brush.rad_out_px;
+    float rFrom = seg.brushFrom.rad_out_px;
+    float rTo   = seg.brush.rad_out_px;
 
     // Pre-compute curve polyline (65 points for 64 subdivisions)
     Vector2 curvePts[65];
@@ -269,7 +292,7 @@ int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad,
         totalLen = 0;
         for (int i = 0; i <= 64; i++) {
             float t = (float)i / 64.0f;
-            curvePts[i] = CubicBezier(from, seg->ctrl0, seg->ctrl3, to, t);
+            curvePts[i] = CubicBezier(from, seg.ctrl0, seg.ctrl3, to, t);
             if (i > 0)
                 totalLen += sqrtf((curvePts[i].x - curvePts[i-1].x) * (curvePts[i].x - curvePts[i-1].x) +
                                    (curvePts[i].y - curvePts[i-1].y) * (curvePts[i].y - curvePts[i-1].y));
@@ -289,8 +312,8 @@ int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad,
     float lastDabRad = (initialRad > 0.0f) ? initialRad : rFrom;
     res->lastRadOut = lastDabRad;
     int count = 0;
-    float lastSrcX = seg->smudgeSrcX;
-    float lastSrcY = seg->smudgeSrcY;
+    float lastSrcX = seg.smudgeSrcX;
+    float lastSrcY = seg.smudgeSrcY;
 
     while (count < maxOut) {
         // 1. Estimate next position using last (jittered) radius
@@ -305,10 +328,8 @@ int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad,
         float nextRadUnJit = rFrom + (rTo - rFrom) * tNext;
 
         // 3. Apply jitter to get ACTUAL next radius
-        CollapsedBrush tempCB = BlendBrushes(seg->brushFrom, seg->brush, tNext);
-        tempCB.rad_out_px = nextRadUnJit;
-        JitterBrush(tempCB, seg->brushFrom.baseSeed, dabOffset + count);
-        float nextRadJit = tempCB.rad_out_px;
+        float jitRange = seg.brushFrom.jitRadOut;
+        float nextRadJit = JitterRadius(nextRadUnJit, jitRange, seg.brushFrom.baseSeed, dabOffset + count);
 
         // 4. Find exact position using jittered next radius
         float nextArc = lastDabPos + (lastDabRad + nextRadJit) * spacingMult;
@@ -319,14 +340,36 @@ int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad,
         float arcPos = lastDabPos;
         Vector2 pos = WalkArc(curvePts, 65, arcPos, nextArc - lastDabPos, totalLen);
 
-        // 6. Build final brush (jitter call 2 — deterministic, same result)
+        // 6. Build final brush
         float k = nextArc / totalLen;
         if (k > 1.0f) k = 1.0f;
-        CollapsedBrush dabCB = BlendBrushes(seg->brushFrom, seg->brush, k);
+        CollapsedBrush dabCB = BlendBrushes(seg.brushFrom, seg.brush, k);
         dabCB.rad_out_px = nextRadUnJit;
-        JitterBrush(dabCB, seg->brushFrom.baseSeed, dabOffset + count);
 
-        if (apply) apply(pos.x, pos.y, lastSrcX, lastSrcY, dabCB, user);
+        // Per-dab rotation: use curve tangent direction if initAngle is set
+        if (seg.initAngle != 0.0f) {
+            float t = nextArc / totalLen;
+            if (t < 0) t = 0; if (t > 1) t = 1;
+            int idx = (int)(t * 64);
+            if (idx < 0) idx = 0; if (idx > 63) idx = 63;
+            float tx = curvePts[idx+1].x - curvePts[idx].x;
+            float ty = curvePts[idx+1].y - curvePts[idx].y;
+            if (tx != 0 || ty != 0) {
+                float dirAng = AtanXY(tx, ty);
+                g_modPars.Pars[csDir] = RngConv(dirAng, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
+                dabCB.resangle = fmodf(seg.initAngle + GetModVal(&bpAngle), 360.0f);
+            }
+        }
+
+        JitterBrush(dabCB, seg.brushFrom.baseSeed, dabOffset + count);
+
+        if (outPoints) {
+            outPoints[count].x = pos.x;
+            outPoints[count].y = pos.y;
+            outPoints[count].srcX = lastSrcX;
+            outPoints[count].srcY = lastSrcY;
+            outPoints[count].brush = dabCB;
+        }
         lastSrcX = pos.x;
         lastSrcY = pos.y;
 
@@ -357,68 +400,29 @@ int DrawLinear(const DrawSegment* seg, int dabOffset, float initialRad,
 }
 
 
-// ── ApplyCollapsedBrush ─────────────────────────────────────────────
-void ApplyCollapsedBrush(RenderTexture2D rt, const CollapsedBrush& cb,
-                         float x, float y, float srcX, float srcY, Texture2D brushTex) {
-    d_Brush tb; memset(&tb, 0, sizeof(tb));
-    tb.Realb.rad_out = cb.rad_out_px;
-    tb.Realb.radInRatio = cb.radInRatio;
-    tb.Realb.opacity = cb.opacity;
-    tb.Realb.crv = cb.crv;
-    tb.Realb.x2y = cb.scale_y;
-    tb.Realb.resangle = cb.resangle;
-    tb.Realb.col = cb.col;
-    tb.Realb.cop = cb.cop;
-    tb.Realb.bmidx = (uint8_t)cb.bmidx;
-    tb.Realb.preserveop = cb.preserveop;
-    tb.Realb.eraseMode = cb.eraseMode;
-    tb.Realb.perspective = cb.perspective;
-    tb.Realb.texScale = cb.texScale;
-    tb.Realb.texFeather = cb.texFeather;
-    tb.Realb.texThresh = cb.texThresh;
-    tb.Realb.texBlendVal = cb.texBlendVal;
-    tb.Realb.texBlendMode = cb.texBlendMode;
-    tb.Realb.texNoisemode = cb.texNoisemode;
-    tb.Realb.texColorMode = cb.texColorMode;
-    tb.Realb.useTexLumAsAlpha = cb.useTexLumAsAlpha;
-    tb.Realb.pwr = cb.pwr;
-    tb.Realb.userTexOriginX = cb.userTexOriginX;
-    tb.Realb.userTexOriginY = cb.userTexOriginY;
-    tb.Realb.userTexDirection = cb.userTexDirection;
-    BrushBlend_ApplyStamp(rt, &tb, brushTex, x, y, srcX, srcY);
-}
-
-// ── DrawOneSegment ─────────────────────────────────────────────────
-void DrawOneSegment(const DrawSegment& dseg, RenderTexture2D rt, Texture2D brushTex, bool seamless, int dabOffset) {
-    bool savedSeamless = g_seamlessPaint;
-    g_seamlessPaint = seamless;
-
-    struct UserData { RenderTexture2D* rt; Texture2D tex; };
-    UserData ud = {&rt, brushTex};
-
-    auto cb = [](float x, float y, float srcX, float srcY, const CollapsedBrush& brush, void* user) {
-        UserData* ud = (UserData*)user;
-        ApplyCollapsedBrush(*ud->rt, brush, x, y, srcX, srcY, ud->tex);
-    };
-
+// ── DrawSegment ────────────────────────────────────────────────────
+void DrawSegment(const SegmentData& dseg, RenderTexture2D rt, Texture2D brushTex, bool useTexture, bool seamless, int dabOffset, bool pixelPerfect) {
+    static DabPoint pts[65536];
     SegResult r;
-    DrawLinear(&dseg, dabOffset, 0.0f, cb, &ud, 65536, &r);
-
-    g_seamlessPaint = savedSeamless;
+    int cnt = DrawLinear(dseg, dabOffset, 0.0f, pts, 65536, &r);
+    for (int i = 0; i < cnt; i++)
+        BrushBlend_ApplyStamp(rt, pts[i].brush, brushTex, useTexture,
+                              pts[i].x, pts[i].y, pts[i].srcX, pts[i].srcY,
+                              seamless, pixelPerfect);
 }
 
 // ── SegDrawer helpers (computation only, no rendering) ─────────────
 
-void SegDrawer_SetSegmentStart(float startRad, Vector2 startPos, DrawSegment* seg) {
+void SegDrawer_SetSegmentStart(float startRad, Vector2 startPos, SegmentData* seg) {
     seg->pos1 = startPos;
     if (startRad > 0.0f)
         seg->brushFrom.rad_out_px = startRad;
 }
 
-void SegDrawer_ComputeSegmentEnd(const DrawSegment* seg, int dabOffset, float initialRad,
+void SegDrawer_ComputeSegmentEnd(const SegmentData& seg, int dabOffset, float initialRad,
                                   Vector2* outLastPos, float* outLastRad) {
     SegResult r;
-    DrawLinear(seg, dabOffset, initialRad, nullptr, nullptr, 65536, &r);
+    DrawLinear(seg, dabOffset, initialRad, nullptr, 65536, &r);
     *outLastPos = r.lastDabPos;
     *outLastRad = r.lastRadOut;
 }

@@ -260,42 +260,45 @@ bool LayerProps_Deserialize(sLayerProps* lp, uint8_t* buf, size_t len) {
     return true;
 }
 
-size_t Segment_Serialize(const NetSegment& ns, uint8_t* buf, size_t cap) {
+size_t Segment_Serialize(const SegmentData& seg, uint8_t* buf, size_t cap) {
     size_t need = sizeof(Vector2)*4 + sizeof(CollapsedBrush)*2 + sizeof(uint16_t)
-                + sizeof(int) + sizeof(uint8_t)*2 + sizeof(float)*2;
+                + sizeof(uint8_t)*3 + sizeof(float)*2;
     if (cap < need) return 0;
     size_t off = 0;
-    memcpy(buf + off, &ns.pos1, sizeof(Vector2)); off += sizeof(Vector2);
-    memcpy(buf + off, &ns.pos2, sizeof(Vector2)); off += sizeof(Vector2);
-    memcpy(buf + off, &ns.ctrl0, sizeof(Vector2)); off += sizeof(Vector2);
-    memcpy(buf + off, &ns.ctrl3, sizeof(Vector2)); off += sizeof(Vector2);
-    memcpy(buf + off, &ns.brushFrom, sizeof(CollapsedBrush)); off += sizeof(CollapsedBrush);
-    memcpy(buf + off, &ns.brushTo, sizeof(CollapsedBrush)); off += sizeof(CollapsedBrush);
-    memcpy(buf + off, &ns.seed, sizeof(uint16_t)); off += sizeof(uint16_t);
-    buf[off++] = ns.layer;
-    buf[off++] = ns.toolID;
-    buf[off++] = ns.seamless;
-    memcpy(buf + off, &ns.smudgeSrcX, sizeof(float)); off += sizeof(float);
-    memcpy(buf + off, &ns.smudgeSrcY, sizeof(float)); off += sizeof(float);
+    memcpy(buf + off, &seg.pos1, sizeof(Vector2)); off += sizeof(Vector2);
+    memcpy(buf + off, &seg.pos2, sizeof(Vector2)); off += sizeof(Vector2);
+    memcpy(buf + off, &seg.ctrl0, sizeof(Vector2)); off += sizeof(Vector2);
+    memcpy(buf + off, &seg.ctrl3, sizeof(Vector2)); off += sizeof(Vector2);
+    memcpy(buf + off, &seg.brushFrom, sizeof(CollapsedBrush)); off += sizeof(CollapsedBrush);
+    memcpy(buf + off, &seg.brush, sizeof(CollapsedBrush)); off += sizeof(CollapsedBrush);
+    memcpy(buf + off, &seg.seed, sizeof(uint16_t)); off += sizeof(uint16_t);
+    buf[off++] = seg.targetId;     // was layer in NetSegment
+    buf[off++] = seg.tool;         // was toolID
+    buf[off++] = seg.seamless;
+    memcpy(buf + off, &seg.smudgeSrcX, sizeof(float)); off += sizeof(float);
+    memcpy(buf + off, &seg.smudgeSrcY, sizeof(float)); off += sizeof(float);
     return off;
 }
 
-bool Segment_Deserialize(NetSegment* ns, uint8_t* buf, size_t len) {
+bool Segment_Deserialize(SegmentData* seg, uint8_t* buf, size_t len) {
     size_t need = sizeof(Vector2)*4 + sizeof(CollapsedBrush)*2 + sizeof(uint16_t)
                 + sizeof(uint8_t)*3 + sizeof(float)*2;
     if (len < need) return false;
     size_t off = 0;
-    memcpy(&ns->pos1, buf + off, sizeof(Vector2)); off += sizeof(Vector2);
-    memcpy(&ns->pos2, buf + off, sizeof(Vector2)); off += sizeof(Vector2);
-    memcpy(&ns->ctrl0, buf + off, sizeof(Vector2)); off += sizeof(Vector2);
-    memcpy(&ns->ctrl3, buf + off, sizeof(Vector2)); off += sizeof(Vector2);
-    memcpy(&ns->brushFrom, buf + off, sizeof(CollapsedBrush)); off += sizeof(CollapsedBrush);
-    memcpy(&ns->brushTo, buf + off, sizeof(CollapsedBrush)); off += sizeof(CollapsedBrush);
-    memcpy(&ns->seed, buf + off, sizeof(uint16_t)); off += sizeof(uint16_t);
-    ns->layer = buf[off++];
-    ns->toolID = buf[off++];
-    ns->seamless = buf[off++];
-    memcpy(&ns->smudgeSrcX, buf + off, sizeof(float)); off += sizeof(float);
-    memcpy(&ns->smudgeSrcY, buf + off, sizeof(float)); off += sizeof(float);
+    memcpy(&seg->pos1, buf + off, sizeof(Vector2)); off += sizeof(Vector2);
+    memcpy(&seg->pos2, buf + off, sizeof(Vector2)); off += sizeof(Vector2);
+    memcpy(&seg->ctrl0, buf + off, sizeof(Vector2)); off += sizeof(Vector2);
+    memcpy(&seg->ctrl3, buf + off, sizeof(Vector2)); off += sizeof(Vector2);
+    memcpy(&seg->brushFrom, buf + off, sizeof(CollapsedBrush)); off += sizeof(CollapsedBrush);
+    memcpy(&seg->brush, buf + off, sizeof(CollapsedBrush)); off += sizeof(CollapsedBrush);
+    memcpy(&seg->seed, buf + off, sizeof(uint16_t)); off += sizeof(uint16_t);
+    seg->targetId = buf[off++];     // was layer
+    seg->targetType = 0;            // old protocol assumed layer painting
+    seg->tool = buf[off++];         // was toolID
+    seg->seamless = buf[off++];
+    seg->pixelPerfect = 0;          // old protocol didn't have this
+    seg->dabOffset = 0;
+    memcpy(&seg->smudgeSrcX, buf + off, sizeof(float)); off += sizeof(float);
+    memcpy(&seg->smudgeSrcY, buf + off, sizeof(float)); off += sizeof(float);
     return true;
 }

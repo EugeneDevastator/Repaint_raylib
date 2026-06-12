@@ -85,11 +85,11 @@ void ViewportHUD_Draw(AppState* state) {
             dstRect, Vector2{0, 0}, 0.0f, WHITE);
         DrawTexturePro(state->brushTex[state->activeBrushTex].rt.texture,
             Rectangle{0, 0, (float)tw, (float)-th}, dstRect, Vector2{0, 0}, 0.0f, WHITE);
-        return;
     }
 
     bool usePresent = GetPresentInited();
     RenderTexture2D* docBlendTex = NULL;
+    if (!state->editTexMode) {
 
     if (g_useViewRes) {
         // Viewport-sized RT — recreate only when viewport changes size
@@ -138,6 +138,7 @@ void ViewportHUD_Draw(AppState* state) {
             if (usePresent) EndShaderMode();
         }
     }
+    }
 
     // ── Brush preview overlay (quick HUD) ────────────────────────────
     if (g_activeHud == HUD_QUICK) {
@@ -151,13 +152,16 @@ void ViewportHUD_Draw(AppState* state) {
             d_RealBrush zoomBrush = state->currentBrush.Realb;
 
             Texture2D bt = {0};
-            if (state->activeBrushTex >= 0 && state->activeBrushTex < state->brushTexCount)
+            bool useTex = false;
+            if (state->activeBrushTex >= 0 && state->activeBrushTex < state->brushTexCount) {
                 bt = state->brushTex[state->activeBrushTex].rt.texture;
+                useTex = true;
+            }
 
             // Copy the visible canvas area as background (needed for smudge, harmless for paint)
             BeginTextureMode(g_previewRT);
             ClearBackground(BLANK);
-            if (!g_useViewRes) {
+            if (!g_useViewRes && docBlendTex) {
                 Camera2D prevCam = {};
                 prevCam.target = state->camera.target;
                 prevCam.offset = Vector2{PREVIEW_SZ * 0.5f, PREVIEW_SZ * 0.5f};
@@ -170,8 +174,9 @@ void ViewportHUD_Draw(AppState* state) {
                     Vector2{0, 0}, WHITE);
                 EndMode2D();
             }
-            // Draw preview strokes on top
-            StrokeEngine_DrawPreview(g_previewRT, bt, &zoomBrush, state->mode,
+            // Draw preview strokes on top (same modulation flow as real stroke)
+            StrokeEngine_DrawPreview(g_previewRT, bt, useTex, &zoomBrush, state->mode,
+                                     state->initialAngle,
                                      PREVIEW_SZ * 0.5f, PREVIEW_SZ * 0.5f);
             EndTextureMode();
 

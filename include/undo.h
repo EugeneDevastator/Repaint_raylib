@@ -16,11 +16,11 @@ class UndoManager {
 public:
     static const int MAX_UNDO = 20;
 
-    void Snapshot(AppState* state, int layerIdx);
-    bool Undo(AppState* state, int layerIdx);
-    bool Redo(AppState* state, int layerIdx);
-    void ClearRedo(int layerIdx);
-    void ClearLayer(int layerIdx);
+    void Snapshot(AppState* state, int idx, bool isTexture = false);
+    bool Undo(AppState* state, int idx, bool isTexture = false);
+    bool Redo(AppState* state, int idx, bool isTexture = false);
+    void ClearRedo(int idx, bool isTexture = false);
+    void ClearLayer(int idx);
     void InvalidateAll();
 
     ~UndoManager() { InvalidateAll(); }
@@ -28,4 +28,6 @@ public:
 private:
     std::deque<UndoEntry> m_undo[256];
     std::deque<UndoEntry> m_redo[256];
+    std::deque<UndoEntry> m_texUndo[256];
+    std::deque<UndoEntry> m_texRedo[256];
 };

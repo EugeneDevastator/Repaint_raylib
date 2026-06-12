@@ -4,22 +4,11 @@
 #include <stdio.h>
 
 #define RPL_MAGIC "RPLREP"
-#define RPL_VER 5
+#define RPL_VER 6
 
-void ReplayRecorder::on_segment(const DrawSegment& seg) {
+void ReplayRecorder::on_segment(const SegmentData& seg) {
     if (m_playing) return;
-    NetSegment s;
-    s.pos1 = seg.pos1; s.pos2 = seg.pos2;
-    s.ctrl0 = seg.ctrl0; s.ctrl3 = seg.ctrl3;
-    s.brushFrom = seg.brushFrom;
-    s.brushTo  = seg.brush;
-    s.seed = seg.seed;
-    s.toolID = seg.tool;
-    s.seamless = seg.seamless;
-    s.smudgeSrcX = seg.smudgeSrcX;
-    s.smudgeSrcY = seg.smudgeSrcY;
-    s.layer = 0;
-    m_segs.push_back(s);
+    m_segs.push_back(seg);
     if (m_segs.size() % 10 == 0)
         printf("[REC] %d segments recorded\n", (int)m_segs.size()), fflush(stdout);
 }
@@ -60,29 +49,29 @@ void ReplayRecorder::Play(AppState* state) {
     int segIdx = 0;
     for (auto& ns : m_segs) {
         segIdx++;
-        DrawSegment dseg;
-        memset(&dseg, 0, sizeof(dseg));
-        dseg.pos1.x = ns.pos1.x * sx; dseg.pos1.y = ns.pos1.y * sy;
-        dseg.pos2.x = ns.pos2.x * sx; dseg.pos2.y = ns.pos2.y * sy;
-        dseg.ctrl0.x = ns.ctrl0.x * sx; dseg.ctrl0.y = ns.ctrl0.y * sy;
-        dseg.ctrl3.x = ns.ctrl3.x * sx; dseg.ctrl3.y = ns.ctrl3.y * sy;
-        dseg.brushFrom = ns.brushFrom;
-        dseg.brush     = ns.brushTo;
+        // Scale positions to document size
+        SegmentData dseg = ns;
+        dseg.pos1.x *= sx; dseg.pos1.y *= sy;
+        dseg.pos2.x *= sx; dseg.pos2.y *= sy;
+        dseg.ctrl0.x *= sx; dseg.ctrl0.y *= sy;
+        dseg.ctrl3.x *= sx; dseg.ctrl3.y *= sy;
+        dseg.smudgeSrcX *= sx;
+        dseg.smudgeSrcY *= sy;
         if (dseg.brushFrom.spacing <= 0.0f) dseg.brushFrom.spacing = 0.5f;
         if (dseg.brush.spacing <= 0.0f) dseg.brush.spacing = 0.5f;
-        dseg.seed = ns.seed;
-        dseg.tool = ns.toolID;
-        dseg.seamless = ns.seamless;
-        dseg.smudgeSrcX = ns.smudgeSrcX * sx;
-        dseg.smudgeSrcY = ns.smudgeSrcY * sy;
-        dseg.Noisemode = 0;
 
         printf("[REPLAY] seg %d: pos1=%.1f,%.1f pos2=%.1f,%.1f rad=%.1f spacing=%.2f\n",
             segIdx, dseg.pos1.x, dseg.pos1.y, dseg.pos2.x, dseg.pos2.y,
             dseg.brushFrom.rad_out_px, dseg.brushFrom.spacing);
         fflush(stdout);
 
-        DrawOneSegment(dseg, rt, g_activeBrushTex, g_seamlessPaint, 0);
+        Texture2D replayTex = {0};
+        bool replayUseTex = false;
+        if (dseg.userTexIdx > 0 && (dseg.userTexIdx - 1u) < (uint8_t)state->brushTexCount) {
+            replayTex = state->brushTex[dseg.userTexIdx - 1].rt.texture;
+            replayUseTex = true;
+        }
+        DrawSegment(dseg, rt, replayTex, replayUseTex, dseg.seamless != 0, 0, dseg.pixelPerfect != 0);
     }
     printf("[REPLAY] Play done\n"); fflush(stdout);
 }
@@ -102,18 +91,19 @@ bool ReplayRecorder::Save(const char* path) {
     uint32_t count = (uint32_t)m_segs.size();
     fwrite(&count, 4, 1, f);
 
-    for (auto& ns : m_segs) {
-        fwrite(&ns.pos1, sizeof(Vector2), 1, f);
-        fwrite(&ns.pos2, sizeof(Vector2), 1, f);
-        fwrite(&ns.ctrl0, sizeof(Vector2), 1, f);
-        fwrite(&ns.ctrl3, sizeof(Vector2), 1, f);
-        fwrite(&ns.brushFrom, sizeof(CollapsedBrush), 1, f);
-        fwrite(&ns.brushTo, sizeof(CollapsedBrush), 1, f);
-        fwrite(&ns.seed, sizeof(uint16_t), 1, f);
-        fwrite(&ns.toolID, sizeof(uint8_t), 1, f);
-        fwrite(&ns.seamless, sizeof(uint8_t), 1, f);
-        fwrite(&ns.smudgeSrcX, sizeof(float), 1, f);
-        fwrite(&ns.smudgeSrcY, sizeof(float), 1, f);
+    for (auto& seg : m_segs) {
+        fwrite(&seg.pos1, sizeof(Vector2), 1, f);
+        fwrite(&seg.pos2, sizeof(Vector2), 1, f);
+        fwrite(&seg.ctrl0, sizeof(Vector2), 1, f);
+        fwrite(&seg.ctrl3, sizeof(Vector2), 1, f);
+        fwrite(&seg.brushFrom, sizeof(CollapsedBrush), 1, f);
+        fwrite(&seg.brush, sizeof(CollapsedBrush), 1, f);
+        fwrite(&seg.seed, sizeof(uint16_t), 1, f);
+        fwrite(&seg.tool, sizeof(uint8_t), 1, f);
+        fwrite(&seg.seamless, sizeof(uint8_t), 1, f);
+        fwrite(&seg.pixelPerfect, sizeof(uint8_t), 1, f);
+        fwrite(&seg.smudgeSrcX, sizeof(float), 1, f);
+        fwrite(&seg.smudgeSrcY, sizeof(float), 1, f);
     }
     fclose(f);
     return true;
@@ -130,7 +120,7 @@ bool ReplayRecorder::Load(const char* path) {
         fclose(f); return false;
     }
     uint32_t ver;
-    if (fread(&ver, 4, 1, f) != 1 || ver != RPL_VER) {
+    if (fread(&ver, 4, 1, f) != 1 || ver < 5 || ver > RPL_VER) {
         printf("[REPLAY] bad ver: %d\n", (int)ver); fflush(stdout);
         fclose(f); return false;
     }
@@ -145,24 +135,30 @@ bool ReplayRecorder::Load(const char* path) {
     m_canvasH = (int)h;
 
     for (uint32_t i = 0; i < count; i++) {
-        NetSegment ns;
-        if (fread(&ns.pos1, sizeof(Vector2), 1, f) != 1) break;
-        if (fread(&ns.pos2, sizeof(Vector2), 1, f) != 1) break;
-        if (fread(&ns.ctrl0, sizeof(Vector2), 1, f) != 1) break;
-        if (fread(&ns.ctrl3, sizeof(Vector2), 1, f) != 1) break;
-        if (fread(&ns.brushFrom, sizeof(CollapsedBrush), 1, f) != 1) break;
-        if (fread(&ns.brushTo, sizeof(CollapsedBrush), 1, f) != 1) break;
-        if (fread(&ns.seed, sizeof(uint16_t), 1, f) != 1) break;
-        if (fread(&ns.toolID, sizeof(uint8_t), 1, f) != 1) break;
-        if (fread(&ns.seamless, sizeof(uint8_t), 1, f) != 1) break;
-        if (fread(&ns.smudgeSrcX, sizeof(float), 1, f) != 1) break;
-        if (fread(&ns.smudgeSrcY, sizeof(float), 1, f) != 1) break;
+        SegmentData seg;
+        memset(&seg, 0, sizeof(seg));
+        if (fread(&seg.pos1, sizeof(Vector2), 1, f) != 1) break;
+        if (fread(&seg.pos2, sizeof(Vector2), 1, f) != 1) break;
+        if (fread(&seg.ctrl0, sizeof(Vector2), 1, f) != 1) break;
+        if (fread(&seg.ctrl3, sizeof(Vector2), 1, f) != 1) break;
+        if (fread(&seg.brushFrom, sizeof(CollapsedBrush), 1, f) != 1) break;
+        if (fread(&seg.brush, sizeof(CollapsedBrush), 1, f) != 1) break;
+        if (fread(&seg.seed, sizeof(uint16_t), 1, f) != 1) break;
+        if (fread(&seg.tool, sizeof(uint8_t), 1, f) != 1) break;
+        if (fread(&seg.seamless, sizeof(uint8_t), 1, f) != 1) break;
+        if (ver >= 6) {
+            if (fread(&seg.pixelPerfect, sizeof(uint8_t), 1, f) != 1) break;
+        } else {
+            seg.pixelPerfect = 0;
+        }
+        if (fread(&seg.smudgeSrcX, sizeof(float), 1, f) != 1) break;
+        if (fread(&seg.smudgeSrcY, sizeof(float), 1, f) != 1) break;
         printf("[RPLOAD] seg %d: p1=(%.1f,%.1f) p2=(%.1f,%.1f) rad=%.1f spacing=%.2f col=(%d,%d,%d)\n",
-            (int)i, ns.pos1.x, ns.pos1.y, ns.pos2.x, ns.pos2.y,
-            ns.brushFrom.rad_out_px, ns.brushFrom.spacing,
-            ns.brushFrom.col.r, ns.brushFrom.col.g, ns.brushFrom.col.b);
+            (int)i, seg.pos1.x, seg.pos1.y, seg.pos2.x, seg.pos2.y,
+            seg.brushFrom.rad_out_px, seg.brushFrom.spacing,
+            seg.brushFrom.col.r, seg.brushFrom.col.g, seg.brushFrom.col.b);
         fflush(stdout);
-        m_segs.push_back(ns);
+        m_segs.push_back(seg);
     }
     printf("[RPLOAD] loaded %d segs total\n", (int)m_segs.size()); fflush(stdout);
     fclose(f);

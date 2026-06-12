@@ -76,7 +76,7 @@ void XORgizmo_DrawVisual(AppState* state) {
 
     // ── Arrow: RED, outside XOR ─────────────────────────────────────
     {
-        float rang = state->currentBrush.Realb.resangle * (float)(M_PI * 2.0 / 360.0);
+        float rang = state->initialAngle * (float)(M_PI * 2.0 / 360.0);
         float ax = gcx + ARROW_DRAW_RADIUS * cosf(rang);
         float ay = gcy + ARROW_DRAW_RADIUS * sinf(rang);
         float ah  = (float)(M_PI * 0.2);
@@ -133,7 +133,7 @@ void XORgizmo_HandleInput(AppState* state) {
         // Clip to gizmo window — ignore clicks in the texture panel area
         if (mp.y >= vp.y + gizmoH) { ImGui::End(); return; }
         // Arrow priority: perpendicular distance to arrow line
-        float arrowAng = state->currentBrush.Realb.resangle * (float)(M_PI * 2.0 / 360.0);
+        float arrowAng = state->initialAngle * (float)(M_PI * 2.0 / 360.0);
         float perpDist = fabsf(dx * sinf(arrowAng) - dy * cosf(arrowAng));
         float along    = dx * cosf(arrowAng) + dy * sinf(arrowAng);
         bool arrowHit  = (perpDist <= ARROW_DETECT_PX) && (along >= ARROW_MIN_RADIUS);
@@ -189,7 +189,6 @@ void XORgizmo_HandleInput(AppState* state) {
             if (newAng < 0) newAng += 360.0f;
             if (absrad < ARROW_SNAP_RADIUS)
                 newAng = roundf(newAng / 22.5f) * 22.5f;
-            state->currentBrush.Realb.resangle = newAng;
             state->initialAngle = newAng;
         }
     }

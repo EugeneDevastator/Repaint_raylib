@@ -1,6 +1,12 @@
-#include "repaint.h"
+
+#include <cmath>
+#include <cstdio>
+
+#include "brush_draw.h"
 #include "RaylibUtils.h"
 #include "rlgl.h"
+#include "brush_blend.h"
+#include "external/glad.h"
 
 static Shader brushBlendShader = {0};
 static Shader brushGeoShader   = {0};
@@ -28,6 +34,7 @@ static int locFracShift  = -1;
 static int locPwr = -1;
 static int locEraseMode = -1;
 static int locSeamless = -1;
+static int locPixelPerfect = -1;
 static int locGeoTex = -1;
 static bool inited = false;
 
@@ -45,12 +52,27 @@ static inline float clampf(float v, float lo, float hi) {
 }
 static inline int pool_index(int bucket) { return (bucket / 32) - 1; }
 
+// Create a render-target texture with GL_RGBA16 (0-65535 uniform precision).
+// Raylib's RL_PIXELFORMAT_UNCOMPRESSED_R16G16B16A16 maps to GL_RGBA16F
+// (half-float) internally, so we bypass rlLoadTexture and call OpenGL directly.
+static unsigned int CreateTexRGBA16(int w, int h) {
+    unsigned int id;
+    glGenTextures(1, &id);
+    glBindTexture(GL_TEXTURE_2D, id);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16, w, h, 0, GL_RGBA, GL_UNSIGNED_SHORT, NULL);
+    return id;
+}
+
 static RenderTexture2D* AllocPoolRT(RenderTexture2D* pool, int bucket, bool pointFilter) {
     int pidx = pool_index(bucket);
     if (pool[pidx].id == 0) {
         unsigned int fboId = rlLoadFramebuffer();
         rlEnableFramebuffer(fboId);
-        unsigned int texId = rlLoadTexture(NULL, bucket, bucket, RL_PIXELFORMAT_UNCOMPRESSED_R16G16B16A16, 1);
+        unsigned int texId = CreateTexRGBA16(bucket, bucket);
         unsigned int depId = rlLoadTextureDepth(bucket, bucket, true);
         rlFramebufferAttach(fboId, texId, RL_ATTACHMENT_COLOR_CHANNEL0, RL_ATTACHMENT_TEXTURE2D, 0);
         rlFramebufferAttach(fboId, depId, RL_ATTACHMENT_DEPTH, RL_ATTACHMENT_RENDERBUFFER, 0);
@@ -63,7 +85,7 @@ static RenderTexture2D* AllocPoolRT(RenderTexture2D* pool, int bucket, bool poin
         rt.texture.mipmaps = 1;
         rt.depth.id = depId; rt.depth.width = bucket; rt.depth.height = bucket;
         rt.depth.format = 19; rt.depth.mipmaps = 1;
-        SetTextureFilter(rt.texture,TEXTURE_FILTER_POINT);
+        SetTextureFilter(rt.texture, pointFilter ? TEXTURE_FILTER_POINT : TEXTURE_FILTER_BILINEAR);
         SetTextureWrap(rt.texture, TEXTURE_WRAP_CLAMP);
         pool[pidx] = rt;
     }
@@ -125,6 +147,7 @@ void BrushBlend_Init(void) {
     locPwr            = GetShaderLocation(brushBlendShader, "pwr");
     locEraseMode      = GetShaderLocation(brushBlendShader, "eraseMode");
     locSeamless       = GetShaderLocation(brushBlendShader, "uSeamless");
+    locPixelPerfect   = GetShaderLocation(brushBlendShader, "uPixelPerfect");
 
     if (locDstTex   >= 0) { int u = 1; SetShaderValue(brushBlendShader, locDstTex,   &u, SHADER_UNIFORM_INT); }
     if (locBrushTex >= 0) { int u = 2; SetShaderValue(brushBlendShader, locBrushTex, &u, SHADER_UNIFORM_INT); }
@@ -132,7 +155,7 @@ void BrushBlend_Init(void) {
     locGeoTex = GetShaderLocation(brushBlendShader, "geoTex");
     if (locGeoTex >= 0) { int u = 0; SetShaderValue(brushBlendShader, locGeoTex, &u, SHADER_UNIFORM_INT); }
 
-    Image img = GenImageColor(1, 1, WHITE);
+    Image img = GenImageColor(4, 4, WHITE);
     whiteTex = LoadTextureFromImage(img);
     UnloadImage(img);
     inited = true;
@@ -151,21 +174,22 @@ void BrushBlend_Shutdown(void) {
 
 void BrushBlend_ApplyStamp(
     RenderTexture2D dstRT,
-    d_Brush* brush,
-    Texture2D brushTex,
+    const CollapsedBrush& brush,
+    Texture2D brushTex, bool useTexture,
     float stampX, float stampY,
-    float srcX,   float srcY
+    float srcX,   float srcY,
+    bool seamless, bool pixelPerfect
 ) {
     if (!inited || dstRT.id == 0) return;
 
     int W = dstRT.texture.width;
     int H = dstRT.texture.height;
 
-    float radOut   = fmaxf(brush->Realb.rad_out, 0.001f);
-    float angleRad = (float)brush->Realb.resangle * (float)(M_PI / 180.0);
-    float squish   = fmaxf((float)brush->Realb.x2y, 0.01f);
+    float radOut   = fmaxf(brush.rad_out_px, 0.001f);
+    float angleRad = (float)brush.resangle * (3.14159265f / 180.0f);
+    float squish   = fmaxf((float)brush.scale_y, 0.01f);
 
-    float radOutForGeo = brush->Realb.rad_out;
+    float radOutForGeo = brush.rad_out_px;
     if (radOutForGeo < 1.0f) radOutForGeo = 1.0f;
 
     float bboxHalf = radOutForGeo * 1.41421356f;
@@ -176,7 +200,7 @@ void BrushBlend_ApplyStamp(
     int drawSz = bucket;
 
     float stampSizePx = (float)drawSz;
-    float actualRadOut = brush->Realb.rad_out;
+    float actualRadOut = brush.rad_out_px;
     if (actualRadOut <= 1.0f && actualRadOut > 0.0f) {
         float ratio = actualRadOut / radOutForGeo;
         stampSizePx = (float)drawSz * ratio;
@@ -195,20 +219,20 @@ void BrushBlend_ApplyStamp(
     SetShaderValue(brushGeoShader, locUAngle,  &angleRad, SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushGeoShader, locUSquish, &squish,   SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushGeoShader, locUSize,   &size,     SHADER_UNIFORM_FLOAT);
-    float persp = brush->Realb.perspective;
+    float persp = brush.perspective;
     SetShaderValue(brushGeoShader, locUPerspective, &persp, SHADER_UNIFORM_FLOAT);
-    float radInRatio = brush->Realb.radInRatio;
-    float curve      = clampf((float)brush->Realb.crv, 0.0f, 1.0f);
+    float radInRatio = brush.radInRatio;
+    float curve      = clampf((float)brush.crv, 0.0f, 1.0f);
     SetShaderValue(brushGeoShader, locURadIn,  &radInRatio, SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushGeoShader, locUCurve,  &curve,      SHADER_UNIFORM_FLOAT);
-    SetTextureFilter(geoRT->texture, RL_TEXTURE_FILTER_NEAREST);
+    SetTextureFilter(geoRT->texture, TEXTURE_FILTER_POINT);
     BeginTextureMode(*geoRT);
     ClearBackground((Color){0, 0, 0, 0});
     rlSetBlendMode(RL_BLEND_CUSTOM);
     rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);  // write rgba as-is
     BeginShaderMode(brushGeoShader);
     DrawTexturePro(whiteTex,
-        (Rectangle){0, 0, 1, 1},
+        (Rectangle){0, 0, (float)whiteTex.width, (float)whiteTex.height},
         (Rectangle){0, 0, (float)drawSz, -(float)drawSz},
         (Vector2){0, 0}, 0.0f, WHITE);
     EndShaderMode();
@@ -221,41 +245,40 @@ void BrushBlend_ApplyStamp(
     // -------- Pass 2a: blend to intermediate --------
     RenderTexture2D* intermediateRT = AllocPoolRT(intermediatePool, bucket, false);
 
-    float opacity    = clampf((float)brush->Realb.opacity, 0.0f, 1.0f);
-    float sol        = (float)brush->Realb.sol;
-    float sol2op     = (float)brush->Realb.sol2op;
-    float seed       = (float)brush->Realb.seed + (float)rand()/(float)RAND_MAX
+    float opacity    = clampf((float)brush.opacity, 0.0f, 1.0f);
+    float seed       = (float)brush.baseSeed + (float)rand()/(float)RAND_MAX
                        + stampX * 0.01f + stampY * 7.13f;
-    int   bmidx      = (int)brush->Realb.bmidx;
-    float preserveop = (brush->Realb.preserveop > 0) ? 1.0f : 0.0f;
-    float smudge     = brush->Realb.cop;
+    int   bmidx      = (int)brush.bmidx;
+    float preserveop = (brush.preserveop > 0) ? 1.0f : 0.0f;
+    float smudge     = brush.cop;
     float odx = stampX - srcX, ody = stampY - srcY;
     float offsetUV[2] = { odx, ody };
 
     float col[4] = {
-        brush->Realb.col.r / 255.0f,
-        brush->Realb.col.g / 255.0f,
-        brush->Realb.col.b / 255.0f,
-        brush->Realb.col.a / 255.0f
+        brush.col.r / 255.0f,
+        brush.col.g / 255.0f,
+        brush.col.b / 255.0f,
+        brush.col.a / 255.0f
     };
-    float tbv = brush->Realb.texBlendVal;
-    float tf  = brush->Realb.texFeather;
-    float tt  = brush->Realb.texThresh;
-    float ts  = brush->Realb.texScale;
+    float tbv = brush.texBlendVal;
+    float tf  = brush.texFeather;
+    float tt  = brush.texThresh;
+    float ts  = brush.texScale;
     float texOff[2] = {0.0f, 0.0f};
-    if (brush->Realb.texNoisemode == 1) {
+    if (brush.texNoisemode == 1) {
         texOff[0] = ((float)rand()/(float)RAND_MAX - 0.5f) * 0.3f;
         texOff[1] = ((float)rand()/(float)RAND_MAX - 0.5f) * 0.3f;
     }
-    int useLum = brush->Realb.useTexLumAsAlpha ? 1 : 0;
-    int cm  = (int)brush->Realb.texColorMode;
-    int tnm = (int)brush->Realb.texNoisemode;
+    int useLum = brush.useTexLumAsAlpha ? 1 : 0;
+    int cm  = (int)brush.texColorMode;
+    int tnm = (int)brush.texNoisemode;
     float sc[2] = { stampX / (float)W, (float)(H - stampY) / (float)H };
 
     SetShaderValue(brushBlendShader, locOpacity,        &opacity,    SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locBrushColor,     col,         SHADER_UNIFORM_VEC4);
-    SetShaderValue(brushBlendShader, locSol,            &sol,        SHADER_UNIFORM_FLOAT);
-    SetShaderValue(brushBlendShader, locSol2op,         &sol2op,     SHADER_UNIFORM_FLOAT);
+    float zero = 0.0f;
+    SetShaderValue(brushBlendShader, locSol,            &zero,       SHADER_UNIFORM_FLOAT);
+    SetShaderValue(brushBlendShader, locSol2op,         &zero,       SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locSeed,           &seed,       SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locBmidx,          &bmidx,      SHADER_UNIFORM_INT);
     SetShaderValue(brushBlendShader, locPreserveOp,     &preserveop, SHADER_UNIFORM_FLOAT);
@@ -264,9 +287,9 @@ void BrushBlend_ApplyStamp(
     SetShaderValue(brushBlendShader, locTexBlendVal,    &tbv,        SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locTexScale,       &ts,         SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locTexOffset,      texOff,      SHADER_UNIFORM_VEC2);
-    { float uo[2] = { brush->Realb.userTexOriginX, 1.0f - brush->Realb.userTexOriginY };
+    { float uo[2] = { brush.userTexOriginX, 1.0f - brush.userTexOriginY };
       SetShaderValue(brushBlendShader, locUserTexOrigin, uo,          SHADER_UNIFORM_VEC2); }
-    { int hasTex = (brushTex.id > 0 && brushTex.id != whiteTex.id && brushTex.id != g_defaultBrushTex.id) ? 1 : 0;
+    { int hasTex = useTexture ? 1 : 0;
       SetShaderValue(brushBlendShader, locHasTexture, &hasTex,         SHADER_UNIFORM_INT); }
     SetShaderValue(brushBlendShader, locTexFeather,     &tf,         SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locTexThresh,      &tt,         SHADER_UNIFORM_FLOAT);
@@ -284,24 +307,26 @@ void BrushBlend_ApplyStamp(
     float bo[2] = { (float)ix0, (float)iy0 };
     float bs[2] = { (float)isz, (float)isz };
     float fs[2] = { x0 - (float)ix0, y0 - (float)iy0 };
+    if (pixelPerfect) { fs[0] = fs[1] = 0.0f; }
     SetShaderValue(brushBlendShader, locBlitOrigin, bo, SHADER_UNIFORM_VEC2);
     SetShaderValue(brushBlendShader, locBlitSize,   bs, SHADER_UNIFORM_VEC2);
     SetShaderValue(brushBlendShader, locFracShift,  fs, SHADER_UNIFORM_VEC2);
 
-    float pwr = brush->Realb.pwr;
+    float pwr = brush.pwr;
     SetShaderValue(brushBlendShader, locPwr, &pwr, SHADER_UNIFORM_FLOAT);
 
-    int eraseMode = brush->Realb.eraseMode;
+    int eraseMode = brush.eraseMode;
     SetShaderValue(brushBlendShader, locEraseMode, &eraseMode, SHADER_UNIFORM_INT);
 
     // Set dstRT.texture wrap for shader reads
     SetTextureFilter(dstRT.texture, TEXTURE_FILTER_POINT);
-    if (g_seamlessPaint)
+    if (seamless)
         SetTextureWrap(dstRT.texture, TEXTURE_WRAP_REPEAT);
     else
         SetTextureWrap(dstRT.texture, TEXTURE_WRAP_CLAMP);
 
     // Render stamp to intermediate RT
+    SetTextureFilter(intermediateRT->texture, TEXTURE_FILTER_POINT);
     BeginTextureMode(*intermediateRT);
     rlSetBlendMode(RL_BLEND_CUSTOM);
     rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
@@ -314,8 +339,10 @@ void BrushBlend_ApplyStamp(
     rlActiveTextureSlot(0);
 
     BeginShaderMode(brushBlendShader);
-    int uSeamlessVal = g_seamlessPaint ? 1 : 0;
+    int uSeamlessVal = seamless ? 1 : 0;
     SetShaderValue(brushBlendShader, locSeamless, &uSeamlessVal, SHADER_UNIFORM_INT);
+    int uPpVal = pixelPerfect ? 1 : 0;
+    SetShaderValue(brushBlendShader, locPixelPerfect, &uPpVal, SHADER_UNIFORM_INT);
 
     DrawTexturePro(geoRT->texture,
         (Rectangle){0, 0, (float)drawSz, (float)-drawSz},
@@ -331,14 +358,14 @@ void BrushBlend_ApplyStamp(
     EndTextureMode();
 
     // Restore dstRT filter
-    SetTextureFilter(dstRT.texture, RL_TEXTURE_FILTER_NEAREST);
+    SetTextureFilter(dstRT.texture, TEXTURE_FILTER_POINT);
 
     // -------- Pass 2b: blit intermediate to dstRT --------
     BeginTextureMode(dstRT);
     rlSetBlendMode(RL_BLEND_CUSTOM);
     rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
 
-    if (g_seamlessPaint) {
+    if (seamless) {
         for (int dy = -1; dy <= 1; dy++) {
             for (int dx = -1; dx <= 1; dx++) {
                 int tx = ix0 + dx * W;

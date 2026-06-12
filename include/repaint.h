@@ -145,17 +145,8 @@ struct AppState;
 struct ReplayRecorder;
 extern ReplayRecorder* g_recorder;
 
-struct NetSegment {
-    Vector2 pos1, pos2, ctrl0, ctrl3;
-    CollapsedBrush brushFrom, brushTo;
-    uint16_t seed;
-    uint8_t layer;       // target layer index
-    uint8_t toolID, seamless;   // pad byte
-    float smudgeSrcX, smudgeSrcY;
-};
-
 struct ICommandBroker {
-    virtual void on_segment(const DrawSegment& seg) = 0;
+    virtual void on_segment(const SegmentData& seg) = 0;
     virtual void poll(AppState* state) = 0;
     virtual ~ICommandBroker() = default;
 };
@@ -205,10 +196,6 @@ Document Doc_New(int w, int h);
 // LayerStack — all layer management lives here
 #include "layerstack.h"
 
-void BrushBlend_Init(void);
-void BrushBlend_Shutdown(void);
-void BrushBlend_ApplyStamp(RenderTexture2D dstRT, d_Brush* brush,
-    Texture2D brushTex, float stampX, float stampY, float srcX, float srcY);
 
 void DualSlider_Init(DualSlider* slider);
 void BParam_Init(BParam* bp, int id, const char* name, float outMin, float outMax, float outDef);
@@ -227,9 +214,12 @@ extern float colorHue, colorSat, colorLit;
 extern int quickPanelMouseMode;
 extern bool g_colorPicking;
 extern Color g_colorPickGrid[25];
+extern int g_colorPickScreenX, g_colorPickScreenY;
+extern Rectangle g_colorPickVpBounds;
 extern float g_pivotCursorX, g_pivotCursorY;
 extern bool g_seamlessPaint;
 extern bool g_seamlessPreview;
+extern bool g_pixelPerfect;
 extern int g_texScaleMode;  // 0 = brush scale, 1 = global scale
 extern int g_texPanelAreaY; // y-coordinate for the texture panel in the Quick HUD
 #define HUD_NONE 0
