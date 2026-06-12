@@ -146,7 +146,7 @@ if(WIN32)
         target_link_options(repaint PRIVATE "-Wl,--allow-multiple-definition")
     endif()
 else()
-    target_sources(repaint PRIVATE src/sensors/tablet_lnx.cpp src/sensors/platform_utils_lnx.cpp)
+    target_sources(repaint PRIVATE src/sensors/tablet_lnx.cpp src/sensors/platform_utils_lnx.cpp src/sensors/clipboard_lnx.cpp)
 endif()
 
 target_include_directories(repaint PRIVATE
