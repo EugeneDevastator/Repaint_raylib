@@ -3,9 +3,9 @@
 
 // constants
 // correction for simple color blend
-vec3 blendWeightCorr = vec3(1.0004);          // is roughly square of the next..
+vec3 blendWeightCorr = vec3(1.000);          // is roughly square of the next..
 // and then correction for bilinear sampler.
-vec3 bilinearStdWeightCorr = vec3(1.00027);
+vec3 bilinearStdWeightCorr = vec3(1.000);
 
 // ── OKLab color space ──────────────────────────────────────────────
 

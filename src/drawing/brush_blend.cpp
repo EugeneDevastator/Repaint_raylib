@@ -6,6 +6,7 @@
 #include "RaylibUtils.h"
 #include "rlgl.h"
 #include "brush_blend.h"
+#include "external/glad.h"
 
 static Shader brushBlendShader = {0};
 static Shader brushGeoShader   = {0};
@@ -51,12 +52,27 @@ static inline float clampf(float v, float lo, float hi) {
 }
 static inline int pool_index(int bucket) { return (bucket / 32) - 1; }
 
+// Create a render-target texture with GL_RGBA16 (0-65535 uniform precision).
+// Raylib's RL_PIXELFORMAT_UNCOMPRESSED_R16G16B16A16 maps to GL_RGBA16F
+// (half-float) internally, so we bypass rlLoadTexture and call OpenGL directly.
+static unsigned int CreateTexRGBA16(int w, int h) {
+    unsigned int id;
+    glGenTextures(1, &id);
+    glBindTexture(GL_TEXTURE_2D, id);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16, w, h, 0, GL_RGBA, GL_UNSIGNED_SHORT, NULL);
+    return id;
+}
+
 static RenderTexture2D* AllocPoolRT(RenderTexture2D* pool, int bucket, bool pointFilter) {
     int pidx = pool_index(bucket);
     if (pool[pidx].id == 0) {
         unsigned int fboId = rlLoadFramebuffer();
         rlEnableFramebuffer(fboId);
-        unsigned int texId = rlLoadTexture(NULL, bucket, bucket, RL_PIXELFORMAT_UNCOMPRESSED_R16G16B16A16, 1);
+        unsigned int texId = CreateTexRGBA16(bucket, bucket);
         unsigned int depId = rlLoadTextureDepth(bucket, bucket, true);
         rlFramebufferAttach(fboId, texId, RL_ATTACHMENT_COLOR_CHANNEL0, RL_ATTACHMENT_TEXTURE2D, 0);
         rlFramebufferAttach(fboId, depId, RL_ATTACHMENT_DEPTH, RL_ATTACHMENT_RENDERBUFFER, 0);
@@ -69,7 +85,7 @@ static RenderTexture2D* AllocPoolRT(RenderTexture2D* pool, int bucket, bool poin
         rt.texture.mipmaps = 1;
         rt.depth.id = depId; rt.depth.width = bucket; rt.depth.height = bucket;
         rt.depth.format = 19; rt.depth.mipmaps = 1;
-        SetTextureFilter(rt.texture,TEXTURE_FILTER_POINT);
+        SetTextureFilter(rt.texture, pointFilter ? TEXTURE_FILTER_POINT : TEXTURE_FILTER_BILINEAR);
         SetTextureWrap(rt.texture, TEXTURE_WRAP_CLAMP);
         pool[pidx] = rt;
     }

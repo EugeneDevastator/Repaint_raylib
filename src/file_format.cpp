@@ -335,6 +335,7 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
                 Image timg = LoadImageFromMemory(".png", p, (int)tsz);
                 p += tsz;
                 if (timg.data) {
+                    ImageFormat(&timg, PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
                     UnloadImage(state->brushTex[idx].cpuImage);
                     state->brushTex[idx].cpuImage = timg;
                     state->brushTex[idx].dirty = true;
