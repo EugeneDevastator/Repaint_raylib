@@ -1,6 +1,12 @@
 // blend.glsl — shared GLSL functions for Repaint shaders
 // Included via: #include blend.glsl  (at column 0)
 
+// constants
+// correction for simple color blend
+vec3 blendWeightCorr = vec3(1.0004);          // is roughly square of the next..
+// and then correction for bilinear sampler.
+vec3 bilinearStdWeightCorr = vec3(1.00027);
+
 // ── OKLab color space ──────────────────────────────────────────────
 
 vec3 rgbToOklab(vec3 c) {
@@ -78,8 +84,7 @@ vec4 applyBlend(int mode, vec4 dst, vec3 srcRGB, float srcA) {
     if (mode == 0) {
         vec3 srcLin = srcRGB*srcRGB;
         vec3 dstLin = dst.rgb*dst.rgb;
-        vec3 wei = vec3(1.0006);
-        outRGB = sqrt(wei*mix(srcLin,dstLin,1-srcA));
+        outRGB = sqrt(blendWeightCorr * mix(srcLin,dstLin,1-srcA));
         outA   = srcA + dst.a*(1.0 - srcA);
     } else if (mode == 1) {
         vec3 dstPremul = dst.rgb*dst.a;
@@ -210,7 +215,6 @@ vec4 sampleBilinear(sampler2D tex, vec2 px, vec2 texSize, int bmidx, bool seamle
         float w01 = (1.0-f.x)*    f.y;
         float w11 =     f.x  *    f.y;
 
-        vec3 wei = vec3(1.00028); // tune this
 
         //vec3 accum = tl_g*w00 + tr_g*w10 + bl_g*w01 + br_g*w11;
         float wsum = w00 + w10 + w01 + w11;
@@ -219,6 +223,6 @@ vec4 sampleBilinear(sampler2D tex, vec2 px, vec2 texSize, int bmidx, bool seamle
 
         float a = (tl.a*w00 + tr.a*w10 + bl.a*w01 + br.a*w11) / wsum;
 
-        return vec4(linear_mix * wei, a);
+        return vec4(linear_mix * bilinearStdWeightCorr, a);
     }
 }
