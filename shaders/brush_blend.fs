@@ -135,7 +135,7 @@ float cloneOpacity = smudgeStrength;
             smudge = texelFetch(dstTex, pp, 0);
         } else {
 			// must use linear blending, at least its algo works best here.
-            smudge = sampleBilinear(dstTex, vec2(srcPx.x, canvasSize.y - srcPx.y), canvasSize, 1, uSeamless);
+            smudge = sampleBilinear(dstTex, vec2(srcPx.x, canvasSize.y - srcPx.y), canvasSize, bmidx, uSeamless);
         }
 
         vec3 smudgeRGB = smudge.rgb;

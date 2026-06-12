@@ -199,7 +199,7 @@ vec4 sampleBilinear(sampler2D tex, vec2 px, vec2 texSize, int bmidx, bool seamle
         vec3 result = gamma_mix * (dot(linear_mix, vec3(0.333)) / (dot(gamma_mix, vec3(0.333)) + 1e-6));
 
         float a = (tl.a*w00 + tr.a*w10 + bl.a*w01 + br.a*w11) / wsum;
-        return vec4(result, a);
+        return vec4(gamma_mix, a);
     }
     else if (bmidx == 2) {
         vec3 ll = rgbToOklab(tl.rgb);
