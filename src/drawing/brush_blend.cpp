@@ -209,7 +209,7 @@ void BrushBlend_ApplyStamp(
     float curve      = clampf((float)brush.crv, 0.0f, 1.0f);
     SetShaderValue(brushGeoShader, locURadIn,  &radInRatio, SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushGeoShader, locUCurve,  &curve,      SHADER_UNIFORM_FLOAT);
-    SetTextureFilter(geoRT->texture, RL_TEXTURE_FILTER_NEAREST);
+    SetTextureFilter(geoRT->texture, TEXTURE_FILTER_POINT);
     BeginTextureMode(*geoRT);
     ClearBackground((Color){0, 0, 0, 0});
     rlSetBlendMode(RL_BLEND_CUSTOM);
@@ -310,6 +310,7 @@ void BrushBlend_ApplyStamp(
         SetTextureWrap(dstRT.texture, TEXTURE_WRAP_CLAMP);
 
     // Render stamp to intermediate RT
+    SetTextureFilter(intermediateRT->texture, TEXTURE_FILTER_POINT);
     BeginTextureMode(*intermediateRT);
     rlSetBlendMode(RL_BLEND_CUSTOM);
     rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
@@ -341,7 +342,7 @@ void BrushBlend_ApplyStamp(
     EndTextureMode();
 
     // Restore dstRT filter
-    SetTextureFilter(dstRT.texture, RL_TEXTURE_FILTER_NEAREST);
+    SetTextureFilter(dstRT.texture, TEXTURE_FILTER_POINT);
 
     // -------- Pass 2b: blit intermediate to dstRT --------
     BeginTextureMode(dstRT);
