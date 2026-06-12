@@ -12,9 +12,9 @@ vec3 rgbToOklab(vec3 c) {
     float m_ = pow(max(m, 0.0), 1.0/3.0);
     float s_ = pow(max(s, 0.0), 1.0/3.0);
     return vec3(
-        0.2104542553*l_ + 0.7936177850*m_ - 0.0040720468*s_,
-        1.9779984951*l_ - 2.4285922050*m_ + 0.4505937099*s_,
-        0.0259040371*l_ + 0.7827717662*m_ - 0.8086757660*s_
+    0.2104542553*l_ + 0.7936177850*m_ - 0.0040720468*s_,
+    1.9779984951*l_ - 2.4285922050*m_ + 0.4505937099*s_,
+    0.0259040371*l_ + 0.7827717662*m_ - 0.8086757660*s_
     );
 }
 
@@ -26,9 +26,9 @@ vec3 oklabToRgb(vec3 lab) {
     float m = m_*m_*m_;
     float s = s_*s_*s_;
     vec3 lin = vec3(
-        +4.0767416621*l - 3.3077115913*m + 0.2309699292*s,
-        -1.2684380046*l + 2.6097574011*m - 0.3413193965*s,
-        -0.0041960863*l - 0.7034186147*m + 1.7076147010*s
+    +4.0767416621*l - 3.3077115913*m + 0.2309699292*s,
+    -1.2684380046*l + 2.6097574011*m - 0.3413193965*s,
+    -0.0041960863*l - 0.7034186147*m + 1.7076147010*s
     );
     return sqrt(max(lin, 0.0));
 }
@@ -78,14 +78,14 @@ vec4 applyBlend(int mode, vec4 dst, vec3 srcRGB, float srcA) {
     if (mode == 0) {
         vec3 srcLin = srcRGB*srcRGB;
         vec3 dstLin = dst.rgb*dst.rgb;
-        outRGB = sqrt(srcLin*srcA + dstLin*(1.0 - srcA));
+        outRGB = sqrt(mix(srcLin,dstLin,1-srcA));
         outA   = srcA + dst.a*(1.0 - srcA);
     } else if (mode == 1) {
         vec3 dstPremul = dst.rgb*dst.a;
         outA   = srcA + dst.a*(1.0 - srcA);
         outRGB = (outA > 0.00001)
-            ? (srcPremul + dstPremul*(1.0 - srcA)) / outA
-            : srcRGB;
+        ? (srcPremul + dstPremul*(1.0 - srcA)) / outA
+        : srcRGB;
     } else if (mode == 2) {
         vec3 srcLab = rgbToOklab(srcRGB);
         vec3 dstLab = rgbToOklab(dst.rgb);
@@ -142,7 +142,7 @@ vec4 applyBlend(int mode, vec4 dst, vec3 srcRGB, float srcA) {
         outA   = srcA + dst.a*(1.0 - srcA);
     }
 
-    return vec4(clamp(outRGB, 0.0, 1.0), clamp(outA, 0.0, 1.0));
+    return vec4(outRGB, outA);
 }
 
 // ── Mode-aware bilinear fetch (gamma, oklab, or premultiplied) ──────
@@ -153,17 +153,20 @@ vec4 sampleBilinear(sampler2D tex, vec2 px, vec2 texSize, int bmidx, bool seamle
     vec2 fpx = px - vec2(0.5);
     vec2 ipx = floor(fpx);
     vec2 f   = fract(fpx);
-
+    //f.y=1.0-f.y;
+    vec3 bias = vec3(0.00048);
+    bias = vec3(0.000028);
+    vec3 wei = vec3(1.0006);
     ivec2 c00, c10, c01, c11;
     if (seamless) {
         ivec2 sz = ivec2(texSize);
-        c00 = ivec2(mod(ipx,                  vec2(sz)));
+        c00 = ivec2(mod(ipx+ ivec2(0,0),                  vec2(sz)));
         c10 = ivec2(mod(ipx + vec2(1,0),      vec2(sz)));
         c01 = ivec2(mod(ipx + vec2(0,1),      vec2(sz)));
         c11 = ivec2(mod(ipx + vec2(1,1),      vec2(sz)));
     } else {
         ivec2 maxC = ivec2(texSize - vec2(1.0));
-        c00 = clamp(ivec2(ipx),              ivec2(0), maxC);
+        c00 = clamp(ivec2(ipx) + ivec2(0,0),              ivec2(0), maxC);
         c10 = clamp(ivec2(ipx) + ivec2(1,0), ivec2(0), maxC);
         c01 = clamp(ivec2(ipx) + ivec2(0,1), ivec2(0), maxC);
         c11 = clamp(ivec2(ipx) + ivec2(1,1), ivec2(0), maxC);
@@ -179,9 +182,10 @@ vec4 sampleBilinear(sampler2D tex, vec2 px, vec2 texSize, int bmidx, bool seamle
         vec3 tr_g = tr.rgb*tr.rgb;
         vec3 bl_g = bl.rgb*bl.rgb;
         vec3 br_g = br.rgb*br.rgb;
+
         vec3 mixed = mix(mix(tl_g, tr_g, f.x), mix(bl_g, br_g, f.x), f.y);
         float a    = mix(mix(tl.a, tr.a, f.x), mix(bl.a, br.a, f.x), f.y);
-        return vec4(sqrt(max(mixed, vec3(0.0))), a);
+        return vec4(sqrt(mixed*wei), a);
     } else if (bmidx == 2) {
         vec3 ll = rgbToOklab(tl.rgb);
         vec3 lr = rgbToOklab(tr.rgb);
