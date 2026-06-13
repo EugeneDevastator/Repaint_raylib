@@ -255,6 +255,7 @@ extern Texture2D g_blendModeIcon;
 extern bool g_blendIconLoaded;
 
 void LayerPanel_Draw(AppState* state);
+void LayerPanel_UpdatePreviews(AppState* state);
 void LeftPanel_Init(void); void LeftPanel_Shutdown(void);
 void LeftPanel_Draw(AppState* state);
 

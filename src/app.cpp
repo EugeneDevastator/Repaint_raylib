@@ -627,6 +627,9 @@ void App_Draw(AppState* state) {
     // ── Module GL draws (viewport canvas + overlays) ──
     g_moduleStack.DrawGL();
 
+    // ── Update layer preview thumbnails ─────────────────────────────
+    LayerPanel_UpdatePreviews(state);
+
     // ── Color picker readback from GPU composite ────────────────────
     if (g_colorPicking) {
         const int ps = 5;
