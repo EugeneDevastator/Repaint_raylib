@@ -1,6 +1,6 @@
 // blend.glsl — shared GLSL functions for Repaint shaders
 // Included via: #include blend.glsl  (at column 0)
-
+#define MODE_NGAMMA     0
 // constants
 // correction for simple color blend
 vec3 blendWeightCorr = vec3(1.000);          // is roughly square of the next..
@@ -94,7 +94,7 @@ vec4 applyBlend(int mode, vec4 dst, vec3 srcRGB, float srcA) {
         return vec4(clamp(srcRGB, 0.0, 1.0), clamp(srcA, 0.0, 1.0));
     }
 
-    if (mode == 0) {
+    if (mode == MODE_NGAMMA) {
         vec3 srcLin = srcRGB*srcRGB;
         vec3 dstLin = dst.rgb*dst.rgb;
         outRGB = sqrt(blendWeightCorr * mix(srcLin,dstLin,1-srcA));
