@@ -13,13 +13,14 @@ Here are most recent working releases from the main.
 | Windows-x64  | [repaint-windows.zip](https://github.com/EugeneDevastator/Repaint_raylib/releases/download/latest/repaint-windows.zip) |
 | Linux    | [repaint-linux.zip](https://github.com/EugeneDevastator/Repaint_raylib/releases/download/latest/repaint-linux.zip) |
 
-Source code is licensed under AGPL v3:
+**Source code** is licensed under AGPL v3: 
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
-Artwork and content created with this app is released under CC0:
+**Content creation** 
 
-[![License: CC0](https://img.shields.io/badge/Content-CC0_1.0-lightgrey.svg)](https://creativecommons.org/publicdomain/zero/1.0/)
+This app does not claim any rights over artwork or content you create with it.
+Your work is yours — use it however you want.
 
 # Getting started:
 
