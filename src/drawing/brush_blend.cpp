@@ -347,6 +347,7 @@ void BrushBlend_ApplyStamp(
     rlActiveTextureSlot(1);
     rlEnableTexture(dstRT.texture.id);
     rlActiveTextureSlot(2);
+    if (brushTex.id > 0) SetTextureWrap(brushTex, TEXTURE_WRAP_REPEAT);
     rlEnableTexture(brushTex.id > 0 ? brushTex.id : whiteTex.id);
     rlActiveTextureSlot(0);
 
