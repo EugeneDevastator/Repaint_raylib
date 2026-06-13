@@ -2,11 +2,65 @@
 #include "layerstack.h"
 #include "imgui.h"
 #include "network_broker.h"
+#include "rlgl.h"
 #include <cstdint>
 
 extern bool layersDirty;
 extern Texture2D g_blendModeIcon;
 extern bool g_blendIconLoaded;
+
+// ── Layer preview texture cache ──────────────────────────────────────
+#define MAX_PREVIEWS 64
+static RenderTexture2D g_previewTex[MAX_PREVIEWS] = {0};
+static int g_previewCount = 0;
+static int g_previewW = 0, g_previewH = 0;
+
+// Called from App_Draw after DrawGL — renders each layer with its
+// transform into a small preview RT matching canvas proportion.
+void LayerPanel_UpdatePreviews(AppState* state) {
+    int count = LayerStack_Count();
+    int cw = state->doc.width, ch = state->doc.height;
+    if (cw < 1 || ch < 1 || count < 1) return;
+
+    int pw = (int)(36.0f * cw / ch);
+    if (pw < 36) pw = 36;
+    if (pw > 150) pw = 150;
+    int ph = 36;
+
+    bool sizeChanged = (pw != g_previewW || ph != g_previewH);
+    bool countChanged = (count != g_previewCount);
+
+    if (sizeChanged || countChanged) {
+        for (int i = 0; i < g_previewCount; i++)
+            if (g_previewTex[i].id) UnloadRenderTexture(g_previewTex[i]);
+        memset(g_previewTex, 0, sizeof(g_previewTex));
+        g_previewCount = count;
+        g_previewW = pw;
+        g_previewH = ph;
+        for (int i = 0; i < count; i++)
+            g_previewTex[i] = Load16BitRT(pw, ph);
+    }
+
+    float sx = (float)pw / (float)cw;
+    float sy = (float)ph / (float)ch;
+    for (int i = 0; i < count; i++) {
+        if (g_previewTex[i].id == 0) continue;
+        RenderTexture2D dst = g_previewTex[i];
+        Texture2D src = LayerStack_GetRT(i).texture;
+        sLayerProps* p = LayerStack_GetProps(i);
+        if (src.id == 0) continue;
+        BeginTextureMode(dst); ClearBackground(BLANK);
+        rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE,RL_ZERO,RL_FUNC_ADD);
+        rlPushMatrix();
+        float* M = p->mat;
+        float mg[16]={sx*M[0],sy*M[3],0,0, sx*M[1],sy*M[4],0,0, 0,0,1,0, sx*M[2],sy*M[5],0,1};
+        rlMultMatrixf(mg);
+        DrawTextureRec(src,Rectangle{0,0,(float)p->layerW,(float)-p->layerH},Vector2{0,0},WHITE);
+        rlPopMatrix();
+        EndTextureMode();
+    }
+    rlSetBlendMode(RL_BLEND_ALPHA);
+}
 
 static void CommitLayerOp(AppState* state, d_LAction* lact) {
     if (networkBroker.IsConnected()) {
@@ -188,11 +242,13 @@ void LayerPanel_Draw(AppState* state) {
         float listH = avail * 0.7f;
         if (listH < 10.0f) listH = 10.0f;
         if (ImGui::BeginChild("LayerList", ImVec2(0, listH), false)) {
+            float prevRMaxY = ImGui::GetCursorScreenPos().y;
             for (int i = 0; i < LayerStack_Count(); i++) {
                 int idx = LayerStack_Count() - 1 - i;
                 bool isActive = (idx == state->activeLayer);
 
                 ImGui::PushID(idx);
+                float itemLeftX = ImGui::GetCursorScreenPos().x;
 
                 bool vis = LayerStack_GetProps(idx)->visible;
                 if (ImGui::Checkbox("##v", &vis)) {
@@ -201,10 +257,10 @@ void LayerPanel_Draw(AppState* state) {
                 }
                 ImGui::SameLine();
 
-                if (idx < LayerStack_Count() && LayerStack_GetRT(idx).id > 0) {
-                    float ts = 36.0f;
-                    ImGui::Image((ImTextureID)(intptr_t)LayerStack_GetRT(idx).texture.id,
-                        ImVec2(ts, ts), ImVec2(0, 1), ImVec2(1, 0));
+                if (idx < LayerStack_Count() && g_previewTex[idx].id > 0) {
+                    float pw = (float)g_previewW, ph = (float)g_previewH;
+                    ImGui::Image((ImTextureID)(intptr_t)g_previewTex[idx].texture.id,
+                        ImVec2(pw, ph), ImVec2(0, 1), ImVec2(1, 0));
                     ImGui::SameLine();
                 }
 
@@ -216,20 +272,40 @@ void LayerPanel_Draw(AppState* state) {
                     snprintf(lname, sizeof(lname), "Layer %d", idx + 1);
 
                 ImVec2 selSize = ImVec2(0, 36);
+                bool dragging = ImGui::GetDragDropPayload()
+                    && ImGui::GetDragDropPayload()->IsDataType("LAYER_IDX");
                 if (isActive) {
                     ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.25f, 0.50f, 0.95f, 0.8f));
                     ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.30f, 0.55f, 0.95f, 0.9f));
+                } else if (dragging) {
+                    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0,0,0,0));
                 }
                 if (ImGui::Selectable(lname, isActive, 0, selSize))
                     state->activeLayer = idx;
                 if (isActive) ImGui::PopStyleColor(2);
+                else if (dragging) ImGui::PopStyleColor(1);
 
                 if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
                     ImGui::SetDragDropPayload("LAYER_IDX", &i, sizeof(int));
                     ImGui::Text("Move %s", lname);
                     ImGui::EndDragDropSource();
                 }
+
+                if (dragging)
+                    ImGui::PushStyleColor(ImGuiCol_DragDropTarget, ImVec4(0,0,0,0));
                 if (ImGui::BeginDragDropTarget()) {
+                    const ImGuiPayload* dragPld = ImGui::GetDragDropPayload();
+                    if (dragPld && dragPld->IsDataType("LAYER_IDX")) {
+                        ImVec2 rMin = ImGui::GetItemRectMin(), rMax = ImGui::GetItemRectMax();
+                        float sp = ImGui::GetStyle().ItemSpacing.y;
+                        float lineY = (ImGui::GetMousePos().y < (rMin.y + rMax.y) * 0.5f)
+                            ? (prevRMaxY + rMin.y) * 0.5f
+                            : rMax.y + sp * 0.5f;
+                        lineY = (float)(int)(lineY + 0.5f);
+                        ImGui::GetWindowDrawList()->AddLine(
+                            ImVec2(itemLeftX, lineY), ImVec2(rMax.x, lineY),
+                            IM_COL32(50, 130, 255, 220), 5.0f);
+                    }
                     const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("LAYER_IDX");
                     if (payload) {
                         int fromVis = *(int*)payload->Data;
@@ -244,8 +320,11 @@ void LayerPanel_Draw(AppState* state) {
                     }
                     ImGui::EndDragDropTarget();
                 }
+                if (dragging)
+                    ImGui::PopStyleColor();
 
                 ImGui::PopID();
+                prevRMaxY = ImGui::GetItemRectMax().y;
             }
         }
         ImGui::EndChild();

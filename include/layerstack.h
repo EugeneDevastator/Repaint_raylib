@@ -54,6 +54,9 @@ void LayerStack_ProduceCompositeDitherView8b(Image* dst, const float viewMat[6],
 void LayerStack_ProduceComposite(RenderTexture2D dst, int w, int h);
 void LayerStack_ProduceCompositeDither8b(Image* dst, int w, int h);
 
+// ── Bake a single layer's transformed content into a caller-owned RT ──
+void LayerStack_BakeSingleLayer(int idx, RenderTexture2D dst);
+
 // ── For viewport/renderer access ─────────────────────────────────────
 bool   LayerStack_PresentInited(void);
 Shader LayerStack_GetPresentShader(void);

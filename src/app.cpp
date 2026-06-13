@@ -328,31 +328,30 @@ static void OnSaveResult(DialogResult r) {
     }
 }
 
-static void DoCreateNew(void) {
-    LayerStack_Shutdown(); LayerStack_Init();
-    g_state->doc = Doc_New(g_newW, g_newH);
+void app_new_document(int w, int h, Color fill) {
+    g_state->doc = Doc_New(w, h);
     g_state->activeLayer = 0;
-    g_state->camera.target = Vector2{(float)g_newW * 0.5f, (float)g_newH * 0.5f};
+    g_state->camera.target = Vector2{(float)w * 0.5f, (float)h * 0.5f};
     g_state->camera.zoom = 1.0f;
-    LayerStack_SetRenderWindow(g_newW, g_newH);
-    int idx = LayerStack_Add(g_newW, g_newH);
-    // Fill first layer with white
+    LayerStack_SetRenderWindow(w, h);
+    int idx = LayerStack_Add(w, h);
     Image* img = LayerStack_GetImage(idx);
     UnloadImage(*img);
-    *img = GenImageColor(g_newW, g_newH, WHITE);
+    *img = GenImageColor(w, h, fill);
     ImageFormat(img, PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
-    Texture2D tmp = LoadTextureFromImage(*img);
     RenderTexture2D rt = LayerStack_GetRT(idx);
     BeginTextureMode(rt);
-    ClearBackground(BLANK);
-    rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
-    DrawTexture(tmp, 0, 0, WHITE);
-    rlSetBlendMode(RL_BLEND_ALPHA);
-    EndTextureMode(); UnloadTexture(tmp);
-    layersDirty = true;
+    ClearBackground(fill);
+    EndTextureMode();
     g_currentFilePath[0] = '\0';
+    if (g_recorder) g_recorder->Reset(w, h);
+}
+
+static void DoCreateNew(void) {
+    LayerStack_Shutdown(); LayerStack_Init();
+    app_new_document(g_newW, g_newH, WHITE);
+    layersDirty = true;
     g_newCanvasActive = false;
-    if (g_recorder) g_recorder->Reset(g_newW, g_newH);
     ImGui::CloseCurrentPopup();
 }
 
@@ -469,24 +468,8 @@ void App_Init(AppState* state) {
     Changelog_Init();
     DrawSplash("Creating canvas...");
 
-    state->doc = Doc_New(1024, 768);
-    state->activeLayer = 0;
     LayerStack_Init();
-    LayerStack_SetRenderWindow(1024, 768);
-    int idx = LayerStack_Add(1024, 768);
-    // First layer is the canvas background — fill with white
-    Image* img = LayerStack_GetImage(idx);
-    UnloadImage(*img);
-    *img = GenImageColor(1024, 768, WHITE);
-    ImageFormat(img, PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
-    Texture2D tmp = LoadTextureFromImage(*img);
-    RenderTexture2D rt = LayerStack_GetRT(idx);
-    BeginTextureMode(rt);
-    ClearBackground(BLANK);
-    rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
-    DrawTexture(tmp, 0, 0, WHITE);
-    rlSetBlendMode(RL_BLEND_ALPHA);
-    EndTextureMode(); UnloadTexture(tmp);
+    app_new_document(1024, 768, WHITE);
 
     Rectangle viewportBounds = {
         (float)uiPanelWidth, 0,
@@ -643,6 +626,9 @@ void App_Draw(AppState* state) {
 
     // ── Module GL draws (viewport canvas + overlays) ──
     g_moduleStack.DrawGL();
+
+    // ── Update layer preview thumbnails ─────────────────────────────
+    LayerPanel_UpdatePreviews(state);
 
     // ── Color picker readback from GPU composite ────────────────────
     if (g_colorPicking) {

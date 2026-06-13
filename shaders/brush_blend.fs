@@ -110,15 +110,15 @@ void main() {
     finalAlpha *= opacity;
     if (finalAlpha < 0.000000001) { finalColor = canvas; return; }
 
-    if (eraseMode == 1) {
-        finalColor = vec4(canvas.rgb, canvas.a * (1.0 - finalAlpha));
-        return;
-    } else if (eraseMode == 2) {
-        float mask = canvas.a * finalAlpha;
-        vec3 erasedRGB = mix(canvas.rgb, brushFinal, mask);
-        finalColor = vec4(erasedRGB, canvas.a * (1.0 - finalAlpha * 0.5));
-        return;
-    }
+    //if (eraseMode == 1) {
+    //    finalColor = vec4(canvas.rgb, canvas.a * (1.0 - finalAlpha));
+    //    return;
+    //} else if (eraseMode == 2) {
+    //    float mask = canvas.a * finalAlpha;
+    //    vec3 erasedRGB = mix(canvas.rgb, brushFinal, mask);
+    //    finalColor = vec4(erasedRGB, canvas.a * (1.0 - finalAlpha * 0.5));
+    //    return;
+    //}
 
 float cloneOpacity = smudgeStrength;
     if (cloneOpacity > 0.000001) {
@@ -140,14 +140,12 @@ float cloneOpacity = smudgeStrength;
 
         vec3 smudgeRGB = smudge.rgb;
         float smudgeA  = smudge.a;
-        finalColor = applyBlend(bmidx, canvas, smudgeRGB, finalAlpha);
+                if (smudgeA < 0.0000001) smudgeRGB = canvas.rgb;
+                brushFinal = smudgeRGB;
+        finalColor = applyBlend(bmidx, canvas, brushFinal, finalAlpha);
 		//finalColor.rgb = (smudge.rgb);
-			   finalColor.a =1;
-			   return;
-        if (smudgeA < 0.0000001) smudgeRGB = canvas.rgb;
-        brushFinal = smudgeRGB;
-
-
+	//		   finalColor.a =1;
+	//		   return;
 
         float blendedA = mix(canvas.a, smudgeA, finalAlpha);
         if (preserveop > 0.5)

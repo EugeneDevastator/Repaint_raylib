@@ -675,4 +675,12 @@ void LayerStack_ProduceCompositeDither8b(Image* dst, int w, int h) {
     LayerStack_ProduceCompositeDitherView8b(dst,NULL,w,h);
 }
 
+void LayerStack_BakeSingleLayer(int idx, RenderTexture2D dst) {
+    if (idx < 0 || idx >= LS.count) return;
+    if (LS.rt[idx].id == 0 || dst.id == 0) return;
+    EnsurePresentShader();
+    BakeTransform(dst, LS.rt[idx].texture, LS.prop[idx].mat,
+                  LS.prop[idx].layerW, LS.prop[idx].layerH, 0, 0);
+}
+
 
