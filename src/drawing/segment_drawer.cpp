@@ -122,6 +122,7 @@ CollapsedBrush BlendBrushes(CollapsedBrush from, CollapsedBrush to, float k) {
     r.jitSat    = lerp(from.jitSat, to.jitSat, k);
     r.jitLit    = lerp(from.jitLit, to.jitLit, k);
     r.jitCloneOp = from.jitCloneOp;
+    r.jitFocal  = lerp(from.jitFocal, to.jitFocal, k);
     r.baseSeed  = from.baseSeed;
     return r;
 }
@@ -156,6 +157,10 @@ void JitterBrush(CollapsedBrush& b, uint16_t baseSeed, int dabIdx) {
     b.cop += dr * b.jitCloneOp;
     if (b.cop < 0.0f) b.cop = 0.0f;
     if (b.cop > 1.0f) b.cop = 1.0f;
+
+    b.focalOffset += dr * b.jitFocal;
+    if (b.focalOffset < -1.0f) b.focalOffset = -1.0f;
+    if (b.focalOffset > 1.0f)  b.focalOffset = 1.0f;
 
     // Color jitter: HSL
     float hue, sat, lit;

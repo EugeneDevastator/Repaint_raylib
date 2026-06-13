@@ -35,6 +35,7 @@ struct CollapsedBrush {
     float jitX2y;
     float jitHue, jitSat, jitLit;
     float jitCloneOp;
+    float jitFocal;      // per-dab focal offset jitter
     uint16_t baseSeed;
 };
 
