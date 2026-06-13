@@ -13,7 +13,7 @@ uniform float uFocalOffset;
 
 // Oblique-cone gradient: returns distance-normalized height (1 = tip, 0 = base edge).
 float coneGradient(vec2 p, float R, float shift) {
-    float dir = 0.0; // hardcoded direction (rightward)
+    float dir = 0.25; // hardcoded direction (rightward)
     vec2 d = vec2(cos(dir * 6.2831853), sin(dir * 6.2831853)) * (shift * R);
 
     float A = dot(d, d) - R*R;

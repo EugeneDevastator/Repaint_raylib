@@ -192,11 +192,12 @@ void BrushBlend_ApplyStamp(
     float squish   = fmaxf((float)brush.scale_y, 0.01f);
 
     if (fabsf(brush.focalOffset) > 0.0001f && radOut > 0.001f) {
-        float shift = brush.focalOffset * radOut * squish;
-        stampX -= cosf(angleRad) * shift;
-        stampY -= sinf(angleRad) * shift;
-        srcX -= cosf(angleRad) * shift;
-        srcY -= sinf(angleRad) * shift;
+        float shift = brush.focalOffset * radOut; // *squish; need if squishing from other side
+        stampX -= cosf(angleRad- PI*0.5) * shift;
+
+        stampY -= sinf(angleRad- PI*0.5) * shift;
+        srcX -= cosf(angleRad  - PI*0.5) * shift;
+        srcY -= sinf(angleRad  - PI*0.5) * shift;
     }
 
     float radOutForGeo = brush.rad_out_px;
