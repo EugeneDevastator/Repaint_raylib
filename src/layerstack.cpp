@@ -362,6 +362,33 @@ static Texture2D GetTransformedTop(int idx) {
     return LS.layerTransRT.texture;
 }
 
+// ── Shared seamless-tile blend ───────────────────────────────────────
+// Renders 3×3 tiles of srcTex through `mat` into ping-pong accumulators.
+// - `accum` on entry holds composite-so-far; on exit holds the final blend.
+// - `scratch` is a temp buffer; contents undefined after return.
+// - `mat` maps layer-local → output space (canvas or viewport).
+// - Restores TEXTURE_WRAP_CLAMP on srcTex after the loop.
+static void BlendSeamlessTiles(
+    RenderTexture2D& accum, RenderTexture2D& scratch,
+    Texture2D srcTex, const float mat[6], int lw, int lh,
+    int outW, int outH,
+    float op, int bmIdx, float threshold, float feather,
+    RenderTexture2D transRT)
+{
+    SetTextureWrap(srcTex,TEXTURE_WRAP_REPEAT);
+    for(int dy=-1;dy<=1;dy++){
+        for(int dx=-1;dx<=1;dx++){
+            float tileMat[6];
+            memcpy(tileMat,mat,6*sizeof(float));
+            tileMat[2]+=dx*(float)lw; tileMat[5]+=dy*(float)lh;
+            BakeTransform(transRT,srcTex,tileMat,lw,lh,outW,outH);
+            ApplyBlendShader(scratch,accum.texture,transRT.texture,op,bmIdx,threshold,feather,outW,outH);
+            RenderTexture2D t=accum; accum=scratch; scratch=t;
+        }
+    }
+    SetTextureWrap(srcTex,TEXTURE_WRAP_CLAMP);
+}
+
 // ── Merge down ────────────────────────────────────────────────────────
 static bool IsRTShared(int idx) {
     if(!LS.rt[idx].id) return false;
@@ -392,34 +419,20 @@ static void MergeDownImpl(int idx, bool seamless) {
         return;
     }
 
-    // ── Seamless: blend each tile individually for proper overlap ─────
+    // ── Seamless: 3×3 tile blend via shared helper ────────────────────
     float relMat[6]; MatInvMul(LS.prop[idx-1].mat, LS.prop[idx].mat, relMat);
-    Texture2D topTex=LS.rt[idx].texture;
-    SetTextureWrap(topTex,TEXTURE_WRAP_REPEAT);
-
     RenderTexture2D bufA=Load16BitRT(bw,bh), bufB=Load16BitRT(bw,bh);
     if(bufA.id==0||bufB.id==0){ if(bufA.id>0)UnloadRenderTexture(bufA); if(bufB.id>0)UnloadRenderTexture(bufB); return; }
 
     // Seed bufA with the bottom layer
     CopyRT(bufA,LS.rt[idx-1],bw,bh);
 
-    RenderTexture2D*src=&bufA,*dst=&bufB;
-    for(int dy=-1;dy<=1;dy++){
-        for(int dx=-1;dx<=1;dx++){
-            float tileMat[6];
-            memcpy(tileMat,relMat,6*sizeof(float));
-            tileMat[2]+=dx*(float)lw; tileMat[5]+=dy*(float)lh;
+    BlendSeamlessTiles(bufA,bufB,LS.rt[idx].texture,relMat,lw,lh,cw,ch,
+        p->op,p->blendmode,p->threshold,p->feather,LS.layerTransRT);
 
-            BakeTransform(LS.layerTransRT,topTex,tileMat,lw,lh,cw,ch);
-
-            ApplyBlendShader(*dst,src->texture,LS.layerTransRT.texture,p->op,p->blendmode,p->threshold,p->feather,bw,bh);
-            RenderTexture2D*tmp=src; src=dst; dst=tmp;
-        }
-    }
-
-    // src holds the final blended result
-    RenderTexture2D mergedRT=*src;
-    UnloadRenderTexture(*dst);
+    // bufA holds the final blended result
+    RenderTexture2D mergedRT=bufA;
+    UnloadRenderTexture(bufB);
     bool bottomShared = IsRTShared(idx-1);
     if(bottomShared) {
         CopyRT(LS.rt[idx-1], mergedRT, bw, bh);
@@ -484,28 +497,22 @@ static RenderTexture2D* CompositeLayersInto(RenderTexture2D& a, RenderTexture2D&
             layerTex=LS.layerTransRT.texture;
         }
         sLayerProps*p=&LS.prop[i];
-        if(p->seamless && LS.shaderInited && LS.layerTransRT.id>0) {
+        bool seamlessBlended=(p->seamless && LS.shaderInited && LS.layerTransRT.id>0);
+        if(seamlessBlended) {
             int lw=p->layerW, lh=p->layerH;
-            SetTextureWrap(LS.rt[i].texture, TEXTURE_WRAP_REPEAT);
-            for(int dy=-1;dy<=1;dy++){
-                for(int dx=-1;dx<=1;dx++){
-                    float tileMat[6];
-                    memcpy(tileMat,p->mat,6*sizeof(float));
-                    tileMat[2]+=dx*(float)lw; tileMat[5]+=dy*(float)lh;
-                    BakeTransform(LS.layerTransRT,LS.rt[i].texture,tileMat,lw,lh,cw,ch);
-                    ApplyBlendShader(*dst,src->texture,LS.layerTransRT.texture,p->op,p->blendmode,p->threshold,p->feather,cw,ch);
-                    RenderTexture2D*tmp=src; src=dst; dst=tmp;
-                }
-            }
-        } else if(LS.shaderInited)
+            BlendSeamlessTiles(*src,*dst,LS.rt[i].texture,p->mat,lw,lh,cw,ch,
+                p->op,p->blendmode,p->threshold,p->feather,LS.layerTransRT);
+            // *src holds the result, *dst is free — no swap needed.
+        } else if(LS.shaderInited) {
             ApplyBlendShader(*dst,src->texture,layerTex,p->op,p->blendmode,p->threshold,p->feather,cw,ch);
-        else {
+            RenderTexture2D*tmp=src; src=dst; dst=tmp;
+        } else {
             BeginTextureMode(*dst); ClearBackground(BLANK);
             DrawTextureRec(src->texture,FullRect(cw,ch),Vector2{0,0},WHITE);
             DrawTextureRec(layerTex,FullRect(cw,ch),Vector2{0,0},ColorAlpha(WHITE,p->op));
             EndTextureMode();
+            RenderTexture2D*tmp=src; src=dst; dst=tmp;
         }
-        RenderTexture2D*tmp=src; src=dst; dst=tmp;
     }
     return src;
 }
@@ -593,28 +600,22 @@ static void _viewBlendLoop(RenderTexture2D dst, RenderTexture2D tmp,
             }
             if(!p->seamless) { BakeTransform(transRT,LS.rt[i].texture,cmb,LS.prop[i].layerW,LS.prop[i].layerH,w,h); layerTex=transRT.texture; }
         }
-        if(p->seamless && LS.shaderInited && transRT.id>0) {
+        bool seamlessBlended=(p->seamless && LS.shaderInited && transRT.id>0);
+        if(seamlessBlended) {
             int lw=p->layerW, lh=p->layerH;
-            SetTextureWrap(LS.rt[i].texture, TEXTURE_WRAP_REPEAT);
-            for(int dy=-1;dy<=1;dy++){
-                for(int dx=-1;dx<=1;dx++){
-                    float tileCmb[6];
-                    memcpy(tileCmb,cmb,6*sizeof(float));
-                    tileCmb[2]+=dx*(float)lw; tileCmb[5]+=dy*(float)lh;
-                    BakeTransform(transRT,LS.rt[i].texture,tileCmb,lw,lh,w,h);
-                    ApplyBlendShader(*dstBuf,src->texture,transRT.texture,p->op,p->blendmode,p->threshold,p->feather,w,h);
-                    RenderTexture2D*t=src; src=dstBuf; dstBuf=t;
-                }
-            }
-        } else if(LS.shaderInited)
+            BlendSeamlessTiles(*src,*dstBuf,LS.rt[i].texture,cmb,lw,lh,w,h,
+                p->op,p->blendmode,p->threshold,p->feather,transRT);
+            // *src holds the result, *dstBuf is free — no swap needed.
+        } else if(LS.shaderInited) {
             ApplyBlendShader(*dstBuf,src->texture,layerTex,p->op,p->blendmode,p->threshold,p->feather,w,h);
-        else{
+            RenderTexture2D*t=src; src=dstBuf; dstBuf=t;
+        } else {
             BeginTextureMode(*dstBuf); ClearBackground(BLANK);
             DrawTextureRec(src->texture,FullRect(w,h),Vector2{0,0},WHITE);
             DrawTextureRec(layerTex,FullRect(w,h),Vector2{0,0},ColorAlpha(WHITE,p->op));
             EndTextureMode();
+            RenderTexture2D*t=src; src=dstBuf; dstBuf=t;
         }
-        RenderTexture2D*t=src; src=dstBuf; dstBuf=t;
     }
     // If final result is in tmp, copy to dst
     if(src!=&dst) CopyRT(dst,*src,w,h);
