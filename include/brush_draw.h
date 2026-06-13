@@ -24,6 +24,7 @@ struct CollapsedBrush {
     bool  useTexLumAsAlpha;
     float userTexOriginX, userTexOriginY;
     float userTexDirection;
+    float focalOffset;   // -1..1, oblique cone tip offset for radial gradient
     float spacing;       // 0–1 multiplier for dab spacing
 
     // Per-dab jitter ranges (drawing-space units, 0 = no jitter)

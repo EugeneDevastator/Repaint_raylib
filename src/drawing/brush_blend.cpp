@@ -35,6 +35,7 @@ static int locPwr = -1;
 static int locEraseMode = -1;
 static int locSeamless = -1;
 static int locPixelPerfect = -1;
+static int locFocalOffset = -1;
 static int locGeoTex = -1;
 static bool inited = false;
 
@@ -112,6 +113,7 @@ void BrushBlend_Init(void) {
     locUPerspective = GetShaderLocation(brushGeoShader, "uPerspective");
     locURadIn  = GetShaderLocation(brushGeoShader, "uRadIn");
     locUCurve  = GetShaderLocation(brushGeoShader, "uCurve");
+    locFocalOffset = GetShaderLocation(brushGeoShader, "uFocalOffset");
 
     snprintf(vs, sizeof(vs), "%sshaders/brush_blend.vs", ad);
     snprintf(fs, sizeof(fs), "%sshaders/brush_blend.fs", ad);
@@ -225,6 +227,8 @@ void BrushBlend_ApplyStamp(
     float curve      = clampf((float)brush.crv, 0.0f, 1.0f);
     SetShaderValue(brushGeoShader, locURadIn,  &radInRatio, SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushGeoShader, locUCurve,  &curve,      SHADER_UNIFORM_FLOAT);
+    float focalOff = brush.focalOffset;
+    if (locFocalOffset >= 0) SetShaderValue(brushGeoShader, locFocalOffset, &focalOff, SHADER_UNIFORM_FLOAT);
     SetTextureFilter(geoRT->texture, TEXTURE_FILTER_POINT);
     BeginTextureMode(*geoRT);
     ClearBackground((Color){0, 0, 0, 0});

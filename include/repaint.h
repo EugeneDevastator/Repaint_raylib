@@ -140,6 +140,7 @@ public:
 extern int g_strokeSmoothingMode;
 extern float g_strokeThrottle;
 
+
 class UndoManager;
 extern UndoManager* g_undoManager;
 struct AppState;
@@ -244,7 +245,7 @@ extern Viewport viewport;
 extern BParam bpOpacity, bpSize, bpHardness, bpSpacing, bpCurvature, bpScatter;
 extern BParam bpCloneOpacity, bpQuickHue, bpQuickSat, bpQuickLit;
 extern BParam bpTexScale, bpTexFeather, bpTexThresh, bpTexBlendVal;
-extern BParam bpAngle, bpScaleRel, bpSizeMul, bpPower, bpPerspective;
+extern BParam bpAngle, bpScaleRel, bpSizeMul, bpPower, bpPerspective, bpFocalOffset;
 
 extern d_StrokePars g_modPars;
 

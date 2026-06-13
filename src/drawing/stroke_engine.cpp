@@ -35,6 +35,7 @@ CollapsedBrush CollapseBrushParams(const d_RealBrush& b, float initialAngle, int
     cb.userTexOriginX = b.userTexOriginX;
     cb.userTexOriginY = b.userTexOriginY;
     cb.userTexDirection = b.userTexDirection;
+    cb.focalOffset = BParam_GetValue(&bpFocalOffset);
     cb.spacing = BParam_GetValue(&bpSpacing);
     cb.jitRadOut  = bpSize.user.jitter * b.rad_out;
     cb.jitRadIn   = bpHardness.user.jitter;
@@ -111,6 +112,7 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex, bool us
     cbFull.jitRadOut = cbFull.jitRadIn = cbFull.jitOpacity = cbFull.jitCrv = cbFull.jitX2y = 0;
     cbFull.jitHue = cbFull.jitSat = cbFull.jitLit = cbFull.jitCloneOp = 0;
     cbFull.baseSeed = 0;
+    cbFull.focalOffset = BParam_GetValue(&bpFocalOffset);
     cbFull.spacing = spacingVal;
 
     // Restore jitter and pars

@@ -110,6 +110,7 @@ CollapsedBrush BlendBrushes(CollapsedBrush from, CollapsedBrush to, float k) {
     r.userTexOriginX = from.userTexOriginX;
     r.userTexOriginY = from.userTexOriginY;
     r.userTexDirection = from.userTexDirection;
+    r.focalOffset = from.focalOffset;
 
     // Jitter ranges (interpolated — proportional to radius)
     r.jitRadOut = lerp(from.jitRadOut, to.jitRadOut, k);
