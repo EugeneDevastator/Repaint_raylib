@@ -41,7 +41,8 @@ typedef enum {
     bmGamma=0, bmLinear=1, bmOKLab=2, bmEraseAlpha=3, bmEraseColor=4,
     bmScreen=5, bmDodge=6, bmLighten=7, bmDarken=8,
     bmBurn=9, bmMult=10, bmOvr=11, bmColor=12,
-    bmSTOP=13
+    bmLuminosity=13, bmSaturation=14,
+    bmSTOP=15
 } bmBlends;
 
 typedef enum {
@@ -192,6 +193,7 @@ float RngConv(float inval, float inmin, float inmax, float outmin, float outmax)
 
 // Document operations
 Document Doc_New(int w, int h);
+void app_new_document(int w, int h, Color fill);
 
 // LayerStack — all layer management lives here
 #include "layerstack.h"

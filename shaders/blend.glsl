@@ -77,7 +77,20 @@ vec4 applyBlend(int mode, vec4 dst, vec3 srcRGB, float srcA) {
     vec3 srcPremul = srcRGB * srcA;
     vec3 outRGB;
     float outA;
-    if (dst.a <= 0.00000001) {
+    // erasers
+    if (mode == 3) {
+        outRGB = dst.rgb;
+        outA = clamp( dst.a*(1.0 -srcA),0,1);
+        return vec4(outRGB, outA);
+    } else if (mode == 4) {
+        float eraseMask = dst.a*srcA;
+        outRGB = mix(dst.rgb, srcRGB, eraseMask);
+        outA   = dst.a*(1.0-srcA);
+        return vec4(outRGB, outA);
+    }
+
+    // color modes
+    if (dst.a <= 0.00000001) { // for color modes assume 0 alpha regions are not dark but have color.
         return vec4(clamp(srcRGB, 0.0, 1.0), clamp(srcA, 0.0, 1.0));
     }
 
@@ -103,26 +116,22 @@ vec4 applyBlend(int mode, vec4 dst, vec3 srcRGB, float srcA) {
         else blendedLab = srcLab;
         outRGB = oklabToRgb(blendedLab);
         outA   = wTotal;
-    } else if (mode == 3) {
-        outRGB = dst.rgb; outA = dst.a*(1.0 - srcA);
-    } else if (mode == 4) {
-        float eraseMask = dst.a*srcA;
-        outRGB = mix(dst.rgb, srcRGB, eraseMask);
-        outA   = dst.a*(1.0 - srcA*0.5);
     } else if (mode == 5) {
         outRGB = 1.0 - (1.0 - dst.rgb)*(1.0 - srcPremul);
         outA   = 1.0 - (1.0 - dst.a)*(1.0 - srcA);
     } else if (mode == 6) {
         outRGB = dst.rgb + srcPremul*(1.0 - dst.rgb);
         outA   = min(1.0, dst.a + srcA);
-    } else if (mode == 7) {
-        outRGB = max(dst.rgb, srcPremul);
-        outA   = max(dst.a, srcA);
-    } else if (mode == 8) {
-        outRGB = min(dst.rgb, srcPremul);
-        outA   = min(dst.a, srcA);
-    } else if (mode == 9) {
-        outRGB = 1.0 - (1.0 - dst.rgb) / (srcPremul + 0.001);
+    } else if (mode == 7) { // lighten
+        outRGB = max(dst.rgb, srcRGB);
+        outRGB = mix(outRGB, dst.rgb, 1-srcA);
+        outA   = srcA + dst.a*(1.0 - srcA);
+    } else if (mode == 8) { // darken
+        outRGB = min(dst.rgb, srcRGB);
+        outRGB = mix(outRGB, dst.rgb, 1-srcA);
+        outA   = srcA + dst.a*(1.0 - srcA);
+    } else if (mode == 9) { // burn
+        outRGB = dst.rgb + srcPremul/(1.0 - dst.rgb);
         outA   = min(1.0, dst.a + srcA);
     } else if (mode == 10) {
         outRGB = dst.rgb * mix(vec3(1.0), srcRGB, srcA);
@@ -138,10 +147,29 @@ vec4 applyBlend(int mode, vec4 dst, vec3 srcRGB, float srcA) {
         outRGB = dst.rgb*(1.0 - srcA) + ov*srcA;
         outA   = srcA + dst.a*(1.0 - srcA);
     } else if (mode == 12) {
-        vec3 sHSL = rgb2hsl(srcRGB);
-        vec3 dHSL = rgb2hsl(dst.rgb);
-        vec3 col  = hsl2rgb(vec3(sHSL.x, sHSL.y, dHSL.z));
+        vec3 srcLab = rgbToOklab(srcRGB);
+        vec3 dstLab = rgbToOklab(dst.rgb);
+        vec3 col = oklabToRgb(vec3(dstLab.x, srcLab.y, srcLab.z));
         outRGB = dst.rgb*(1.0 - srcA) + col*srcA;
+        outA   = srcA + dst.a*(1.0 - srcA);
+    } else if (mode == 13) {
+        vec3 srcLab = rgbToOklab(srcRGB);
+        vec3 dstLab = rgbToOklab(dst.rgb);
+        vec3 lum = oklabToRgb(vec3(srcLab.x, dstLab.y, dstLab.z));
+        outRGB = dst.rgb*(1.0 - srcA) + lum*srcA;
+        outA   = srcA + dst.a*(1.0 - srcA);
+    } else if (mode == 14) {
+        vec3 srcLab = rgbToOklab(srcRGB);
+        vec3 dstLab = rgbToOklab(dst.rgb);
+        float cDst = sqrt(dstLab.y*dstLab.y + dstLab.z*dstLab.z);
+        float cSrc = sqrt(srcLab.y*srcLab.y + srcLab.z*srcLab.z);
+        vec3 sat;
+        if (cDst > 0.001) {
+            sat = oklabToRgb(vec3(dstLab.x, dstLab.y/cDst*cSrc, dstLab.z/cDst*cSrc));
+        } else {
+            sat = oklabToRgb(vec3(dstLab.x, srcLab.y, srcLab.z));
+        }
+        outRGB = dst.rgb*(1.0 - srcA) + sat*srcA;
         outA   = srcA + dst.a*(1.0 - srcA);
     } else {
         outRGB = srcPremul + dst.rgb*(1.0 - srcA);

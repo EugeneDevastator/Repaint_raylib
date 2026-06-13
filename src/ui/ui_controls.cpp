@@ -4,9 +4,10 @@
 // ── Shared blend mode names ──────────────────────────────────────────
 const char* g_blendModeNames[] = {
     "N-Gamma","N-Linear","N-OKLab","EraseA","EraseColor","Screen",
-    "Color Dodge","Lighten","Darken","Burn","Multiply","Overlay","Color"
+    "Color Dodge","Lighten","Darken","Burn","Multiply","Overlay","Color",
+    "Luminosity","Saturation"
 };
-extern const int g_blendModeCount = 13;
+extern const int g_blendModeCount = 15;
 
 static Texture2D penModeTex[PEN_MODE_COUNT];
 static const char* PenIconNames[PEN_MODE_COUNT] = {
