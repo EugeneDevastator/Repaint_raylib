@@ -140,9 +140,10 @@ float cloneOpacity = smudgeStrength;
 
         vec3 smudgeRGB = smudge.rgb;
         float smudgeA  = smudge.a;
-                if (smudgeA < 0.0000001) smudgeRGB = canvas.rgb;
-                brushFinal = smudgeRGB;
+        if (smudgeA < 0.0000001) smudgeRGB = canvas.rgb;
+		brushFinal = applyBlend(bmidx, smudge, brushFinal, (1.0 - smudgeStrength)*(1.0 - smudgeStrength)).rgb;
         finalColor = applyBlend(bmidx, canvas, brushFinal, finalAlpha);
+      //  finalColor = applyBlend(bmidx, canvas, smudgeRGB, finalAlpha);
 		//finalColor.rgb = (smudge.rgb);
 	//		   finalColor.a =1;
 	//		   return;
