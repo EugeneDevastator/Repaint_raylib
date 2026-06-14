@@ -148,9 +148,8 @@ claude formulas
     } else if (mode == MODE_SCREEN) {
         outRGB = 1.0 - (1.0 - dst.rgb)*(1.0 - srcPremul);
         outA   = 1.0 - (1.0 - dst.a)*(1.0 - srcA);
-    } else if (mode == MODE_DODGE) {
-        //outRGB = dst.rgb + srcPremul*(1.0 - dst.rgb); // old dodge
-        outRGB = dst.rgb + srcPremul; // linear dodghe
+    } else if (mode == MODE_DODGE) {   // linear dodge (add)
+        outRGB = dst.rgb + srcPremul;
         outA   = min(1.0, dst.a + srcA);
     } else if (mode == MODE_LIGHTEN) { // lighten
         outRGB = max(dst.rgb, srcRGB);
@@ -164,9 +163,9 @@ claude formulas
         outRGB = dst.rgb * dst.rgb + srcRGB*srcRGB;
         outRGB = sqrt(mix(outRGB, dst.rgb*dst.rgb, 1.0-srcA));
         outA   = srcA + dst.a*(1.0 - srcA);
-    } else if (mode == MODE_LIN_LIGHT) { // linear light with gamma
-        vec3 lin = dst.rgb*dst.rgb + 2.0*srcRGB*srcRGB - 1.0;
-        outRGB = sqrt(dst.rgb*dst.rgb*(1.0 - srcA) + lin*srcA)	;
+    } else if (mode == MODE_LIN_LIGHT) { // linear light
+        outRGB = dst.rgb + 2.0*srcRGB - 1.0;
+        outRGB = mix(outRGB, dst.rgb, 1.0-srcA);
         outA   = srcA + dst.a*(1.0 - srcA);
     } else if (mode == MODE_BURN) { // burn
         outRGB = dst.rgb + srcPremul/(1.0 - dst.rgb);
