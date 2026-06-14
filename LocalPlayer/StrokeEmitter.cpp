@@ -44,6 +44,32 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
     memset(m_splinePts, 0, sizeof(m_splinePts));
     m_splinePts[0] = start;
     m_segEpCount = 0;
+
+    // ── Emit first dab immediately at stroke start ────────────────
+    CollapsedBrush cb = CollapseBrushParams(e.brush, e.initAngle, e.toolMode);
+    SegmentData dseg;
+    memset(&dseg, 0, sizeof(dseg));
+    dseg.pos1 = dseg.pos2 = start;
+    dseg.ctrl0 = dseg.ctrl3 = dseg.pos1;
+    dseg.brushFrom = dseg.brush = cb;
+    dseg.tool     = eSingleStamp;
+    dseg.seamless = g_seamlessPaint ? 1 : 0;
+    dseg.pixelPerfect = g_pixelPerfect ? 1 : 0;
+    dseg.seed     = e.brush.seed;
+    dseg.smudgeSrcX = start.x;
+    dseg.smudgeSrcY = start.y;
+    dseg.targetType = m_targetType;
+    dseg.targetId   = m_targetId;
+    dseg.userTexIdx = m_userTexIdx;
+    dseg.dabOffset  = 0;
+    dseg.initAngle  = e.initAngle;
+
+    m_throttle->Push(dseg);
+    if (g_recorder) g_recorder->on_segment(dseg);
+    if (g_broker)   g_broker->on_segment(dseg);
+
+    m_emittedAny = true;
+    m_lastDabRad = cb.rad_out_px;
 }
 
 void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 ctrl3,

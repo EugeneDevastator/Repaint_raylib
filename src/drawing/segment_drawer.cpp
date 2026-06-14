@@ -269,7 +269,6 @@ int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
 
     Vector2 to = seg.pos2;
     float stdist = sqrtf((to.x - from.x) * (to.x - from.x) + (to.y - from.y) * (to.y - from.y));
-    if (stdist < 0.001f) return 0;
 
     if (seg.tool == eSingleStamp) {
         if (outPoints) {
@@ -281,6 +280,8 @@ int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
         res->lastRadOut = seg.brushFrom.rad_out_px;
         return 1;
     }
+
+    if (stdist < 0.001f) return 0;
 
     bool isCurved = (seg.ctrl0.x != from.x || seg.ctrl0.y != from.y ||
                      seg.ctrl3.x != to.x   || seg.ctrl3.y != to.y);
