@@ -32,7 +32,7 @@ float coneGradient(vec2 p, float R, float shift) {
     }
     return clamp(t, 0.0, 1.0);
 }
-
+float curvePWR = 6.0;
 float applyRadialFalloff(float d) {
     if (d < 0.00001) return 0.0;
     float innerT = clamp(uRadIn, 0.0, 0.99);
@@ -46,7 +46,7 @@ float applyRadialFalloff(float d) {
     }
     a = clamp(a, 0.0, 1.0);
     float crvt = uCurve * 2.0 - 1.0;
-    float curvePower = (crvt >= 0.0) ? mix(1.0, 3.0, crvt) : mix(1.0, 1.0/3.0, -crvt);
+    float curvePower = (crvt >= 0.0) ? mix(1.0, curvePWR, crvt) : mix(1.0, 1.0/curvePWR, -crvt);
     return clamp(pow(a, curvePower), 0.0, 1.0);
 }
 
