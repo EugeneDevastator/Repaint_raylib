@@ -38,17 +38,24 @@ float GetModVal(BParam* bp) {
     int pm = bp->penMode;
     if (pm >= 0 && pm < csSTOP)
         cpar = g_modPars.Pars[pm];
-    return ApplyBP(bp->user.clipminF, bp->user.clipmaxF, bp->user.jitter,
+    float n = bp->user.clipmaxF;
+    if (bp->power != 1.0f)
+        n = powf(n, bp->power);
+    return ApplyBP(bp->user.clipminF, n, bp->user.jitter,
                    cpar, bp->outMin, bp->outMax);
 }
 
 float GetModValFor(BParam* bp, float cpar) {
-    return ApplyBP(bp->run.clipminF, bp->run.clipmaxF, bp->user.jitter,
+    float n = bp->run.clipmaxF;
+    if (bp->power != 1.0f)
+        n = powf(n, bp->power);
+    return ApplyBP(bp->run.clipminF, n, bp->user.jitter,
                    cpar, bp->outMin, bp->outMax);
 }
 
 void Modulators_Init(void) {
     BParam_Init(&bpOpacity, 0, "Opacity", 0.0f, 1.0f, 1.0f);
+    bpOpacity.power = 2.0f;
     strncpy(bpOpacity.tooltip, "Overall opacity of the brush stroke", sizeof(bpOpacity.tooltip) - 1);
     BParam_SetIcon(&bpOpacity, "ctlop");
 
@@ -62,6 +69,10 @@ void Modulators_Init(void) {
     BParam_SetIcon(&bpHardness, "ctlrrel");
 
     BParam_Init(&bpSpacing, 3, "Spacing", 0.0f, 2.0f, 0.3f);
+    bpSpacing.power = 2.0f;
+    bpSpacing.defClipmaxF = sqrtf((0.3f - 0.0f) / (2.0f - 0.0f));
+    bpSpacing.user.clipmaxF = bpSpacing.defClipmaxF;
+    bpSpacing.run.clipmaxF = bpSpacing.defClipmaxF;
     strncpy(bpSpacing.tooltip, "Distance between successive dabs as fraction of brush diameter", sizeof(bpSpacing.tooltip) - 1);
     BParam_SetIcon(&bpSpacing, "ctlspc");
 

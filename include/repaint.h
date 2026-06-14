@@ -160,7 +160,7 @@ extern ReplayRecorder* g_recorder;
 typedef struct { float clipminF,clipmaxF,jitter; } BPuserstate;
 typedef struct { float clipminF,clipmaxF; } BPrunstate;
 typedef struct { Rectangle rect,activeRect; float DsRange; int ActivePick,orient,sliderrad,Soff,colorMode; Color gradStart,gradEnd,shade,hlite,midtone; bool showValue,noGradient; char label[48]; } DualSlider;
-typedef struct { DualSlider slider; Texture2D iconTex; bool iconLoaded; int penMode; float outMin,outMax,defClipmaxF; char name[48],tooltip[128]; int id; BPuserstate user; BPrunstate run; } BParam;
+typedef struct { DualSlider slider; Texture2D iconTex; bool iconLoaded; int penMode; float outMin,outMax,defClipmaxF,power; char name[48],tooltip[128]; int id; BPuserstate user; BPrunstate run; } BParam;
 
 typedef struct {
     Rectangle bounds;
