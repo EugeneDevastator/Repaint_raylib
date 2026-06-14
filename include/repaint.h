@@ -42,7 +42,8 @@ typedef enum {
     bmScreen=5, bmDodge=6, bmLighten=7, bmDarken=8,
     bmBurn=9, bmMult=10, bmOvr=11, bmColor=12,
     bmLuminosity=13, bmSaturation=14,
-    bmSTOP=15
+    bmLinDodge=15, bmLinLight=16,
+    bmSTOP=17
 } bmBlends;
 
 typedef enum {

@@ -5,9 +5,9 @@
 const char* g_blendModeNames[] = {
     "N-Gamma","N-Linear","N-OKLab","EraseA","EraseColor","Screen",
     "Color Dodge","Lighten","Darken","Burn","Multiply","Overlay","Color",
-    "Luminosity","Saturation"
+    "Luminosity","Saturation","LinDodge","LinLight"
 };
-extern const int g_blendModeCount = 15;
+extern const int g_blendModeCount = 17;
 
 static Texture2D penModeTex[PEN_MODE_COUNT];
 static const char* PenIconNames[PEN_MODE_COUNT] = {
