@@ -181,7 +181,16 @@ void StrokeEmitter::handlePoint(const InputEntry& e) {
         return;
     }
 
-    float threshold = fmaxf(g_strokeThrottle, 0.5f);
+    float threshold;
+    if (g_strokeThrottle <= 0.0f) {
+        float sizeMul = 0.5;//powf(16.0f, BParam_GetValue(&bpSizeMul) / 128.0f - 1.0f);
+        threshold = GetModVal(&bpSize) * sizeMul;
+        if (m_layerScale > 0.001f && fabsf(m_layerScale - 1.0f) > 0.0001f)
+            threshold *= m_layerScale;
+        if (threshold < 0.5f) threshold = 0.5f;
+    } else {
+        threshold = fmaxf(g_strokeThrottle, 0.5f);
+    }
     if (m_splineCount < 4) threshold = fminf(threshold, 5.0f);
 
     float dist = Dist2D(m_lastInputPos, pos);
