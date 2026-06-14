@@ -5,9 +5,9 @@
 const char* g_blendModeNames[] = {
     "N-Gamma","N-Linear","N-OKLab","EraseA","EraseColor","Screen",
     "Color Dodge","Lighten","Darken","Burn","Multiply","Overlay","Color",
-    "Luminosity","Saturation"
+    "Luminosity","Saturation","LinDodge","LinLight"
 };
-extern const int g_blendModeCount = 15;
+extern const int g_blendModeCount = 17;
 
 static Texture2D penModeTex[PEN_MODE_COUNT];
 static const char* PenIconNames[PEN_MODE_COUNT] = {
@@ -83,6 +83,7 @@ void BParam_Init(BParam* bp, int id, const char* name, float outMin, float outMa
     bp->penMode = csNone;
     bp->outMin = outMin;
     bp->outMax = outMax;
+    bp->power = 1.0f;
     bp->id = id;
     strncpy(bp->name, name, sizeof(bp->name) - 1);
     bp->tooltip[0] = '\0';
@@ -104,17 +105,23 @@ void BParam_SetIcon(BParam* bp, const char* filename) {
 }
 
 float BParam_GetValue(BParam* bp) {
+    float n = bp->user.clipmaxF;
+    if (bp->power != 1.0f)
+        n = powf(n, bp->power);
     float range = bp->outMax - bp->outMin;
-    return bp->user.clipmaxF * range + bp->outMin;
+    return n * range + bp->outMin;
 }
 
 void BParam_SetValue(BParam* bp, float val) {
     float range = bp->outMax - bp->outMin;
-    if (range > 0.0001f)
-        bp->user.clipmaxF = (val - bp->outMin) / range;
-    else
+    if (range > 0.0001f) {
+        float n = (val - bp->outMin) / range;
+        if (bp->power != 1.0f)
+            n = powf(n, 1.0f / bp->power);
+        bp->user.clipmaxF = fmaxf(0.0f, fminf(1.0f, n));
+    } else {
         bp->user.clipmaxF = 1.0f;
-    bp->user.clipmaxF = fmaxf(0.0f, fminf(1.0f, bp->user.clipmaxF));
+    }
 }
 
 void BParam_SnapRunState(BParam* bp) {

@@ -20,6 +20,7 @@ BParam bpScaleRel;
 BParam bpSizeMul;
 BParam bpPower;
 BParam bpPerspective;
+BParam bpFocalOffset;
 
 d_StrokePars g_modPars;
 
@@ -37,17 +38,24 @@ float GetModVal(BParam* bp) {
     int pm = bp->penMode;
     if (pm >= 0 && pm < csSTOP)
         cpar = g_modPars.Pars[pm];
-    return ApplyBP(bp->user.clipminF, bp->user.clipmaxF, bp->user.jitter,
+    float n = bp->user.clipmaxF;
+    if (bp->power != 1.0f)
+        n = powf(n, bp->power);
+    return ApplyBP(bp->user.clipminF, n, bp->user.jitter,
                    cpar, bp->outMin, bp->outMax);
 }
 
 float GetModValFor(BParam* bp, float cpar) {
-    return ApplyBP(bp->run.clipminF, bp->run.clipmaxF, bp->user.jitter,
+    float n = bp->run.clipmaxF;
+    if (bp->power != 1.0f)
+        n = powf(n, bp->power);
+    return ApplyBP(bp->run.clipminF, n, bp->user.jitter,
                    cpar, bp->outMin, bp->outMax);
 }
 
 void Modulators_Init(void) {
     BParam_Init(&bpOpacity, 0, "Opacity", 0.0f, 1.0f, 1.0f);
+    bpOpacity.power = 2.0f;
     strncpy(bpOpacity.tooltip, "Overall opacity of the brush stroke", sizeof(bpOpacity.tooltip) - 1);
     BParam_SetIcon(&bpOpacity, "ctlop");
 
@@ -61,6 +69,10 @@ void Modulators_Init(void) {
     BParam_SetIcon(&bpHardness, "ctlrrel");
 
     BParam_Init(&bpSpacing, 3, "Spacing", 0.0f, 2.0f, 0.3f);
+    bpSpacing.power = 2.0f;
+    bpSpacing.defClipmaxF = sqrtf((0.3f - 0.0f) / (2.0f - 0.0f));
+    bpSpacing.user.clipmaxF = bpSpacing.defClipmaxF;
+    bpSpacing.run.clipmaxF = bpSpacing.defClipmaxF;
     strncpy(bpSpacing.tooltip, "Distance between successive dabs as fraction of brush diameter", sizeof(bpSpacing.tooltip) - 1);
     BParam_SetIcon(&bpSpacing, "ctlspc");
 
@@ -124,11 +136,15 @@ void Modulators_Init(void) {
 
     BParam_Init(&bpPower, 43, "Power", 0.0f, 1.0f, 0.0f);
     strncpy(bpPower.tooltip, "Displacement power for the Disp tool (0=no displacement, 1=max)", sizeof(bpPower.tooltip) - 1);
+    BParam_SetIcon(&bpPower, "ctlpwr");
 
     BParam_Init(&bpPerspective, 44, "Perspective", 0.0f, 1.0f, 0.0f);
     strncpy(bpPerspective.tooltip, "Perspective distortion: rotates brush along Y axis before in-plane rotation", sizeof(bpPerspective.tooltip) - 1);
     BParam_SetIcon(&bpPerspective, "ctlpersp");
 
+    BParam_Init(&bpFocalOffset, 45, "Focal", -1.0f, 1.0f, 0.0f);
+    strncpy(bpFocalOffset.tooltip, "Shifts radial gradient convergence point (-1..1, 0=center)", sizeof(bpFocalOffset.tooltip) - 1);
+    BParam_SetIcon(&bpFocalOffset, "ctlfocal");
     // Init global modulator defaults
     for (int i = 0; i < csSTOP; i++) g_modPars.Pars[i] = 1.0f;
     g_modPars.Pars[csDir]    = 0.5f;

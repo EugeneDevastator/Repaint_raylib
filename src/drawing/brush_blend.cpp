@@ -35,6 +35,7 @@ static int locPwr = -1;
 static int locEraseMode = -1;
 static int locSeamless = -1;
 static int locPixelPerfect = -1;
+static int locFocalOffset = -1;
 static int locGeoTex = -1;
 static bool inited = false;
 
@@ -112,6 +113,7 @@ void BrushBlend_Init(void) {
     locUPerspective = GetShaderLocation(brushGeoShader, "uPerspective");
     locURadIn  = GetShaderLocation(brushGeoShader, "uRadIn");
     locUCurve  = GetShaderLocation(brushGeoShader, "uCurve");
+    locFocalOffset = GetShaderLocation(brushGeoShader, "uFocalOffset");
 
     snprintf(vs, sizeof(vs), "%sshaders/brush_blend.vs", ad);
     snprintf(fs, sizeof(fs), "%sshaders/brush_blend.fs", ad);
@@ -189,6 +191,15 @@ void BrushBlend_ApplyStamp(
     float angleRad = (float)brush.resangle * (3.14159265f / 180.0f);
     float squish   = fmaxf((float)brush.scale_y, 0.01f);
 
+    if (fabsf(brush.focalOffset) > 0.0001f && radOut > 0.001f) {
+        float shift = brush.focalOffset * radOut; // *squish; need if squishing from other side
+        stampX -= cosf(angleRad- PI*0.5) * shift;
+
+        stampY -= sinf(angleRad- PI*0.5) * shift;
+        srcX -= cosf(angleRad  - PI*0.5) * shift;
+        srcY -= sinf(angleRad  - PI*0.5) * shift;
+    }
+
     float radOutForGeo = brush.rad_out_px;
     if (radOutForGeo < 1.0f) radOutForGeo = 1.0f;
 
@@ -225,6 +236,8 @@ void BrushBlend_ApplyStamp(
     float curve      = clampf((float)brush.crv, 0.0f, 1.0f);
     SetShaderValue(brushGeoShader, locURadIn,  &radInRatio, SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushGeoShader, locUCurve,  &curve,      SHADER_UNIFORM_FLOAT);
+    float focalOff = brush.focalOffset;
+    if (locFocalOffset >= 0) SetShaderValue(brushGeoShader, locFocalOffset, &focalOff, SHADER_UNIFORM_FLOAT);
     SetTextureFilter(geoRT->texture, TEXTURE_FILTER_POINT);
     BeginTextureMode(*geoRT);
     ClearBackground((Color){0, 0, 0, 0});
@@ -335,6 +348,7 @@ void BrushBlend_ApplyStamp(
     rlActiveTextureSlot(1);
     rlEnableTexture(dstRT.texture.id);
     rlActiveTextureSlot(2);
+    if (brushTex.id > 0) SetTextureWrap(brushTex, TEXTURE_WRAP_REPEAT);
     rlEnableTexture(brushTex.id > 0 ? brushTex.id : whiteTex.id);
     rlActiveTextureSlot(0);
 

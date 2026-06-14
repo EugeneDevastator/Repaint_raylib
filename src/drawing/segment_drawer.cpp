@@ -110,6 +110,7 @@ CollapsedBrush BlendBrushes(CollapsedBrush from, CollapsedBrush to, float k) {
     r.userTexOriginX = from.userTexOriginX;
     r.userTexOriginY = from.userTexOriginY;
     r.userTexDirection = from.userTexDirection;
+    r.focalOffset = from.focalOffset;
 
     // Jitter ranges (interpolated — proportional to radius)
     r.jitRadOut = lerp(from.jitRadOut, to.jitRadOut, k);
@@ -121,6 +122,7 @@ CollapsedBrush BlendBrushes(CollapsedBrush from, CollapsedBrush to, float k) {
     r.jitSat    = lerp(from.jitSat, to.jitSat, k);
     r.jitLit    = lerp(from.jitLit, to.jitLit, k);
     r.jitCloneOp = from.jitCloneOp;
+    r.jitFocal  = lerp(from.jitFocal, to.jitFocal, k);
     r.baseSeed  = from.baseSeed;
     return r;
 }
@@ -155,6 +157,10 @@ void JitterBrush(CollapsedBrush& b, uint16_t baseSeed, int dabIdx) {
     b.cop += dr * b.jitCloneOp;
     if (b.cop < 0.0f) b.cop = 0.0f;
     if (b.cop > 1.0f) b.cop = 1.0f;
+
+    b.focalOffset += dr * b.jitFocal;
+    if (b.focalOffset < -1.0f) b.focalOffset = -1.0f;
+    if (b.focalOffset > 1.0f)  b.focalOffset = 1.0f;
 
     // Color jitter: HSL
     float hue, sat, lit;
@@ -263,7 +269,6 @@ int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
 
     Vector2 to = seg.pos2;
     float stdist = sqrtf((to.x - from.x) * (to.x - from.x) + (to.y - from.y) * (to.y - from.y));
-    if (stdist < 0.001f) return 0;
 
     if (seg.tool == eSingleStamp) {
         if (outPoints) {
@@ -275,6 +280,8 @@ int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
         res->lastRadOut = seg.brushFrom.rad_out_px;
         return 1;
     }
+
+    if (stdist < 0.001f) return 0;
 
     bool isCurved = (seg.ctrl0.x != from.x || seg.ctrl0.y != from.y ||
                      seg.ctrl3.x != to.x   || seg.ctrl3.y != to.y);

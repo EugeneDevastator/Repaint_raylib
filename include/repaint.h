@@ -42,7 +42,8 @@ typedef enum {
     bmScreen=5, bmDodge=6, bmLighten=7, bmDarken=8,
     bmBurn=9, bmMult=10, bmOvr=11, bmColor=12,
     bmLuminosity=13, bmSaturation=14,
-    bmSTOP=15
+    bmLinDodge=15, bmLinLight=16,
+    bmSTOP=17
 } bmBlends;
 
 typedef enum {
@@ -140,6 +141,7 @@ public:
 extern int g_strokeSmoothingMode;
 extern float g_strokeThrottle;
 
+
 class UndoManager;
 extern UndoManager* g_undoManager;
 struct AppState;
@@ -158,7 +160,7 @@ extern ReplayRecorder* g_recorder;
 typedef struct { float clipminF,clipmaxF,jitter; } BPuserstate;
 typedef struct { float clipminF,clipmaxF; } BPrunstate;
 typedef struct { Rectangle rect,activeRect; float DsRange; int ActivePick,orient,sliderrad,Soff,colorMode; Color gradStart,gradEnd,shade,hlite,midtone; bool showValue,noGradient; char label[48]; } DualSlider;
-typedef struct { DualSlider slider; Texture2D iconTex; bool iconLoaded; int penMode; float outMin,outMax,defClipmaxF; char name[48],tooltip[128]; int id; BPuserstate user; BPrunstate run; } BParam;
+typedef struct { DualSlider slider; Texture2D iconTex; bool iconLoaded; int penMode; float outMin,outMax,defClipmaxF,power; char name[48],tooltip[128]; int id; BPuserstate user; BPrunstate run; } BParam;
 
 typedef struct {
     Rectangle bounds;
@@ -244,7 +246,7 @@ extern Viewport viewport;
 extern BParam bpOpacity, bpSize, bpHardness, bpSpacing, bpCurvature, bpScatter;
 extern BParam bpCloneOpacity, bpQuickHue, bpQuickSat, bpQuickLit;
 extern BParam bpTexScale, bpTexFeather, bpTexThresh, bpTexBlendVal;
-extern BParam bpAngle, bpScaleRel, bpSizeMul, bpPower, bpPerspective;
+extern BParam bpAngle, bpScaleRel, bpSizeMul, bpPower, bpPerspective, bpFocalOffset;
 
 extern d_StrokePars g_modPars;
 

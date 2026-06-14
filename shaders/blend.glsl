@@ -1,6 +1,24 @@
 // blend.glsl — shared GLSL functions for Repaint shaders
 // Included via: #include blend.glsl  (at column 0)
+// ── Blend mode constants (must match bmBlends enum in repaint.h) ────
 #define MODE_NGAMMA     0
+#define MODE_NLINEAR    1
+#define MODE_NOKLAB     2
+#define MODE_ERASEA     3
+#define MODE_ERASECLR   4
+#define MODE_SCREEN     5
+#define MODE_DODGE      6
+#define MODE_LIGHTEN    7
+#define MODE_DARKEN     8
+#define MODE_BURN       9
+#define MODE_MULT       10
+#define MODE_OVERLAY    11
+#define MODE_COLOR      12
+#define MODE_LUMINOSITY 13
+#define MODE_SATURATION 14
+#define MODE_LIN_DODGE  15
+#define MODE_LIN_LIGHT  16
+
 // constants
 // correction for simple color blend
 vec3 blendWeightCorr = vec3(1.000);          // is roughly square of the next..
@@ -78,11 +96,11 @@ vec4 applyBlend(int mode, vec4 dst, vec3 srcRGB, float srcA) {
     vec3 outRGB;
     float outA;
     // erasers
-    if (mode == 3) {
+    if (mode == MODE_ERASEA) {
         outRGB = dst.rgb;
         outA = clamp( dst.a*(1.0 -srcA),0,1);
         return vec4(outRGB, outA);
-    } else if (mode == 4) {
+    } else if (mode == MODE_ERASECLR) {
         float eraseMask = dst.a*srcA;
         outRGB = mix(dst.rgb, srcRGB, eraseMask);
         outA   = dst.a*(1.0-srcA);
@@ -93,19 +111,30 @@ vec4 applyBlend(int mode, vec4 dst, vec3 srcRGB, float srcA) {
     if (dst.a <= 0.00000001) { // for color modes assume 0 alpha regions are not dark but have color.
         return vec4(clamp(srcRGB, 0.0, 1.0), clamp(srcA, 0.0, 1.0));
     }
-
+/*
+claude formulas
+} else if (mode == 9) { // linear dodge (add)
+    outRGB = dst.rgb + srcRGB;
+    outRGB = mix(outRGB, dst.rgb, 1.0-srcA);
+    outA   = srcA + dst.a*(1.0 - srcA);
+} else if (mode == 10) { // linear light
+    outRGB = dst.rgb + 2.0*srcRGB - 1.0;
+    outRGB = mix(outRGB, dst.rgb, 1.0-srcA);
+    outA   = srcA + dst.a*(1.0 - srcA);
+}
+*/
     if (mode == MODE_NGAMMA) {
         vec3 srcLin = srcRGB*srcRGB;
         vec3 dstLin = dst.rgb*dst.rgb;
         outRGB = sqrt(blendWeightCorr * mix(srcLin,dstLin,1-srcA));
         outA   = srcA + dst.a*(1.0 - srcA);
-    } else if (mode == 1) {
+    } else if (mode == MODE_NLINEAR) {
         vec3 dstPremul = dst.rgb*dst.a;
         outA   = srcA + dst.a*(1.0 - srcA);
         outRGB = (outA > 0.00001)
         ? (srcPremul + dstPremul*(1.0 - srcA)) / outA
         : srcRGB;
-    } else if (mode == 2) {
+    } else if (mode == MODE_NOKLAB) {
         vec3 srcLab = rgbToOklab(srcRGB);
         vec3 dstLab = rgbToOklab(dst.rgb);
         float wSrc  = srcA;
@@ -116,27 +145,35 @@ vec4 applyBlend(int mode, vec4 dst, vec3 srcRGB, float srcA) {
         else blendedLab = srcLab;
         outRGB = oklabToRgb(blendedLab);
         outA   = wTotal;
-    } else if (mode == 5) {
+    } else if (mode == MODE_SCREEN) {
         outRGB = 1.0 - (1.0 - dst.rgb)*(1.0 - srcPremul);
         outA   = 1.0 - (1.0 - dst.a)*(1.0 - srcA);
-    } else if (mode == 6) {
-        outRGB = dst.rgb + srcPremul*(1.0 - dst.rgb);
+    } else if (mode == MODE_DODGE) {   // linear dodge (add)
+        outRGB = dst.rgb + srcPremul;
         outA   = min(1.0, dst.a + srcA);
-    } else if (mode == 7) { // lighten
+    } else if (mode == MODE_LIGHTEN) { // lighten
         outRGB = max(dst.rgb, srcRGB);
         outRGB = mix(outRGB, dst.rgb, 1-srcA);
         outA   = srcA + dst.a*(1.0 - srcA);
-    } else if (mode == 8) { // darken
+    } else if (mode == MODE_DARKEN) { // darken
         outRGB = min(dst.rgb, srcRGB);
         outRGB = mix(outRGB, dst.rgb, 1-srcA);
         outA   = srcA + dst.a*(1.0 - srcA);
-    } else if (mode == 9) { // burn
+    } else if (mode == MODE_LIN_DODGE) { // linear dodge with gamma (add)
+        outRGB = dst.rgb * dst.rgb + srcRGB*srcRGB;
+        outRGB = sqrt(mix(outRGB, dst.rgb*dst.rgb, 1.0-srcA));
+        outA   = srcA + dst.a*(1.0 - srcA);
+    } else if (mode == MODE_LIN_LIGHT) { // linear light
+        outRGB = dst.rgb + 2.0*srcRGB - 1.0;
+        outRGB = mix(outRGB, dst.rgb, 1.0-srcA);
+        outA   = srcA + dst.a*(1.0 - srcA);
+    } else if (mode == MODE_BURN) { // burn
         outRGB = dst.rgb + srcPremul/(1.0 - dst.rgb);
         outA   = min(1.0, dst.a + srcA);
-    } else if (mode == 10) {
+    } else if (mode == MODE_MULT) {
         outRGB = dst.rgb * mix(vec3(1.0), srcRGB, srcA);
         outA   = dst.a;
-    } else if (mode == 11) {
+    } else if (mode == MODE_OVERLAY) {
         vec3 ov;
         if (dst.rgb.r < 0.5) ov.r = 2.0*dst.rgb.r*srcRGB.r;
         else ov.r = 1.0 - 2.0*(1.0 - dst.rgb.r)*(1.0 - srcRGB.r);
@@ -146,19 +183,19 @@ vec4 applyBlend(int mode, vec4 dst, vec3 srcRGB, float srcA) {
         else ov.b = 1.0 - 2.0*(1.0 - dst.rgb.b)*(1.0 - srcRGB.b);
         outRGB = dst.rgb*(1.0 - srcA) + ov*srcA;
         outA   = srcA + dst.a*(1.0 - srcA);
-    } else if (mode == 12) {
+    } else if (mode == MODE_COLOR) {
         vec3 srcLab = rgbToOklab(srcRGB);
         vec3 dstLab = rgbToOklab(dst.rgb);
         vec3 col = oklabToRgb(vec3(dstLab.x, srcLab.y, srcLab.z));
         outRGB = dst.rgb*(1.0 - srcA) + col*srcA;
         outA   = srcA + dst.a*(1.0 - srcA);
-    } else if (mode == 13) {
+    } else if (mode == MODE_LUMINOSITY) {
         vec3 srcLab = rgbToOklab(srcRGB);
         vec3 dstLab = rgbToOklab(dst.rgb);
         vec3 lum = oklabToRgb(vec3(srcLab.x, dstLab.y, dstLab.z));
         outRGB = dst.rgb*(1.0 - srcA) + lum*srcA;
         outA   = srcA + dst.a*(1.0 - srcA);
-    } else if (mode == 14) {
+    } else if (mode == MODE_SATURATION) {
         vec3 srcLab = rgbToOklab(srcRGB);
         vec3 dstLab = rgbToOklab(dst.rgb);
         float cDst = sqrt(dstLab.y*dstLab.y + dstLab.z*dstLab.z);
@@ -213,7 +250,7 @@ vec4 sampleBilinear(sampler2D tex, vec2 px, vec2 texSize, int bmidx, bool seamle
     vec4 bl = texelFetch(tex, c01, 0);
     vec4 br = texelFetch(tex, c11, 0);
 
-    if (bmidx == 0) {
+    if (bmidx == MODE_NGAMMA) {
         vec3 tl_g = tl.rgb*tl.rgb;
         vec3 tr_g = tr.rgb*tr.rgb;
         vec3 bl_g = bl.rgb*bl.rgb;
@@ -229,7 +266,7 @@ vec4 sampleBilinear(sampler2D tex, vec2 px, vec2 texSize, int bmidx, bool seamle
         float a = (tl.a*w00 + tr.a*w10 + bl.a*w01 + br.a*w11) / wsum;
         return vec4(gamma_mix, a);
     }
-    else if (bmidx == 2) {
+    else if (bmidx == MODE_NOKLAB) {
         vec3 ll = rgbToOklab(tl.rgb);
         vec3 lr = rgbToOklab(tr.rgb);
         vec3 bl2 = rgbToOklab(bl.rgb);
