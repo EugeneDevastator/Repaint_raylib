@@ -9,6 +9,7 @@ void BrushBlend_Shutdown(void);
 void BrushBlend_ApplyStamp(RenderTexture2D dstRT, const CollapsedBrush& brush,
     Texture2D brushTex, bool useTexture,
     float stampX, float stampY, float srcX, float srcY,
+    float srcRad, float srcAngleDeg,
     bool seamless, bool pixelPerfect);
 
 #endif

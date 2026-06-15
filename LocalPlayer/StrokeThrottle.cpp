@@ -60,7 +60,8 @@ int StrokeThrottle::DrawPending(AppState* state, int pixelBudget) {
 
             if (rt.id > 0)
                 BrushBlend_ApplyStamp(rt, pt.brush, brushTex, useTexture,
-                    pt.x, pt.y, pt.srcX, pt.srcY, m_seamless, m_pixelPerfect);
+                    pt.x, pt.y, pt.srcX, pt.srcY, pt.srcRad, pt.srcAngle,
+                    m_seamless, m_pixelPerfect);
 
             pixelBudget -= cost;
             m_dabIdx++;

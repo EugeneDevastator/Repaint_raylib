@@ -61,7 +61,7 @@ void TestBroker::poll(AppState* state) {
                 brushTex = state->brushTex[d->userTexIdx - 1].rt.texture;
                 useTexture = true;
             }
-            BrushBlend_ApplyStamp(rt, cb, brushTex, useTexture, d->x, d->y, d->srcX, d->srcY, false, false);
+            BrushBlend_ApplyStamp(rt, cb, brushTex, useTexture, d->x, d->y, d->srcX, d->srcY, 0.0f, 0.0f, false, false);
         }
         head = (head + 1) % CMD_CAPACITY;
     }

@@ -19,6 +19,8 @@ static int locBrushColor = -1, locCurve = -1;
 static int locSol = -1, locSol2op = -1, locSeed = -1;
 static int locBmidx = -1, locPreserveOp = -1;
 static int locSmudgeStrength = -1, locSmudgeOffsetUV = -1;
+static int locSmudgeSrcRad = -1, locSmudgeSrcAngle = -1;
+static int locCurAngleRad = -1, locRadOut = -1;
 static int locTexBlendVal = -1, locTexScale = -1, locTexOffset = -1;
 static int locUserTexOrigin = -1;
 static int locHasTexture = -1;
@@ -130,6 +132,10 @@ void BrushBlend_Init(void) {
     locPreserveOp     = GetShaderLocation(brushBlendShader, "preserveop");
     locSmudgeStrength = GetShaderLocation(brushBlendShader, "smudgeStrength");
     locSmudgeOffsetUV = GetShaderLocation(brushBlendShader, "smudgeOffsetUV");
+    locSmudgeSrcRad   = GetShaderLocation(brushBlendShader, "smudgeSrcRad");
+    locSmudgeSrcAngle = GetShaderLocation(brushBlendShader, "smudgeSrcAngle");
+    locCurAngleRad    = GetShaderLocation(brushBlendShader, "curAngleRad");
+    locRadOut         = GetShaderLocation(brushBlendShader, "radOut");
     locTexBlendVal    = GetShaderLocation(brushBlendShader, "texBlendVal");
     locTexScale       = GetShaderLocation(brushBlendShader, "texScale");
     locTexOffset      = GetShaderLocation(brushBlendShader, "texOffset");
@@ -180,6 +186,7 @@ void BrushBlend_ApplyStamp(
     Texture2D brushTex, bool useTexture,
     float stampX, float stampY,
     float srcX,   float srcY,
+    float srcRad, float srcAngleDeg,
     bool seamless, bool pixelPerfect
 ) {
     if (!inited || dstRT.id == 0) return;
@@ -297,6 +304,11 @@ void BrushBlend_ApplyStamp(
     SetShaderValue(brushBlendShader, locPreserveOp,     &preserveop, SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locSmudgeStrength, &smudge,     SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locSmudgeOffsetUV, offsetUV,    SHADER_UNIFORM_VEC2);
+    float smudgeSrcAngleRad = srcAngleDeg * (3.14159265f / 180.0f);
+    SetShaderValue(brushBlendShader, locSmudgeSrcRad,   &srcRad,     SHADER_UNIFORM_FLOAT);
+    SetShaderValue(brushBlendShader, locSmudgeSrcAngle, &smudgeSrcAngleRad, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(brushBlendShader, locCurAngleRad,    &angleRad,   SHADER_UNIFORM_FLOAT);
+    SetShaderValue(brushBlendShader, locRadOut,         &radOut,     SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locTexBlendVal,    &tbv,        SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locTexScale,       &ts,         SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locTexOffset,      texOff,      SHADER_UNIFORM_VEC2);

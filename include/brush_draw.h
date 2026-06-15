@@ -42,6 +42,7 @@ struct CollapsedBrush {
 // ── Point output from DrawLinear (replaces C callback) ─────────────
 struct DabPoint {
     float x, y, srcX, srcY;
+    float srcRad, srcAngle;   // source dab radius + rotation (degrees) for smudge transform
     CollapsedBrush brush;
 };
 
