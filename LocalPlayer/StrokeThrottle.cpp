@@ -23,8 +23,23 @@ int StrokeThrottle::DrawPending(AppState* state, int pixelBudget) {
             m_userTexIdx = seg.userTexIdx;
             m_seamless = seg.seamless != 0;
             m_pixelPerfect = seg.pixelPerfect != 0;
+            if (seg.isStrokeStart) m_hasPrevAngle = false;
+            // Forward last dab's angle so next segment's first dab gets a correct delta
+            if (m_hasPrevAngle)
+                seg.brushFrom.resangle = m_lastSegEndAngle;
+
             SegResult r;
             m_dabCount = DrawLinear(seg, 0, 0.0f, m_dabBuf, DAB_CAP, &r);
+
+            if (m_dabCount > 0) {
+                if (!m_hasPrevAngle) {
+                    // First segment: no previous dab to chain from, first dab's delta = 0
+                    m_dabBuf[0].srcAngle = m_dabBuf[0].brush.resangle;
+                }
+                m_lastSegEndAngle = m_dabBuf[m_dabCount - 1].brush.resangle;
+                m_hasPrevAngle = true;
+            }
+
             printf("[THR] unpacked seg: %d dabs, rad=%.1f, spacing=%.2f\n",
                 m_dabCount, seg.brushFrom.rad_out_px, seg.brushFrom.spacing);
             fflush(stdout);
@@ -60,7 +75,8 @@ int StrokeThrottle::DrawPending(AppState* state, int pixelBudget) {
 
             if (rt.id > 0)
                 BrushBlend_ApplyStamp(rt, pt.brush, brushTex, useTexture,
-                    pt.x, pt.y, pt.srcX, pt.srcY, m_seamless, m_pixelPerfect);
+                    pt.x, pt.y, pt.srcX, pt.srcY, pt.srcRad, pt.srcAngle,
+                    m_seamless, m_pixelPerfect);
 
             pixelBudget -= cost;
             m_dabIdx++;

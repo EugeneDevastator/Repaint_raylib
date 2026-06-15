@@ -274,6 +274,8 @@ int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
         if (outPoints) {
             outPoints[0].x = from.x; outPoints[0].y = from.y;
             outPoints[0].srcX = seg.smudgeSrcX; outPoints[0].srcY = seg.smudgeSrcY;
+            outPoints[0].srcRad = seg.brushFrom.rad_out_px;
+            outPoints[0].srcAngle = seg.brushFrom.resangle;
             outPoints[0].brush = seg.brushFrom;
         }
         res->lastDabPos = Vector2{from.x, from.y};
@@ -321,6 +323,8 @@ int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
     int count = 0;
     float lastSrcX = seg.smudgeSrcX;
     float lastSrcY = seg.smudgeSrcY;
+    float lastSrcRad = seg.brushFrom.rad_out_px;
+    float lastSrcAngle = seg.brushFrom.resangle;
 
     while (count < maxOut) {
         // 1. Estimate next position using last (jittered) radius
@@ -353,8 +357,8 @@ int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
         CollapsedBrush dabCB = BlendBrushes(seg.brushFrom, seg.brush, k);
         dabCB.rad_out_px = nextRadUnJit;
 
-        // Per-dab rotation: use curve tangent direction if initAngle is set
-        if (seg.initAngle != 0.0f) {
+        // Per-dab rotation: always use curve tangent direction
+        {
             float t = nextArc / totalLen;
             if (t < 0) t = 0; if (t > 1) t = 1;
             int idx = (int)(t * 64);
@@ -375,10 +379,14 @@ int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
             outPoints[count].y = pos.y;
             outPoints[count].srcX = lastSrcX;
             outPoints[count].srcY = lastSrcY;
+            outPoints[count].srcRad = lastSrcRad;
+            outPoints[count].srcAngle = lastSrcAngle;
             outPoints[count].brush = dabCB;
         }
         lastSrcX = pos.x;
         lastSrcY = pos.y;
+        lastSrcRad = dabCB.rad_out_px;
+        lastSrcAngle = dabCB.resangle;
 
         lastDabPos = nextArc;
         lastDabRad = dabCB.rad_out_px;  // JITTERED — actual placed size
@@ -415,6 +423,7 @@ void DrawSegment(const SegmentData& dseg, RenderTexture2D rt, Texture2D brushTex
     for (int i = 0; i < cnt; i++)
         BrushBlend_ApplyStamp(rt, pts[i].brush, brushTex, useTexture,
                               pts[i].x, pts[i].y, pts[i].srcX, pts[i].srcY,
+                              pts[i].srcRad, pts[i].srcAngle,
                               seamless, pixelPerfect);
 }
 

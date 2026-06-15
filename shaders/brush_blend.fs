@@ -14,6 +14,8 @@ uniform float seed;
 uniform float preserveop;
 uniform float smudgeStrength;
 uniform vec2  smudgeOffsetUV;  // pixel-space offset
+uniform float smudgeSrcRad;      // source dab radius (for smudge transform)
+uniform float smudgeAngleDelta;  // srcAngleDeg - curAngleDeg in radians
 uniform float texBlendVal;
 uniform float texScale;
 uniform vec2  texOffset;
@@ -120,9 +122,14 @@ void main() {
     //    return;
     //}
 
-float cloneOpacity = smudgeStrength;
+    float cloneOpacity = smudgeStrength;
     if (cloneOpacity > 0.000001) {
-        vec2 srcPx = outCanvasPx - smudgeOffsetUV;
+        vec2 stampPosPx = vec2(stampCenter.x * canvasSize.x, (1.0 - stampCenter.y) * canvasSize.y);
+        vec2 rel = (outCanvasPx - stampPosPx) * (smudgeSrcRad / radOut);
+        float a = smudgeAngleDelta;
+        float c = cos(a), s = sin(a);
+        vec2 rot = vec2(rel.x*c - rel.y*s, rel.x*s + rel.y*c);
+        vec2 srcPx = (stampPosPx - smudgeOffsetUV) + rot;
         if (uSeamless)
             srcPx = mod(srcPx, canvasSize);
         else

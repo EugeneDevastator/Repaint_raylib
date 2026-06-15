@@ -12,7 +12,6 @@ StrokeEmitter::StrokeEmitter(StrokeThrottle* throttle)
     : m_throttle(throttle), m_active(false), m_emittedAny(false) {
     m_splineCount = 0;
     m_processedCount = 0;
-    m_accumDist = 0;
     m_initDirSet = false;
     m_prevSegLen = 0;
 }
@@ -39,37 +38,37 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
     m_initDirSet = false;
     m_splineCount = 1;
     m_processedCount = 0;
-    m_accumDist = 0;
-    m_lastInputPos = start;
     memset(m_splinePts, 0, sizeof(m_splinePts));
     m_splinePts[0] = start;
     m_segEpCount = 0;
 
     // ── Emit first dab immediately at stroke start ────────────────
-    CollapsedBrush cb = CollapseBrushParams(e.brush, e.initAngle, e.toolMode);
-    SegmentData dseg;
-    memset(&dseg, 0, sizeof(dseg));
-    dseg.pos1 = dseg.pos2 = start;
-    dseg.ctrl0 = dseg.ctrl3 = dseg.pos1;
-    dseg.brushFrom = dseg.brush = cb;
-    dseg.tool     = eSingleStamp;
-    dseg.seamless = g_seamlessPaint ? 1 : 0;
-    dseg.pixelPerfect = g_pixelPerfect ? 1 : 0;
-    dseg.seed     = e.brush.seed;
-    dseg.smudgeSrcX = start.x;
-    dseg.smudgeSrcY = start.y;
-    dseg.targetType = m_targetType;
-    dseg.targetId   = m_targetId;
-    dseg.userTexIdx = m_userTexIdx;
-    dseg.dabOffset  = 0;
-    dseg.initAngle  = e.initAngle;
+    if (isFirstDabPainted) {
+        CollapsedBrush cb = CollapseBrushParams(e.brush, e.initAngle, e.toolMode);
+        SegmentData dseg;
+        memset(&dseg, 0, sizeof(dseg));
+        dseg.pos1 = dseg.pos2 = start;
+        dseg.ctrl0 = dseg.ctrl3 = dseg.pos1;
+        dseg.brushFrom = dseg.brush = cb;
+        dseg.tool     = eSingleStamp;
+        dseg.seamless = g_seamlessPaint ? 1 : 0;
+        dseg.pixelPerfect = g_pixelPerfect ? 1 : 0;
+        dseg.seed     = e.brush.seed;
+        dseg.smudgeSrcX = start.x;
+        dseg.smudgeSrcY = start.y;
+        dseg.targetType = m_targetType;
+        dseg.targetId   = m_targetId;
+        dseg.userTexIdx = m_userTexIdx;
+        dseg.dabOffset  = 0;
+        dseg.initAngle  = e.initAngle;
 
-    m_throttle->Push(dseg);
-    if (g_recorder) g_recorder->on_segment(dseg);
-    if (g_broker)   g_broker->on_segment(dseg);
+        m_throttle->Push(dseg);
+        if (g_recorder) g_recorder->on_segment(dseg);
+        if (g_broker)   g_broker->on_segment(dseg);
 
-    m_emittedAny = true;
-    m_lastDabRad = cb.rad_out_px;
+        m_emittedAny = true;
+        m_lastDabRad = cb.rad_out_px;
+    }
 }
 
 void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 ctrl3,
@@ -138,6 +137,7 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
     dseg.initAngle  = initAngle;
 
     SegDrawer_SetSegmentStart(m_lastDabRad, m_lastDabPos, &dseg);
+    if (!m_emittedAny) dseg.isStrokeStart = 1;
 
     if (m_segEpCount + 1 < DBG_SEG_PTS) {
         m_segEndpoints[m_segEpCount++] = dseg.pos1;
@@ -182,8 +182,10 @@ void StrokeEmitter::handlePoint(const InputEntry& e) {
     }
 
     float threshold;
-    if (g_strokeThrottle <= 0.0f) {
-        float sizeMul = 0.5;//powf(16.0f, BParam_GetValue(&bpSizeMul) / 128.0f - 1.0f);
+    if (g_strokeSmoothingMode == SMOOTH_MODE_SMOOTH) {
+        threshold = fmaxf(g_strokeThrottle, 0.5f);
+    } else if (g_strokeThrottle <= 0.0f) {
+        float sizeMul = 0.5;
         threshold = GetModVal(&bpSize) * sizeMul;
         if (m_layerScale > 0.001f && fabsf(m_layerScale - 1.0f) > 0.0001f)
             threshold *= m_layerScale;
@@ -191,22 +193,15 @@ void StrokeEmitter::handlePoint(const InputEntry& e) {
     } else {
         threshold = fmaxf(g_strokeThrottle, 0.5f);
     }
-    if (m_splineCount < 4) threshold = fminf(threshold, 5.0f);
 
-    float dist = Dist2D(m_lastInputPos, pos);
-    m_accumDist += dist;
-    m_lastInputPos = pos;
-
-    if (m_accumDist >= threshold) {
+    if (Dist2D(m_splinePts[m_splineCount - 1], pos) >= threshold) {
         if (m_splineCount < 256) {
             m_splinePts[m_splineCount++] = pos;
         } else {
             memmove(m_splinePts, m_splinePts + 1, sizeof(Vector2) * 255);
             m_splinePts[255] = pos;
             if (m_processedCount > 0) m_processedCount--;
-            m_splinePts[m_processedCount] = m_lastDabPos;
         }
-        m_accumDist = 0;
     }
 
     int N = m_splineCount;
