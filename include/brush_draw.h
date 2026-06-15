@@ -51,7 +51,7 @@ struct SegmentData {
     Vector2 pos1, pos2;
     Vector2 ctrl0, ctrl3;
     CollapsedBrush brushFrom, brush;
-    uint8_t tool, seamless, pixelPerfect;
+    uint8_t tool, seamless, pixelPerfect, isStrokeStart;
     uint16_t seed;
     float smudgeSrcX, smudgeSrcY;
     uint8_t targetType, targetId;

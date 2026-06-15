@@ -23,6 +23,7 @@ int StrokeThrottle::DrawPending(AppState* state, int pixelBudget) {
             m_userTexIdx = seg.userTexIdx;
             m_seamless = seg.seamless != 0;
             m_pixelPerfect = seg.pixelPerfect != 0;
+            if (seg.isStrokeStart) m_hasPrevAngle = false;
             // Forward last dab's angle so next segment's first dab gets a correct delta
             if (m_hasPrevAngle)
                 seg.brushFrom.resangle = m_lastSegEndAngle;

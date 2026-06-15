@@ -302,7 +302,10 @@ void BrushBlend_ApplyStamp(
     SetShaderValue(brushBlendShader, locPreserveOp,     &preserveop, SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locSmudgeStrength, &smudge,     SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locSmudgeOffsetUV, offsetUV,    SHADER_UNIFORM_VEC2);
-    float angleDelta = (srcAngleDeg - brush.resangle) * (3.14159265f / 180.0f);
+    float deltaDeg = srcAngleDeg - brush.resangle;
+    while (deltaDeg > 180.0f) deltaDeg -= 360.0f;
+    while (deltaDeg < -180.0f) deltaDeg += 360.0f;
+    float angleDelta = deltaDeg * (3.14159265f / 180.0f);
     SetShaderValue(brushBlendShader, locSmudgeSrcRad,    &srcRad,     SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locSmudgeAngleDelta, &angleDelta, SHADER_UNIFORM_FLOAT);
     SetShaderValue(brushBlendShader, locRadOut,          &radOut,     SHADER_UNIFORM_FLOAT);

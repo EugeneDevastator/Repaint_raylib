@@ -357,8 +357,8 @@ int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
         CollapsedBrush dabCB = BlendBrushes(seg.brushFrom, seg.brush, k);
         dabCB.rad_out_px = nextRadUnJit;
 
-        // Per-dab rotation: use curve tangent direction if initAngle is set
-        if (seg.initAngle != 0.0f) {
+        // Per-dab rotation: always use curve tangent direction
+        {
             float t = nextArc / totalLen;
             if (t < 0) t = 0; if (t > 1) t = 1;
             int idx = (int)(t * 64);

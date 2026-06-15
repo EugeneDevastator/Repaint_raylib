@@ -12,7 +12,6 @@ public:
 
     void Push(const SegmentData& seg);
     int  DrawPending(AppState* state, int pixelBudget);
-    void ResetSmudgeAngle() { m_hasPrevAngle = false; }
 
 private:
     SegmentData m_segQ[SEG_CAP];

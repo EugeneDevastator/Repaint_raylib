@@ -17,7 +17,6 @@ StrokeEmitter::StrokeEmitter(StrokeThrottle* throttle)
 }
 
 void StrokeEmitter::handleBegin(const InputEntry& e) {
-    m_throttle->ResetSmudgeAngle();
     m_active = true;
     m_brushFrom = e.brush;
     m_emittedAny = false;
@@ -138,6 +137,7 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
     dseg.initAngle  = initAngle;
 
     SegDrawer_SetSegmentStart(m_lastDabRad, m_lastDabPos, &dseg);
+    if (!m_emittedAny) dseg.isStrokeStart = 1;
 
     if (m_segEpCount + 1 < DBG_SEG_PTS) {
         m_segEndpoints[m_segEpCount++] = dseg.pos1;
