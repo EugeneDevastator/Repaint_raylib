@@ -24,6 +24,11 @@ private:
     // Cached segment metadata for current dab batch
     uint8_t m_targetType, m_targetId, m_userTexIdx;
     bool m_seamless, m_pixelPerfect;
+
+    // Angle tracking across segments: forward last dab's angle so
+    // the first dab of the next segment gets a correct angle delta.
+    float m_lastSegEndAngle = 0.0f;
+    bool  m_hasPrevAngle = false;
 };
 
 extern StrokeThrottle* g_throttle;
