@@ -14,6 +14,7 @@ public:
 
     Vector2 m_lastDabPos;  // public for Distort/Contrast debug
     float m_lastDabRad;
+    bool isFirstDabPainted = true;
 
     // Debug
     static const int DBG_SEG_PTS = 2048;
@@ -42,8 +43,6 @@ private:
     bool  m_initDirSet;
 
     int m_processedCount;
-    float m_accumDist;
-    Vector2 m_lastInputPos;
 
     void handleBegin(const InputEntry& e);
     void handlePoint(const InputEntry& e);
