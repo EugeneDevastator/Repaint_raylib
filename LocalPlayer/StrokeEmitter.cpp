@@ -17,6 +17,7 @@ StrokeEmitter::StrokeEmitter(StrokeThrottle* throttle)
 }
 
 void StrokeEmitter::handleBegin(const InputEntry& e) {
+    m_throttle->ResetSmudgeAngle();
     m_active = true;
     m_brushFrom = e.brush;
     m_emittedAny = false;
