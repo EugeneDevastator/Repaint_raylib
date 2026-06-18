@@ -59,8 +59,9 @@ void Preset_CaptureFromCurrent(BrushPreset* p, AppState* state) {
     p->useTexLumAsAlpha = state->currentBrush.Realb.useTexLumAsAlpha;
     p->texUseRGB       = state->currentBrush.Realb.texUseRGB;
 
-    if (state->activeBrushTex >= 0 && state->activeBrushTex < state->brushTexCount)
-        snprintf(p->texName, sizeof(p->texName), "%s", state->brushTex[state->activeBrushTex].name);
+    TexSlot* ts = TM_Get(state->activeBrushSlot);
+    if (ts)
+        snprintf(p->texName, sizeof(p->texName), "%s", ts->name);
     else
         p->texName[0] = '\0';
 
@@ -114,14 +115,19 @@ void Preset_ApplyToCurrent(const BrushPreset* p, AppState* state) {
     state->currentBrush.Realb.preserveop      = p->preserveop ? 1 : 0;
 
     if (p->texName[0]) {
-        for (int ti = 0; ti < state->brushTexCount; ti++) {
-            if (strcmp(state->brushTex[ti].name, p->texName) == 0) {
-                state->activeBrushTex = ti;
+        bool found = false;
+        for (int s = 0; s < TM_SLOTS_PER_BUCKET; s++) {
+            TexSlotID id = {TM_BUCKET_USER, (uint8_t)s};
+            TexSlot* ts = TM_Get(id);
+            if (ts && strcmp(ts->name, p->texName) == 0) {
+                state->activeBrushSlot = id;
+                found = true;
                 break;
             }
         }
+        if (!found) state->activeBrushSlot = TM_INVALID_SLOT;
     } else {
-        state->activeBrushTex = -1;
+        state->activeBrushSlot = TM_INVALID_SLOT;
     }
 
     extern bool g_seamlessPaint;

@@ -54,37 +54,37 @@ void ViewportHUD_Draw(AppState* state) {
     DrawRectangleRec(vpBounds, Color{55, 55, 55, 255});
 
     // Edit texture mode
-    if (state->editTexMode && state->activeBrushTex >= 0 &&
-        state->activeBrushTex < state->brushTexCount &&
-        state->brushTex[state->activeBrushTex].rt.id > 0)
-    {
-        int tw = state->brushTex[state->activeBrushTex].w;
-        int th = state->brushTex[state->activeBrushTex].h;
-        float dstX = -state->camera.target.x * state->camera.zoom + state->camera.offset.x;
-        float dstY = -state->camera.target.y * state->camera.zoom + state->camera.offset.y;
-        float dstW = tw * state->camera.zoom;
-        float dstH = th * state->camera.zoom;
-        Rectangle dstRect = {dstX, dstY, dstW, dstH};
+    if (state->editTexMode && TM_IsValid(state->activeBrushSlot)) {
+        TexSlot* bt = TM_Get(state->activeBrushSlot);
+        if (bt && bt->rt.id > 0) {
+            int tw = bt->w;
+            int th = bt->h;
+            float dstX = -state->camera.target.x * state->camera.zoom + state->camera.offset.x;
+            float dstY = -state->camera.target.y * state->camera.zoom + state->camera.offset.y;
+            float dstW = tw * state->camera.zoom;
+            float dstH = th * state->camera.zoom;
+            Rectangle dstRect = {dstX, dstY, dstW, dstH};
 
-        // Cached checker backdrop — rebuild only if size changed
-        if (g_editCheckerTex.id == 0 || g_editCheckerW != tw || g_editCheckerH != th) {
-            if (g_editCheckerTex.id > 0) UnloadTexture(g_editCheckerTex);
-            Image img = GenImageColor(tw, th, BLANK);
-            for (int y = 0; y < th; y += 8)
-                for (int x = 0; x < tw; x += 8) {
-                    bool light = ((x / 8) + (y / 8)) % 2 == 0;
-                    Color col = light ? Color{70, 70, 75, 255} : Color{55, 55, 60, 255};
-                    ImageDrawRectangle(&img, x, y, 8, 8, col);
-                }
-            g_editCheckerTex = LoadTextureFromImage(img);
-            UnloadImage(img);
-            g_editCheckerW = tw;
-            g_editCheckerH = th;
+            // Cached checker backdrop — rebuild only if size changed
+            if (g_editCheckerTex.id == 0 || g_editCheckerW != tw || g_editCheckerH != th) {
+                if (g_editCheckerTex.id > 0) UnloadTexture(g_editCheckerTex);
+                Image img = GenImageColor(tw, th, BLANK);
+                for (int y = 0; y < th; y += 8)
+                    for (int x = 0; x < tw; x += 8) {
+                        bool light = ((x / 8) + (y / 8)) % 2 == 0;
+                        Color col = light ? Color{70, 70, 75, 255} : Color{55, 55, 60, 255};
+                        ImageDrawRectangle(&img, x, y, 8, 8, col);
+                    }
+                g_editCheckerTex = LoadTextureFromImage(img);
+                UnloadImage(img);
+                g_editCheckerW = tw;
+                g_editCheckerH = th;
+            }
+            DrawTexturePro(g_editCheckerTex, Rectangle{0, 0, (float)tw, (float)th},
+                dstRect, Vector2{0, 0}, 0.0f, WHITE);
+            DrawTexturePro(bt->rt.texture,
+                Rectangle{0, 0, (float)tw, (float)-th}, dstRect, Vector2{0, 0}, 0.0f, WHITE);
         }
-        DrawTexturePro(g_editCheckerTex, Rectangle{0, 0, (float)tw, (float)th},
-            dstRect, Vector2{0, 0}, 0.0f, WHITE);
-        DrawTexturePro(state->brushTex[state->activeBrushTex].rt.texture,
-            Rectangle{0, 0, (float)tw, (float)-th}, dstRect, Vector2{0, 0}, 0.0f, WHITE);
     }
 
     bool usePresent = GetPresentInited();
@@ -153,9 +153,9 @@ void ViewportHUD_Draw(AppState* state) {
 
             Texture2D bt = {0};
             bool useTex = false;
-            if (state->activeBrushTex >= 0 && state->activeBrushTex < state->brushTexCount) {
-                bt = state->brushTex[state->activeBrushTex].rt.texture;
-                useTex = true;
+            if (TM_IsValid(state->activeBrushSlot)) {
+                TexSlot* ts = TM_Get(state->activeBrushSlot);
+                if (ts) { bt = ts->rt.texture; useTex = true; }
             }
 
             // Copy the visible canvas area as background (needed for smudge, harmless for paint)

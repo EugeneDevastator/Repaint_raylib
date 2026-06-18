@@ -1,6 +1,7 @@
 #include "layerstack.h"
 #include "RaylibUtils.h"
 #include "undo.h"
+#include "texture_manager.h"
 #include "rlgl.h"
 #include "external/glad.h"
 #include <math.h>
@@ -27,6 +28,7 @@ static struct {
     sLayerProps* prop;
     RenderTexture2D* rt;
     Texture2D* tex;
+    TexSlotID* slotID;   // TM slot for this layer (registered via TM_Register)
     int count;
     int renderW, renderH;
     RenderTexture2D accumA, accumB, layerTransRT;
@@ -78,6 +80,21 @@ static bool LoadBlendShader(void) {
 
 // ── Helper: unload a single slot's GPU/CPU resources (no array shift) ──
 static void UnloadLayerSlotResources(int idx) {
+    // Unregister from TM if no other layer shares this slot
+    if (TM_IsValid(LS.slotID[idx])) {
+        bool shared = false;
+        TexSlotID sid = LS.slotID[idx];
+        for (int j = 0; j < LS.count; j++) {
+            if (j != idx && LS.slotID[j].bucket == sid.bucket && LS.slotID[j].slot == sid.slot) {
+                shared = true;
+                break;
+            }
+        }
+        if (!shared) {
+            TM_Remove(LS.slotID[idx]);
+        }
+        LS.slotID[idx] = TM_INVALID_SLOT;
+    }
     // Check if any other layer shares this RT — skip unloading if so
     bool shared = false;
     if(LS.rt[idx].id>0) {
@@ -108,6 +125,7 @@ static void ShiftLayersUp(int from, int to) {
     for(int i=from;i>to;i--){
         LS.img[i]=LS.img[i-1]; LS.prop[i]=LS.prop[i-1];
         LS.rt[i]=LS.rt[i-1]; LS.tex[i]=LS.tex[i-1];
+        LS.slotID[i]=LS.slotID[i-1];
     }
 }
 
@@ -116,6 +134,7 @@ static void ShiftLayersDown(int from, int to) {
     for(int i=from;i<to;i++){
         LS.img[i]=LS.img[i+1]; LS.prop[i]=LS.prop[i+1];
         LS.rt[i]=LS.rt[i+1]; LS.tex[i]=LS.tex[i+1];
+        LS.slotID[i]=LS.slotID[i+1];
     }
 }
 
@@ -130,6 +149,9 @@ static void InitLayerSlot(int idx, int w, int h) {
     LS.prop[idx].blendmode=bmGamma; LS.prop[idx].mat[0]=1; LS.prop[idx].mat[4]=1;
     LS.prop[idx].threshold=0; LS.prop[idx].feather=1;
     LS.prop[idx].layerW=w; LS.prop[idx].layerH=h;
+    char name[64]; snprintf(name, sizeof(name), "Layer %d", idx);
+    LS.slotID[idx]=TM_Register(TM_BUCKET_LAYER, LS.rt[idx], LS.img[idx],
+                                name, false, w, h);
 }
 
 // ── Helper: rebuild tex[idx] from img[idx] with aliasing guard ──
@@ -164,7 +186,7 @@ void LayerStack_Shutdown(void) {
     if(LS.shaderInited){ UnloadShader(LS.blendShader); LS.shaderInited=false; }
     if(LS.presentInited){ UnloadShader(LS.presentShader); LS.presentInited=false; }
     for(int i=0;i<LS.count;i++) UnloadLayerSlotResources(i);
-    free(LS.img); free(LS.prop); free(LS.rt); free(LS.tex);
+    free(LS.img); free(LS.prop); free(LS.rt); free(LS.tex); free(LS.slotID);
     LS={0};
 }
 
@@ -190,9 +212,11 @@ static void ReallocArrays(int n) {
     LS.prop=(sLayerProps*)realloc(LS.prop,n*sizeof(sLayerProps));
     LS.rt=(RenderTexture2D*)realloc(LS.rt,n*sizeof(RenderTexture2D));
     LS.tex=(Texture2D*)realloc(LS.tex,n*sizeof(Texture2D));
+    LS.slotID=(TexSlotID*)realloc(LS.slotID,n*sizeof(TexSlotID));
     if(n>LS.count){
         memset(&LS.rt[LS.count],0,(n-LS.count)*sizeof(RenderTexture2D));
         memset(&LS.tex[LS.count],0,(n-LS.count)*sizeof(Texture2D));
+        for(int i=LS.count;i<n;i++) LS.slotID[i]=TM_INVALID_SLOT;
     }
 }
 
@@ -233,6 +257,10 @@ void LayerStack_DuplicateLayer(int idx) {
     LS.rt[di]=Load16BitRT(lw,lh);
     CopyRT(LS.rt[di],LS.rt[idx],lw,lh);
     LS.tex[di]=LoadTextureFromImage(LS.img[di]);
+    // Register new RT with TM
+    char name[64]; snprintf(name, sizeof(name), "Layer %d (dup)", di);
+    LS.slotID[di]=TM_Register(TM_BUCKET_LAYER, LS.rt[di], LS.img[di],
+                               name, false, lw, lh);
     LS.count++; LS.dirty=true;
 }
 
@@ -249,6 +277,9 @@ void LayerStack_DuplicateAsInstance(int idx) {
     // Share RT and tex with the original
     LS.rt[di]=LS.rt[idx];
     LS.tex[di]=LS.tex[idx];
+    // Share TM slot — increment refcount
+    LS.slotID[di]=LS.slotID[idx];
+    TM_AddRef(LS.slotID[idx]);
     LS.count++; LS.dirty=true;
 }
 
@@ -256,9 +287,11 @@ void LayerStack_MoveLayer(int from, int to) {
     if(from<0||from>=LS.count||to<0||to>=LS.count||from==to) return;
     RenderTexture2D mvRT=LS.rt[from]; Texture2D mvTex=LS.tex[from];
     Image mvImg=LS.img[from]; sLayerProps mvProp=LS.prop[from];
+    TexSlotID mvSlot=LS.slotID[from];
     if(from<to) ShiftLayersDown(from,to);
     else        ShiftLayersUp(from,to);
     LS.img[to]=mvImg; LS.prop[to]=mvProp; LS.rt[to]=mvRT; LS.tex[to]=mvTex;
+    LS.slotID[to]=mvSlot;
     LS.dirty=true;
 }
 

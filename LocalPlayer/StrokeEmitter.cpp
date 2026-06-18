@@ -25,7 +25,8 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
     m_toolMode = e.toolMode;
     m_targetType = e.targetType;
     m_targetId = e.targetId;
-    m_userTexIdx = e.userTexIdx;
+    m_userTexBucket = e.userTexBucket;
+    m_userTexSlot = e.userTexSlot;
     m_layerScale = e.layerScale;
 
     Vector2 start = {e.x, e.y};
@@ -58,7 +59,8 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
         dseg.smudgeSrcY = start.y;
         dseg.targetType = m_targetType;
         dseg.targetId   = m_targetId;
-        dseg.userTexIdx = m_userTexIdx;
+        dseg.userTexBucket = m_userTexBucket;
+        dseg.userTexSlot = m_userTexSlot;
         dseg.dabOffset  = 0;
         dseg.initAngle  = e.initAngle;
 
@@ -132,9 +134,10 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
     dseg.smudgeSrcY = m_lastDabPos.y;
     dseg.targetType = m_targetType;
     dseg.targetId   = m_targetId;
-    dseg.userTexIdx = m_userTexIdx;
-    dseg.dabOffset  = 0;
-    dseg.initAngle  = initAngle;
+        dseg.userTexBucket = m_userTexBucket;
+        dseg.userTexSlot = m_userTexSlot;
+        dseg.dabOffset  = 0;
+        dseg.initAngle  = initAngle;
 
     SegDrawer_SetSegmentStart(m_lastDabRad, m_lastDabPos, &dseg);
     if (!m_emittedAny) dseg.isStrokeStart = 1;
@@ -287,7 +290,8 @@ void StrokeEmitter::handleEnd() {
         dseg.smudgeSrcY = m_lastDabPos.y;
         dseg.targetType = m_targetType;
         dseg.targetId   = m_targetId;
-        dseg.userTexIdx = m_userTexIdx;
+        dseg.userTexBucket = m_userTexBucket;
+        dseg.userTexSlot = m_userTexSlot;
         dseg.dabOffset  = 0;
         dseg.initAngle  = m_initAngle;
 

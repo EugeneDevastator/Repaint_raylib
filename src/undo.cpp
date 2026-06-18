@@ -1,25 +1,29 @@
 #include "undo.h"
 #include "repaint.h"
 #include "layerstack.h"
+#include "texture_manager.h"
 
-// ── Helpers to sync a brush texture RT ↔ CPU image ────────────────────────
+// ── Helpers to sync a brush texture RT ↔ CPU image via TextureManager ─────
+static TexSlot* GetUserTexSlot(AppState* state, int texIdx) {
+    TexSlotID id = {TM_BUCKET_USER, (uint8_t)texIdx};
+    return TM_Get(id);
+}
+
 static void SyncBrushTexFromRT(AppState* state, int texIdx) {
-    if (texIdx < 0 || texIdx >= state->brushTexCount) return;
-    BrushTexture* bt = &state->brushTex[texIdx];
-    if (bt->rt.id == 0) return;
-    Image img = LoadImageFromTexture(bt->rt.texture);
+    TexSlot* ts = GetUserTexSlot(state, texIdx);
+    if (!ts || ts->rt.id == 0) return;
+    Image img = LoadImageFromTexture(ts->rt.texture);
     if (img.data) {
-        if (bt->cpuImage.data) UnloadImage(bt->cpuImage);
-        bt->cpuImage = img;
+        if (ts->cpuImage.data) UnloadImage(ts->cpuImage);
+        ts->cpuImage = img;
     }
 }
 
 static void SyncBrushTexFromImage(AppState* state, int texIdx) {
-    if (texIdx < 0 || texIdx >= state->brushTexCount) return;
-    BrushTexture* bt = &state->brushTex[texIdx];
-    if (!bt->cpuImage.data || bt->rt.id == 0) return;
-    Texture2D tmp = LoadTextureFromImage(bt->cpuImage);
-    BeginTextureMode(bt->rt);
+    TexSlot* ts = GetUserTexSlot(state, texIdx);
+    if (!ts || !ts->cpuImage.data || ts->rt.id == 0) return;
+    Texture2D tmp = LoadTextureFromImage(ts->cpuImage);
+    BeginTextureMode(ts->rt);
     ClearBackground(BLANK);
     DrawTexture(tmp, 0, 0, WHITE);
     EndTextureMode();
@@ -28,10 +32,10 @@ static void SyncBrushTexFromImage(AppState* state, int texIdx) {
 
 void UndoManager::Snapshot(AppState* state, int idx, bool isTexture) {
     if (isTexture) {
-        if (idx < 0 || idx >= state->brushTexCount) return;
-        if (state->brushTex[idx].rt.id == 0) return;
+        TexSlot* ts = GetUserTexSlot(state, idx);
+        if (!ts || ts->rt.id == 0) return;
         SyncBrushTexFromRT(state, idx);
-        Image* src = &state->brushTex[idx].cpuImage;
+        Image* src = &ts->cpuImage;
         if (!src || !src->data) return;
         UndoEntry entry;
         entry.snapshot = ImageCopy(*src);
@@ -61,11 +65,12 @@ void UndoManager::Snapshot(AppState* state, int idx, bool isTexture) {
 
 bool UndoManager::Undo(AppState* state, int idx, bool isTexture) {
     if (isTexture) {
-        if (idx < 0 || idx >= state->brushTexCount) return false;
+        TexSlot* ts = GetUserTexSlot(state, idx);
+        if (!ts) return false;
         auto& st = m_texUndo[idx];
         if (st.empty()) return false;
         SyncBrushTexFromRT(state, idx);
-        Image* cur = &state->brushTex[idx].cpuImage;
+        Image* cur = &ts->cpuImage;
         if (!cur || !cur->data) return false;
         UndoEntry redo;
         redo.snapshot = ImageCopy(*cur);
@@ -103,11 +108,12 @@ bool UndoManager::Undo(AppState* state, int idx, bool isTexture) {
 
 bool UndoManager::Redo(AppState* state, int idx, bool isTexture) {
     if (isTexture) {
-        if (idx < 0 || idx >= state->brushTexCount) return false;
+        TexSlot* ts = GetUserTexSlot(state, idx);
+        if (!ts) return false;
         auto& st = m_texRedo[idx];
         if (st.empty()) return false;
         SyncBrushTexFromRT(state, idx);
-        Image* cur = &state->brushTex[idx].cpuImage;
+        Image* cur = &ts->cpuImage;
         if (!cur || !cur->data) return false;
         UndoEntry reundo;
         reundo.snapshot = ImageCopy(*cur);

@@ -76,14 +76,7 @@ typedef struct {
     bool instanced;      // shares RT/texture with another layer
 } sLayerProps;
 
-#define MAX_BRUSH_TEX 32
-#define BUILTIN_TEX_COUNT 4
-
-typedef struct {
-    int id; char name[64]; int w, h;
-    RenderTexture2D rt; Image cpuImage;
-    bool dirty; bool builtIn;
-} BrushTexture;
+#include "texture_manager.h"
 
 typedef struct {
     PackedFloat Prad_in, Prad_out;
@@ -180,9 +173,8 @@ struct AppState {
     int activeLayer;
     Camera2D camera;
     int mode, eraseMode;
-    BrushTexture brushTex[MAX_BRUSH_TEX];
-    int brushTexCount;
-    int activeBrushTex;
+    TexSlotID activeBrushSlot;
+    bool brushTexActive;
     int editTexMode;
     float initialAngle;
 };
@@ -308,12 +300,13 @@ void SyncLayerTexture(AppState* state, int layer);
 bool SaveRePaint(const char* path, Document* doc, AppState* state);
 bool LoadRePaint(const char* path, Document* doc, AppState* state);
 
-void BrushTex_Init(AppState* state);
-int  BrushTex_Add(AppState* state, const char* name, int w, int h);
-void BrushTex_Delete(AppState* state, int idx);
-void BrushTex_SetActive(AppState* state, int idx);
-void BrushTex_SyncAll(AppState* state);
-Texture2D BrushTex_GetThumb(AppState* state, int idx);
+void        BrushTex_Init(AppState* state);
+TexSlotID   BrushTex_Add(AppState* state, const char* name, int w, int h);
+void        BrushTex_Delete(AppState* state, TexSlotID id);
+void        BrushTex_SetActive(AppState* state, TexSlotID id);
+void        BrushTex_SyncAll(AppState* state);
+Texture2D   BrushTex_GetThumb(AppState* state, TexSlotID id);
+TexSlotID   BrushTex_GetSlot(AppState* state, int userTexSlot);
 
 extern Texture2D g_activeBrushTex, g_defaultBrushTex;
 

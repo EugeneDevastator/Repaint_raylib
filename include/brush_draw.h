@@ -55,7 +55,8 @@ struct SegmentData {
     uint16_t seed;
     float smudgeSrcX, smudgeSrcY;
     uint8_t targetType, targetId;
-    uint8_t userTexIdx;   // 0 = no texture, 1+ = (index+1) into state->brushTex[]
+    uint8_t userTexBucket;   // TM_BUCKET_USER typically, 0xFF = none
+    uint8_t userTexSlot;     // slot within bucket, 0xFF = none
     int dabOffset;
     float initAngle;    // base angle for per-dab rotation modulation; 0 = use baked resangle
 };

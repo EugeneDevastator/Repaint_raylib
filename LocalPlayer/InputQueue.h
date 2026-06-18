@@ -20,7 +20,8 @@ struct InputEntry {
     int toolMode;
     uint8_t targetType;
     uint8_t targetId;
-    uint8_t userTexIdx;   // 0 = no texture, 1+ = (index+1) into state->brushTex[]
+    uint8_t userTexBucket;  // TM_BUCKET_USER typically, 0xFF = none
+    uint8_t userTexSlot;    // slot within bucket, 0xFF = none
     float layerScale;
 };
 

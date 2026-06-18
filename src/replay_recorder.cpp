@@ -1,5 +1,6 @@
 #include "replay_recorder.h"
 #include "layerstack.h"
+#include "texture_manager.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -67,8 +68,10 @@ void ReplayRecorder::Play(AppState* state) {
 
         Texture2D replayTex = {0};
         bool replayUseTex = false;
-        if (dseg.userTexIdx > 0 && (dseg.userTexIdx - 1u) < (uint8_t)state->brushTexCount) {
-            replayTex = state->brushTex[dseg.userTexIdx - 1].rt.texture;
+        TexSlotID texId = {dseg.userTexBucket, dseg.userTexSlot};
+        TexSlot* ts = TM_Get(texId);
+        if (ts) {
+            replayTex = ts->rt.texture;
             replayUseTex = true;
         }
         DrawSegment(dseg, rt, replayTex, replayUseTex, dseg.seamless != 0, 0, dseg.pixelPerfect != 0);

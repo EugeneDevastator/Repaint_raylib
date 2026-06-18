@@ -114,23 +114,33 @@ bool SaveRePaint(const char* path, Document* doc, AppState* state) {
     }
 
     // 3. Serialize user textures (skip built-in defaults)
-    int tc = state->brushTexCount - BUILTIN_TEX_COUNT;
-    if (tc < 0) tc = 0;
-    size_t texTotalSz = 0;
-    int* texPngSizes = (int*)calloc(tc, sizeof(int));
-    unsigned char** texPngData = (unsigned char**)calloc(tc, sizeof(unsigned char*));
-    for (int i = 0; i < tc; i++) {
-        int idx = i + BUILTIN_TEX_COUNT;
-        Image texPngImg = state->brushTex[idx].cpuImage;
+    // Collect non-built-in textures from TM bucket 0
+    struct { TexSlotID id; uint8_t* png; int pngSz; } texBlobs[256];
+    int tc = 0;
+    for (int s = 0; s < TM_SLOTS_PER_BUCKET && tc < 256; s++) {
+        TexSlotID id = {TM_BUCKET_USER, (uint8_t)s};
+        TexSlot* ts = TM_Get(id);
+        if (!ts || ts->builtIn) continue;
+        Image texPngImg = ts->cpuImage;
         bool owned = false;
         if (texPngImg.data && texPngImg.format != PIXELFORMAT_UNCOMPRESSED_R8G8B8A8) {
             texPngImg = ImageCopy(texPngImg);
             ImageFormat(&texPngImg, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
             owned = true;
         }
-        texPngData[i] = ExportImageToMemory(texPngImg, ".png", &texPngSizes[i]);
+        int pngSz = 0;
+        uint8_t* png = ExportImageToMemory(texPngImg, ".png", &pngSz);
         if (owned) UnloadImage(texPngImg);
-        if (texPngData[i]) texTotalSz += 4 + 4 + 4 + 4 + 64 + texPngSizes[i];
+        texBlobs[tc].id = id;
+        texBlobs[tc].png = png;
+        texBlobs[tc].pngSz = pngSz;
+        tc++;
+    }
+
+    // Compute total texture section size
+    size_t texTotalSz = 0;
+    for (int i = 0; i < tc; i++) {
+        if (texBlobs[i].png) texTotalSz += 4 + 4 + 4 + 4 + 64 + texBlobs[i].pngSz;
     }
 
     // 4. Write final buffer
@@ -140,8 +150,8 @@ bool SaveRePaint(const char* path, Document* doc, AppState* state) {
     if (!buf) {
         for (int i = 0; i < lc; i++) free(blobs[i].propsData);
         MemFree(compPng);
-        for (int i = 0; i < tc; i++) if (texPngData[i]) MemFree(texPngData[i]);
-        free(texPngSizes); free(texPngData); return false;
+        for (int i = 0; i < tc; i++) if (texBlobs[i].png) MemFree(texBlobs[i].png);
+        return false;
     }
 
     uint8_t* p = buf;
@@ -167,22 +177,22 @@ bool SaveRePaint(const char* path, Document* doc, AppState* state) {
     /* User texture section (built-in defaults not saved) */
     _wu32(&p, (uint32_t)tc);
     for (int i = 0; i < tc; i++) {
-        int idx = i + BUILTIN_TEX_COUNT;
-        uint32_t nlen = (uint32_t)strnlen(state->brushTex[idx].name, 64);
+        TexSlot* ts = TM_Get(texBlobs[i].id);
+        if (!ts) continue;
+        uint32_t nlen = (uint32_t)strnlen(ts->name, 64);
         _wu32(&p, nlen);
-        _wcpy(&p, state->brushTex[idx].name, nlen);
-        _wu32(&p, (uint32_t)state->brushTex[idx].w);
-        _wu32(&p, (uint32_t)state->brushTex[idx].h);
-        _wu32(&p, (uint32_t)texPngSizes[i]);
-        if (texPngSizes[i] > 0) _wcpy(&p, texPngData[i], texPngSizes[i]);
+        _wcpy(&p, ts->name, nlen);
+        _wu32(&p, (uint32_t)ts->w);
+        _wu32(&p, (uint32_t)ts->h);
+        _wu32(&p, (uint32_t)texBlobs[i].pngSz);
+        if (texBlobs[i].pngSz > 0) _wcpy(&p, texBlobs[i].png, texBlobs[i].pngSz);
     }
 
     bool ok = SaveFileData(path, buf, (int)totalSz);
 
     for (int i = 0; i < lc; i++) free(blobs[i].propsData);
     MemFree(compPng);
-    for (int i = 0; i < tc; i++) if (texPngData[i]) MemFree(texPngData[i]);
-    free(texPngSizes); free(texPngData);
+    for (int i = 0; i < tc; i++) if (texBlobs[i].png) MemFree(texBlobs[i].png);
     free(buf);
     return ok;
 }
@@ -302,26 +312,20 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
 
     // Load textures (v2+)
     if (ver >= 2 && state != NULL) {
-        uint32_t tc = _ru32(&p);
-        if (ver < 3) {
-            for (int t = 0; t < state->brushTexCount; t++) {
-                if (state->brushTex[t].rt.id > 0) UnloadRenderTexture(state->brushTex[t].rt);
-                if (state->brushTex[t].cpuImage.data) UnloadImage(state->brushTex[t].cpuImage);
-            }
-            state->brushTexCount = 0;
-        } else {
-            for (int t = BUILTIN_TEX_COUNT; t < state->brushTexCount; t++) {
-                if (state->brushTex[t].rt.id > 0) UnloadRenderTexture(state->brushTex[t].rt);
-                if (state->brushTex[t].cpuImage.data) UnloadImage(state->brushTex[t].cpuImage);
-            }
-            memset(&state->brushTex[BUILTIN_TEX_COUNT], 0,
-                (MAX_BRUSH_TEX - BUILTIN_TEX_COUNT) * sizeof(BrushTexture));
-            state->brushTexCount = BUILTIN_TEX_COUNT;
+        // Remove existing non-built-in user textures
+        TexSlotID toRemove[256];
+        int removeCount = 0;
+        for (int s = 0; s < TM_SLOTS_PER_BUCKET && removeCount < 256; s++) {
+            TexSlotID id = {TM_BUCKET_USER, (uint8_t)s};
+            TexSlot* ts = TM_Get(id);
+            if (ts && !ts->builtIn) toRemove[removeCount++] = id;
         }
-        state->activeBrushTex = -1;
+        for (int i = 0; i < removeCount; i++) TM_Remove(toRemove[i]);
 
-        uint32_t maxTc = (ver < 3) ? MAX_BRUSH_TEX : (MAX_BRUSH_TEX - BUILTIN_TEX_COUNT);
-        if (tc > maxTc) tc = maxTc;
+        state->activeBrushSlot = TM_INVALID_SLOT;
+        state->brushTexActive = false;
+
+        uint32_t tc = _ru32(&p);
         for (uint32_t ti = 0; ti < tc; ti++) {
             uint32_t nlen = _ru32(&p);
             if (nlen > 63) nlen = 63;
@@ -330,15 +334,18 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
             uint32_t tw = _ru32(&p);
             uint32_t th = _ru32(&p);
             uint32_t tsz = _ru32(&p);
-            int idx = BrushTex_Add(state, name, (int)tw, (int)th);
-            if (idx >= 0 && tsz > 0 && (int)(p - fileData) + (int)tsz <= fileSz) {
+            TexSlotID id = BrushTex_Add(state, name, (int)tw, (int)th);
+            if (TM_IsValid(id) && tsz > 0 && (int)(p - fileData) + (int)tsz <= fileSz) {
                 Image timg = LoadImageFromMemory(".png", p, (int)tsz);
                 p += tsz;
                 if (timg.data) {
                     ImageFormat(&timg, PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
-                    UnloadImage(state->brushTex[idx].cpuImage);
-                    state->brushTex[idx].cpuImage = timg;
-                    state->brushTex[idx].dirty = true;
+                    TexSlot* ts = TM_Get(id);
+                    if (ts) {
+                        UnloadImage(ts->cpuImage);
+                        ts->cpuImage = timg;
+                        ts->dirty = true;
+                    }
                 }
             } else {
                 p += tsz;

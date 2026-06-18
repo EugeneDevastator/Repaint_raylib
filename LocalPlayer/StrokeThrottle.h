@@ -22,7 +22,7 @@ private:
     int m_dabIdx = 0;
 
     // Cached segment metadata for current dab batch
-    uint8_t m_targetType, m_targetId, m_userTexIdx;
+    uint8_t m_targetType, m_targetId, m_userTexBucket, m_userTexSlot;
     bool m_seamless, m_pixelPerfect;
 
     // Angle tracking across segments: forward last dab's angle so

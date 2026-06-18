@@ -17,7 +17,8 @@ static void PushDabSegment(ICommandBroker* b, float x, float y, float srcX, floa
     s.ctrl0 = s.ctrl3 = s.pos1;
     s.brushFrom = s.brush = cb;
     s.seed = brush.seed;
-    s.userTexIdx = 0;
+    s.userTexBucket = 0xFF;
+    s.userTexSlot = 0xFF;
     if (b) b->on_segment(s);
 }
 
@@ -159,12 +160,9 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         vp->inputPts[vp->inputLen++] = paintPos;
 
     // ── Texture editing mode ──────────────────────────────────────────
-    if (state->editTexMode && state->activeBrushTex >= 0 &&
-        state->activeBrushTex < state->brushTexCount &&
-        !state->brushTex[state->activeBrushTex].builtIn)
-    {
-        BrushTexture* bt = &state->brushTex[state->activeBrushTex];
-        if (bt->rt.id > 0 && (state->mode == eBrush || state->mode == eSmudge)) {
+    if (state->editTexMode && TM_IsValid(state->activeBrushSlot)) {
+        TexSlot* bt = TM_Get(state->activeBrushSlot);
+        if (bt && !bt->builtIn && bt->rt.id > 0 && (state->mode == eBrush || state->mode == eSmudge)) {
             float dstX = -state->camera.target.x * state->camera.zoom + state->camera.offset.x;
             float dstY = -state->camera.target.y * state->camera.zoom + state->camera.offset.y;
             float dstW = bt->w * state->camera.zoom;
@@ -178,7 +176,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             if (!vp->wasMouseDown) {
                 if (vp->inBounds && leftDown) {
                     Modulators_SnapRunState();
-                    if (state->undo) state->undo->Snapshot(state, state->activeBrushTex, true);
+                    if (state->undo) state->undo->Snapshot(state, state->activeBrushSlot.slot, true);
 
                     InputEntry be;
                     be.type = InputEntry::Begin;
@@ -187,8 +185,9 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     be.initAngle = state->initialAngle;
                     be.toolMode = state->mode;
                     be.targetType = 1;
-                    be.targetId = state->activeBrushTex;
-                    be.userTexIdx = 0;     // no pattern texture when editing a stamp
+                    be.targetId = state->activeBrushSlot.slot;
+                    be.userTexBucket = 0xFF;  // no pattern texture when editing a stamp
+                    be.userTexSlot = 0xFF;
                     be.layerScale = 1.0f;
                     be.timestamp = GetTime();
                     g_inputQueue.AddEntry(be);
@@ -239,7 +238,13 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     be.toolMode = state->mode;
                     be.targetType = 0;
                     be.targetId = active;
-                    be.userTexIdx = (state->activeBrushTex >= 0) ? (uint8_t)(state->activeBrushTex + 1) : 0;
+                    if (TM_IsValid(state->activeBrushSlot)) {
+                        be.userTexBucket = TM_BUCKET_USER;
+                        be.userTexSlot = state->activeBrushSlot.slot;
+                    } else {
+                        be.userTexBucket = 0xFF;
+                        be.userTexSlot = 0xFF;
+                    }
                     be.layerScale = layerScale;
                     be.timestamp = GetTime();
                     g_inputQueue.AddEntry(be);

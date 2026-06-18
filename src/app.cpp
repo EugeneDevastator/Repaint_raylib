@@ -162,13 +162,13 @@ void UpdateUI(AppState* state) {
     // Undo / Redo
     if (IsKeyDown(KEY_LEFT_CONTROL) && !IsKeyDown(KEY_LEFT_SHIFT) && IsKeyPressed(KEY_Z)) {
         if (state->undo) {
-            int idx = state->editTexMode ? state->activeBrushTex : state->activeLayer;
+            int idx = state->editTexMode ? state->activeBrushSlot.slot : state->activeLayer;
             state->undo->Undo(state, idx, state->editTexMode);
         }
     }
     if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyDown(KEY_LEFT_SHIFT) && IsKeyPressed(KEY_Z)) {
         if (state->undo) {
-            int idx = state->editTexMode ? state->activeBrushTex : state->activeLayer;
+            int idx = state->editTexMode ? state->activeBrushSlot.slot : state->activeLayer;
             state->undo->Redo(state, idx, state->editTexMode);
         }
     }
@@ -182,10 +182,16 @@ void UpdateUI(AppState* state) {
     if (IsKeyPressed(KEY_T)) {
         if (state->editTexMode) {
             state->editTexMode = 0;
-            state->activeBrushTex = -1;
-        } else if (state->brushTexCount > 0) {
+            state->activeBrushSlot = TM_INVALID_SLOT;
+        } else if (TM_Count(TM_BUCKET_USER) > 0) {
             state->editTexMode = 1;
-            if (state->activeBrushTex < 0) state->activeBrushTex = 0;
+            if (!TM_IsValid(state->activeBrushSlot)) {
+                // Find first valid slot
+                for (int s = 0; s < TM_SLOTS_PER_BUCKET; s++) {
+                    TexSlotID id = {TM_BUCKET_USER, (uint8_t)s};
+                    if (TM_IsValid(id)) { state->activeBrushSlot = id; break; }
+                }
+            }
         }
     }
 
@@ -410,10 +416,35 @@ void App_FileReload(void) {
 
 
 void App_FileSnap(void) {
+    /* If this is an unsaved new document, auto-save it first */
+    if (!g_currentFilePath[0]) {
+        time_t now = time(NULL);
+        struct tm* t = localtime(&now);
+        const char* appDir = GetApplicationDirectory();
+        char savePath[1024];
+        snprintf(savePath, sizeof(savePath), "%sSaves/auto_%04d%02d%02d_%02d%02d%02d.re.png",
+                 appDir,
+                 t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
+                 t->tm_hour, t->tm_min, t->tm_sec);
+
+        if (SaveRePaint(savePath, &g_state->doc, g_state)) {
+            int len = (int)strlen(savePath);
+            if (len < (int)sizeof(g_currentFilePath) - 1)
+                memcpy(g_currentFilePath, savePath, len + 1);
+            if (g_recorder) {
+                char rpPath[1024];
+                snprintf(rpPath, sizeof(rpPath), "%s.re.play", savePath);
+                g_recorder->Save(rpPath);
+            }
+            _updateWorkingDir(savePath);
+        }
+    }
+
     /* GPU composite + dither → 8-bit snapshot */
     Image flat = CompositeLayersWithDither(g_state);
 
     /* build path: Snaps/snap_YYYYMMDD_HHMMSS.png */
+    {
     time_t now = time(NULL);
     struct tm* t = localtime(&now);
     const char* appDir = GetApplicationDirectory();
@@ -425,6 +456,7 @@ void App_FileSnap(void) {
 
     ExportImage(flat, path);
     UnloadImage(flat);
+    }
 }
 
 /* ── App_Init ──────────────────────────────────────────────────────────── */
@@ -828,11 +860,8 @@ void App_Close(AppState* state) {
     Modulators_Shutdown();
     UnloadPenIcons();
     QuickPanel_Shutdown();
-    // Cleanup brush textures
-    for (int i = 0; i < state->brushTexCount; i++) {
-        if (state->brushTex[i].rt.id > 0) UnloadRenderTexture(state->brushTex[i].rt);
-        if (state->brushTex[i].cpuImage.data) UnloadImage(state->brushTex[i].cpuImage);
-    }
+    // Cleanup all textures via TextureManager
+    TM_Shutdown();
     if (g_dialogFont.texture.id > 0) UnloadFont(g_dialogFont);
     UIStyle::Shutdown();
     BrushBlend_Shutdown();

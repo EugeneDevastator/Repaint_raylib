@@ -12,7 +12,8 @@ struct TestBroker : ICommandBroker {
         d_RealBrush brush;
         uint8_t targetType;  // 0 = layer, 1 = texture
         uint8_t targetId;
-        uint8_t userTexIdx;
+        uint8_t userTexBucket;
+        uint8_t userTexSlot;
     };
 
     Dab queue[CMD_CAPACITY];
