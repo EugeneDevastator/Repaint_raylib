@@ -162,14 +162,16 @@ void UpdateUI(AppState* state) {
     // Undo / Redo
     if (IsKeyDown(KEY_LEFT_CONTROL) && !IsKeyDown(KEY_LEFT_SHIFT) && IsKeyPressed(KEY_Z)) {
         if (state->undo) {
-            int idx = state->editTexMode ? state->editTexSlot.slot : state->activeLayer;
-            state->undo->Undo(state, idx, state->editTexMode);
+            TexSlotID slot = state->editTexMode ? state->editTexSlot : LayerStack_GetSlotID(state->activeLayer);
+            if (TM_IsValid(slot))
+                state->undo->Undo(state, slot);
         }
     }
     if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyDown(KEY_LEFT_SHIFT) && IsKeyPressed(KEY_Z)) {
         if (state->undo) {
-            int idx = state->editTexMode ? state->editTexSlot.slot : state->activeLayer;
-            state->undo->Redo(state, idx, state->editTexMode);
+            TexSlotID slot = state->editTexMode ? state->editTexSlot : LayerStack_GetSlotID(state->activeLayer);
+            if (TM_IsValid(slot))
+                state->undo->Redo(state, slot);
         }
     }
 

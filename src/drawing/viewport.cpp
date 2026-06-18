@@ -107,9 +107,6 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         if (state->editTexMode || active < 0 || active >= LayerStack_Count())
             return worldPt;
         sLayerProps* lp = LayerStack_GetProps(active);
-        if (lp->mat[0] == 1.0f && lp->mat[1] == 0.0f && lp->mat[2] == 0.0f &&
-            lp->mat[3] == 0.0f && lp->mat[4] == 1.0f && lp->mat[5] == 0.0f)
-            return worldPt;
         float a = lp->mat[0], b = lp->mat[1], tx = lp->mat[2];
         float c = lp->mat[3], d = lp->mat[4], ty = lp->mat[5];
         float det = a * d - b * c;
@@ -129,11 +126,8 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
     // Subtract layer rotation so brush stamps appear upright in world space
     if (!state->editTexMode && active >= 0 && active < LayerStack_Count()) {
         sLayerProps* lp = LayerStack_GetProps(active);
-        if (lp->mat[0] != 1.0f || lp->mat[1] != 0.0f || lp->mat[2] != 0.0f ||
-            lp->mat[3] != 0.0f || lp->mat[4] != 1.0f || lp->mat[5] != 0.0f) {
-            float layerRot = atan2f(lp->mat[3], lp->mat[0]) * (180.0f / (float)M_PI);
-            adjustedAngle -= layerRot;
-        }
+        float layerRot = atan2f(lp->mat[3], lp->mat[0]) * (180.0f / (float)M_PI);
+        adjustedAngle -= layerRot;
     }
 
     // Compute average layer scale for brush radius adjustment.
@@ -144,13 +138,10 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
     float layerScale = 1.0f;
     if (!state->editTexMode && active >= 0 && active < LayerStack_Count()) {
         sLayerProps* lp = LayerStack_GetProps(active);
-        if (lp->mat[0] != 1.0f || lp->mat[1] != 0.0f || lp->mat[2] != 0.0f ||
-            lp->mat[3] != 0.0f || lp->mat[4] != 1.0f || lp->mat[5] != 0.0f) {
-            float sx = sqrtf(lp->mat[0] * lp->mat[0] + lp->mat[3] * lp->mat[3]);
-            float sy = sqrtf(lp->mat[1] * lp->mat[1] + lp->mat[4] * lp->mat[4]);
-            float avg = (sx + sy) * 0.5f;
-            if (avg > 0.001f) layerScale = 1.0f / avg;
-        }
+        float sx = sqrtf(lp->mat[0] * lp->mat[0] + lp->mat[3] * lp->mat[3]);
+        float sy = sqrtf(lp->mat[1] * lp->mat[1] + lp->mat[4] * lp->mat[4]);
+        float avg = (sx + sy) * 0.5f;
+        if (avg > 0.001f) layerScale = 1.0f / avg;
     }
 
     // Record raw input positions for debug (during active stroke)
@@ -173,7 +164,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             if (!vp->wasMouseDown) {
                 if (vp->inBounds && leftDown) {
                     Modulators_SnapRunState();
-                    if (state->undo) state->undo->Snapshot(state, state->editTexSlot.slot, true);
+                    if (state->undo) state->undo->Snapshot(state, state->editTexSlot);
 
                     InputEntry be;
                     be.type = InputEntry::Begin;
@@ -181,8 +172,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     be.brush = state->currentBrush.Realb;
                     be.initAngle = state->initialAngle;
                     be.toolMode = state->mode;
-                    be.targetType = 1;
-                    be.targetId = state->editTexSlot.slot;
+                    be.targetSlot = state->editTexSlot;
                     if (TM_IsValid(state->brushTexSlot)) {
                         be.userTexBucket = TM_BUCKET_USER;
                         be.userTexSlot = state->brushTexSlot.slot;
@@ -224,7 +214,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             if (state->mode == eBrush || state->mode == eSmudge) {
                 if (!vp->wasMouseDown) {
                     Modulators_SnapRunState();
-                    if (state->undo) state->undo->Snapshot(state, active);
+                    if (state->undo) state->undo->Snapshot(state, LayerStack_GetSlotID(active));
 
                     float origRad = state->currentBrush.Realb.rad_out;
                     state->currentBrush.Realb.rad_out *= layerScale;
@@ -236,8 +226,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     be.brush = state->currentBrush.Realb;
                     be.initAngle = adjustedAngle;
                     be.toolMode = state->mode;
-                    be.targetType = 0;
-                    be.targetId = active;
+                    be.targetSlot = LayerStack_GetSlotID(active);
                     if (TM_IsValid(state->brushTexSlot)) {
                         be.userTexBucket = TM_BUCKET_USER;
                         be.userTexSlot = state->brushTexSlot.slot;

@@ -10,8 +10,7 @@ struct TestBroker : ICommandBroker {
         float x, y;
         float srcX, srcY;
         d_RealBrush brush;
-        uint8_t targetType;  // 0 = layer, 1 = texture
-        uint8_t targetId;
+        TexSlotID targetSlot;
         uint8_t userTexBucket;
         uint8_t userTexSlot;
     };

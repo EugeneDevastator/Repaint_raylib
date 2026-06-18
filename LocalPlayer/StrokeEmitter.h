@@ -30,8 +30,7 @@ private:
     d_RealBrush m_brushFrom;
     bool m_emittedAny;
     uint16_t m_seed;
-    uint8_t m_targetType;
-    uint8_t m_targetId;
+    TexSlotID m_targetSlot;
     uint8_t m_userTexBucket;
     uint8_t m_userTexSlot;
     float m_initAngle;

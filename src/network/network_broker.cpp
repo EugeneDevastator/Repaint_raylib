@@ -261,8 +261,7 @@ void NetworkBroker::ProcessReceived(uint8_t hid, uint8_t* data, uint32_t size) {
             seg.seamless = 0;
             seg.smudgeSrcX = seg.pos1.x;
             seg.smudgeSrcY = seg.pos1.y;
-            seg.targetType = 0;
-            seg.targetId = act.layer;
+            seg.targetSlot = LayerStack_GetSlotID(act.layer);
             EnqueueRemoteSegment(seg);
         }
         break;

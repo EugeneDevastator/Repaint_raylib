@@ -23,8 +23,7 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
     m_seed = e.brush.seed;
     m_initAngle = e.initAngle;
     m_toolMode = e.toolMode;
-    m_targetType = e.targetType;
-    m_targetId = e.targetId;
+    m_targetSlot = e.targetSlot;
     m_userTexBucket = e.userTexBucket;
     m_userTexSlot = e.userTexSlot;
     m_layerScale = e.layerScale;
@@ -57,8 +56,7 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
         dseg.seed     = e.brush.seed;
         dseg.smudgeSrcX = start.x;
         dseg.smudgeSrcY = start.y;
-        dseg.targetType = m_targetType;
-        dseg.targetId   = m_targetId;
+        dseg.targetSlot = m_targetSlot;
         dseg.userTexBucket = m_userTexBucket;
         dseg.userTexSlot = m_userTexSlot;
         dseg.dabOffset  = 0;
@@ -132,9 +130,8 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
     dseg.seed      = m_seed;
     dseg.smudgeSrcX = m_lastDabPos.x;
     dseg.smudgeSrcY = m_lastDabPos.y;
-    dseg.targetType = m_targetType;
-    dseg.targetId   = m_targetId;
-        dseg.userTexBucket = m_userTexBucket;
+    dseg.targetSlot = m_targetSlot;
+    dseg.userTexBucket = m_userTexBucket;
         dseg.userTexSlot = m_userTexSlot;
         dseg.dabOffset  = 0;
         dseg.initAngle  = initAngle;
@@ -288,8 +285,7 @@ void StrokeEmitter::handleEnd() {
         dseg.seed = m_seed;
         dseg.smudgeSrcX = m_lastDabPos.x;
         dseg.smudgeSrcY = m_lastDabPos.y;
-        dseg.targetType = m_targetType;
-        dseg.targetId   = m_targetId;
+        dseg.targetSlot = m_targetSlot;
         dseg.userTexBucket = m_userTexBucket;
         dseg.userTexSlot = m_userTexSlot;
         dseg.dabOffset  = 0;

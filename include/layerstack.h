@@ -31,13 +31,15 @@ int            LayerStack_Count(void);
 sLayerProps*   LayerStack_GetProps(int idx);
 Image*         LayerStack_GetImage(int idx);
 RenderTexture2D LayerStack_GetRT(int idx);
-Texture2D       LayerStack_GetTex(int idx);
+TexSlotID      LayerStack_GetSlotID(int idx);
 int            LayerStack_RenderW(void);
 int            LayerStack_RenderH(void);
 
 // ── Sync (GPU ↔ CPU) ────────────────────────────────────────────────
 void LayerStack_SyncImageFromRT(int idx);
-void LayerStack_SyncLayerTex(int idx);
+
+// ── Reverse lookup ──────────────────────────────────────────────────
+int  LayerStack_FindLayerBySlot(TexSlotID slot);
 
 // Upload the CPU image to the GPU render target (CPU → GPU)
 void LayerStack_SyncRTFromImage(int idx);

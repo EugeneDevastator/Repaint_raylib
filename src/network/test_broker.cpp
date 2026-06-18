@@ -15,7 +15,6 @@ TestBroker::TestBroker() {
 
 void TestBroker::on_segment(const SegmentData& seg) {
     if (!appState) return;
-    int target = (seg.targetType == 1) ? seg.targetId : appState->activeLayer;
 
     int next = (tail + 1) % CMD_CAPACITY;
     if (next == head) return;
@@ -25,8 +24,7 @@ void TestBroker::on_segment(const SegmentData& seg) {
     queue[tail].srcX = seg.pos2.x;
     queue[tail].srcY = seg.pos2.y;
     queue[tail].brush = appState->currentBrush.Realb;
-    queue[tail].targetType = seg.targetType;
-    queue[tail].targetId = target;
+    queue[tail].targetSlot = seg.targetSlot;
     queue[tail].userTexBucket = seg.userTexBucket;
     queue[tail].userTexSlot = seg.userTexSlot;
     tail = next;
@@ -39,8 +37,7 @@ void TestBroker::on_segment(const SegmentData& seg) {
     queue[tail].srcX = seg.pos2.x + 200.0f;
     queue[tail].srcY = seg.pos2.y;
     queue[tail].brush = appState->currentBrush.Realb;
-    queue[tail].targetType = seg.targetType;
-    queue[tail].targetId = target;
+    queue[tail].targetSlot = seg.targetSlot;
     queue[tail].userTexBucket = seg.userTexBucket;
     queue[tail].userTexSlot = seg.userTexSlot;
     tail = next;
@@ -51,13 +48,8 @@ void TestBroker::poll(AppState* state) {
         Dab* d = &queue[head];
 
         RenderTexture2D rt = {0};
-        if (d->targetType == 1) {
-            TexSlotID id = {TM_BUCKET_USER, d->targetId};
-            TexSlot* ts = TM_Get(id);
-            if (ts && ts->rt.id > 0) rt = ts->rt;
-        } else if (d->targetId >= 0 && d->targetId < LayerStack_Count()) {
-            rt = LayerStack_GetRT(d->targetId);
-        }
+        TexSlot* ts = TM_Get(d->targetSlot);
+        if (ts && ts->rt.id > 0) rt = ts->rt;
 
         if (rt.id > 0) {
             CollapsedBrush cb = CollapseBrushParams(d->brush, 0.0f, eBrush);

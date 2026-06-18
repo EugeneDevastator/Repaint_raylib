@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include "raylib.h"
+#include "texture_manager.h"
 
 // ── Drawing-space brush (collapsed from UI parameters) ──────────────
 struct CollapsedBrush {
@@ -54,7 +55,7 @@ struct SegmentData {
     uint8_t tool, seamless, pixelPerfect, isStrokeStart;
     uint16_t seed;
     float smudgeSrcX, smudgeSrcY;
-    uint8_t targetType, targetId;
+    TexSlotID targetSlot;
     uint8_t userTexBucket;   // TM_BUCKET_USER typically, 0xFF = none
     uint8_t userTexSlot;     // slot within bucket, 0xFF = none
     int dabOffset;

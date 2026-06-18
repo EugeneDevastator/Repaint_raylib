@@ -19,8 +19,7 @@ int StrokeThrottle::DrawPending(AppState* state, int pixelBudget) {
         if (m_dabIdx >= m_dabCount) {
             if (m_segHead == m_segTail) break;
             SegmentData& seg = m_segQ[m_segHead];
-            m_targetType = seg.targetType;
-            m_targetId = seg.targetId;
+            m_targetSlot = seg.targetSlot;
             m_userTexBucket = seg.userTexBucket;
             m_userTexSlot = seg.userTexSlot;
             m_seamless = seg.seamless != 0;
@@ -62,27 +61,14 @@ int StrokeThrottle::DrawPending(AppState* state, int pixelBudget) {
             RenderTexture2D rt = {0};
             Texture2D brushTex = {0};
             bool useTexture = false;
-            if (m_targetType == 1) {
-                TexSlotID id = {TM_BUCKET_USER, m_targetId};
-                TexSlot* ts = TM_Get(id);
-                if (ts && ts->rt.id > 0) {
-                    rt = ts->rt;
-                    TexSlotID btId = {m_userTexBucket, m_userTexSlot};
-                    TexSlot* bts = TM_Get(btId);
-                    if (bts) {
-                        brushTex = bts->rt.texture;
-                        useTexture = true;
-                    }
-                }
-            } else {
-                if (m_targetId < LayerStack_Count()) {
-                    rt = LayerStack_GetRT(m_targetId);
-                    TexSlotID texId = {m_userTexBucket, m_userTexSlot};
-                    TexSlot* ts = TM_Get(texId);
-                    if (ts) {
-                        brushTex = ts->rt.texture;
-                        useTexture = true;
-                    }
+            TexSlot* ts = TM_Get(m_targetSlot);
+            if (ts && ts->rt.id > 0) {
+                rt = ts->rt;
+                TexSlotID btId = {m_userTexBucket, m_userTexSlot};
+                TexSlot* bts = TM_Get(btId);
+                if (bts) {
+                    brushTex = bts->rt.texture;
+                    useTexture = true;
                 }
             }
 

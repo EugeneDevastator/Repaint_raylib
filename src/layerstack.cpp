@@ -27,7 +27,6 @@ static struct {
     Image*  img;
     sLayerProps* prop;
     RenderTexture2D* rt;
-    Texture2D* tex;
     TexSlotID* slotID;   // TM slot for this layer (registered via TM_Register)
     int count;
     int renderW, renderH;
@@ -104,8 +103,6 @@ static void UnloadLayerSlotResources(int idx) {
     }
     if(!shared) {
         if(LS.rt[idx].id>0) UnloadRenderTexture(LS.rt[idx]);
-        if(LS.tex[idx].id>0 && LS.tex[idx].id!=LS.rt[idx].texture.id)
-            UnloadTexture(LS.tex[idx]);
     }
     UnloadImage(LS.img[idx]);
 }
@@ -124,7 +121,7 @@ static void CopyRT(RenderTexture2D dst, RenderTexture2D src, int w, int h) {
 static void ShiftLayersUp(int from, int to) {
     for(int i=from;i>to;i--){
         LS.img[i]=LS.img[i-1]; LS.prop[i]=LS.prop[i-1];
-        LS.rt[i]=LS.rt[i-1]; LS.tex[i]=LS.tex[i-1];
+        LS.rt[i]=LS.rt[i-1];
         LS.slotID[i]=LS.slotID[i-1];
     }
 }
@@ -133,7 +130,7 @@ static void ShiftLayersUp(int from, int to) {
 static void ShiftLayersDown(int from, int to) {
     for(int i=from;i<to;i++){
         LS.img[i]=LS.img[i+1]; LS.prop[i]=LS.prop[i+1];
-        LS.rt[i]=LS.rt[i+1]; LS.tex[i]=LS.tex[i+1];
+        LS.rt[i]=LS.rt[i+1];
         LS.slotID[i]=LS.slotID[i+1];
     }
 }
@@ -144,7 +141,6 @@ static void InitLayerSlot(int idx, int w, int h) {
     ImageFormat(&LS.img[idx],PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
     LS.rt[idx]=Load16BitRT(w,h);
     BeginTextureMode(LS.rt[idx]); ClearBackground(BLANK); EndTextureMode();
-    LS.tex[idx]=LoadTextureFromImage(LS.img[idx]);
     LS.prop[idx]={}; LS.prop[idx].op=1; LS.prop[idx].visible=true;
     LS.prop[idx].blendmode=bmGamma; LS.prop[idx].mat[0]=1; LS.prop[idx].mat[4]=1;
     LS.prop[idx].threshold=0; LS.prop[idx].feather=1;
@@ -154,20 +150,10 @@ static void InitLayerSlot(int idx, int w, int h) {
                                 name, false, w, h);
 }
 
-// ── Helper: rebuild tex[idx] from img[idx] with aliasing guard ──
-static void RebuildTex(int idx) {
-    if(LS.tex[idx].id>0 && LS.tex[idx].id!=LS.rt[idx].texture.id)
-        UnloadTexture(LS.tex[idx]);
-    else if(LS.tex[idx].id==LS.rt[idx].texture.id)
-        LS.tex[idx]=Texture2D{0};
-    LS.tex[idx]=LoadTextureFromImage(LS.img[idx]);
-}
-
-// ── Helper: capture an RT, store into img[idx], rebuild tex[idx] ──
+// ── Helper: capture an RT, store into img[idx] ──
 static void RebuildLayerImageAndTex(int idx, RenderTexture2D srcRT) {
     Image cap=LoadImageFromTexture(srcRT.texture); ImageFlipVertical(&cap);
     UnloadImage(LS.img[idx]); LS.img[idx]=cap;
-    RebuildTex(idx);
 }
 
 // ── Helper: remove a layer slot (unload resources + shift down) ──
@@ -186,7 +172,7 @@ void LayerStack_Shutdown(void) {
     if(LS.shaderInited){ UnloadShader(LS.blendShader); LS.shaderInited=false; }
     if(LS.presentInited){ UnloadShader(LS.presentShader); LS.presentInited=false; }
     for(int i=0;i<LS.count;i++) UnloadLayerSlotResources(i);
-    free(LS.img); free(LS.prop); free(LS.rt); free(LS.tex); free(LS.slotID);
+    free(LS.img); free(LS.prop); free(LS.rt); free(LS.slotID);
     LS={0};
 }
 
@@ -202,7 +188,14 @@ int LayerStack_Count(void) { return LS.count; }
 sLayerProps*   LayerStack_GetProps(int i){ return (i>=0&&i<LS.count)?&LS.prop[i]:NULL; }
 Image*         LayerStack_GetImage(int i){ return (i>=0&&i<LS.count)?&LS.img[i]:NULL; }
 RenderTexture2D LayerStack_GetRT(int i)   { return (i>=0&&i<LS.count)?LS.rt[i]:RenderTexture2D{0}; }
-Texture2D       LayerStack_GetTex(int i)  { return (i>=0&&i<LS.count)?LS.tex[i]:Texture2D{0}; }
+TexSlotID       LayerStack_GetSlotID(int i){ return (i>=0&&i<LS.count)?LS.slotID[i]:TM_INVALID_SLOT; }
+int             LayerStack_FindLayerBySlot(TexSlotID slot) {
+    if (!TM_IsValid(slot)) return -1;
+    for (int i = 0; i < LS.count; i++)
+        if (LS.slotID[i].bucket == slot.bucket && LS.slotID[i].slot == slot.slot)
+            return i;
+    return -1;
+}
 int LayerStack_RenderW(void) { return LS.renderW; }
 int LayerStack_RenderH(void) { return LS.renderH; }
 
@@ -211,11 +204,9 @@ static void ReallocArrays(int n) {
     LS.img=(Image*)realloc(LS.img,n*sizeof(Image));
     LS.prop=(sLayerProps*)realloc(LS.prop,n*sizeof(sLayerProps));
     LS.rt=(RenderTexture2D*)realloc(LS.rt,n*sizeof(RenderTexture2D));
-    LS.tex=(Texture2D*)realloc(LS.tex,n*sizeof(Texture2D));
     LS.slotID=(TexSlotID*)realloc(LS.slotID,n*sizeof(TexSlotID));
     if(n>LS.count){
         memset(&LS.rt[LS.count],0,(n-LS.count)*sizeof(RenderTexture2D));
-        memset(&LS.tex[LS.count],0,(n-LS.count)*sizeof(Texture2D));
         for(int i=LS.count;i<n;i++) LS.slotID[i]=TM_INVALID_SLOT;
     }
 }
@@ -256,7 +247,6 @@ void LayerStack_DuplicateLayer(int idx) {
     int lw=LS.prop[idx].layerW, lh=LS.prop[idx].layerH;
     LS.rt[di]=Load16BitRT(lw,lh);
     CopyRT(LS.rt[di],LS.rt[idx],lw,lh);
-    LS.tex[di]=LoadTextureFromImage(LS.img[di]);
     // Register new RT with TM
     char name[64]; snprintf(name, sizeof(name), "Layer %d (dup)", di);
     LS.slotID[di]=TM_Register(TM_BUCKET_LAYER, LS.rt[di], LS.img[di],
@@ -274,9 +264,8 @@ void LayerStack_DuplicateAsInstance(int idx) {
     LS.prop[di].instanced=true;
     snprintf(LS.prop[di].layerName, sizeof(LS.prop[di].layerName),
              "%s(INST)", LS.prop[idx].layerName);
-    // Share RT and tex with the original
+    // Share RT with the original
     LS.rt[di]=LS.rt[idx];
-    LS.tex[di]=LS.tex[idx];
     // Share TM slot — increment refcount
     LS.slotID[di]=LS.slotID[idx];
     TM_AddRef(LS.slotID[idx]);
@@ -285,12 +274,12 @@ void LayerStack_DuplicateAsInstance(int idx) {
 
 void LayerStack_MoveLayer(int from, int to) {
     if(from<0||from>=LS.count||to<0||to>=LS.count||from==to) return;
-    RenderTexture2D mvRT=LS.rt[from]; Texture2D mvTex=LS.tex[from];
+    RenderTexture2D mvRT=LS.rt[from];
     Image mvImg=LS.img[from]; sLayerProps mvProp=LS.prop[from];
     TexSlotID mvSlot=LS.slotID[from];
     if(from<to) ShiftLayersDown(from,to);
     else        ShiftLayersUp(from,to);
-    LS.img[to]=mvImg; LS.prop[to]=mvProp; LS.rt[to]=mvRT; LS.tex[to]=mvTex;
+    LS.img[to]=mvImg; LS.prop[to]=mvProp; LS.rt[to]=mvRT;
     LS.slotID[to]=mvSlot;
     LS.dirty=true;
 }
@@ -317,12 +306,6 @@ void LayerStack_SyncImageFromRT(int idx) {
     UnloadImage(LS.img[idx]); LS.img[idx]=cap;
 }
 
-void LayerStack_SyncLayerTex(int idx) {
-    if(idx<0||idx>=LS.count||LS.rt[idx].id==0) return;
-    LayerStack_SyncImageFromRT(idx);
-    RebuildTex(idx);
-}
-
 void LayerStack_SyncRTFromImage(int idx) {
     if(idx<0||idx>=LS.count||LS.rt[idx].id==0||!LS.img[idx].data) return;
     Texture2D tmp = LoadTextureFromImage(LS.img[idx]);
@@ -334,7 +317,6 @@ void LayerStack_SyncRTFromImage(int idx) {
     rlSetBlendMode(RL_BLEND_ALPHA);
     EndTextureMode();
     UnloadTexture(tmp);
-    RebuildTex(idx);
     LS.dirty=true;
 }
 
