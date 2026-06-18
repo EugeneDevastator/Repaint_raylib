@@ -13,6 +13,7 @@ static void SyncBrushTexFromRT(AppState* state, int texIdx) {
     TexSlot* ts = GetUserTexSlot(state, texIdx);
     if (!ts || ts->rt.id == 0) return;
     Image img = LoadImageFromTexture(ts->rt.texture);
+    ImageFlipVertical(&img);
     if (img.data) {
         if (ts->cpuImage.data) UnloadImage(ts->cpuImage);
         ts->cpuImage = img;
