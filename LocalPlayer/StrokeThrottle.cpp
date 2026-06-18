@@ -65,8 +65,15 @@ int StrokeThrottle::DrawPending(AppState* state, int pixelBudget) {
             if (m_targetType == 1) {
                 TexSlotID id = {TM_BUCKET_USER, m_targetId};
                 TexSlot* ts = TM_Get(id);
-                if (ts && ts->rt.id > 0)
+                if (ts && ts->rt.id > 0) {
                     rt = ts->rt;
+                    TexSlotID btId = {m_userTexBucket, m_userTexSlot};
+                    TexSlot* bts = TM_Get(btId);
+                    if (bts) {
+                        brushTex = bts->rt.texture;
+                        useTexture = true;
+                    }
+                }
             } else {
                 if (m_targetId < LayerStack_Count()) {
                     rt = LayerStack_GetRT(m_targetId);

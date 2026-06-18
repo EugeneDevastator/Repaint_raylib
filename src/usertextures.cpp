@@ -20,8 +20,8 @@ void UserTexture_Shutdown(void) {
 }
 
 void UserTexture_Update(AppState* state) {
-    if (TM_IsValid(state->activeBrushSlot)) {
-        TexSlot* ts = TM_Get(state->activeBrushSlot);
+    if (TM_IsValid(state->brushTexSlot)) {
+        TexSlot* ts = TM_Get(state->brushTexSlot);
         if (ts) {
             g_activeBrushTex = ts->rt.texture;
             return;

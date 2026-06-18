@@ -160,8 +160,8 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         vp->inputPts[vp->inputLen++] = paintPos;
 
     // ── Texture editing mode ──────────────────────────────────────────
-    if (state->editTexMode && TM_IsValid(state->activeBrushSlot)) {
-        TexSlot* bt = TM_Get(state->activeBrushSlot);
+    if (state->editTexMode && TM_IsValid(state->editTexSlot)) {
+        TexSlot* bt = TM_Get(state->editTexSlot);
         if (bt && !bt->builtIn && bt->rt.id > 0 && (state->mode == eBrush || state->mode == eSmudge)) {
             float dstX = -state->camera.target.x * state->camera.zoom + state->camera.offset.x;
             float dstY = -state->camera.target.y * state->camera.zoom + state->camera.offset.y;
@@ -170,13 +170,10 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             float tx = (mousePos.x - dstX) / dstW * bt->w;
             float ty = (mousePos.y - dstY) / dstH * bt->h;
 
-            Texture2D savedTex = g_activeBrushTex;
-            g_activeBrushTex = g_defaultBrushTex;
-
             if (!vp->wasMouseDown) {
                 if (vp->inBounds && leftDown) {
                     Modulators_SnapRunState();
-                    if (state->undo) state->undo->Snapshot(state, state->activeBrushSlot.slot, true);
+                    if (state->undo) state->undo->Snapshot(state, state->editTexSlot.slot, true);
 
                     InputEntry be;
                     be.type = InputEntry::Begin;
@@ -185,9 +182,14 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     be.initAngle = state->initialAngle;
                     be.toolMode = state->mode;
                     be.targetType = 1;
-                    be.targetId = state->activeBrushSlot.slot;
-                    be.userTexBucket = 0xFF;  // no pattern texture when editing a stamp
-                    be.userTexSlot = 0xFF;
+                    be.targetId = state->editTexSlot.slot;
+                    if (TM_IsValid(state->brushTexSlot)) {
+                        be.userTexBucket = TM_BUCKET_USER;
+                        be.userTexSlot = state->brushTexSlot.slot;
+                    } else {
+                        be.userTexBucket = 0xFF;
+                        be.userTexSlot = 0xFF;
+                    }
                     be.layerScale = 1.0f;
                     be.timestamp = GetTime();
                     g_inputQueue.AddEntry(be);
@@ -210,8 +212,6 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                 g_inputQueue.AddEntry(ee);
                 vp->wasMouseDown = false;
             }
-
-            g_activeBrushTex = savedTex;
         }
         layersDirty = true;
     }
@@ -238,9 +238,9 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     be.toolMode = state->mode;
                     be.targetType = 0;
                     be.targetId = active;
-                    if (TM_IsValid(state->activeBrushSlot)) {
+                    if (TM_IsValid(state->brushTexSlot)) {
                         be.userTexBucket = TM_BUCKET_USER;
-                        be.userTexSlot = state->activeBrushSlot.slot;
+                        be.userTexSlot = state->brushTexSlot.slot;
                     } else {
                         be.userTexBucket = 0xFF;
                         be.userTexSlot = 0xFF;

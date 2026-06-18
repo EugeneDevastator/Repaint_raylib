@@ -15,7 +15,8 @@ static bool hasSuffix(const char* str, const char* suffix) {
 
 void BrushTex_Init(AppState* state) {
     TM_Init();
-    state->activeBrushSlot = TM_INVALID_SLOT;
+    state->brushTexSlot = TM_INVALID_SLOT;
+    state->editTexSlot = TM_INVALID_SLOT;
     state->brushTexActive = false;
     state->editTexMode = 0;
 
@@ -71,20 +72,23 @@ void BrushTex_Delete(AppState* state, TexSlotID id) {
     if (!TM_IsValid(id)) return;
     TexSlot* ts = TM_Get(id);
     if (!ts || ts->builtIn) return;
-    if (state->activeBrushSlot == id) {
-        state->activeBrushSlot = TM_INVALID_SLOT;
-        state->brushTexActive = false;
+    if (state->editTexSlot == id) {
+        state->editTexSlot = TM_INVALID_SLOT;
         state->editTexMode = 0;
+    }
+    if (state->brushTexSlot == id) {
+        state->brushTexSlot = TM_INVALID_SLOT;
+        state->brushTexActive = false;
     }
     TM_Remove(id);
 }
 
 void BrushTex_SetActive(AppState* state, TexSlotID id) {
     if (!TM_IsValid(id)) {
-        state->activeBrushSlot = TM_INVALID_SLOT;
+        state->brushTexSlot = TM_INVALID_SLOT;
         state->brushTexActive = false;
     } else {
-        state->activeBrushSlot = id;
+        state->brushTexSlot = id;
         state->brushTexActive = true;
     }
 }

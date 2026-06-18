@@ -9,6 +9,9 @@ extern bool layersDirty;
 extern Texture2D g_blendModeIcon;
 extern bool g_blendIconLoaded;
 
+// Texture list state — which user texture is selected in the layer panel
+static int g_layerTexSelected = -1;
+
 // ── Layer preview texture cache ──────────────────────────────────────
 #define MAX_PREVIEWS 64
 static RenderTexture2D g_previewTex[MAX_PREVIEWS] = {0};
@@ -239,7 +242,7 @@ void LayerPanel_Draw(AppState* state) {
 
     {
         float avail = ImGui::GetContentRegionAvail().y;
-        float listH = avail * 0.7f;
+        float listH = avail * 0.35f;
         if (listH < 10.0f) listH = 10.0f;
         if (ImGui::BeginChild("LayerList", ImVec2(0, listH), false)) {
             float prevRMaxY = ImGui::GetCursorScreenPos().y;
@@ -280,8 +283,10 @@ void LayerPanel_Draw(AppState* state) {
                 } else if (dragging) {
                     ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0,0,0,0));
                 }
-                if (ImGui::Selectable(lname, isActive, 0, selSize))
+                if (ImGui::Selectable(lname, isActive, 0, selSize)) {
                     state->activeLayer = idx;
+                    if (state->editTexMode) state->editTexMode = 0;
+                }
                 if (isActive) ImGui::PopStyleColor(2);
                 else if (dragging) ImGui::PopStyleColor(1);
 
@@ -329,6 +334,109 @@ void LayerPanel_Draw(AppState* state) {
         }
         ImGui::EndChild();
     }
+
+    // ── User texture section ──
+    ImGui::Separator();
+
+    ImGui::PushID("tex");
+    {
+        float aw = ImGui::GetContentRegionAvail().x;
+        float btnW = (aw - ImGui::GetStyle().ItemSpacing.x * 2) / 3.0f;
+        if (btnW < 30.0f) btnW = 30.0f;
+
+        if (ImGui::Button("+Tex", ImVec2(btnW, 24))) {
+            char name[64];
+            snprintf(name, sizeof(name), "Texture %d", TM_Count(TM_BUCKET_USER) + 1);
+            TexSlotID id = BrushTex_Add(state, name, 512, 512);
+            if (TM_IsValid(id)) {
+                g_layerTexSelected = id.slot;
+                state->editTexMode = 1;
+                state->editTexSlot = id;
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Dup", ImVec2(btnW, 24))) {
+            if (g_layerTexSelected >= 0) {
+                TexSlotID srcId = {TM_BUCKET_USER, (uint8_t)g_layerTexSelected};
+                TexSlot* srcTs = TM_Get(srcId);
+                if (srcTs && TM_IsValid(srcId)) {
+                    TexSlotID di = BrushTex_Add(state, srcTs->name, srcTs->w, srcTs->h);
+                    if (TM_IsValid(di)) {
+                        TexSlot* dstTs = TM_Get(di);
+                        if (dstTs) {
+                            UnloadImage(dstTs->cpuImage);
+                            dstTs->cpuImage = ImageCopy(srcTs->cpuImage);
+                            Texture2D tmp = LoadTextureFromImage(dstTs->cpuImage);
+                            BeginTextureMode(dstTs->rt);
+                            ClearBackground(BLANK);
+                            rlSetBlendMode(RL_BLEND_CUSTOM);
+                            rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+                            DrawTextureRec(srcTs->rt.texture,
+                                Rectangle{0, 0, (float)srcTs->w, (float)-srcTs->h},
+                                Vector2{0, 0}, WHITE);
+                            rlSetBlendMode(RL_BLEND_ALPHA);
+                            EndTextureMode();
+                            UnloadTexture(tmp);
+                            g_layerTexSelected = di.slot;
+                            state->editTexMode = 1;
+                            state->editTexSlot = di;
+                        }
+                    }
+                }
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Del", ImVec2(btnW, 24))) {
+            if (g_layerTexSelected >= 0) {
+                TexSlotID id = {TM_BUCKET_USER, (uint8_t)g_layerTexSelected};
+                TexSlot* ts = TM_Get(id);
+                if (ts && !ts->builtIn) {
+                    BrushTex_Delete(state, id);
+                    g_layerTexSelected = -1;
+                }
+            }
+        }
+
+        float texAvail = ImGui::GetContentRegionAvail().y;
+        float texListH = texAvail;
+        if (texListH < 10.0f) texListH = 10.0f;
+        if (ImGui::BeginChild("UserTexList", ImVec2(0, texListH), false)) {
+            for (int s = 0; s < TM_SLOTS_PER_BUCKET; s++) {
+                TexSlotID id = {TM_BUCKET_USER, (uint8_t)s};
+                TexSlot* ts = TM_Get(id);
+                if (!ts || ts->builtIn) continue;
+
+                ImGui::PushID(s);
+                bool isEditing = (state->editTexMode && state->editTexSlot == id);
+                bool isSel = (g_layerTexSelected == s);
+
+                Texture2D thumb = BrushTex_GetThumb(state, id);
+                if (thumb.id > 0) {
+                    ImGui::Image((ImTextureID)(intptr_t)thumb.id, ImVec2(36, 36), ImVec2(0, 1), ImVec2(1, 0));
+                    ImGui::SameLine();
+                }
+
+                if (isEditing) {
+                    ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.25f, 0.50f, 0.95f, 0.8f));
+                    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.30f, 0.55f, 0.95f, 0.9f));
+                }
+                if (ImGui::Selectable(ts->name, isSel, 0, ImVec2(0, 36))) {
+                    g_layerTexSelected = s;
+                    if (state->editTexMode && state->editTexSlot == id) {
+                        state->editTexMode = 0;
+                    } else {
+                        state->editTexMode = 1;
+                        state->editTexSlot = id;
+                    }
+                }
+                if (isEditing) ImGui::PopStyleColor(2);
+
+                ImGui::PopID();
+            }
+        }
+        ImGui::EndChild();
+    }
+    ImGui::PopID();
 
     // Network lobby panel (bottom of layers)
     {

@@ -54,8 +54,8 @@ void ViewportHUD_Draw(AppState* state) {
     DrawRectangleRec(vpBounds, Color{55, 55, 55, 255});
 
     // Edit texture mode
-    if (state->editTexMode && TM_IsValid(state->activeBrushSlot)) {
-        TexSlot* bt = TM_Get(state->activeBrushSlot);
+    if (state->editTexMode && TM_IsValid(state->editTexSlot)) {
+        TexSlot* bt = TM_Get(state->editTexSlot);
         if (bt && bt->rt.id > 0) {
             int tw = bt->w;
             int th = bt->h;
@@ -153,8 +153,8 @@ void ViewportHUD_Draw(AppState* state) {
 
             Texture2D bt = {0};
             bool useTex = false;
-            if (TM_IsValid(state->activeBrushSlot)) {
-                TexSlot* ts = TM_Get(state->activeBrushSlot);
+            if (TM_IsValid(state->brushTexSlot)) {
+                TexSlot* ts = TM_Get(state->brushTexSlot);
                 if (ts) { bt = ts->rt.texture; useTex = true; }
             }
 

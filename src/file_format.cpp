@@ -322,7 +322,9 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
         }
         for (int i = 0; i < removeCount; i++) TM_Remove(toRemove[i]);
 
-        state->activeBrushSlot = TM_INVALID_SLOT;
+        state->brushTexSlot = TM_INVALID_SLOT;
+        state->editTexSlot = TM_INVALID_SLOT;
+        state->editTexMode = 0;
         state->brushTexActive = false;
 
         uint32_t tc = _ru32(&p);

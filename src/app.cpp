@@ -162,13 +162,13 @@ void UpdateUI(AppState* state) {
     // Undo / Redo
     if (IsKeyDown(KEY_LEFT_CONTROL) && !IsKeyDown(KEY_LEFT_SHIFT) && IsKeyPressed(KEY_Z)) {
         if (state->undo) {
-            int idx = state->editTexMode ? state->activeBrushSlot.slot : state->activeLayer;
+            int idx = state->editTexMode ? state->editTexSlot.slot : state->activeLayer;
             state->undo->Undo(state, idx, state->editTexMode);
         }
     }
     if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyDown(KEY_LEFT_SHIFT) && IsKeyPressed(KEY_Z)) {
         if (state->undo) {
-            int idx = state->editTexMode ? state->activeBrushSlot.slot : state->activeLayer;
+            int idx = state->editTexMode ? state->editTexSlot.slot : state->activeLayer;
             state->undo->Redo(state, idx, state->editTexMode);
         }
     }
@@ -182,14 +182,14 @@ void UpdateUI(AppState* state) {
     if (IsKeyPressed(KEY_T)) {
         if (state->editTexMode) {
             state->editTexMode = 0;
-            state->activeBrushSlot = TM_INVALID_SLOT;
+            state->editTexSlot = TM_INVALID_SLOT;
         } else if (TM_Count(TM_BUCKET_USER) > 0) {
             state->editTexMode = 1;
-            if (!TM_IsValid(state->activeBrushSlot)) {
+            if (!TM_IsValid(state->editTexSlot)) {
                 // Find first valid slot
                 for (int s = 0; s < TM_SLOTS_PER_BUCKET; s++) {
                     TexSlotID id = {TM_BUCKET_USER, (uint8_t)s};
-                    if (TM_IsValid(id)) { state->activeBrushSlot = id; break; }
+                    if (TM_IsValid(id)) { state->editTexSlot = id; break; }
                 }
             }
         }
