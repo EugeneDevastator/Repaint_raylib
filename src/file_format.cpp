@@ -6,7 +6,7 @@
 
 #define MAGIC      "REPAINT"
 #define MAGIC_LEN  8
-#define FILE_VER   5
+#define FILE_VER   6
 
 /* ── Write helpers ─────────────────────────────────────────────────────── */
 
@@ -142,7 +142,7 @@ bool SaveRePaint(const char* path, Document* doc, AppState* state) {
     }
 
     // 4. Write final buffer
-    size_t hdrSz = MAGIC_LEN + 4 + 4 + 4 + 4 + 4; // +4 for pixelDepth
+    size_t hdrSz = MAGIC_LEN + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4; // +ppu,reserved,5×cw
     size_t totalSz = compSize + hdrSz + totalExtra + texTotalSz + 4;
     uint8_t* buf = (uint8_t*)malloc(totalSz);
     if (!buf) {
@@ -156,10 +156,15 @@ bool SaveRePaint(const char* path, Document* doc, AppState* state) {
     _wcpy(&p, compPng, compSize);
     _wcpy(&p, MAGIC, MAGIC_LEN);
     _wu32(&p, FILE_VER);
-    _wu32(&p, (uint32_t)doc->width);
-    _wu32(&p, (uint32_t)doc->height);
+    _wcpy(&p, &doc->ppu, 4);            // v6: ppu (was width)
+    { uint32_t _z=0; _wu32(&p,_z); }   // reserved (was height)
     _wu32(&p, (uint32_t)lc);
     _wu32(&p, pixelDepth);
+    _wcpy(&p, &doc->window.cx, 4);      // v6+: CanvasWindow data
+    _wcpy(&p, &doc->window.cy, 4);
+    _wcpy(&p, &doc->window.w, 4);
+    _wcpy(&p, &doc->window.h, 4);
+    _wcpy(&p, &doc->window.rotation, 4);
 
     for (int i = 0; i < lc; i++) {
         Image layerImg = LayerStack_ReadFromGPU(i);
@@ -224,16 +229,42 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
     p += MAGIC_LEN;
 
     uint32_t ver = _ru32(&p);
-    uint32_t w = _ru32(&p), h = _ru32(&p);
-    if (w < 1 || w > 32768 || h < 1 || h > 32768) { UnloadFileData(fileData); return false; }
-    uint32_t lc = _ru32(&p);
-    if (lc < 1 || lc > 256) { UnloadFileData(fileData); return false; }
 
+    // ── Parse header (version-dependent layout) ─────────────────────
+    float ppuFromFile = 1.0f;
+    CanvasWindow cwFromFile = {0,0,0,0,0};
+    uint32_t lc = 0;
     uint32_t pixelDepth = 0;
-    if (ver >= 5) pixelDepth = _ru32(&p);
+    int oldFileW = 0, oldFileH = 0;  // used by v3/v4 fallback path
 
-    doc->width = (int)w; doc->height = (int)h;
+    if (ver < 6) {
+        // v3-v5: w,h are pixel dimensions
+        uint32_t w = _ru32(&p), h = _ru32(&p);
+        if (w < 1 || w > 32768 || h < 1 || h > 32768) { UnloadFileData(fileData); return false; }
+        ppuFromFile = 1.0f;
+        cwFromFile.cx = w * 0.5f; cwFromFile.cy = h * 0.5f;
+        cwFromFile.w = (float)w; cwFromFile.h = (float)h; cwFromFile.rotation = 0.0f;
+        oldFileW = (int)w; oldFileH = (int)h;
+        lc = _ru32(&p);
+        if (lc < 1 || lc > 256) { UnloadFileData(fileData); return false; }
+        if (ver >= 5) pixelDepth = _ru32(&p);
+    } else {
+        // v6+ : ppu (float) + CanvasWindow data
+        memcpy(&ppuFromFile, p, 4); p += 4;
+        p += 4; // reserved (was height)
+        lc = _ru32(&p);
+        if (lc < 1 || lc > 256) { UnloadFileData(fileData); return false; }
+        pixelDepth = _ru32(&p);
+        memcpy(&cwFromFile.cx, p, 4); p += 4;
+        memcpy(&cwFromFile.cy, p, 4); p += 4;
+        memcpy(&cwFromFile.w,  p, 4); p += 4;
+        memcpy(&cwFromFile.h,  p, 4); p += 4;
+        memcpy(&cwFromFile.rotation, p, 4); p += 4;
+    }
+    doc->ppu = ppuFromFile;
+    doc->window = cwFromFile;
 
+    // ── Load layers ──────────────────────────────────────────────────
     if (ver < 5) {
         // v3/v4: skip per-layer blobs, load composite preview as single layer
         for (uint32_t i = 0; i < lc; i++) {
@@ -243,9 +274,10 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
             uint32_t pngSz = _ru32(&p); if ((int)(p - fileData) + (int)pngSz > fileSz) { UnloadFileData(fileData); return false; }
             p += pngSz;
         }
+        int w = oldFileW, h = oldFileH;
         Image preview = LoadImageFromMemory(".png", fileData, (int)(offset + 12));
         if (preview.data) {
-            if (preview.width != (int)w || preview.height != (int)h) ImageResize(&preview, (int)w, (int)h);
+            if (preview.width != w || preview.height != h) ImageResize(&preview, w, h);
             int pxCount = preview.width * preview.height;
             uint16_t* d16 = (uint16_t*)malloc(pxCount * 4 * sizeof(uint16_t));
             uint8_t* s8 = (uint8_t*)preview.data;
@@ -254,10 +286,10 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
                 d16[pi*4+2] = (uint16_t)s8[pi*4+2]*257; d16[pi*4+3] = (uint16_t)s8[pi*4+3]*257;
             }
             free(preview.data); preview.data = d16; preview.format = PIXELFORMAT_UNCOMPRESSED_R16G16B16A16;
-            int idx = LayerStack_Add((int)w, (int)h);
+            int idx = LayerStack_Add(w, h);
             sLayerProps* lp = LayerStack_GetProps(idx);
             lp->op = 1; lp->visible = true; lp->blendmode = bmGamma;
-            lp->mat[0] = 1; lp->mat[4] = 1; lp->layerW = (int)w; lp->layerH = (int)h;
+            lp->mat[0] = 1; lp->mat[4] = 1; lp->layerW = w; lp->layerH = h;
             LayerStack_UploadToGPU(idx, preview);
         }
     } else {
@@ -270,8 +302,8 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
             const uint8_t* propStart = p;
             _readProps(&p, &tempProps, ver);
             p = propStart + propSz;
-            int lw = tempProps.layerW > 0 ? tempProps.layerW : (int)w;
-            int lh = tempProps.layerH > 0 ? tempProps.layerH : (int)h;
+            int lw = tempProps.layerW > 0 ? tempProps.layerW : oldFileW;
+            int lh = tempProps.layerH > 0 ? tempProps.layerH : oldFileH;
 
             uint32_t dataSz = _ru32(&p);
             if ((int)(p - fileData) + (int)dataSz > fileSz) { UnloadFileData(fileData); return false; }

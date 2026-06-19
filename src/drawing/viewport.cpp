@@ -62,8 +62,8 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         layersDirty = true;
     }
 
-    // Right-click is only used in HUD_LAYER_XFORM mode (rotation). No default right-click pan.
-    if (g_activeHud != HUD_LAYER_XFORM)
+    // Right-click is only used in HUD_LAYER_XFORM or HUD_CANVAS_XFORM mode (rotation). No default right-click pan.
+    if (g_activeHud != HUD_LAYER_XFORM && g_activeHud != HUD_CANVAS_XFORM)
         vp->rightMouseDown = false;
 
     // Zoom
@@ -93,8 +93,8 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
 
     Vector2 canvasPos = GetScreenToWorld2D(mousePos, state->camera);
 
-    // Suppress normal painting while in layer transform mode or space-panning
-    if (g_activeHud == HUD_LAYER_XFORM || spaceHeld) return;
+    // Suppress normal painting while in layer transform mode, crop framing mode, or space-panning
+    if (g_activeHud == HUD_LAYER_XFORM || state->framingMode == FRAME_CROP || spaceHeld) return;
 
     bool leftDown = IsMouseButtonDown(MOUSE_BUTTON_LEFT);
     int active = state->activeLayer;

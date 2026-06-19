@@ -22,7 +22,7 @@ static int g_previewW = 0, g_previewH = 0;
 // transform into a small preview RT matching canvas proportion.
 void LayerPanel_UpdatePreviews(AppState* state) {
     int count = LayerStack_Count();
-    int cw = state->doc.width, ch = state->doc.height;
+    int cw = DocOutW(&state->doc), ch = DocOutH(&state->doc);
     if (cw < 1 || ch < 1 || count < 1) return;
 
     int pw = (int)(36.0f * cw / ch);
@@ -237,6 +237,32 @@ void LayerPanel_Draw(AppState* state) {
         ImGui::Text("%s", idxBuf);
     }
     ImGui::Checkbox("Use screen res", &g_useViewRes);
+    {
+        const char* frameLabel = (state->framingMode == FRAME_CROP) ? "Framing: Crop" : "Framing: Canvas";
+        if (ImGui::Button(frameLabel, ImVec2(-1, 0))) {
+            state->framingMode = (state->framingMode == FRAME_DEFAULT) ? FRAME_CROP : FRAME_DEFAULT;
+            g_activeHud = (state->framingMode == FRAME_CROP) ? HUD_CANVAS_XFORM : HUD_NONE;
+            if (state->framingMode == FRAME_CROP) {
+                Rectangle sb; LayerStack_GetSceneBounds(&sb);
+                if (sb.width > 0 && sb.height > 0) {
+                    float cx = sb.x + sb.width/2, cy = sb.y + sb.height/2;
+                    state->camera.target = Vector2{cx, cy};
+                    float pad = 1.1f;
+                    float zoomX = viewport.bounds.width / (sb.width * pad);
+                    float zoomY = viewport.bounds.height / (sb.height * pad);
+                    state->camera.zoom = fminf(zoomX, zoomY);
+                } else {
+                    state->camera.target = Vector2{0,0};
+                    state->camera.zoom = 1.0f;
+                }
+            } else {
+                int cw = DocOutW(&state->doc), ch = DocOutH(&state->doc);
+                state->camera.target = Vector2{(float)cw*0.5f, (float)ch*0.5f};
+                state->camera.zoom = 1.0f;
+            }
+            layersDirty = true;
+        }
+    }
 
     ImGui::Separator();
 
@@ -394,7 +420,7 @@ void LayerPanel_Draw(AppState* state) {
         }
 
         float texAvail = ImGui::GetContentRegionAvail().y;
-        float texListH = texAvail;
+        float texListH = texAvail * 0.65f;
         if (texListH < 10.0f) texListH = 10.0f;
         if (ImGui::BeginChild("UserTexList", ImVec2(0, texListH), false)) {
             for (int s = 0; s < TM_SLOTS_PER_BUCKET; s++) {
@@ -439,8 +465,7 @@ void LayerPanel_Draw(AppState* state) {
         ImGui::Separator();
         float netH = ImGui::GetContentRegionAvail().y;
         if (netH < 10.0f) netH = 10.0f;
-        if (ImGui::BeginChild("NetworkLobby", ImVec2(0, netH), false,
-                ImGuiWindowFlags_NoScrollbar)) {
+        if (ImGui::BeginChild("NetworkLobby", ImVec2(0, netH), false)) {
             ImGui::Text("Server");
             ImGui::Separator();
             float btnW = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;

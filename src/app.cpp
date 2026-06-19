@@ -102,6 +102,17 @@ bool g_replayPopupActive = false;
 bool g_pixelPerfect = false;
 float g_pivotCursorX = 0.0f, g_pivotCursorY = 0.0f;
 
+// ── Helper: sync the canvas-window matrix + render window from Document ──
+// Returns the output pixel size via outW/outH.
+static void SyncCanvasFromDoc(const Document* doc, int* outW, int* outH) {
+    int cw = DocOutW(doc), ch = DocOutH(doc);
+    if (outW) *outW = cw; if (outH) *outH = ch;
+    float cv[6];
+    ComputeCanvasMatrix(doc->ppu, &doc->window, cw, ch, cv);
+    LayerStack_SetCanvasView(cv);
+    LayerStack_SetRenderWindow(cw, ch);
+}
+
 static void DrawSplash(const char* msg) {
     int sw = GetScreenWidth(), sh = GetScreenHeight();
     if (g_splashTex.id == 0 && FileExists("resources/splash.png")) {
@@ -158,6 +169,33 @@ void UpdateUI(AppState* state) {
     if (IsKeyPressed(KEY_THREE)) state->mode = ePolyStripe;
     if (IsKeyPressed(KEY_FOUR)) state->mode = eDistort;
     if (IsKeyPressed(KEY_FIVE)) state->mode = eContrast;
+
+    // Toggle framing mode (C key — "crop" framing)
+    if (IsKeyPressed(KEY_C)) {
+        state->framingMode = (state->framingMode == FRAME_DEFAULT) ? FRAME_CROP : FRAME_DEFAULT;
+        g_activeHud = (state->framingMode == FRAME_CROP) ? HUD_CANVAS_XFORM : HUD_NONE;
+        if (state->framingMode == FRAME_CROP) {
+            // Frame camera to show all layers
+            Rectangle sb; LayerStack_GetSceneBounds(&sb);
+            if (sb.width > 0 && sb.height > 0) {
+                float cx = sb.x + sb.width/2, cy = sb.y + sb.height/2;
+                state->camera.target = Vector2{cx, cy};
+                // Fit with 10% padding
+                float pad = 1.1f;
+                float zoomX = viewport.bounds.width / (sb.width * pad);
+                float zoomY = viewport.bounds.height / (sb.height * pad);
+                state->camera.zoom = fminf(zoomX, zoomY);
+            } else {
+                state->camera.target = Vector2{0,0};
+                state->camera.zoom = 1.0f;
+            }
+        } else {
+            // Back to default: center on canvas window
+            state->camera.target = Vector2{state->doc.window.cx, state->doc.window.cy};
+            state->camera.zoom = 1.0f;
+        }
+        layersDirty = true;
+    }
 
     // Undo / Redo
     if (IsKeyDown(KEY_LEFT_CONTROL) && !IsKeyDown(KEY_LEFT_SHIFT) && IsKeyPressed(KEY_Z)) {
@@ -265,11 +303,8 @@ static void OnOpenResult(DialogResult r) {
             if (len < (int)sizeof(g_currentFilePath) - 1)
                 memcpy(g_currentFilePath, r.output, len + 1);
             g_state->activeLayer = 0;
-            g_state->camera.target = Vector2{
-                (float)g_state->doc.width * 0.5f,
-                (float)g_state->doc.height * 0.5f
-            };
-            LayerStack_SetRenderWindow(g_state->doc.width, g_state->doc.height);
+            SyncCanvasFromDoc(&g_state->doc, NULL, NULL);
+            g_state->camera.target = Vector2{g_state->doc.window.cx, g_state->doc.window.cy};
             layersDirty = true;
         } else {
             // Try as a standard image (PNG, JPEG, BMP, GIF, etc.)
@@ -283,9 +318,9 @@ static void OnOpenResult(DialogResult r) {
                 }
                 g_state->doc = Doc_New(w, h);
                 g_state->activeLayer = 0;
-                g_state->camera.target = Vector2{(float)w * 0.5f, (float)h * 0.5f};
+                SyncCanvasFromDoc(&g_state->doc, NULL, NULL);
+                g_state->camera.target = Vector2{g_state->doc.window.cx, g_state->doc.window.cy};
                 g_state->camera.zoom = 1.0f;
-                LayerStack_SetRenderWindow(w, h);
                 int idx = LayerStack_Add(w, h);
                 LayerStack_UploadToGPU(idx, img);
                 layersDirty = true;
@@ -296,9 +331,9 @@ static void OnOpenResult(DialogResult r) {
                 int w = 800, h = 600;
                 g_state->doc = Doc_New(w, h);
                 g_state->activeLayer = 0;
-                g_state->camera.target = Vector2{(float)w * 0.5f, (float)h * 0.5f};
+                SyncCanvasFromDoc(&g_state->doc, NULL, NULL);
+                g_state->camera.target = Vector2{g_state->doc.window.cx, g_state->doc.window.cy};
                 g_state->camera.zoom = 1.0f;
-                LayerStack_SetRenderWindow(w, h);
                 int idx = LayerStack_Add(w, h);
                 Image fillImg = GenImageColor(w, h, WHITE);
                 ImageFormat(&fillImg, PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
@@ -334,9 +369,8 @@ static void OnSaveResult(DialogResult r) {
 void app_new_document(int w, int h, Color fill) {
     g_state->doc = Doc_New(w, h);
     g_state->activeLayer = 0;
-    g_state->camera.target = Vector2{(float)w * 0.5f, (float)h * 0.5f};
-    g_state->camera.zoom = 1.0f;
-    LayerStack_SetRenderWindow(w, h);
+    SyncCanvasFromDoc(&g_state->doc, NULL, NULL);
+    g_state->camera.target = Vector2{g_state->doc.window.cx, g_state->doc.window.cy};
     int idx = LayerStack_Add(w, h);
     RenderTexture2D rt = LayerStack_GetRT(idx);
     BeginTextureMode(rt);
@@ -397,11 +431,8 @@ void App_FileReload(void) {
     LayerStack_Shutdown(); LayerStack_Init();
     if (LoadRePaint(g_currentFilePath, &g_state->doc, g_state)) {
         g_state->activeLayer = 0;
-        g_state->camera.target = Vector2{
-            (float)g_state->doc.width * 0.5f,
-            (float)g_state->doc.height * 0.5f
-        };
-        LayerStack_SetRenderWindow(g_state->doc.width, g_state->doc.height);
+        SyncCanvasFromDoc(&g_state->doc, NULL, NULL);
+        g_state->camera.target = Vector2{g_state->doc.window.cx, g_state->doc.window.cy};
         layersDirty = true;
     }
 }
@@ -515,10 +546,10 @@ void App_Init(AppState* state) {
     g_undoManager = state->undo;
 
     g_recorder = new ReplayRecorder();
-    g_recorder->Reset(state->doc.width, state->doc.height);
+    g_recorder->Reset(DocOutW(&state->doc), DocOutH(&state->doc));
 
     state->camera = Camera2D{};
-    state->camera.target = Vector2{(float)state->doc.width * 0.5f, (float)state->doc.height * 0.5f};
+    state->camera.target = Vector2{state->doc.window.cx, state->doc.window.cy};
     state->camera.offset = Vector2{viewportBounds.x + viewportBounds.width * 0.5f, viewportBounds.y + viewportBounds.height * 0.5f};
 
     // ── Module stack ──
@@ -528,6 +559,7 @@ void App_Init(AppState* state) {
     g_moduleStack.Add(std::unique_ptr<IModule>(new ViewportModule(state)), vpRect);
     g_moduleStack.Add(std::unique_ptr<IModule>(new QuickHudModule(state)), vpRect);
     g_moduleStack.Add(std::unique_ptr<IModule>(new LayerXformModule(state)), vpRect);
+    g_moduleStack.Add(std::unique_ptr<IModule>(new CanvasXformModule(state)), vpRect);
     g_moduleStack.Add(std::unique_ptr<IModule>(new RightPanelModule(state)),
         DrawRect{(float)(sw - RIGHT_PANEL_WIDTH), 0, (float)RIGHT_PANEL_WIDTH, (float)sh});
     g_moduleStack.Add(std::unique_ptr<IModule>(new LeftPanelModule(state)),
@@ -613,6 +645,7 @@ void App_Draw(AppState* state) {
     g_moduleStack.SetRect("Viewport",    vpRect);
     g_moduleStack.SetRect("QuickHud",    vpRect);
     g_moduleStack.SetRect("LayerXform",  vpRect);
+    g_moduleStack.SetRect("CanvasXform", vpRect);
     g_moduleStack.SetRect("RightPanel",  rightRect);
 
     BeginDrawing();

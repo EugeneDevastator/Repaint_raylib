@@ -46,8 +46,8 @@ static void EnsurePreviewRTs(void) {
 }
 
 void ViewportHUD_Draw(AppState* state) {
-    int cw = state->doc.width;
-    int ch = state->doc.height;
+    int cw = DocOutW(&state->doc);
+    int ch = DocOutH(&state->doc);
     if (cw < 1 || ch < 1) return;
 
     Rectangle vpBounds = viewport.bounds;
@@ -91,7 +91,29 @@ void ViewportHUD_Draw(AppState* state) {
     RenderTexture2D* docBlendTex = NULL;
     if (!state->editTexMode) {
 
-    if (g_useViewRes) {
+    if (state->framingMode == FRAME_CROP) {
+        // Crop mode: render all layers to viewport-sized RT without canvas view,
+        // then draw the canvas window rectangle as an interactive overlay.
+        int vpW = (int)vpBounds.width, vpH = (int)vpBounds.height;
+        if (vpW > 0 && vpH > 0) {
+            if (g_viewResRT.id == 0 || g_viewResRT.texture.width != (unsigned)vpW || g_viewResRT.texture.height != (unsigned)vpH)
+                g_viewResRT = Load16BitRT(vpW, vpH);
+            float vOffX = state->camera.offset.x - vpBounds.x;
+            float vOffY = state->camera.offset.y - vpBounds.y;
+            float vMat[6] = {state->camera.zoom, 0,
+                -state->camera.target.x * state->camera.zoom + vOffX, 0,
+                state->camera.zoom,
+                -state->camera.target.y * state->camera.zoom + vOffY};
+            LayerStack_ProduceCompositeView(g_viewResRT, vMat, vpW, vpH);
+            if (usePresent) { BeginShaderMode(GetPresentShader()); LayerStack_SetPresentTexSize(vpW, vpH); LayerStack_SetPresentDither(true); }
+            DrawTextureRec(g_viewResRT.texture,
+                Rectangle{0, 0, (float)vpW, (float)-vpH},
+                Vector2{vpBounds.x, vpBounds.y}, WHITE);
+            if (usePresent) EndShaderMode();
+            docBlendTex = &g_viewResRT;
+
+        }
+    } else if (g_useViewRes) {
         // Viewport-sized RT — recreate only when viewport changes size
         int vpW = (int)vpBounds.width, vpH = (int)vpBounds.height;
         if (g_viewResRT.id == 0 || g_viewResRT.texture.width != (unsigned)vpW || g_viewResRT.texture.height != (unsigned)vpH)

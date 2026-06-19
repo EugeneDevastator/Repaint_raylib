@@ -110,8 +110,24 @@ typedef struct { uint8_t ToolID; d_Brush Brush; uint8_t startseed, Noisemode; d_
 typedef struct { d_Stroke Stroke; d_Brush BrushFrom, Brush; uint8_t BrushID,NoiseID,Noisemode,ToolID,startseed,layer; float spacing; uint8_t scatter,rRadout,rRadrel,rScale,rScaleRel,rAngle,rSpacing,rSpread,rOp,rSol,rSol2,rCrv,rCop,rPwr,rHue,rSat,rLit; } d_Section;
 typedef struct { uint8_t ActID; int16_t layer, layerto; uint8_t bm; float op; bool vis; Rectangle rect; } d_LAction;
 
-// Document — base resolution for viewport / export
-typedef struct { int width, height; } Document;
+// ── Canvas window — defines the framing rectangle in document space ──
+typedef struct {
+    float cx, cy;    // center in document-space units
+    float w, h;      // size in document-space units
+    float rotation;  // radians
+} CanvasWindow;
+
+// Document — resolution (ppu) + canvas window framing
+typedef struct {
+    float ppu;            // pixels per unit (default 256)
+    CanvasWindow window;
+} Document;
+
+enum FramingMode { FRAME_DEFAULT, FRAME_CROP };
+
+// Helpers — explicit rounding, not hidden in a macro
+static inline int DocOutW(const Document* d) { return (int)(d->window.w * d->ppu + 0.5f); }
+static inline int DocOutH(const Document* d) { return (int)(d->window.h * d->ppu + 0.5f); }
 
 struct BrushDab  { float x, y; float srcX, srcY; d_RealBrush brush; };
 struct DrawCommand { float x, y; uint32_t color; float radius; };
@@ -173,6 +189,7 @@ struct AppState {
     int activeLayer;
     Camera2D camera;
     int mode, eraseMode;
+    int framingMode;          // FRAME_DEFAULT or FRAME_CROP
     TexSlotID brushTexSlot;   // texture used as brush stamp pattern — set by Quick HUD only
     TexSlotID editTexSlot;    // texture being edited (when editTexMode==1) — set by Layer Panel only
     bool brushTexActive;
@@ -188,7 +205,15 @@ float RngConv(float inval, float inmin, float inmax, float outmin, float outmax)
 
 // Document operations
 Document Doc_New(int w, int h);
+Document Doc_NewPPU(float ppu, float cw, float ch);
 void app_new_document(int w, int h, Color fill);
+
+// Canvas window matrix — pure function, maps document coords → output pixel coords
+void ComputeCanvasMatrix(float ppu, const CanvasWindow* cw, int outW, int outH, float mat[6]);
+
+// Commit the canvas window: bake the window transform into all layers,
+// reset document to identity window at the new size.
+void ApplyCanvasWindow(Document* doc);
 
 // LayerStack — all layer management lives here
 #include "layerstack.h"
@@ -222,6 +247,7 @@ extern int g_texPanelAreaY; // y-coordinate for the texture panel in the Quick H
 #define HUD_NONE 0
 #define HUD_QUICK 1
 #define HUD_LAYER_XFORM 2
+#define HUD_CANVAS_XFORM 3
 extern int g_activeHud;
 
 #define QP_SLIDER_W 28
@@ -364,6 +390,15 @@ struct LayerXformModule : IModule {
     AppState* state;
     explicit LayerXformModule(AppState* s) : state(s) {}
     const char* Name() const override { return "LayerXform"; }
+    bool HandleInput(InputState& input, const DrawRect& rect) override;
+    void DrawGL(const DrawRect& rect) override;
+    void DrawGUI(const DrawRect& rect) override;
+};
+
+struct CanvasXformModule : IModule {
+    AppState* state;
+    explicit CanvasXformModule(AppState* s) : state(s) {}
+    const char* Name() const override { return "CanvasXform"; }
     bool HandleInput(InputState& input, const DrawRect& rect) override;
     void DrawGL(const DrawRect& rect) override;
     void DrawGUI(const DrawRect& rect) override;

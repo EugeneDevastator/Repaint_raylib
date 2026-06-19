@@ -1,4 +1,5 @@
 #include "repaint.h"
+#include "layerstack.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -20,4 +21,48 @@ float RngConv(float inval,float inmin,float inmax,float outmin,float outmax) {
     return (outmax-outmin)*inrel+outmin;
 }
 
-Document Doc_New(int w, int h) { Document d; d.width=w; d.height=h; return d; }
+Document Doc_New(int w, int h) {
+    Document d;
+    d.ppu = 1.0f;
+    d.window.cx = w * 0.5f;
+    d.window.cy = h * 0.5f;
+    d.window.w = (float)w;
+    d.window.h = (float)h;
+    d.window.rotation = 0.0f;
+    return d;
+}
+
+Document Doc_NewPPU(float ppu, float cw, float ch) {
+    Document d;
+    d.ppu = ppu;
+    d.window.cx = cw * 0.5f;
+    d.window.cy = ch * 0.5f;
+    d.window.w = cw;
+    d.window.h = ch;
+    d.window.rotation = 0.0f;
+    return d;
+}
+
+void ComputeCanvasMatrix(float ppu, const CanvasWindow* cw, int outW, int outH, float mat[6]) {
+    float c = cosf(cw->rotation), s = sinf(cw->rotation);
+    mat[0] = ppu * c;
+    mat[1] = ppu * s;
+    mat[2] = -ppu * (cw->cx * c + cw->cy * s) + outW * 0.5f;
+    mat[3] = -ppu * s;
+    mat[4] = ppu * c;
+    mat[5] =  ppu * (cw->cx * s - cw->cy * c) + outH * 0.5f;
+}
+
+void ApplyCanvasWindow(Document* doc) {
+    // Bake the canvas-window transform into every visible layer,
+    // then reset the window to identity.
+    LayerStack_BakeCanvasWindow(doc);
+    // Reset document: identity window at the new output size
+    int outW = DocOutW(doc), outH = DocOutH(doc);
+    doc->window.cx = outW * 0.5f;
+    doc->window.cy = outH * 0.5f;
+    doc->window.w = (float)outW;
+    doc->window.h = (float)outH;
+    doc->window.rotation = 0.0f;
+    // ppu unchanged
+}

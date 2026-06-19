@@ -24,8 +24,8 @@ bool LayerXformModule::HandleInput(InputState& input, const DrawRect& rect) {
         } else {
             g_activeHud = HUD_LAYER_XFORM;
             if (state->activeLayer >= 0) {
-                g_pivotCursorX = state->doc.width * 0.5f;
-                g_pivotCursorY = state->doc.height * 0.5f;
+                g_pivotCursorX = state->doc.window.cx;
+                g_pivotCursorY = state->doc.window.cy;
             }
         }
         return true;
@@ -58,8 +58,8 @@ bool LayerXformModule::HandleInput(InputState& input, const DrawRect& rect) {
 
     sLayerProps* lp = LayerStack_GetProps(state->activeLayer);
     float lw = (float)lp->layerW, lh = (float)lp->layerH;
-    if (lw < 1) lw = (float)state->doc.width;
-    if (lh < 1) lh = (float)state->doc.height;
+    if (lw < 1) lw = (float)DocOutW(&state->doc);
+    if (lh < 1) lh = (float)DocOutH(&state->doc);
 
     Vector2 mousePos = input.MousePos();
     Vector2 canvasPos = GetScreenToWorld2D(mousePos, state->camera);
@@ -219,8 +219,8 @@ void LayerXformModule::DrawGL(const DrawRect& rect) {
 
     sLayerProps* lp = LayerStack_GetProps(state->activeLayer);
     float lw = (float)lp->layerW, lh = (float)lp->layerH;
-    if (lw < 1) lw = (float)state->doc.width;
-    if (lh < 1) lh = (float)state->doc.height;
+    if (lw < 1) lw = (float)DocOutW(&state->doc);
+    if (lh < 1) lh = (float)DocOutH(&state->doc);
 
     auto ws = [&](Vector2 wp) -> Vector2 {
         return GetWorldToScreen2D(wp, state->camera);

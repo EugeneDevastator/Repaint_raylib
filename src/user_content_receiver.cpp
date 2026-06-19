@@ -55,15 +55,17 @@ static void OnDropResult(DialogResult r) {
                 LayerStack_Init();
                 s_state->doc = Doc_New(w, h);
                 s_state->activeLayer = 0;
-                s_state->camera.target = Vector2{(float)w * 0.5f, (float)h * 0.5f};
+                { int cw = DocOutW(&s_state->doc), ch = DocOutH(&s_state->doc);
+                float cv[6]; ComputeCanvasMatrix(s_state->doc.ppu, &s_state->doc.window, cw, ch, cv);
+                LayerStack_SetCanvasView(cv); LayerStack_SetRenderWindow(cw, ch);
+                s_state->camera.target = Vector2{(float)cw * 0.5f, (float)ch * 0.5f}; }
                 s_state->camera.zoom = 1.0f;
-                LayerStack_SetRenderWindow(w, h);
                 ImportImage(img);
             } else {
                 ImportImage(img);
             }
             layersDirty = true;
-            if (g_recorder) g_recorder->Reset(s_state->doc.width, s_state->doc.height);
+            if (g_recorder) g_recorder->Reset(DocOutW(&s_state->doc), DocOutH(&s_state->doc));
         } else {
             UnloadImage(img);
         }
@@ -110,15 +112,17 @@ static void OnPasteResult(DialogResult r) {
             LayerStack_Init();
             s_state->doc = Doc_New(w, h);
             s_state->activeLayer = 0;
-            s_state->camera.target = Vector2{(float)w * 0.5f, (float)h * 0.5f};
+            { int cw = DocOutW(&s_state->doc), ch = DocOutH(&s_state->doc);
+            float cv[6]; ComputeCanvasMatrix(s_state->doc.ppu, &s_state->doc.window, cw, ch, cv);
+            LayerStack_SetCanvasView(cv); LayerStack_SetRenderWindow(cw, ch);
+            s_state->camera.target = Vector2{(float)cw * 0.5f, (float)ch * 0.5f}; }
             s_state->camera.zoom = 1.0f;
-            LayerStack_SetRenderWindow(w, h);
             ImportImage(img);
-            if (g_recorder) g_recorder->Reset(w, h);
+            if (g_recorder) g_recorder->Reset(DocOutW(&s_state->doc), DocOutH(&s_state->doc));
         } else {
             ImportImage(img);
-            if (g_recorder) g_recorder->Reset(s_state ? s_state->doc.width : w,
-                                               s_state ? s_state->doc.height : h);
+            if (g_recorder) g_recorder->Reset(s_state ? DocOutW(&s_state->doc) : w,
+                                               s_state ? DocOutH(&s_state->doc) : h);
         }
         layersDirty = true;
     } else {

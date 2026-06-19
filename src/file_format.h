@@ -11,10 +11,22 @@
 //                     3 = original (8-bit PNG per layer, no transforms)
 //                     4 = added mat[6] transform per layer
 //                     5 = added layerW/H, pixelDepth field
-//   [N+12 … N+16)   Canvas width  (uint32)
-//   [N+16 … N+20)   Canvas height (uint32)
-//   [N+20 … N+24)   Layer count   (uint32)
-//   [N+24 … N+28)   pixelDepth    (uint32, v5+)
+//                     6 = added ppu (float) + CanvasWindow data
+//   v3-v5 header:
+//     [N+12 … N+16)   Canvas width  (uint32)
+//     [N+16 … N+20)   Canvas height (uint32)
+//     [N+20 … N+24)   Layer count   (uint32)
+//     [N+24 … N+28)   pixelDepth    (uint32, v5+)
+//   v6+ header:
+//     [N+12 … N+16)   ppu (float, was width)
+//     [N+16 … N+20)   reserved (uint32, was height)
+//     [N+20 … N+24)   Layer count   (uint32)
+//     [N+24 … N+28)   pixelDepth    (uint32)
+//     [N+28 … N+32)   CanvasWindow.cx  (float)
+//     [N+32 … N+36)   CanvasWindow.cy  (float)
+//     [N+36 … N+40)   CanvasWindow.w   (float)
+//     [N+40 … N+44)   CanvasWindow.h   (float)
+//     [N+44 … N+48)   CanvasWindow.rotation (float)
 //                       0 = legacy 8-bit PNG per layer  (v3/v4)
 //                       1 = raw R16G16B16A16 per layer   (v5)
 //

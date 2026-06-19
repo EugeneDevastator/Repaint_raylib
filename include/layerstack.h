@@ -15,6 +15,10 @@ void LayerStack_ReloadShader(void);
 // Set the rendering window (for Composite output) and init accumulators
 void LayerStack_SetRenderWindow(int w, int h);
 
+// Set the canvas-window matrix that is always pre-multiplied into every
+// layer's transform during compositing.
+void LayerStack_SetCanvasView(const float mat[6]);
+
 // ── Layer management ────────────────────────────────────────────────
 int  LayerStack_Add(int w, int h);
 int  LayerStack_InsertLayer(int afterIdx);
@@ -53,8 +57,16 @@ void LayerStack_ProduceCompositeDitherView8b(Image* dst, const float viewMat[6],
 void LayerStack_ProduceComposite(RenderTexture2D dst, int w, int h);
 void LayerStack_ProduceCompositeDither8b(Image* dst, int w, int h);
 
+// Scene bounds — computes the bounding rectangle (in document-space units)
+// of all visible layers. Returns false if no visible layers.
+bool LayerStack_GetSceneBounds(Rectangle* out);
+
 // ── Bake a single layer's transformed content into a caller-owned RT ──
 void LayerStack_BakeSingleLayer(int idx, RenderTexture2D dst);
+
+// ── Canvas-window commit: re-bake every layer so the window transform
+//     is baked into each layer's content, then reset transforms. ──
+void LayerStack_BakeCanvasWindow(const Document* doc);
 
 // ── For viewport/renderer access ─────────────────────────────────────
 bool   LayerStack_PresentInited(void);

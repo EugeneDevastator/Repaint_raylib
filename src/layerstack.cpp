@@ -29,6 +29,7 @@ static struct {
     TexSlotID* slotID;   // TM slot for this layer (registered via TM_Register)
     int count;
     int renderW, renderH;
+    float canvasView[6]; // always pre-multiplied into every layer's transform
     RenderTexture2D accumA, accumB, layerTransRT;
     bool accumInited;
     Texture2D checkerTex; bool checkerValid;
@@ -42,7 +43,7 @@ static struct {
     int curCanvasW, curCanvasH;
     RenderTexture2D* finalAcc;
     bool dirty;
-} LS = {0};
+} LS;
 
 static int CW(void) { return LS.renderW; }
 static int CH(void) { return LS.renderH; }
@@ -164,7 +165,7 @@ static void RemoveLayerSlot(int idx) {
 }
 
 // ── Init / shutdown ──────────────────────────────────────────────────
-void LayerStack_Init(void) { LS = {0}; }
+void LayerStack_Init(void) { LS = {0}; LS.canvasView[0]=1; LS.canvasView[4]=1; }
 
 void LayerStack_Shutdown(void) {
     if(LS.accumInited){ UnloadRenderTexture(LS.accumA); UnloadRenderTexture(LS.accumB); UnloadRenderTexture(LS.layerTransRT); LS.accumInited=false; }
@@ -182,6 +183,11 @@ void LayerStack_ReloadShader(void) {
 }
 
 void LayerStack_SetRenderWindow(int w, int h) { LS.renderW=w; LS.renderH=h; LS.dirty=true; }
+
+void LayerStack_SetCanvasView(const float mat[6]) {
+    memcpy(LS.canvasView, mat, 6*sizeof(float));
+    LS.dirty = true;
+}
 
 // ── Accessors ─────────────────────────────────────────────────────────
 int LayerStack_Count(void) { return LS.count; }
@@ -516,18 +522,23 @@ static void EnsurePresentShader(void) {
 // Returns pointer to whichever RT holds the final accumulated result.
 static RenderTexture2D* CompositeLayersInto(RenderTexture2D& a, RenderTexture2D& b, int cw, int ch) {
     RenderTexture2D*src=&a,*dst=&b;
+    float cv[6]; memcpy(cv, LS.canvasView, 6*sizeof(float));
     for(int i=0;i<LS.count;i++){
         if(!LS.prop[i].visible||LS.rt[i].id==0) continue;
         Texture2D layerTex=LS.rt[i].texture;
+        sLayerProps*p=&LS.prop[i];
+        float cmb[6];
+        // Pre-multiply canvasView × layerMat
+        cmb[0]=cv[0]*p->mat[0]+cv[1]*p->mat[3]; cmb[1]=cv[0]*p->mat[1]+cv[1]*p->mat[4]; cmb[2]=cv[0]*p->mat[2]+cv[1]*p->mat[5]+cv[2];
+        cmb[3]=cv[3]*p->mat[0]+cv[4]*p->mat[3]; cmb[4]=cv[3]*p->mat[1]+cv[4]*p->mat[4]; cmb[5]=cv[3]*p->mat[2]+cv[4]*p->mat[5]+cv[5];
         if(LS.layerTransRT.id>0){
-            BakeTransform(LS.layerTransRT,LS.rt[i].texture,LS.prop[i].mat,LS.prop[i].layerW,LS.prop[i].layerH,cw,ch);
+            BakeTransform(LS.layerTransRT,LS.rt[i].texture,cmb,LS.prop[i].layerW,LS.prop[i].layerH,cw,ch);
             layerTex=LS.layerTransRT.texture;
         }
-        sLayerProps*p=&LS.prop[i];
         bool seamlessBlended=(p->seamless && LS.shaderInited && LS.layerTransRT.id>0);
         if(seamlessBlended) {
             int lw=p->layerW, lh=p->layerH;
-            BlendSeamlessTiles(*src,*dst,LS.rt[i].texture,p->mat,lw,lh,cw,ch,
+            BlendSeamlessTiles(*src,*dst,LS.rt[i].texture,cmb,lw,lh,cw,ch,
                 p->op,p->blendmode,p->threshold,p->feather,LS.layerTransRT);
             // *src holds the result, *dst is free — no swap needed.
         } else if(LS.shaderInited) {
@@ -711,4 +722,54 @@ void LayerStack_BakeSingleLayer(int idx, RenderTexture2D dst) {
                   LS.prop[idx].layerW, LS.prop[idx].layerH, 0, 0);
 }
 
+bool LayerStack_GetSceneBounds(Rectangle* out) {
+    if (!out) return false;
+    bool any = false;
+    float l=0, r=0, b=0, t=0;
+    for (int i = 0; i < LS.count; i++) {
+        if (!LS.prop[i].visible || LS.rt[i].id == 0) continue;
+        float* M = LS.prop[i].mat;
+        float lw = (float)LS.prop[i].layerW, lh = (float)LS.prop[i].layerH;
+        float x0 = M[2];                    float y0 = M[5];
+        float x1 = M[0]*lw + M[2];           float y1 = M[3]*lw + M[5];
+        float x2 = M[1]*lh + M[2];           float y2 = M[4]*lh + M[5];
+        float x3 = M[0]*lw + M[1]*lh + M[2]; float y3 = M[3]*lw + M[4]*lh + M[5];
+        float mx = fminf(fminf(x0,x1),fminf(x2,x3));
+        float my = fminf(fminf(y0,y1),fminf(y2,y3));
+        float Mx = fmaxf(fmaxf(x0,x1),fmaxf(x2,x3));
+        float My = fmaxf(fmaxf(y0,y1),fmaxf(y2,y3));
+        if (!any) { l=mx; r=Mx; b=my; t=My; any=true; }
+        else { l=fminf(l,mx); r=fmaxf(r,Mx); b=fminf(b,my); t=fmaxf(t,My); }
+    }
+    out->x = l; out->y = b; out->width = r-l; out->height = t-b;
+    return any;
+}
 
+void LayerStack_BakeCanvasWindow(const Document* doc) {
+    int outW = DocOutW(doc), outH = DocOutH(doc);
+    if (outW < 1 || outH < 1) return;
+    EnsureShader(); EnsurePresentShader();
+    // Bake combined canvasView × layerMat into each layer
+    for (int i = 0; i < LS.count; i++) {
+        if (LS.rt[i].id == 0) continue;
+        sLayerProps* p = &LS.prop[i];
+        float cv[6]; memcpy(cv, LS.canvasView, 6*sizeof(float));
+        float cmb[6];
+        cmb[0]=cv[0]*p->mat[0]+cv[1]*p->mat[3]; cmb[1]=cv[0]*p->mat[1]+cv[1]*p->mat[4]; cmb[2]=cv[0]*p->mat[2]+cv[1]*p->mat[5]+cv[2];
+        cmb[3]=cv[3]*p->mat[0]+cv[4]*p->mat[3]; cmb[4]=cv[3]*p->mat[1]+cv[4]*p->mat[4]; cmb[5]=cv[3]*p->mat[2]+cv[4]*p->mat[5]+cv[5];
+        // Re-bake into a new RT at the canvas-window output size
+        RenderTexture2D newRT = Load16BitRT(outW, outH);
+        if (newRT.id == 0) continue;
+        BakeTransform(newRT, LS.rt[i].texture, cmb, p->layerW, p->layerH, outW, outH);
+        // Replace old RT
+        UnloadRenderTexture(LS.rt[i]);
+        LS.rt[i] = newRT;
+        // Reset layer transform to identity
+        p->mat[0]=1; p->mat[1]=0; p->mat[2]=0; p->mat[3]=0; p->mat[4]=1; p->mat[5]=0;
+        p->layerW = outW; p->layerH = outH;
+    }
+    // Reset canvasView to identity
+    LS.canvasView[0]=1; LS.canvasView[1]=0; LS.canvasView[2]=0;
+    LS.canvasView[3]=0; LS.canvasView[4]=1; LS.canvasView[5]=0;
+    LS.dirty = true;
+}
