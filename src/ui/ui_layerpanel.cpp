@@ -364,9 +364,6 @@ void LayerPanel_Draw(AppState* state) {
                     if (TM_IsValid(di)) {
                         TexSlot* dstTs = TM_Get(di);
                         if (dstTs) {
-                            UnloadImage(dstTs->cpuImage);
-                            dstTs->cpuImage = ImageCopy(srcTs->cpuImage);
-                            Texture2D tmp = LoadTextureFromImage(dstTs->cpuImage);
                             BeginTextureMode(dstTs->rt);
                             ClearBackground(BLANK);
                             rlSetBlendMode(RL_BLEND_CUSTOM);
@@ -376,7 +373,6 @@ void LayerPanel_Draw(AppState* state) {
                                 Vector2{0, 0}, WHITE);
                             rlSetBlendMode(RL_BLEND_ALPHA);
                             EndTextureMode();
-                            UnloadTexture(tmp);
                             g_layerTexSelected = di.slot;
                             state->editTexMode = 1;
                             state->editTexSlot = di;

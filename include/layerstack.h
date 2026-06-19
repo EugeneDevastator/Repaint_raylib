@@ -36,13 +36,13 @@ int            LayerStack_RenderW(void);
 int            LayerStack_RenderH(void);
 
 // ── Sync (GPU ↔ CPU) ────────────────────────────────────────────────
-void LayerStack_SyncImageFromRT(int idx);
+void LayerStack_ReadFromGPU(int idx);
 
 // ── Reverse lookup ──────────────────────────────────────────────────
 int  LayerStack_FindLayerBySlot(TexSlotID slot);
 
 // Upload the CPU image to the GPU render target (CPU → GPU)
-void LayerStack_SyncRTFromImage(int idx);
+void LayerStack_UploadToGPU(int idx);
 
 // ── Compositing ─────────────────────────────────────────────────────
 // Legacy — renders into internal accumulators at SetRenderWindow resolution

@@ -290,7 +290,7 @@ static void OnOpenResult(DialogResult r) {
                 Image* layerImg = LayerStack_GetImage(idx);
                 UnloadImage(*layerImg);
                 *layerImg = img;  // transfer ownership
-                LayerStack_SyncRTFromImage(idx);
+                LayerStack_UploadToGPU(idx);
                 layersDirty = true;
                 // Don't set g_currentFilePath — imported images should be
                 // saved as .re.png via Save As before they can be reloaded.
@@ -307,7 +307,7 @@ static void OnOpenResult(DialogResult r) {
                 UnloadImage(*layerImg);
                 *layerImg = GenImageColor(w, h, WHITE);
                 ImageFormat(layerImg, PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
-                LayerStack_SyncRTFromImage(idx);
+                LayerStack_UploadToGPU(idx);
                 layersDirty = true;
                 if (g_recorder) {
                     g_recorder->Reset(w, h);

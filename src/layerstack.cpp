@@ -296,7 +296,7 @@ void LayerStack_ApplyTransform(int idx, const float mat[6]) {
 }
 
 // ── Sync ──────────────────────────────────────────────────────────────
-void LayerStack_SyncImageFromRT(int idx) {
+void LayerStack_ReadFromGPU(int idx) {
     if(idx<0||idx>=LS.count||LS.rt[idx].id==0) return;
     Image cap=LoadImageFromTexture(LS.rt[idx].texture); ImageFlipVertical(&cap);
     if(cap.format!=PIXELFORMAT_UNCOMPRESSED_R16G16B16A16){
@@ -307,7 +307,7 @@ void LayerStack_SyncImageFromRT(int idx) {
     UnloadImage(LS.img[idx]); LS.img[idx]=cap;
 }
 
-void LayerStack_SyncRTFromImage(int idx) {
+void LayerStack_UploadToGPU(int idx) {
     if(idx<0||idx>=LS.count||LS.rt[idx].id==0||!LS.img[idx].data) return;
     Texture2D tmp = LoadTextureFromImage(LS.img[idx]);
     BeginTextureMode(LS.rt[idx]);

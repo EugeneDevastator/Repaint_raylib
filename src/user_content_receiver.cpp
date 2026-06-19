@@ -26,7 +26,7 @@ static void ImportImage(Image img) {
     Image* layerImg = LayerStack_GetImage(idx);
     UnloadImage(*layerImg);
     *layerImg = img;
-    LayerStack_SyncRTFromImage(idx);
+    LayerStack_UploadToGPU(idx);
 }
 
 static void _updateWorkingDir(const char* path) {

@@ -90,7 +90,7 @@ bool SaveRePaint(const char* path, Document* doc, AppState* state) {
 
     // Sync all layer CPU images from GPU (realtime SyncLayerTexture was removed)
     for (int i = 0; i < LayerStack_Count(); i++)
-        LayerStack_SyncImageFromRT(i);
+        LayerStack_ReadFromGPU(i);
 
     // Sync all user texture CPU images from GPU
     for (int s = 0; s < TM_SLOTS_PER_BUCKET; s++) {
@@ -278,7 +278,7 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
             sLayerProps* lp = LayerStack_GetProps(idx);
             lp->op = 1; lp->visible = true; lp->blendmode = bmGamma;
             lp->mat[0] = 1; lp->mat[4] = 1; lp->layerW = (int)w; lp->layerH = (int)h;
-            LayerStack_SyncRTFromImage(idx);
+            LayerStack_UploadToGPU(idx);
         }
     } else {
         // v5+: load each layer at its native resolution
@@ -322,7 +322,7 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
             *LayerStack_GetProps(idx) = tempProps;
             LayerStack_GetProps(idx)->layerW = lw; LayerStack_GetProps(idx)->layerH = lh;
             // Upload the loaded CPU image to the GPU render target
-            LayerStack_SyncRTFromImage(idx);
+            LayerStack_UploadToGPU(idx);
         }
     }
 
