@@ -4,51 +4,46 @@
 #include "texture_manager.h"
 #include "rlgl.h"
 
-static void UploadCPUToRT(TexSlot* ts) {
-    Texture2D tmp = LoadTextureFromImage(ts->cpuImage);
-    BeginTextureMode(ts->rt);
+static void CopyRT(RenderTexture2D dst, RenderTexture2D src, int w, int h) {
+    BeginTextureMode(dst);
+    rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE,RL_ZERO,RL_FUNC_ADD);
     ClearBackground(BLANK);
-    rlSetBlendMode(RL_BLEND_CUSTOM);
-    rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
-    DrawTexture(tmp, 0, 0, WHITE);
+    DrawTextureRec(src.texture, Rectangle{0,0,(float)w,(float)-h}, Vector2{0,0}, WHITE);
     rlSetBlendMode(RL_BLEND_ALPHA);
     EndTextureMode();
-    UnloadTexture(tmp);
 }
 
 void UndoManager::Snapshot(AppState* state, TexSlotID slot) {
     (void)state;
+    int w = 0, h = 0;
+    RenderTexture2D srcRT = {0};
+
     if (slot.bucket == TM_BUCKET_LAYER) {
         int li = LayerStack_FindLayerBySlot(slot);
         if (li < 0) return;
-        LayerStack_SyncImageFromRT(li);
-        Image* src = LayerStack_GetImage(li);
-        if (!src || !src->data) return;
-        UndoEntry entry;
-        entry.snapshot = ImageCopy(*src);
-        auto& st = m_undo[flatIdx(slot)];
-        st.push_back(std::move(entry));
-        while ((int)st.size() > MAX_UNDO) {
-            st.front().Free();
-            st.pop_front();
-        }
+        srcRT = LayerStack_GetRT(li);
+        sLayerProps* p = LayerStack_GetProps(li);
+        if (!p || srcRT.id == 0) return;
+        w = p->layerW;
+        h = p->layerH;
     } else {
         TexSlot* ts = TM_Get(slot);
         if (!ts || ts->rt.id == 0) return;
-        Image cap = LoadImageFromTexture(ts->rt.texture);
-        ImageFlipVertical(&cap);
-        if (!cap.data) return;
-        if (ts->cpuImage.data) UnloadImage(ts->cpuImage);
-        ts->cpuImage = cap;
-        UndoEntry entry;
-        entry.snapshot = ImageCopy(ts->cpuImage);
-        auto& st = m_undo[flatIdx(slot)];
-        st.push_back(std::move(entry));
-        while ((int)st.size() > MAX_UNDO) {
-            st.front().Free();
-            st.pop_front();
-        }
+        srcRT = ts->rt;
+        w = ts->rt.texture.width;
+        h = ts->rt.texture.height;
     }
+
+    RenderTexture2D snapRT = Load16BitRT(w, h);
+    if (snapRT.id == 0) return;
+    CopyRT(snapRT, srcRT, w, h);
+
+    UndoEntry entry;
+    entry.snapshot = snapRT;
+    auto& st = m_undo[flatIdx(slot)];
+    st.push_back(std::move(entry));
+    while ((int)st.size() > MAX_UNDO)
+        st.pop_front();
 }
 
 bool UndoManager::Undo(AppState* state, TexSlotID slot) {
@@ -56,45 +51,42 @@ bool UndoManager::Undo(AppState* state, TexSlotID slot) {
     auto& st = m_undo[flatIdx(slot)];
     if (st.empty()) return false;
 
+    int w = 0, h = 0;
+    RenderTexture2D srcRT = {0};
+
     if (slot.bucket == TM_BUCKET_LAYER) {
         int li = LayerStack_FindLayerBySlot(slot);
         if (li < 0) return false;
-        LayerStack_SyncImageFromRT(li);
-        Image* cur = LayerStack_GetImage(li);
-        if (!cur || !cur->data) return false;
-        UndoEntry redo;
-        redo.snapshot = ImageCopy(*cur);
-        auto& rs = m_redo[flatIdx(slot)];
-        rs.push_back(std::move(redo));
-        UndoEntry& undo = st.back();
-        UnloadImage(*cur);
-        *cur = undo.snapshot;
-        undo.snapshot.data = nullptr;
-        undo.snapshot = {0};
-        LayerStack_SyncRTFromImage(li);
-        st.pop_back();
-        return true;
+        srcRT = LayerStack_GetRT(li);
+        sLayerProps* p = LayerStack_GetProps(li);
+        if (!p || srcRT.id == 0) return false;
+        w = p->layerW;
+        h = p->layerH;
     } else {
         TexSlot* ts = TM_Get(slot);
-        if (!ts) return false;
-        Image cap = LoadImageFromTexture(ts->rt.texture);
-        ImageFlipVertical(&cap);
-        if (!cap.data) return false;
-        if (ts->cpuImage.data) UnloadImage(ts->cpuImage);
-        ts->cpuImage = cap;
-        UndoEntry redo;
-        redo.snapshot = ImageCopy(ts->cpuImage);
-        auto& rs = m_redo[flatIdx(slot)];
-        rs.push_back(std::move(redo));
-        UndoEntry& undo = st.back();
-        UnloadImage(ts->cpuImage);
-        ts->cpuImage = undo.snapshot;
-        undo.snapshot.data = nullptr;
-        undo.snapshot = {0};
-        UploadCPUToRT(ts);
-        st.pop_back();
-        return true;
+        if (!ts || ts->rt.id == 0) return false;
+        srcRT = ts->rt;
+        w = ts->rt.texture.width;
+        h = ts->rt.texture.height;
     }
+
+    // Save current state as redo
+    RenderTexture2D redoRT = Load16BitRT(w, h);
+    if (redoRT.id == 0) return false;
+    CopyRT(redoRT, srcRT, w, h);
+    UndoEntry redo;
+    redo.snapshot = redoRT;
+    auto& rs = m_redo[flatIdx(slot)];
+    rs.push_back(std::move(redo));
+
+    // Restore from undo
+    UndoEntry& undo = st.back();
+    CopyRT(srcRT, undo.snapshot, w, h);
+    st.pop_back();
+
+    if (slot.bucket == TM_BUCKET_LAYER) LayerStack_SetDirty();
+    layersDirty = true;
+    return true;
 }
 
 bool UndoManager::Redo(AppState* state, TexSlotID slot) {
@@ -102,52 +94,53 @@ bool UndoManager::Redo(AppState* state, TexSlotID slot) {
     auto& st = m_redo[flatIdx(slot)];
     if (st.empty()) return false;
 
+    int w = 0, h = 0;
+    RenderTexture2D srcRT = {0};
+
     if (slot.bucket == TM_BUCKET_LAYER) {
         int li = LayerStack_FindLayerBySlot(slot);
         if (li < 0) return false;
-        LayerStack_SyncImageFromRT(li);
-        Image* cur = LayerStack_GetImage(li);
-        if (!cur || !cur->data) return false;
-        UndoEntry reundo;
-        reundo.snapshot = ImageCopy(*cur);
-        auto& us = m_undo[flatIdx(slot)];
-        us.push_back(std::move(reundo));
-        UndoEntry& redo = st.back();
-        UnloadImage(*cur);
-        *cur = redo.snapshot;
-        redo.snapshot.data = nullptr;
-        redo.snapshot = {0};
-        LayerStack_SyncRTFromImage(li);
-        st.pop_back();
-        return true;
+        srcRT = LayerStack_GetRT(li);
+        sLayerProps* p = LayerStack_GetProps(li);
+        if (!p || srcRT.id == 0) return false;
+        w = p->layerW;
+        h = p->layerH;
     } else {
         TexSlot* ts = TM_Get(slot);
-        if (!ts) return false;
-        Image cap = LoadImageFromTexture(ts->rt.texture);
-        ImageFlipVertical(&cap);
-        if (!cap.data) return false;
-        if (ts->cpuImage.data) UnloadImage(ts->cpuImage);
-        ts->cpuImage = cap;
-        UndoEntry reundo;
-        reundo.snapshot = ImageCopy(ts->cpuImage);
-        auto& us = m_undo[flatIdx(slot)];
-        us.push_back(std::move(reundo));
-        UndoEntry& redo = st.back();
-        UnloadImage(ts->cpuImage);
-        ts->cpuImage = redo.snapshot;
-        redo.snapshot.data = nullptr;
-        redo.snapshot = {0};
-        UploadCPUToRT(ts);
-        st.pop_back();
-        return true;
+        if (!ts || ts->rt.id == 0) return false;
+        srcRT = ts->rt;
+        w = ts->rt.texture.width;
+        h = ts->rt.texture.height;
     }
+
+    // Save current state back to undo
+    RenderTexture2D reundoRT = Load16BitRT(w, h);
+    if (reundoRT.id == 0) return false;
+    CopyRT(reundoRT, srcRT, w, h);
+    UndoEntry reundo;
+    reundo.snapshot = reundoRT;
+    auto& us = m_undo[flatIdx(slot)];
+    us.push_back(std::move(reundo));
+
+    // Restore from redo
+    UndoEntry& redo = st.back();
+    CopyRT(srcRT, redo.snapshot, w, h);
+    st.pop_back();
+
+    if (slot.bucket == TM_BUCKET_LAYER) LayerStack_SetDirty();
+    layersDirty = true;
+    return true;
 }
 
 void UndoManager::InvalidateAll() {
-    for (auto& st : m_undo)
-        for (auto& e : st) e.Free();
-    for (auto& st : m_redo)
-        for (auto& e : st) e.Free();
     for (auto& st : m_undo) st.clear();
     for (auto& st : m_redo) st.clear();
+}
+
+void UndoManager::InvalidateSlot(TexSlotID slot) {
+    int fi = flatIdx(slot);
+    if (fi >= 0 && fi < MAX_SLOTS) {
+        m_undo[fi].clear();
+        m_redo[fi].clear();
+    }
 }

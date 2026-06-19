@@ -88,6 +88,22 @@ static void _readProps(const uint8_t** p, sLayerProps* lp, uint32_t ver) {
 bool SaveRePaint(const char* path, Document* doc, AppState* state) {
     if (!path || !doc || LayerStack_Count() < 1) return false;
 
+    // Sync all layer CPU images from GPU (realtime SyncLayerTexture was removed)
+    for (int i = 0; i < LayerStack_Count(); i++)
+        LayerStack_SyncImageFromRT(i);
+
+    // Sync all user texture CPU images from GPU
+    for (int s = 0; s < TM_SLOTS_PER_BUCKET; s++) {
+        TexSlotID id = {TM_BUCKET_USER, (uint8_t)s};
+        TexSlot* ts = TM_Get(id);
+        if (!ts || ts->builtIn) continue;
+        if (ts->rt.id == 0) continue;
+        Image cap = LoadImageFromTexture(ts->rt.texture);
+        ImageFlipVertical(&cap);
+        if (ts->cpuImage.data) UnloadImage(ts->cpuImage);
+        ts->cpuImage = cap;
+    }
+
     // 1. GPU composite + dithered 8-bit preview (for file thumbnails)
     Image flat = CompositeLayersWithDither(state);
     int compSize = 0;

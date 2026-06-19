@@ -6,9 +6,18 @@
 struct AppState;
 
 struct UndoEntry {
-    Image snapshot;
+    RenderTexture2D snapshot{};
 
-    void Free() { if (snapshot.data) UnloadImage(snapshot); snapshot.data = nullptr; }
+    void Free() { if (snapshot.id) UnloadRenderTexture(snapshot); snapshot = {0}; }
+    ~UndoEntry() { Free(); }
+    UndoEntry() = default;
+    UndoEntry(UndoEntry&& other) noexcept : snapshot(other.snapshot) { other.snapshot = {0}; }
+    UndoEntry& operator=(UndoEntry&& other) noexcept {
+        if (this != &other) { Free(); snapshot = other.snapshot; other.snapshot = {0}; }
+        return *this;
+    }
+    UndoEntry(const UndoEntry&) = delete;
+    UndoEntry& operator=(const UndoEntry&) = delete;
 };
 
 class UndoManager {
@@ -20,6 +29,7 @@ public:
     bool Undo(AppState* state, TexSlotID slot);
     bool Redo(AppState* state, TexSlotID slot);
     void InvalidateAll();
+    void InvalidateSlot(TexSlotID slot);
 
     ~UndoManager() { InvalidateAll(); }
 

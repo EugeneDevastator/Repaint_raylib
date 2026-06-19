@@ -217,7 +217,7 @@ int LayerStack_Add(int w, int h) {
     ReallocArrays(idx+1);
     InitLayerSlot(idx,w,h);
     LS.count++; LS.dirty=true;
-    if (g_undoManager) g_undoManager->InvalidateAll();
+    // New layer starts with empty undo — don't touch existing layers' history
     return idx;
 }
 
@@ -228,14 +228,15 @@ int LayerStack_InsertLayer(int afterIdx) {
     ShiftLayersUp(LS.count,idx);
     InitLayerSlot(idx,cw,ch);
     LS.count++; LS.dirty=true;
-    if (g_undoManager) g_undoManager->InvalidateAll();
     return idx;
 }
 
 void LayerStack_DeleteLayer(int idx) {
     if(idx<0||idx>=LS.count||LS.count<=1) return;
+    TexSlotID sid = LS.slotID[idx];
     RemoveLayerSlot(idx);
-    if (g_undoManager) g_undoManager->InvalidateAll();
+    if (g_undoManager && TM_IsValid(sid))
+        g_undoManager->InvalidateSlot(sid);
 }
 
 void LayerStack_DuplicateLayer(int idx) {
@@ -457,8 +458,13 @@ static void MergeDownImpl(int idx, bool seamless) {
         RebuildLayerImageAndTex(idx-1,mergedRT);
         UnloadRenderTexture(oldRT);
     }
+    TexSlotID sidTop = LS.slotID[idx];
+    TexSlotID sidBot = LS.slotID[idx-1];
     RemoveLayerSlot(idx);
-    if (g_undoManager) g_undoManager->InvalidateAll();
+    if (g_undoManager) {
+        g_undoManager->InvalidateSlot(sidTop);
+        g_undoManager->InvalidateSlot(sidBot);
+    }
 }
 
 void LayerStack_MergeDown(int idx) { MergeDownImpl(idx,false); }

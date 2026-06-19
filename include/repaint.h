@@ -294,9 +294,6 @@ void MergeDownLayer(AppState* state, int idx);
 void UnloadViewportRenderer(void);
 void ReloadViewportShader(void);
 
-// Legacy sync (called by viewport after strokes, delegates to LayerStack)
-void SyncLayerTexture(AppState* state, int layer);
-
 // File format
 bool SaveRePaint(const char* path, Document* doc, AppState* state);
 bool LoadRePaint(const char* path, Document* doc, AppState* state);

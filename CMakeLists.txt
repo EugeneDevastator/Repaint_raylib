@@ -80,7 +80,6 @@ set(SOURCES
     src/app.cpp
     src/modulators.cpp
     src/brush_preset.cpp
-    src/layermanager.cpp
     src/layerstack.cpp
     src/texture_manager.cpp
     src/repaint_core.cpp

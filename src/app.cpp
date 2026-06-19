@@ -654,10 +654,6 @@ void App_Draw(AppState* state) {
 
     if (viewport.broker) viewport.broker->poll(state);
     if (g_recorder) g_recorder->poll(state);
-    if (viewport.strokeEnded) {
-        SyncLayerTexture(state, viewport.endLayer);
-        viewport.strokeEnded = false;
-    }
 
     // ── Module GL draws (viewport canvas + overlays) ──
     g_moduleStack.DrawGL();
