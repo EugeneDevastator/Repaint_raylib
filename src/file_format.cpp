@@ -1,5 +1,6 @@
 #include "file_format.h"
 #include "repaint.h"
+#include "rlgl.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -88,22 +89,6 @@ static void _readProps(const uint8_t** p, sLayerProps* lp, uint32_t ver) {
 bool SaveRePaint(const char* path, Document* doc, AppState* state) {
     if (!path || !doc || LayerStack_Count() < 1) return false;
 
-    // Sync all layer CPU images from GPU (realtime SyncLayerTexture was removed)
-    for (int i = 0; i < LayerStack_Count(); i++)
-        LayerStack_ReadFromGPU(i);
-
-    // Sync all user texture CPU images from GPU
-    for (int s = 0; s < TM_SLOTS_PER_BUCKET; s++) {
-        TexSlotID id = {TM_BUCKET_USER, (uint8_t)s};
-        TexSlot* ts = TM_Get(id);
-        if (!ts || ts->builtIn) continue;
-        if (ts->rt.id == 0) continue;
-        Image cap = LoadImageFromTexture(ts->rt.texture);
-        ImageFlipVertical(&cap);
-        if (ts->cpuImage.data) UnloadImage(ts->cpuImage);
-        ts->cpuImage = cap;
-    }
-
     // 1. GPU composite + dithered 8-bit preview (for file thumbnails)
     Image flat = CompositeLayersWithDither(state);
     int compSize = 0;
@@ -111,7 +96,7 @@ bool SaveRePaint(const char* path, Document* doc, AppState* state) {
     UnloadImage(flat);
     if (!compPng || compSize <= 0) return false;
 
-    // 2. Serialize each layer's props (pixel data written later from the live image)
+    // 2. Serialize each layer's props (pixel data written later from live GPU RTs)
     int lc = LayerStack_Count();
     size_t totalExtra = 0;
     uint32_t pixelDepth = 1;  // 1 = raw R16G16B16A16
@@ -129,24 +114,21 @@ bool SaveRePaint(const char* path, Document* doc, AppState* state) {
         totalExtra += 4 + blobs[i].propsSz + 4 + rawSz;
     }
 
-    // 3. Serialize user textures (skip built-in defaults)
-    // Collect non-built-in textures from TM bucket 0
+    // 3. Serialize user textures (skip built-in defaults) — read RT→temp PNG
     struct { TexSlotID id; uint8_t* png; int pngSz; } texBlobs[256];
     int tc = 0;
     for (int s = 0; s < TM_SLOTS_PER_BUCKET && tc < 256; s++) {
         TexSlotID id = {TM_BUCKET_USER, (uint8_t)s};
         TexSlot* ts = TM_Get(id);
         if (!ts || ts->builtIn) continue;
-        Image texPngImg = ts->cpuImage;
-        bool owned = false;
-        if (texPngImg.data && texPngImg.format != PIXELFORMAT_UNCOMPRESSED_R8G8B8A8) {
-            texPngImg = ImageCopy(texPngImg);
-            ImageFormat(&texPngImg, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
-            owned = true;
-        }
+        if (ts->rt.id == 0) continue;
+        Image texImg = LoadImageFromTexture(ts->rt.texture);
+        ImageFlipVertical(&texImg);
+        if (texImg.format != PIXELFORMAT_UNCOMPRESSED_R8G8B8A8)
+            ImageFormat(&texImg, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
         int pngSz = 0;
-        uint8_t* png = ExportImageToMemory(texPngImg, ".png", &pngSz);
-        if (owned) UnloadImage(texPngImg);
+        uint8_t* png = ExportImageToMemory(texImg, ".png", &pngSz);
+        UnloadImage(texImg);
         texBlobs[tc].id = id;
         texBlobs[tc].png = png;
         texBlobs[tc].pngSz = pngSz;
@@ -180,14 +162,14 @@ bool SaveRePaint(const char* path, Document* doc, AppState* state) {
     _wu32(&p, pixelDepth);
 
     for (int i = 0; i < lc; i++) {
+        Image layerImg = LayerStack_ReadFromGPU(i);
         sLayerProps* props = LayerStack_GetProps(i);
-        Image* img = LayerStack_GetImage(i);
         _wu32(&p, (uint32_t)blobs[i].propsSz);
         _wcpy(&p, blobs[i].propsData, blobs[i].propsSz);
-        // pixelDepth == 1: write raw R16G16B16A16 pixel data (8 bytes/px)
         int rawSz = props->layerW * props->layerH * 8;
         _wu32(&p, (uint32_t)rawSz);
-        _wcpy(&p, img->data, rawSz);
+        _wcpy(&p, layerImg.data, rawSz);
+        UnloadImage(layerImg);
     }
 
     /* User texture section (built-in defaults not saved) */
@@ -273,12 +255,10 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
             }
             free(preview.data); preview.data = d16; preview.format = PIXELFORMAT_UNCOMPRESSED_R16G16B16A16;
             int idx = LayerStack_Add((int)w, (int)h);
-            UnloadImage(*LayerStack_GetImage(idx));
-            *LayerStack_GetImage(idx) = preview;
             sLayerProps* lp = LayerStack_GetProps(idx);
             lp->op = 1; lp->visible = true; lp->blendmode = bmGamma;
             lp->mat[0] = 1; lp->mat[4] = 1; lp->layerW = (int)w; lp->layerH = (int)h;
-            LayerStack_UploadToGPU(idx);
+            LayerStack_UploadToGPU(idx, preview);
         }
     } else {
         // v5+: load each layer at its native resolution
@@ -318,11 +298,9 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
             }
 
             int idx = LayerStack_Add(lw, lh);
-            *LayerStack_GetImage(idx) = layerImg;
             *LayerStack_GetProps(idx) = tempProps;
             LayerStack_GetProps(idx)->layerW = lw; LayerStack_GetProps(idx)->layerH = lh;
-            // Upload the loaded CPU image to the GPU render target
-            LayerStack_UploadToGPU(idx);
+            LayerStack_UploadToGPU(idx, layerImg);
         }
     }
 
@@ -360,16 +338,22 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
                     ImageFormat(&timg, PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
                     TexSlot* ts = TM_Get(id);
                     if (ts) {
-                        UnloadImage(ts->cpuImage);
-                        ts->cpuImage = timg;
-                        ts->dirty = true;
+                        Texture2D tmp = LoadTextureFromImage(timg);
+                        BeginTextureMode(ts->rt);
+                        ClearBackground(BLANK);
+                        rlSetBlendMode(RL_BLEND_CUSTOM);
+                        rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+                        DrawTexture(tmp, 0, 0, WHITE);
+                        rlSetBlendMode(RL_BLEND_ALPHA);
+                        EndTextureMode();
+                        UnloadTexture(tmp);
                     }
+                    UnloadImage(timg);
                 }
             } else {
                 p += tsz;
             }
         }
-        BrushTex_SyncAll(state);
     }
 
     UnloadFileData(fileData);

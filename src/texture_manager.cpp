@@ -41,20 +41,12 @@ TexSlotID TM_Add(uint8_t bucket, int w, int h, const char* name, bool builtIn) {
     ts->ownsResources = true;
     if (name) snprintf(ts->name, sizeof(ts->name), "%s", name);
 
-    // Create GPU render target
+    // Create GPU render target and initialise to transparent
     ts->rt = Load16BitRT(w, h);
-    // Create CPU image (blank)
-    ts->cpuImage = GenImageColor(w, h, BLANK);
-    ImageFormat(&ts->cpuImage, PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
-
-    // Upload blank CPU image to RT to initialise the GPU texture
     if (ts->rt.id > 0) {
-        Texture2D blank = LoadTextureFromImage(ts->cpuImage);
         BeginTextureMode(ts->rt);
         ClearBackground(BLANK);
-        DrawTexture(blank, 0, 0, WHITE);
         EndTextureMode();
-        UnloadTexture(blank);
     }
 
     // Advance hint past this slot
@@ -62,7 +54,7 @@ TexSlotID TM_Add(uint8_t bucket, int w, int h, const char* name, bool builtIn) {
     return TexSlotID{bucket, slot};
 }
 
-TexSlotID TM_Register(uint8_t bucket, RenderTexture2D rt, Image cpuImage,
+TexSlotID TM_Register(uint8_t bucket, RenderTexture2D rt,
                       const char* name, bool builtIn, int w, int h) {
     if (bucket >= TM_BUCKETS) return TM_INVALID_SLOT;
 
@@ -84,7 +76,6 @@ TexSlotID TM_Register(uint8_t bucket, RenderTexture2D rt, Image cpuImage,
     ts->w = w;
     ts->h = h;
     ts->rt = rt;
-    ts->cpuImage = cpuImage;
     ts->refCount = 1;
     ts->ownsResources = false;  // caller owns lifecycle
     if (name) snprintf(ts->name, sizeof(ts->name), "%s", name);
@@ -109,7 +100,6 @@ void TM_Remove(TexSlotID id) {
 
     if (ts->ownsResources) {
         if (ts->rt.id > 0) UnloadRenderTexture(ts->rt);
-        if (ts->cpuImage.data) UnloadImage(ts->cpuImage);
     }
     memset(ts, 0, sizeof(*ts));
 }
@@ -118,39 +108,6 @@ TexSlot* TM_Get(TexSlotID id) {
     if (id.bucket >= TM_BUCKETS || id.slot >= TM_SLOTS_PER_BUCKET) return NULL;
     TexSlot* ts = &TM.slots[id.bucket][id.slot];
     return ts->used ? ts : NULL;
-}
-
-void TM_SetDirty(TexSlotID id) {
-    TexSlot* ts = TM_Get(id);
-    if (ts) ts->dirty = true;
-}
-
-void TM_SyncAll(void) {
-    for (int b = 0; b < TM_BUCKETS; b++) {
-        for (int s = 0; s < TM_SLOTS_PER_BUCKET; s++) {
-            TexSlot* ts = &TM.slots[b][s];
-            if (!ts->used || !ts->dirty || !ts->cpuImage.data) continue;
-            ts->dirty = false;
-            Texture2D tmp = LoadTextureFromImage(ts->cpuImage);
-            BeginTextureMode(ts->rt);
-            ClearBackground(BLANK);
-            DrawTexture(tmp, 0, 0, WHITE);
-            EndTextureMode();
-            UnloadTexture(tmp);
-        }
-    }
-}
-
-void TM_SyncSlot(TexSlotID id) {
-    TexSlot* ts = TM_Get(id);
-    if (!ts || !ts->dirty || !ts->cpuImage.data) return;
-    ts->dirty = false;
-    Texture2D tmp = LoadTextureFromImage(ts->cpuImage);
-    BeginTextureMode(ts->rt);
-    ClearBackground(BLANK);
-    DrawTexture(tmp, 0, 0, WHITE);
-    EndTextureMode();
-    UnloadTexture(tmp);
 }
 
 int TM_Count(uint8_t bucket) {
@@ -173,7 +130,6 @@ void TM_Shutdown(void) {
             if (!ts->used) continue;
             if (ts->ownsResources) {
                 if (ts->rt.id > 0) UnloadRenderTexture(ts->rt);
-                if (ts->cpuImage.data) UnloadImage(ts->cpuImage);
             }
             // registered (non-owned) slots: resources freed by caller
             memset(ts, 0, sizeof(*ts));

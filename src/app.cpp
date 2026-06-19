@@ -287,10 +287,7 @@ static void OnOpenResult(DialogResult r) {
                 g_state->camera.zoom = 1.0f;
                 LayerStack_SetRenderWindow(w, h);
                 int idx = LayerStack_Add(w, h);
-                Image* layerImg = LayerStack_GetImage(idx);
-                UnloadImage(*layerImg);
-                *layerImg = img;  // transfer ownership
-                LayerStack_UploadToGPU(idx);
+                LayerStack_UploadToGPU(idx, img);
                 layersDirty = true;
                 // Don't set g_currentFilePath — imported images should be
                 // saved as .re.png via Save As before they can be reloaded.
@@ -303,11 +300,9 @@ static void OnOpenResult(DialogResult r) {
                 g_state->camera.zoom = 1.0f;
                 LayerStack_SetRenderWindow(w, h);
                 int idx = LayerStack_Add(w, h);
-                Image* layerImg = LayerStack_GetImage(idx);
-                UnloadImage(*layerImg);
-                *layerImg = GenImageColor(w, h, WHITE);
-                ImageFormat(layerImg, PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
-                LayerStack_UploadToGPU(idx);
+                Image fillImg = GenImageColor(w, h, WHITE);
+                ImageFormat(&fillImg, PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
+                LayerStack_UploadToGPU(idx, fillImg);
                 layersDirty = true;
                 if (g_recorder) {
                     g_recorder->Reset(w, h);
@@ -343,10 +338,6 @@ void app_new_document(int w, int h, Color fill) {
     g_state->camera.zoom = 1.0f;
     LayerStack_SetRenderWindow(w, h);
     int idx = LayerStack_Add(w, h);
-    Image* img = LayerStack_GetImage(idx);
-    UnloadImage(*img);
-    *img = GenImageColor(w, h, fill);
-    ImageFormat(img, PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
     RenderTexture2D rt = LayerStack_GetRT(idx);
     BeginTextureMode(rt);
     ClearBackground(fill);

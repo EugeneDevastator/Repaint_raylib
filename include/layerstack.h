@@ -29,20 +29,17 @@ void LayerStack_MergeDownSeamless(int idx);
 // ── Accessors ───────────────────────────────────────────────────────
 int            LayerStack_Count(void);
 sLayerProps*   LayerStack_GetProps(int idx);
-Image*         LayerStack_GetImage(int idx);
 RenderTexture2D LayerStack_GetRT(int idx);
 TexSlotID      LayerStack_GetSlotID(int idx);
 int            LayerStack_RenderW(void);
 int            LayerStack_RenderH(void);
 
-// ── Sync (GPU ↔ CPU) ────────────────────────────────────────────────
-void LayerStack_ReadFromGPU(int idx);
-
 // ── Reverse lookup ──────────────────────────────────────────────────
 int  LayerStack_FindLayerBySlot(TexSlotID slot);
 
-// Upload the CPU image to the GPU render target (CPU → GPU)
-void LayerStack_UploadToGPU(int idx);
+// ── GPU ↔ CPU transfer (caller owns + frees the Image) ──────────────
+Image LayerStack_ReadFromGPU(int idx);
+void  LayerStack_UploadToGPU(int idx, Image img);
 
 // ── Compositing ─────────────────────────────────────────────────────
 // Legacy — renders into internal accumulators at SetRenderWindow resolution

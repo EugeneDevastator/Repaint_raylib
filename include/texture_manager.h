@@ -23,15 +23,11 @@ static const TexSlotID TM_INVALID_SLOT = {0xFF, 0xFF};
 
 struct TexSlot {
     RenderTexture2D rt;
-    Image cpuImage;
-    bool dirty;
     bool used;
     bool builtIn;
     char name[64];
     int w, h;
-    // For layer instance sharing: refcount so shared RTs aren't double-freed
     int refCount;
-    // Only meaningful for TM_BUCKET_LAYER — tracks whether TM owns the resources
     bool ownsResources;
 };
 
@@ -42,14 +38,12 @@ void      TM_Init(void);
 TexSlotID TM_Add(uint8_t bucket, int w, int h, const char* name, bool builtIn);
 
 // Register existing resources (layers that manage their own lifecycle)
-TexSlotID TM_Register(uint8_t bucket, RenderTexture2D rt, Image cpuImage,
+TexSlotID TM_Register(uint8_t bucket, RenderTexture2D rt,
                       const char* name, bool builtIn, int w, int h);
 void      TM_AddRef(TexSlotID id);
 void      TM_Remove(TexSlotID id);
 TexSlot*  TM_Get(TexSlotID id);
-void      TM_SetDirty(TexSlotID id);
-void      TM_SyncAll(void);
-void      TM_SyncSlot(TexSlotID id);
+
 int       TM_Count(uint8_t bucket);
 bool      TM_IsValid(TexSlotID id);
 void      TM_Shutdown(void);

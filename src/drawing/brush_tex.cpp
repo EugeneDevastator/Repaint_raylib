@@ -48,19 +48,22 @@ void BrushTex_Init(AppState* state) {
             if (TM_IsValid(id)) {
                 TexSlot* ts = TM_Get(id);
                 if (ts) {
-                    UnloadImage(ts->cpuImage);
-                    ts->cpuImage = img;
-                    ts->dirty = true;
                     ts->builtIn = true;
+                    Texture2D tmp = LoadTextureFromImage(img);
+                    BeginTextureMode(ts->rt);
+                    ClearBackground(BLANK);
+                    rlSetBlendMode(RL_BLEND_CUSTOM);
+                    rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+                    DrawTexture(tmp, 0, 0, WHITE);
+                    rlSetBlendMode(RL_BLEND_ALPHA);
+                    EndTextureMode();
+                    UnloadTexture(tmp);
                 }
-            } else {
-                UnloadImage(img);
             }
+            UnloadImage(img);
         }
         closedir(d);
     }
-
-    BrushTex_SyncAll(state);
 }
 
 TexSlotID BrushTex_Add(AppState* state, const char* name, int w, int h) {
@@ -91,11 +94,6 @@ void BrushTex_SetActive(AppState* state, TexSlotID id) {
         state->brushTexSlot = id;
         state->brushTexActive = true;
     }
-}
-
-void BrushTex_SyncAll(AppState* state) {
-    (void)state;
-    TM_SyncAll();
 }
 
 Texture2D BrushTex_GetThumb(AppState* state, TexSlotID id) {

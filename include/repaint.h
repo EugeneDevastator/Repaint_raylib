@@ -302,7 +302,6 @@ void        BrushTex_Init(AppState* state);
 TexSlotID   BrushTex_Add(AppState* state, const char* name, int w, int h);
 void        BrushTex_Delete(AppState* state, TexSlotID id);
 void        BrushTex_SetActive(AppState* state, TexSlotID id);
-void        BrushTex_SyncAll(AppState* state);
 Texture2D   BrushTex_GetThumb(AppState* state, TexSlotID id);
 TexSlotID   BrushTex_GetSlot(AppState* state, int userTexSlot);
 
