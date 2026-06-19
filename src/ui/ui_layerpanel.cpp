@@ -256,8 +256,7 @@ void LayerPanel_Draw(AppState* state) {
                     state->camera.zoom = 1.0f;
                 }
             } else {
-                int cw = DocOutW(&state->doc), ch = DocOutH(&state->doc);
-                state->camera.target = Vector2{(float)cw*0.5f, (float)ch*0.5f};
+                state->camera.target = Vector2{state->doc.window.cx, state->doc.window.cy};
                 state->camera.zoom = 1.0f;
             }
             layersDirty = true;

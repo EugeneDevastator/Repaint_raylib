@@ -746,27 +746,20 @@ bool LayerStack_GetSceneBounds(Rectangle* out) {
 }
 
 void LayerStack_BakeCanvasWindow(const Document* doc) {
-    int outW = DocOutW(doc), outH = DocOutH(doc);
-    if (outW < 1 || outH < 1) return;
-    EnsureShader(); EnsurePresentShader();
-    // Bake combined canvasView × layerMat into each layer
+    (void)doc;
+    // Non-destructive: bake canvasView into each layer's transform only.
+    // Layer image content is untouched.
     for (int i = 0; i < LS.count; i++) {
         if (LS.rt[i].id == 0) continue;
         sLayerProps* p = &LS.prop[i];
-        float cv[6]; memcpy(cv, LS.canvasView, 6*sizeof(float));
         float cmb[6];
-        cmb[0]=cv[0]*p->mat[0]+cv[1]*p->mat[3]; cmb[1]=cv[0]*p->mat[1]+cv[1]*p->mat[4]; cmb[2]=cv[0]*p->mat[2]+cv[1]*p->mat[5]+cv[2];
-        cmb[3]=cv[3]*p->mat[0]+cv[4]*p->mat[3]; cmb[4]=cv[3]*p->mat[1]+cv[4]*p->mat[4]; cmb[5]=cv[3]*p->mat[2]+cv[4]*p->mat[5]+cv[5];
-        // Re-bake into a new RT at the canvas-window output size
-        RenderTexture2D newRT = Load16BitRT(outW, outH);
-        if (newRT.id == 0) continue;
-        BakeTransform(newRT, LS.rt[i].texture, cmb, p->layerW, p->layerH, outW, outH);
-        // Replace old RT
-        UnloadRenderTexture(LS.rt[i]);
-        LS.rt[i] = newRT;
-        // Reset layer transform to identity
-        p->mat[0]=1; p->mat[1]=0; p->mat[2]=0; p->mat[3]=0; p->mat[4]=1; p->mat[5]=0;
-        p->layerW = outW; p->layerH = outH;
+        cmb[0]=LS.canvasView[0]*p->mat[0]+LS.canvasView[1]*p->mat[3];
+        cmb[1]=LS.canvasView[0]*p->mat[1]+LS.canvasView[1]*p->mat[4];
+        cmb[2]=LS.canvasView[0]*p->mat[2]+LS.canvasView[1]*p->mat[5]+LS.canvasView[2];
+        cmb[3]=LS.canvasView[3]*p->mat[0]+LS.canvasView[4]*p->mat[3];
+        cmb[4]=LS.canvasView[3]*p->mat[1]+LS.canvasView[4]*p->mat[4];
+        cmb[5]=LS.canvasView[3]*p->mat[2]+LS.canvasView[4]*p->mat[5]+LS.canvasView[5];
+        memcpy(p->mat, cmb, 6*sizeof(float));
     }
     // Reset canvasView to identity
     LS.canvasView[0]=1; LS.canvasView[1]=0; LS.canvasView[2]=0;

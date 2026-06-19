@@ -13,6 +13,8 @@ static int      g_dragAction = 0;  // 1=translate, 2=scale, 3=rotate
 static Vector2  g_dragStart = {0, 0};
 static int      g_dragCorner = -1;
 static CanvasWindow g_savedWin = {};
+static CanvasWindow g_entryWindow = {};  // saved on entering crop mode (for discard)
+static bool     g_entrySaved = false;
 
 // Returns true if canvasPos (document-space) is inside the canvas window rect
 static bool PointInCanvasWindow(Vector2 canvasPos, const CanvasWindow* cw) {
@@ -33,11 +35,45 @@ static void UpdateCanvasPipeline(AppState* state, CanvasWindow* cw) {
     layersDirty = true;
 }
 
+static void ExitCropMode(AppState* state, bool accept) {
+    if (accept) {
+        ApplyCanvasWindow(&state->doc);
+    } else {
+        state->doc.window = g_entryWindow;
+    }
+    { int cw = DocOutW(&state->doc), ch = DocOutH(&state->doc);
+      float cv[6]; ComputeCanvasMatrix(state->doc.ppu, &state->doc.window, cw, ch, cv);
+      LayerStack_SetCanvasView(cv); LayerStack_SetRenderWindow(cw, ch); }
+    state->framingMode = FRAME_DEFAULT;
+    g_activeHud = HUD_NONE;
+    state->camera.target = Vector2{state->doc.window.cx, state->doc.window.cy};
+    state->camera.zoom = 1.0f;
+    g_entrySaved = false;
+    layersDirty = true;
+}
+
 bool CanvasXformModule::HandleInput(InputState& input, const DrawRect& rect) {
     if (g_activeHud != HUD_CANVAS_XFORM) {
         g_dragAction = 0; g_dragCorner = -1;
         memset(&g_savedWin, 0, sizeof(g_savedWin));
+        g_entrySaved = false;
         return false;
+    }
+
+    // Save initial canvas window on first frame after entering crop mode
+    if (!g_entrySaved) {
+        g_entryWindow = state->doc.window;
+        g_entrySaved = true;
+    }
+
+    // Accept / discard keys
+    if (IsKeyPressed(KEY_E)) {
+        ExitCropMode(state, true);
+        return true;
+    }
+    if (IsKeyPressed(KEY_ESCAPE)) {
+        ExitCropMode(state, false);
+        return true;
     }
 
     if (ImGui::IsAnyItemHovered()) {
@@ -212,6 +248,14 @@ void CanvasXformModule::DrawGUI(const DrawRect& rect) {
     ImGui::Text("ppu: %.2f", state->doc.ppu);
     ImGui::Text("win: %.0f x %.0f", state->doc.window.w, state->doc.window.h);
     ImGui::Text("rot: %.1f", state->doc.window.rotation * 180.0f / (float)M_PI);
+
+    ImGui::Separator();
+    if (ImGui::Button("Accept (E)", ImVec2(-1, 0))) {
+        ExitCropMode(state, true);
+    }
+    if (ImGui::Button("Discard (ESC)", ImVec2(-1, 0))) {
+        ExitCropMode(state, false);
+    }
 
     ImGui::End();
 }

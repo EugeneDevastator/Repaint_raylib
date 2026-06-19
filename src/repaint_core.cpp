@@ -61,8 +61,8 @@ void ApplyCanvasWindow(Document* doc) {
     int outW = DocOutW(doc), outH = DocOutH(doc);
     doc->window.cx = outW * 0.5f;
     doc->window.cy = outH * 0.5f;
-    doc->window.w = (float)outW;
-    doc->window.h = (float)outH;
+    doc->window.w = (float)outW / doc->ppu;
+    doc->window.h = (float)outH / doc->ppu;
     doc->window.rotation = 0.0f;
     // ppu unchanged
 }

@@ -64,8 +64,8 @@ bool LayerStack_GetSceneBounds(Rectangle* out);
 // ── Bake a single layer's transformed content into a caller-owned RT ──
 void LayerStack_BakeSingleLayer(int idx, RenderTexture2D dst);
 
-// ── Canvas-window commit: re-bake every layer so the window transform
-//     is baked into each layer's content, then reset transforms. ──
+// ── Canvas-window commit: pre-multiply canvasView into every layer's
+//     transform (non-destructive — image data is untouched). ──
 void LayerStack_BakeCanvasWindow(const Document* doc);
 
 // ── For viewport/renderer access ─────────────────────────────────────
