@@ -156,6 +156,17 @@ static void RebuildLayerImageAndTex(int idx, RenderTexture2D srcRT) {
     UnloadImage(LS.img[idx]); LS.img[idx]=cap;
 }
 
+// ── Helper: sync texture-manager slot with current layer state ──
+static void SetSlotFromLayer(int idx) {
+    TexSlot* ts = TM_Get(LS.slotID[idx]);
+    if (ts) {
+        ts->rt = LS.rt[idx];
+        ts->cpuImage = LS.img[idx];
+        ts->w = LS.prop[idx].layerW;
+        ts->h = LS.prop[idx].layerH;
+    }
+}
+
 // ── Helper: remove a layer slot (unload resources + shift down) ──
 static void RemoveLayerSlot(int idx) {
     UnloadLayerSlotResources(idx);
@@ -431,7 +442,14 @@ static void MergeDownImpl(int idx, bool seamless) {
             RebuildLayerImageAndTex(idx-1,mergedRT);
             UnloadRenderTexture(oldRT);
         }
+        SetSlotFromLayer(idx-1);
+        TexSlotID sidTop = LS.slotID[idx];
+        TexSlotID sidBot = LS.slotID[idx-1];
         RemoveLayerSlot(idx);
+        if (g_undoManager) {
+            g_undoManager->InvalidateSlot(sidTop);
+            g_undoManager->InvalidateSlot(sidBot);
+        }
         return;
     }
 
@@ -458,6 +476,7 @@ static void MergeDownImpl(int idx, bool seamless) {
         RebuildLayerImageAndTex(idx-1,mergedRT);
         UnloadRenderTexture(oldRT);
     }
+    SetSlotFromLayer(idx-1);
     TexSlotID sidTop = LS.slotID[idx];
     TexSlotID sidBot = LS.slotID[idx-1];
     RemoveLayerSlot(idx);
