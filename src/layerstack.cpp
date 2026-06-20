@@ -189,6 +189,10 @@ void LayerStack_SetCanvasView(const float mat[6]) {
     LS.dirty = true;
 }
 
+const float* LayerStack_GetCanvasView(void) {
+    return LS.canvasView;
+}
+
 // ── Accessors ─────────────────────────────────────────────────────────
 int LayerStack_Count(void) { return LS.count; }
 sLayerProps*   LayerStack_GetProps(int i){ return (i>=0&&i<LS.count)?&LS.prop[i]:NULL; }

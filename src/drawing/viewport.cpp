@@ -91,7 +91,23 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
     vp->lastMousePos = mousePos;
     if (IsKeyDown(KEY_LEFT_ALT)) return;
 
-    Vector2 canvasPos = GetScreenToWorld2D(mousePos, state->camera);
+    Vector2 canvasPos;
+    if (state->framingMode == FRAME_DEFAULT && state->doc.ppu != 1.0f) {
+        // Construct a camera whose GetScreenToWorld2D is the inverse of the
+        // display pipeline (vMat or canvasView + dstRect), which scales by
+        // cam_zoom × ppu.
+        Camera2D dc = state->camera;
+        dc.zoom *= state->doc.ppu;
+        if (!g_useViewRes) {
+            // Legacy path: canvasView has a world-space centering offset
+            const float* cv = LayerStack_GetCanvasView();
+            dc.target.x = (state->camera.target.x - cv[2]) / state->doc.ppu;
+            dc.target.y = (state->camera.target.y - cv[5]) / state->doc.ppu;
+        }
+        canvasPos = GetScreenToWorld2D(mousePos, dc);
+    } else {
+        canvasPos = GetScreenToWorld2D(mousePos, state->camera);
+    }
 
     // Suppress normal painting while in layer transform mode, crop framing mode, or space-panning
     if (g_activeHud == HUD_LAYER_XFORM || state->framingMode == FRAME_CROP || spaceHeld) return;
@@ -217,7 +233,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     if (state->undo) state->undo->Snapshot(state, LayerStack_GetSlotID(active));
 
                     float origRad = state->currentBrush.Realb.rad_out;
-                    state->currentBrush.Realb.rad_out *= layerScale;
+                    state->currentBrush.Realb.rad_out *= layerScale / state->doc.ppu;
                     TabletPlatform_ClearMousePos();
 
                     InputEntry be;
@@ -234,7 +250,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                         be.userTexBucket = 0xFF;
                         be.userTexSlot = 0xFF;
                     }
-                    be.layerScale = layerScale;
+                    be.layerScale = layerScale / state->doc.ppu;
                     be.timestamp = GetTime();
                     g_inputQueue.AddEntry(be);
 
@@ -244,13 +260,25 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                         vp->strokePts[vp->strokeLen++] = paintPos;
                 } else {
                     float origRad = state->currentBrush.Realb.rad_out;
-                    state->currentBrush.Realb.rad_out *= layerScale;
+                    state->currentBrush.Realb.rad_out *= layerScale / state->doc.ppu;
 
                     float mouseBuf[1024];
                     int n = TabletPlatform_DrainMousePos(mouseBuf, 512);
                     for (int i = 0; i < n; i++) {
                         Vector2 screenPos = {mouseBuf[i*2], mouseBuf[i*2+1]};
-                        Vector2 worldPos = GetScreenToWorld2D(screenPos, state->camera);
+                        Vector2 worldPos;
+                        if (state->framingMode == FRAME_DEFAULT && state->doc.ppu != 1.0f) {
+                            Camera2D dc = state->camera;
+                            dc.zoom *= state->doc.ppu;
+                            if (!g_useViewRes) {
+                                const float* cv = LayerStack_GetCanvasView();
+                                dc.target.x = (state->camera.target.x - cv[2]) / state->doc.ppu;
+                                dc.target.y = (state->camera.target.y - cv[5]) / state->doc.ppu;
+                            }
+                            worldPos = GetScreenToWorld2D(screenPos, dc);
+                        } else {
+                            worldPos = GetScreenToWorld2D(screenPos, state->camera);
+                        }
                         Vector2 paintPt = toPaintSpace(worldPos);
                         StrokePoint sp = vp->inputFilter.Feed(paintPt.x, paintPt.y, GetTime());
                         InputEntry e;

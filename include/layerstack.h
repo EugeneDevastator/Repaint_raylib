@@ -69,6 +69,7 @@ void LayerStack_BakeSingleLayer(int idx, RenderTexture2D dst);
 void LayerStack_BakeCanvasWindow(const Document* doc);
 
 // ── For viewport/renderer access ─────────────────────────────────────
+const float* LayerStack_GetCanvasView(void);
 bool   LayerStack_PresentInited(void);
 Shader LayerStack_GetPresentShader(void);
 void   LayerStack_SetPresentTexSize(int w, int h);
