@@ -160,11 +160,14 @@ bool SaveRePaint(const char* path, Document* doc, AppState* state) {
     { uint32_t _z=0; _wu32(&p,_z); }   // reserved (was height)
     _wu32(&p, (uint32_t)lc);
     _wu32(&p, pixelDepth);
-    _wcpy(&p, &doc->window.cx, 4);      // v6+: CanvasWindow data
-    _wcpy(&p, &doc->window.cy, 4);
+    // Store decomposed RectXform as cx, cy, w, h, rotation (same v6 format)
+    { float cx=doc->window.mat[2], cy=doc->window.mat[5];
+      float rot = RectXform_GetRot(&doc->window);
+      _wcpy(&p, &cx, 4); _wcpy(&p, &cy, 4); }
     _wcpy(&p, &doc->window.w, 4);
     _wcpy(&p, &doc->window.h, 4);
-    _wcpy(&p, &doc->window.rotation, 4);
+    { float rot = RectXform_GetRot(&doc->window);
+      _wcpy(&p, &rot, 4); }
 
     for (int i = 0; i < lc; i++) {
         Image layerImg = LayerStack_ReadFromGPU(i);
@@ -232,7 +235,7 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
 
     // ── Parse header (version-dependent layout) ─────────────────────
     float ppuFromFile = 1.0f;
-    CanvasWindow cwFromFile = {0,0,0,0,0};
+    float loadCx=0, loadCy=0, loadW=0, loadH=0, loadRot=0;
     uint32_t lc = 0;
     uint32_t pixelDepth = 0;
     int oldFileW = 0, oldFileH = 0;  // used by v3/v4 fallback path
@@ -242,8 +245,8 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
         uint32_t w = _ru32(&p), h = _ru32(&p);
         if (w < 1 || w > 32768 || h < 1 || h > 32768) { UnloadFileData(fileData); return false; }
         ppuFromFile = 1.0f;
-        cwFromFile.cx = w * 0.5f; cwFromFile.cy = h * 0.5f;
-        cwFromFile.w = (float)w; cwFromFile.h = (float)h; cwFromFile.rotation = 0.0f;
+        loadCx = w * 0.5f; loadCy = h * 0.5f;
+        loadW = (float)w; loadH = (float)h; loadRot = 0.0f;
         oldFileW = (int)w; oldFileH = (int)h;
         lc = _ru32(&p);
         if (lc < 1 || lc > 256) { UnloadFileData(fileData); return false; }
@@ -255,14 +258,14 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
         lc = _ru32(&p);
         if (lc < 1 || lc > 256) { UnloadFileData(fileData); return false; }
         pixelDepth = _ru32(&p);
-        memcpy(&cwFromFile.cx, p, 4); p += 4;
-        memcpy(&cwFromFile.cy, p, 4); p += 4;
-        memcpy(&cwFromFile.w,  p, 4); p += 4;
-        memcpy(&cwFromFile.h,  p, 4); p += 4;
-        memcpy(&cwFromFile.rotation, p, 4); p += 4;
+        memcpy(&loadCx, p, 4); p += 4;
+        memcpy(&loadCy, p, 4); p += 4;
+        memcpy(&loadW,  p, 4); p += 4;
+        memcpy(&loadH,  p, 4); p += 4;
+        memcpy(&loadRot, p, 4); p += 4;
     }
     doc->ppu = ppuFromFile;
-    doc->window = cwFromFile;
+    doc->window = RectXform_Center(loadCx, loadCy, loadW, loadH, loadRot);
 
     // ── Load layers ──────────────────────────────────────────────────
     if (ver < 5) {

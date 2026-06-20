@@ -24,8 +24,8 @@ bool LayerXformModule::HandleInput(InputState& input, const DrawRect& rect) {
         } else {
             g_activeHud = HUD_LAYER_XFORM;
             if (state->activeLayer >= 0) {
-                g_pivotCursorX = state->doc.window.cx;
-                g_pivotCursorY = state->doc.window.cy;
+                g_pivotCursorX = state->doc.window.mat[2];
+                g_pivotCursorY = state->doc.window.mat[5];
             }
         }
         return true;

@@ -83,6 +83,7 @@ set(SOURCES
     src/layerstack.cpp
     src/texture_manager.cpp
     src/repaint_core.cpp
+    src/xform.cpp
     src/file_format.cpp
     src/app_config.cpp
     src/usertextures.cpp

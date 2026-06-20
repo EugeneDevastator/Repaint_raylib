@@ -58,7 +58,7 @@ static void OnDropResult(DialogResult r) {
                 { int cw = DocOutW(&s_state->doc), ch = DocOutH(&s_state->doc);
                 float cv[6]; ComputeCanvasMatrix(s_state->doc.ppu, &s_state->doc.window, cw, ch, cv);
                 LayerStack_SetCanvasView(cv); LayerStack_SetRenderWindow(cw, ch); }
-                s_state->camera.target = Vector2{s_state->doc.window.cx, s_state->doc.window.cy};
+                s_state->camera.target = Vector2{s_state->doc.window.mat[2], s_state->doc.window.mat[5]};
                 s_state->camera.zoom = 1.0f;
                 ImportImage(img);
             } else {
@@ -115,7 +115,7 @@ static void OnPasteResult(DialogResult r) {
             { int cw = DocOutW(&s_state->doc), ch = DocOutH(&s_state->doc);
             float cv[6]; ComputeCanvasMatrix(s_state->doc.ppu, &s_state->doc.window, cw, ch, cv);
             LayerStack_SetCanvasView(cv); LayerStack_SetRenderWindow(cw, ch); }
-            s_state->camera.target = Vector2{s_state->doc.window.cx, s_state->doc.window.cy};
+            s_state->camera.target = Vector2{s_state->doc.window.mat[2], s_state->doc.window.mat[5]};
             s_state->camera.zoom = 1.0f;
             ImportImage(img);
             if (g_recorder) g_recorder->Reset(DocOutW(&s_state->doc), DocOutH(&s_state->doc));

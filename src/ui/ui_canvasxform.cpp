@@ -12,24 +12,25 @@ extern bool layersDirty;
 static int      g_dragAction = 0;  // 1=translate, 2=scale, 3=rotate
 static Vector2  g_dragStart = {0, 0};
 static int      g_dragCorner = -1;
-static CanvasWindow g_savedWin = {};
-static CanvasWindow g_entryWindow = {};  // saved on entering crop mode (for discard)
+static RectXform g_savedWin = {};
+static RectXform g_entryWindow = {};  // saved on entering crop mode (for discard)
 static bool     g_entrySaved = false;
+static float    g_ppiSlider = 0.0f;
 
 // Returns true if canvasPos (document-space) is inside the canvas window rect
-static bool PointInCanvasWindow(Vector2 canvasPos, const CanvasWindow* cw) {
-    float dx = canvasPos.x - cw->cx;
-    float dy = canvasPos.y - cw->cy;
-    float c = cosf(-cw->rotation), s = sinf(-cw->rotation);
+static bool PointInCanvasWindow(Vector2 canvasPos, const RectXform* rx) {
+    float dx = canvasPos.x - rx->mat[2];
+    float dy = canvasPos.y - rx->mat[5];
+    float c = rx->mat[0], s = -rx->mat[1]; // un-rotate: negate sin
     float localX = dx * c - dy * s;
     float localY = dx * s + dy * c;
-    float hw = cw->w * 0.5f, hh = cw->h * 0.5f;
+    float hw = rx->w * 0.5f, hh = rx->h * 0.5f;
     return fabsf(localX) <= hw && fabsf(localY) <= hh;
 }
 
-static void UpdateCanvasPipeline(AppState* state, CanvasWindow* cw) {
+static void UpdateCanvasPipeline(AppState* state, RectXform* rx) {
     int outW = DocOutW(&state->doc), outH = DocOutH(&state->doc);
-    float cv[6]; ComputeCanvasMatrix(state->doc.ppu, cw, outW, outH, cv);
+    float cv[6]; ComputeCanvasMatrix(state->doc.ppu, rx, outW, outH, cv);
     LayerStack_SetCanvasView(cv);
     LayerStack_SetRenderWindow(outW, outH);
     layersDirty = true;
@@ -37,16 +38,19 @@ static void UpdateCanvasPipeline(AppState* state, CanvasWindow* cw) {
 
 static void ExitCropMode(AppState* state, bool accept) {
     if (accept) {
+        // ApplyCanvasWindow bakes canvasView into layer mats, resets canvasView
+        // to identity, resets window to full-frame, and calls SetRenderWindow.
         ApplyCanvasWindow(&state->doc);
     } else {
         state->doc.window = g_entryWindow;
+        // Re-sync pipeline from the restored window
+        int cw = DocOutW(&state->doc), ch = DocOutH(&state->doc);
+        float cv[6]; ComputeCanvasMatrix(state->doc.ppu, &state->doc.window, cw, ch, cv);
+        LayerStack_SetCanvasView(cv); LayerStack_SetRenderWindow(cw, ch);
     }
-    { int cw = DocOutW(&state->doc), ch = DocOutH(&state->doc);
-      float cv[6]; ComputeCanvasMatrix(state->doc.ppu, &state->doc.window, cw, ch, cv);
-      LayerStack_SetCanvasView(cv); LayerStack_SetRenderWindow(cw, ch); }
     state->framingMode = FRAME_DEFAULT;
     g_activeHud = HUD_NONE;
-    state->camera.target = Vector2{state->doc.window.cx, state->doc.window.cy};
+    state->camera.target = Vector2{state->doc.window.mat[2], state->doc.window.mat[5]};
     state->camera.zoom = 1.0f;
     g_entrySaved = false;
     layersDirty = true;
@@ -90,23 +94,24 @@ bool CanvasXformModule::HandleInput(InputState& input, const DrawRect& rect) {
 
     Vector2 mousePos = input.MousePos();
     Vector2 canvasPos = GetScreenToWorld2D(mousePos, state->camera);
-    CanvasWindow* cw = &state->doc.window;
+    RectXform* rx = &state->doc.window;
 
-    float c = cosf(cw->rotation), s = sinf(cw->rotation);
-    float hw = cw->w * 0.5f, hh = cw->h * 0.5f;
+    float c = rx->mat[0], s = rx->mat[1];
+    float hw = rx->w * 0.5f, hh = rx->h * 0.5f;
+    float cx = rx->mat[2], cy = rx->mat[5];
     Vector2 corners_doc[4] = {
-        {cw->cx + (-hw)*c - (-hh)*s, cw->cy + (-hw)*s + (-hh)*c},
-        {cw->cx + (+hw)*c - (-hh)*s, cw->cy + (+hw)*s + (-hh)*c},
-        {cw->cx + (+hw)*c - (+hh)*s, cw->cy + (+hw)*s + (+hh)*c},
-        {cw->cx + (-hw)*c - (+hh)*s, cw->cy + (-hw)*s + (+hh)*c},
+        {cx + (-hw)*c - (-hh)*s, cy + (-hw)*s + (-hh)*c},
+        {cx + (+hw)*c - (-hh)*s, cy + (+hw)*s + (-hh)*c},
+        {cx + (+hw)*c - (+hh)*s, cy + (+hw)*s + (+hh)*c},
+        {cx + (-hw)*c - (+hh)*s, cy + (-hw)*s + (+hh)*c},
     };
     Vector2 sc[4];
-    Vector2 centerSc = GetWorldToScreen2D(Vector2{cw->cx, cw->cy}, state->camera);
+    Vector2 centerSc = GetWorldToScreen2D(Vector2{cx, cy}, state->camera);
     for (int i = 0; i < 4; i++)
         sc[i] = GetWorldToScreen2D(corners_doc[i], state->camera);
 
     bool nearCenter = Dist2D(mousePos, centerSc) < 12.0f;
-    bool inBody = PointInCanvasWindow(canvasPos, cw);
+    bool inBody = PointInCanvasWindow(canvasPos, rx);
     int nearCorner = -1;
     for (int i = 0; i < 4; i++) {
         if (Dist2D(mousePos, sc[i]) < 12.0f) { nearCorner = i; break; }
@@ -119,27 +124,26 @@ bool CanvasXformModule::HandleInput(InputState& input, const DrawRect& rect) {
         } else if (inBody) {
             g_dragAction = 1;
         } else {
-            // Click outside window body — let viewport handle panning
             return false;
         }
         g_dragStart = canvasPos;
-        g_savedWin = *cw;
+        g_savedWin = *rx;
     }
 
     // Translate
     if (g_dragAction == 1 && input.MouseDown(MOUSE_LEFT_BUTTON)) {
         float dx = canvasPos.x - g_dragStart.x;
         float dy = canvasPos.y - g_dragStart.y;
-        cw->cx = g_savedWin.cx + dx;
-        cw->cy = g_savedWin.cy + dy;
-        UpdateCanvasPipeline(state, cw);
+        rx->mat[2] = g_savedWin.mat[2] + dx;
+        rx->mat[5] = g_savedWin.mat[5] + dy;
+        UpdateCanvasPipeline(state, rx);
     }
 
-    // Scale from corner
+    // Scale from corner (maintains orientation from saved mat[0],mat[1])
     if (g_dragAction == 2 && input.MouseDown(MOUSE_LEFT_BUTTON)) {
-        float sc = cosf(g_savedWin.rotation), ss = sinf(g_savedWin.rotation);
-        float dx = canvasPos.x - g_savedWin.cx;
-        float dy = canvasPos.y - g_savedWin.cy;
+        float sc = g_savedWin.mat[0], ss = g_savedWin.mat[1];
+        float dx = canvasPos.x - g_savedWin.mat[2];
+        float dy = canvasPos.y - g_savedWin.mat[5];
         float initLx = (g_dragCorner == 0 || g_dragCorner == 3) ? -g_savedWin.w * 0.5f : g_savedWin.w * 0.5f;
         float initLy = (g_dragCorner == 0 || g_dragCorner == 1) ? -g_savedWin.h * 0.5f : g_savedWin.h * 0.5f;
         float curLx =  dx * sc + dy * ss;
@@ -148,30 +152,33 @@ bool CanvasXformModule::HandleInput(InputState& input, const DrawRect& rect) {
         float sy = (fabsf(initLy) > 0.001f) ? curLy / initLy : 1.0f;
         if (fabsf(sx) < 0.01f) sx = (sx < 0) ? -0.01f : 0.01f;
         if (fabsf(sy) < 0.01f) sy = (sy < 0) ? -0.01f : 0.01f;
-        cw->w = g_savedWin.w * sx;
-        cw->h = g_savedWin.h * sy;
-        if (cw->w < 1.0f) cw->w = 1.0f;
-        if (cw->h < 1.0f) cw->h = 1.0f;
-        UpdateCanvasPipeline(state, cw);
+        rx->w = g_savedWin.w * sx;
+        rx->h = g_savedWin.h * sy;
+        if (rx->w < 1.0f) rx->w = 1.0f;
+        if (rx->h < 1.0f) rx->h = 1.0f;
+        UpdateCanvasPipeline(state, rx);
     }
 
     // Start rotate (right-click)
     if (input.MousePressed(MOUSE_RIGHT_BUTTON)) {
-        if (!inBody) return false; // only rotate when clicking on window
+        if (!inBody) return false;
         g_dragAction = 3;
         g_dragStart = canvasPos;
-        g_savedWin = *cw;
+        g_savedWin = *rx;
     }
 
     // Rotate
     if (g_dragAction == 3 && input.MouseDown(MOUSE_RIGHT_BUTTON)) {
-        float startAng = atan2f(g_dragStart.y - g_savedWin.cy, g_dragStart.x - g_savedWin.cx);
-        float curAng   = atan2f(canvasPos.y - g_savedWin.cy, canvasPos.x - g_savedWin.cx);
+        float startAng = atan2f(g_dragStart.y - g_savedWin.mat[5], g_dragStart.x - g_savedWin.mat[2]);
+        float curAng   = atan2f(canvasPos.y - g_savedWin.mat[5], canvasPos.x - g_savedWin.mat[2]);
         float delta = curAng - startAng;
         if (delta > (float)M_PI) delta -= 2.0f*(float)M_PI;
         else if (delta < -(float)M_PI) delta += 2.0f*(float)M_PI;
-        cw->rotation = g_savedWin.rotation + delta;
-        UpdateCanvasPipeline(state, cw);
+        // Rebuild matrix: same center, new rotation
+        { float savedCx = g_savedWin.mat[2], savedCy = g_savedWin.mat[5];
+          Xform_SetRot(rx->mat, RectXform_GetRot(&g_savedWin) + delta);
+          rx->mat[2] = savedCx; rx->mat[5] = savedCy; }
+        UpdateCanvasPipeline(state, rx);
     }
 
     // Release
@@ -188,14 +195,15 @@ void CanvasXformModule::DrawGL(const DrawRect& rect) {
     (void)rect;
     if (g_activeHud != HUD_CANVAS_XFORM) return;
 
-    const CanvasWindow* cw = &state->doc.window;
-    float c = cosf(cw->rotation), s = sinf(cw->rotation);
+    const RectXform* cw = &state->doc.window;
+    float c = cw->mat[0], s = cw->mat[1];
     float hw = cw->w * 0.5f, hh = cw->h * 0.5f;
+    float cx = cw->mat[2], cy = cw->mat[5];
     Vector2 corners_doc[4] = {
-        {cw->cx + (-hw)*c - (-hh)*s, cw->cy + (-hw)*s + (-hh)*c},
-        {cw->cx + (+hw)*c - (-hh)*s, cw->cy + (+hw)*s + (-hh)*c},
-        {cw->cx + (+hw)*c - (+hh)*s, cw->cy + (+hw)*s + (+hh)*c},
-        {cw->cx + (-hw)*c - (+hh)*s, cw->cy + (-hw)*s + (+hh)*c},
+        {cx + (-hw)*c - (-hh)*s, cy + (-hw)*s + (-hh)*c},
+        {cx + (+hw)*c - (-hh)*s, cy + (+hw)*s + (-hh)*c},
+        {cx + (+hw)*c - (+hh)*s, cy + (+hw)*s + (+hh)*c},
+        {cx + (-hw)*c - (+hh)*s, cy + (-hw)*s + (+hh)*c},
     };
 
     auto ws = [&](Vector2 wp) -> Vector2 {
@@ -207,7 +215,7 @@ void CanvasXformModule::DrawGL(const DrawRect& rect) {
     glLogicOp(GL_XOR);
 
     // Center crosshair (pivot)
-    Vector2 uip = ws(Vector2{cw->cx, cw->cy});
+    Vector2 uip = ws(Vector2{cx, cy});
     float chLen = 12.0f;
     DrawLine(uip.x - chLen, uip.y, uip.x + chLen, uip.y, WHITE);
     DrawLine(uip.x, uip.y - chLen, uip.x, uip.y + chLen, WHITE);
@@ -247,7 +255,26 @@ void CanvasXformModule::DrawGUI(const DrawRect& rect) {
     ImGui::Separator();
     ImGui::Text("ppu: %.2f", state->doc.ppu);
     ImGui::Text("win: %.0f x %.0f", state->doc.window.w, state->doc.window.h);
-    ImGui::Text("rot: %.1f", state->doc.window.rotation * 180.0f / (float)M_PI);
+    ImGui::Text("rot: %.1f", RectXform_GetRot(&state->doc.window) * 180.0f / (float)M_PI);
+
+    ImGui::Separator();
+    ImGui::Text("PPI");
+    ImGui::SetNextItemWidth(-1);
+    ImGui::SliderFloat("##ppi", &g_ppiSlider, -1.0f, 1.0f, "%.2f");
+    bool ppiEdited = ImGui::IsItemDeactivatedAfterEdit();
+    if (g_ppiSlider != 0.0f) {
+        float previewPPU = state->doc.ppu * powf(2.0f, g_ppiSlider);
+        ImGui::Text("  -> %.2f PPI", previewPPU);
+    }
+    if (ppiEdited) {
+        state->doc.ppu *= powf(2.0f, g_ppiSlider);
+        g_ppiSlider = 0.0f;
+        int outW = DocOutW(&state->doc), outH = DocOutH(&state->doc);
+        float cv[6]; ComputeCanvasMatrix(state->doc.ppu, &state->doc.window, outW, outH, cv);
+        LayerStack_SetCanvasView(cv);
+        LayerStack_SetRenderWindow(outW, outH);
+        layersDirty = true;
+    }
 
     ImGui::Separator();
     if (ImGui::Button("Accept (E)", ImVec2(-1, 0))) {

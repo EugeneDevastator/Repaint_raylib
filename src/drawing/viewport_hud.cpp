@@ -120,12 +120,17 @@ void ViewportHUD_Draw(AppState* state) {
             g_viewResRT = Load16BitRT(vpW, vpH);
         if (vpW < 1 || vpH < 1) return;
 
+        float zoom = state->camera.zoom;
+        // In FRAME_DEFAULT, include ppu in the view transform so PPI slider
+        // affects the viewport preview. In FRAME_CROP the user is editing
+        // the window — canvas transform is not applied yet.
+        if (state->framingMode == FRAME_DEFAULT) zoom *= state->doc.ppu;
         float vOffX = state->camera.offset.x - vpBounds.x;
         float vOffY = state->camera.offset.y - vpBounds.y;
-        float vMat[6] = {state->camera.zoom, 0,
-            -state->camera.target.x * state->camera.zoom + vOffX, 0,
-            state->camera.zoom,
-            -state->camera.target.y * state->camera.zoom + vOffY};
+        float vMat[6] = {zoom, 0,
+            -state->camera.target.x * zoom + vOffX, 0,
+            zoom,
+            -state->camera.target.y * zoom + vOffY};
         LayerStack_ProduceCompositeView(g_viewResRT, vMat, vpW, vpH);
         if (usePresent) { BeginShaderMode(GetPresentShader()); LayerStack_SetPresentTexSize(vpW, vpH); LayerStack_SetPresentDither(true); }
         DrawTextureRec(g_viewResRT.texture,
