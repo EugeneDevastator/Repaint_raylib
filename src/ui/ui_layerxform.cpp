@@ -58,8 +58,8 @@ bool LayerXformModule::HandleInput(InputState& input, const DrawRect& rect) {
 
     sLayerProps* lp = LayerStack_GetProps(state->activeLayer);
     float lw = (float)lp->layerW, lh = (float)lp->layerH;
-    if (lw < 1) lw = (float)DocOutW(&state->doc);
-    if (lh < 1) lh = (float)DocOutH(&state->doc);
+    if (lw < 1) lw = state->doc.window.w;
+    if (lh < 1) lh = state->doc.window.h;
 
     Vector2 mousePos = input.MousePos();
     Vector2 canvasPos = GetScreenToWorld2D(mousePos, state->camera);
@@ -219,8 +219,8 @@ void LayerXformModule::DrawGL(const DrawRect& rect) {
 
     sLayerProps* lp = LayerStack_GetProps(state->activeLayer);
     float lw = (float)lp->layerW, lh = (float)lp->layerH;
-    if (lw < 1) lw = (float)DocOutW(&state->doc);
-    if (lh < 1) lh = (float)DocOutH(&state->doc);
+    if (lw < 1) lw = state->doc.window.w;
+    if (lh < 1) lh = state->doc.window.h;
 
     auto ws = [&](Vector2 wp) -> Vector2 {
         return GetWorldToScreen2D(wp, state->camera);

@@ -121,10 +121,6 @@ void ViewportHUD_Draw(AppState* state) {
         if (vpW < 1 || vpH < 1) return;
 
         float zoom = state->camera.zoom;
-        // In FRAME_DEFAULT, include ppu in the view transform so PPI slider
-        // affects the viewport preview. In FRAME_CROP the user is editing
-        // the window — canvas transform is not applied yet.
-        if (state->framingMode == FRAME_DEFAULT) zoom *= state->doc.ppu;
         float vOffX = state->camera.offset.x - vpBounds.x;
         float vOffY = state->camera.offset.y - vpBounds.y;
         float vMat[6] = {zoom, 0,
@@ -145,8 +141,11 @@ void ViewportHUD_Draw(AppState* state) {
 
         float dstX = -state->camera.target.x * state->camera.zoom + state->camera.offset.x;
         float dstY = -state->camera.target.y * state->camera.zoom + state->camera.offset.y;
-        float dstW = cw * state->camera.zoom;
-        float dstH = ch * state->camera.zoom;
+        // Display at world-space extent so handles match; source texture
+        // (DocOutW×DocOutH) is stretched by DrawTexturePro when ppu≠1.
+        float ww = state->doc.window.w, wh = state->doc.window.h;
+        float dstW = ww * state->camera.zoom;
+        float dstH = wh * state->camera.zoom;
         Rectangle srcRect = {0, 0, (float)cw, (float)-ch};
         Rectangle dstRect = {dstX, dstY, dstW, dstH};
 

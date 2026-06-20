@@ -22,7 +22,7 @@ static int g_previewW = 0, g_previewH = 0;
 // transform into a small preview RT matching canvas proportion.
 void LayerPanel_UpdatePreviews(AppState* state) {
     int count = LayerStack_Count();
-    int cw = DocOutW(&state->doc), ch = DocOutH(&state->doc);
+    int cw = (int)state->doc.window.w, ch = (int)state->doc.window.h;
     if (cw < 1 || ch < 1 || count < 1) return;
 
     int pw = (int)(36.0f * cw / ch);
