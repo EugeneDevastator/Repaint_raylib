@@ -396,8 +396,11 @@ struct CanvasXformModule : IModule {
     bool HandleInput(InputState& input, const DrawRect& rect) override;
     void DrawGL(const DrawRect& rect) override;
     void DrawGUI(const DrawRect& rect) override;
+    void OnExit() override;
 };
 
 extern ModuleStack g_moduleStack;
+
+void HudSetActive(AppState* state, int newHud);
 
 #endif

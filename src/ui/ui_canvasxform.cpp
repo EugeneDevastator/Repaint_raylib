@@ -56,6 +56,11 @@ static void ExitCropMode(AppState* state, bool accept) {
     layersDirty = true;
 }
 
+void CanvasXformModule::OnExit() {
+    if (state->framingMode == FRAME_CROP)
+        ExitCropMode(state, true);
+}
+
 bool CanvasXformModule::HandleInput(InputState& input, const DrawRect& rect) {
     if (g_activeHud != HUD_CANVAS_XFORM) {
         g_dragAction = 0; g_dragCorner = -1;

@@ -18,11 +18,11 @@ bool LayerXformModule::HandleInput(InputState& input, const DrawRect& rect) {
     // Toggle mode on KEY_ONE
     if (input.KeyPressed(KEY_ONE)) {
         if (g_activeHud == HUD_LAYER_XFORM) {
-            g_activeHud = HUD_NONE;
+            HudSetActive(state, HUD_NONE);
             g_dragAction = 0;
             g_dragCorner = -1;
         } else {
-            g_activeHud = HUD_LAYER_XFORM;
+            HudSetActive(state, HUD_LAYER_XFORM);
             if (state->activeLayer >= 0) {
                 g_pivotCursorX = state->doc.window.mat[2];
                 g_pivotCursorY = state->doc.window.mat[5];

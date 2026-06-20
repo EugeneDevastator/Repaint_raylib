@@ -240,9 +240,10 @@ void LayerPanel_Draw(AppState* state) {
     {
         const char* frameLabel = (state->framingMode == FRAME_CROP) ? "Framing: Crop" : "Framing: Canvas";
         if (ImGui::Button(frameLabel, ImVec2(-1, 0))) {
-            state->framingMode = (state->framingMode == FRAME_DEFAULT) ? FRAME_CROP : FRAME_DEFAULT;
-            g_activeHud = (state->framingMode == FRAME_CROP) ? HUD_CANVAS_XFORM : HUD_NONE;
-            if (state->framingMode == FRAME_CROP) {
+            bool enteringCrop = (state->framingMode == FRAME_DEFAULT);
+            if (enteringCrop) {
+                HudSetActive(state, HUD_CANVAS_XFORM);
+                state->framingMode = FRAME_CROP;
                 Rectangle sb; LayerStack_GetSceneBounds(&sb);
                 if (sb.width > 0 && sb.height > 0) {
                     float cx = sb.x + sb.width/2, cy = sb.y + sb.height/2;
@@ -256,6 +257,8 @@ void LayerPanel_Draw(AppState* state) {
                     state->camera.zoom = 1.0f;
                 }
             } else {
+                HudSetActive(state, HUD_NONE);
+                state->framingMode = FRAME_DEFAULT;
                 state->camera.target = Vector2{state->doc.window.mat[2], state->doc.window.mat[5]};
                 state->camera.zoom = 1.0f;
             }

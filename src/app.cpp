@@ -91,6 +91,22 @@ void SyncImGuiInput(void) {
 float g_splashAlpha = 1.0f;
 static Texture2D g_splashTex = {0};
 int g_activeHud = HUD_NONE;
+
+void HudSetActive(AppState* state, int newHud) {
+    if (newHud == g_activeHud) return;
+    const char* name = nullptr;
+    switch (g_activeHud) {
+        case HUD_CANVAS_XFORM: name = "CanvasXform"; break;
+        case HUD_LAYER_XFORM:  name = "LayerXform";  break;
+        case HUD_QUICK:        name = "QuickHud";    break;
+    }
+    if (name) {
+        IModule* mod = g_moduleStack.Find(name);
+        if (mod) mod->OnExit();
+    }
+    g_activeHud = newHud;
+}
+
 bool g_seamlessPaint = false;
 bool g_seamlessPreview = false;
 int g_texScaleMode = 0;
@@ -172,15 +188,15 @@ void UpdateUI(AppState* state) {
 
     // Toggle framing mode (C key — "crop" framing)
     if (IsKeyPressed(KEY_C)) {
-        state->framingMode = (state->framingMode == FRAME_DEFAULT) ? FRAME_CROP : FRAME_DEFAULT;
-        g_activeHud = (state->framingMode == FRAME_CROP) ? HUD_CANVAS_XFORM : HUD_NONE;
-        if (state->framingMode == FRAME_CROP) {
+        bool enteringCrop = (state->framingMode == FRAME_DEFAULT);
+        if (enteringCrop) {
+            HudSetActive(state, HUD_CANVAS_XFORM);
+            state->framingMode = FRAME_CROP;
             // Frame camera to show all layers
             Rectangle sb; LayerStack_GetSceneBounds(&sb);
             if (sb.width > 0 && sb.height > 0) {
                 float cx = sb.x + sb.width/2, cy = sb.y + sb.height/2;
                 state->camera.target = Vector2{cx, cy};
-                // Fit with 10% padding
                 float pad = 1.1f;
                 float zoomX = viewport.bounds.width / (sb.width * pad);
                 float zoomY = viewport.bounds.height / (sb.height * pad);
@@ -190,7 +206,8 @@ void UpdateUI(AppState* state) {
                 state->camera.zoom = 1.0f;
             }
         } else {
-            // Back to default: center on canvas window
+            HudSetActive(state, HUD_NONE);
+            state->framingMode = FRAME_DEFAULT;
             state->camera.target = Vector2{state->doc.window.mat[2], state->doc.window.mat[5]};
             state->camera.zoom = 1.0f;
         }

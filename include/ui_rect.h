@@ -50,6 +50,7 @@ struct IModule {
     }
 
     virtual void OnResize(const DrawRect& rect) {}
+    virtual void OnExit() {}
 
     // Register a child module with a sub-rect within this module's area.
     // The childRect is stored on the child and updated on resize.
