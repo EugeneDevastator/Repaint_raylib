@@ -258,10 +258,13 @@ void CanvasXformModule::DrawGUI(const DrawRect& rect) {
 
     ImGui::Text("Canvas Window");
     ImGui::Separator();
+    int curW = DocOutW(&state->doc), curH = DocOutH(&state->doc);
     ImGui::Text("ppu: %.2f", state->doc.ppu);
-    ImGui::Text("win: %.0f x %.0f", state->doc.window.w, state->doc.window.h);
+    ImGui::Text("Size: %.0f x %.0f", state->doc.window.w, state->doc.window.h);
     ImGui::Text("rot: %.1f", RectXform_GetRot(&state->doc.window) * 180.0f / (float)M_PI);
 
+    ImGui::Separator();
+    ImGui::Text("Output: %d x %d", curW, curH);
     ImGui::Separator();
     ImGui::Text("PPI");
     ImGui::SetNextItemWidth(-1);
@@ -269,7 +272,11 @@ void CanvasXformModule::DrawGUI(const DrawRect& rect) {
     bool ppiEdited = ImGui::IsItemDeactivatedAfterEdit();
     if (g_ppiSlider != 0.0f) {
         float previewPPU = state->doc.ppu * powf(2.0f, g_ppiSlider);
-        ImGui::Text("  -> %.2f PPI", previewPPU);
+        ImGui::Separator();
+        ImGui::SetWindowFontScale(1.5f);
+        ImGui::Text("%.0f x %.0f", previewPPU * state->doc.window.w,
+                    previewPPU * state->doc.window.h);
+        ImGui::SetWindowFontScale(1.0f);
     }
     if (ppiEdited) {
         state->doc.ppu *= powf(2.0f, g_ppiSlider);
