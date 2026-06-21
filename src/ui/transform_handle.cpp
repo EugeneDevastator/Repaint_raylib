@@ -142,30 +142,48 @@ bool TransformHandle_Input(RectXform* xform,
     // ── Scale ──────────────────────────────────────────────────────
     if (s_dragAction == 2 && leftDown) {
         if (!scaleProportionalToCursor) {
-            // Extent-scale (crop): corner moves in local XY axes
+            // Extent-scale (crop): each corner moves independently;
+            // the opposite diagonal corner stays fixed in world space.
             float sa = s_savedXform.mat[0], sb = s_savedXform.mat[1];
             float sc_ = s_savedXform.mat[3], sd = s_savedXform.mat[4];
-            float sx = s_savedXform.mat[2], sy = s_savedXform.mat[5];
-            float dx = canvasPos.x - sx;
-            float dy = canvasPos.y - sy;
+            float stx = s_savedXform.mat[2], sty = s_savedXform.mat[5];
+            float sw = s_savedXform.w, sh = s_savedXform.h;
+            float dx = canvasPos.x - stx;
+            float dy = canvasPos.y - sty;
             float det = sa*sd - sb*sc_;
             if (fabsf(det) < 0.0001f) return false;
             float invDet = 1.0f/det;
             float curLx = (dx*sd - dy*sb)*invDet;
             float curLy = (-dx*sc_ + dy*sa)*invDet;
-            float initLx = (s_dragCorner==0||s_dragCorner==3) ? 0.0f : s_savedXform.w;
-            float initLy = (s_dragCorner==0||s_dragCorner==1) ? 0.0f : s_savedXform.h;
-            float sx_f = (fabsf(initLx)>0.001f) ? curLx/initLx : 1.0f;
-            float sy_f = (fabsf(initLy)>0.001f) ? curLy/initLy : 1.0f;
-            if (fabsf(sx_f)<0.01f) sx_f = (sx_f<0) ? -0.01f : 0.01f;
-            if (fabsf(sy_f)<0.01f) sy_f = (sy_f<0) ? -0.01f : 0.01f;
-            xform->w = s_savedXform.w * sx_f;
-            xform->h = s_savedXform.h * sy_f;
-            if (fabsf(xform->w)<1.0f) xform->w = (xform->w<0) ? -1.0f : 1.0f;
-            if (fabsf(xform->h)<1.0f) xform->h = (xform->h<0) ? -1.0f : 1.0f;
-            // Transfer flip sign from w/h to matrix rows
-            if (xform->w < 0) { xform->mat[0] = -xform->mat[0]; xform->mat[1] = -xform->mat[1]; xform->w = -xform->w; }
-            if (xform->h < 0) { xform->mat[3] = -xform->mat[3]; xform->mat[4] = -xform->mat[4]; xform->h = -xform->h; }
+            float nw, nh;
+            switch (s_dragCorner) {
+            case 0: // TL → opposite BR stays at (sw, sh)
+                nw = sw - curLx;
+                nh = sh - curLy;
+                xform->mat[2] = stx + sa*curLx + sb*curLy;
+                xform->mat[5] = sty + sc_*curLx + sd*curLy;
+                break;
+            case 1: // TR → opposite BL stays at (0, sh)
+                nw = curLx;
+                nh = sh - curLy;
+                xform->mat[2] = stx + sb*curLy;
+                xform->mat[5] = sty + sd*curLy;
+                break;
+            case 2: // BR → opposite TL stays at (0, 0)
+                nw = curLx;
+                nh = curLy;
+                break;
+            case 3: // BL → opposite TR stays at (sw, 0)
+                nw = sw - curLx;
+                nh = curLy;
+                xform->mat[2] = stx + sa*curLx;
+                xform->mat[5] = sty + sc_*curLx;
+                break;
+            }
+            xform->w = nw;
+            xform->h = nh;
+            if (fabsf(xform->w) < 1.0f) xform->w = (xform->w < 0) ? -1.0f : 1.0f;
+            if (fabsf(xform->h) < 1.0f) xform->h = (xform->h < 0) ? -1.0f : 1.0f;
         } else {
             // Scale proportional to cursor (layer): scale matrix around cursor
             float as = s_savedXform.mat[0], bs = s_savedXform.mat[1];
@@ -210,8 +228,15 @@ bool TransformHandle_Input(RectXform* xform,
 
     // ── Release (any held button) ────────────────────────────────────
     if (s_dragAction != 0 && !leftDown && !rightDown) {
-        cursor->x = xform->mat[2];
-        cursor->y = xform->mat[5];
+        // Snap cursor to world-space mouse position on release
+        // (but not after corner scale — cursor stays where it is)
+        if (s_dragAction != 2) {
+            cursor->x = canvasPos.x;
+            cursor->y = canvasPos.y;
+        }
+        // Normalize flips: transfer negative w/h to matrix rows
+        if (xform->w < 0) { xform->mat[0] = -xform->mat[0]; xform->mat[1] = -xform->mat[1]; xform->w = -xform->w; }
+        if (xform->h < 0) { xform->mat[3] = -xform->mat[3]; xform->mat[4] = -xform->mat[4]; xform->h = -xform->h; }
         ResetState();
     }
 
