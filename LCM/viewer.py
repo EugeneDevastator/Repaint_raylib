@@ -1,27 +1,41 @@
 import os
 import tkinter as tk
 from tkinter import ttk
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageDraw
+import hashlib
 
 IMAGE_DIR = "images"
+CACHE_DIR = ".thumb_cache"
+THUMB_SIZE = 150
 
 RENAMES = {
-    "steps": "ns",
-    "n": "ns",
+    "n": "steps",
     "cfg": "g",
     "s": "str"
 }
 
-KNOWN_PARAMS = ["str", "g", "res", "ns", "loops"]
+KNOWN_PARAMS = ["str", "g", "res", "steps", "loops"]
 
-# Default values used when a param is missing from filename
 DEFAULTS = {
     "str": 1.0,
     "g": 7,
     "res": 512,
-    "ns": 4,
+    "steps": 4,
     "loops": 1
 }
+
+BG = "#ffffff"
+BG2 = "#f0f0f0"
+BG3 = "#e0e0e0"
+BG_DISABLED = "#e8e8e8"
+FG = "#111111"
+FG2 = "#333333"
+FG_DISABLED = "#aaaaaa"
+ACCENT = "#2266cc"
+FONT = ("Arial", 12)
+FONT_BOLD = ("Arial", 12, "bold")
+FONT_HEADER = ("Arial", 11, "bold")
+
 
 def parse_filename(filename):
     name = os.path.splitext(filename)[0]
@@ -29,39 +43,23 @@ def parse_filename(filename):
     params = {}
     for part in parts:
         part = part.replace("-", ".")
-        
-        # Try to split into key and value
-        # Match longest known key or rename key first
-        matched_key = None
-        matched_val = None
-        
-        # Build full candidate list: renames + known params
         all_keys = list(RENAMES.keys()) + KNOWN_PARAMS
-        # Sort by length descending so "steps" matches before "s"
         all_keys.sort(key=len, reverse=True)
-        
         for key in all_keys:
             if part.startswith(key):
                 val_str = part[len(key):]
                 try:
-                    val = float(val_str) if "." in val_str else int(val_str)
-                    matched_key = key
-                    matched_val = val
+                    val = float(val_str) # if "." in val_str else int(val_str)
+                    final_key = RENAMES.get(key, key)
+                    params[final_key] = val
                     break
                 except ValueError:
                     pass
-        
-        if matched_key is not None:
-            # Apply rename if needed
-            final_key = RENAMES.get(matched_key, matched_key)
-            params[final_key] = matched_val
-
-    # Fill in defaults for any missing params
     for k, v in DEFAULTS.items():
         if k not in params:
             params[k] = v
-
     return params
+
 
 def load_database():
     db = []
@@ -75,16 +73,43 @@ def load_database():
     return db
 
 
-# Style constants
-BG = "#ffffff"
-BG2 = "#f0f0f0"
-BG3 = "#e0e0e0"
-FG = "#111111"
-FG2 = "#333333"
-ACCENT = "#2266cc"
-FONT = ("Arial", 12)
-FONT_BOLD = ("Arial", 12, "bold")
-FONT_HEADER = ("Arial", 11, "bold")
+def get_thumb_path(image_path):
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    h = hashlib.md5(image_path.encode()).hexdigest()
+    return os.path.join(CACHE_DIR, f"{h}_{THUMB_SIZE}.png")
+
+
+def build_thumbnail(image_path):
+    thumb_path = get_thumb_path(image_path)
+    if os.path.exists(thumb_path):
+        if os.path.getmtime(thumb_path) >= os.path.getmtime(image_path):
+            return thumb_path
+    img = Image.open(image_path).resize((THUMB_SIZE, THUMB_SIZE), Image.LANCZOS)
+    img.save(thumb_path, "PNG")
+    return thumb_path
+
+
+class SplashProgress(tk.Toplevel):
+    def __init__(self, parent, total):
+        super().__init__(parent)
+        self.title("Loading thumbnails...")
+        self.resizable(False, False)
+        self.configure(bg=BG)
+        self.total = total
+        w, h = 400, 110
+        self.geometry(f"{w}x{h}+{(self.winfo_screenwidth()-w)//2}+{(self.winfo_screenheight()-h)//2}")
+        self.grab_set()
+        tk.Label(self, text="Building thumbnail cache...", bg=BG, fg=FG,
+                 font=FONT_BOLD).pack(pady=(18, 6))
+        self.bar = ttk.Progressbar(self, length=340, maximum=total, mode="determinate")
+        self.bar.pack(pady=4)
+        self.lbl = tk.Label(self, text=f"0 / {total}", bg=BG, fg=FG2, font=FONT)
+        self.lbl.pack()
+
+    def update_progress(self, done):
+        self.bar["value"] = done
+        self.lbl.config(text=f"{done} / {self.total}")
+        self.update()
 
 
 class ImageBrowser(tk.Tk):
@@ -93,22 +118,51 @@ class ImageBrowser(tk.Tk):
         self.title("Image Parameter Browser")
         self.state("zoomed")
         self.configure(bg=BG)
+        self.withdraw()
 
         self.db = load_database()
         self.all_params = self._collect_all_params()
+
+        # --- Fast lookup index: frozenset of (k,v) pairs -> entry ---
+        self._index = {}
+        for entry in self.db:
+            key = frozenset(entry["params"].items())
+            self._index[key] = entry
 
         self.x_var = tk.StringVar()
         self.y_var = tk.StringVar()
         self.slider_vars = {}
         self.slider_values = {}
-        self.cell_size = 150
-        self.image_cache = {}
+        self.slider_widgets = {}   # param -> {"frame", "slider", "val_label"}
+        self.cell_size = THUMB_SIZE
+
+        self.tk_cache = {}
+        self._empty_img = None
 
         self._apply_style()
         self._build_ui()
         self._init_dropdowns()
         self._init_sliders()
+        self._preload_thumbnails()
+
+        self.deiconify()
         self.update_grid()
+
+    def _preload_thumbnails(self):
+        if not self.db:
+            return
+        splash = SplashProgress(self, len(self.db))
+        for i, entry in enumerate(self.db):
+            thumb_path = build_thumbnail(entry["file"])
+            entry["thumb_path"] = thumb_path
+            splash.update_progress(i + 1)
+        splash.destroy()
+
+    def _get_tk_image(self, thumb_path):
+        if thumb_path not in self.tk_cache:
+            img = Image.open(thumb_path)
+            self.tk_cache[thumb_path] = ImageTk.PhotoImage(img)
+        return self.tk_cache[thumb_path]
 
     def _apply_style(self):
         style = ttk.Style(self)
@@ -125,28 +179,24 @@ class ImageBrowser(tk.Tk):
         return {k: sorted(v) for k, v in params.items()}
 
     def _build_ui(self):
-        # Top bar
         top = tk.Frame(self, bg=BG2, pady=8)
         top.pack(side=tk.TOP, fill=tk.X)
 
         tk.Label(top, text="X Axis:", bg=BG2, fg=FG, font=FONT_BOLD).pack(side=tk.LEFT, padx=(14, 4))
         self.x_combo = ttk.Combobox(top, textvariable=self.x_var, state="readonly", width=12, font=FONT)
         self.x_combo.pack(side=tk.LEFT, padx=(0, 24))
-        self.x_combo.bind("<<ComboboxSelected>>", lambda e: self.update_grid())
+        self.x_combo.bind("<<ComboboxSelected>>", lambda e: self._on_axis_change())
 
         tk.Label(top, text="Y Axis:", bg=BG2, fg=FG, font=FONT_BOLD).pack(side=tk.LEFT, padx=(0, 4))
         self.y_combo = ttk.Combobox(top, textvariable=self.y_var, state="readonly", width=12, font=FONT)
         self.y_combo.pack(side=tk.LEFT)
-        self.y_combo.bind("<<ComboboxSelected>>", lambda e: self.update_grid())
+        self.y_combo.bind("<<ComboboxSelected>>", lambda e: self._on_axis_change())
 
-        # Separator
         tk.Frame(self, bg=BG3, height=2).pack(fill=tk.X)
 
-        # Main area
         main = tk.Frame(self, bg=BG)
         main.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
-        # Grid area
         grid_frame = tk.Frame(main, bg=BG)
         grid_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
@@ -162,10 +212,8 @@ class ImageBrowser(tk.Tk):
         self.canvas_window = self.canvas.create_window((0, 0), window=self.grid_inner, anchor="nw")
         self.grid_inner.bind("<Configure>", self._on_grid_configure)
 
-        # Divider
         tk.Frame(main, bg=BG3, width=2).pack(side=tk.RIGHT, fill=tk.Y)
 
-        # Right panel
         right = tk.Frame(main, bg=BG2, width=230)
         right.pack(side=tk.RIGHT, fill=tk.Y)
         right.pack_propagate(False)
@@ -194,6 +242,7 @@ class ImageBrowser(tk.Tk):
             widget.destroy()
         self.slider_vars = {}
         self.slider_values = {}
+        self.slider_widgets = {}
 
         for param, values in self.all_params.items():
             self.slider_values[param] = values
@@ -206,8 +255,9 @@ class ImageBrowser(tk.Tk):
             top_row = tk.Frame(frame, bg=BG2)
             top_row.pack(fill=tk.X)
 
-            tk.Label(top_row, text=param, bg=BG2, fg=FG,
-                     font=FONT_BOLD, anchor="w").pack(side=tk.LEFT)
+            name_label = tk.Label(top_row, text=param, bg=BG2, fg=FG,
+                                  font=FONT_BOLD, anchor="w")
+            name_label.pack(side=tk.LEFT)
 
             val_label = tk.Label(top_row, text=str(values[0]), bg=BG2,
                                  fg=ACCENT, font=FONT_BOLD, anchor="e")
@@ -223,13 +273,47 @@ class ImageBrowser(tk.Tk):
             )
             slider.pack(fill=tk.X)
 
-            # Tick labels: show min and max
             tick_frame = tk.Frame(frame, bg=BG2)
             tick_frame.pack(fill=tk.X)
             tk.Label(tick_frame, text=str(values[0]), bg=BG2, fg=FG2,
                      font=("Arial", 9)).pack(side=tk.LEFT)
             tk.Label(tick_frame, text=str(values[-1]), bg=BG2, fg=FG2,
                      font=("Arial", 9)).pack(side=tk.RIGHT)
+
+            self.slider_widgets[param] = {
+                "frame": frame,
+                "slider": slider,
+                "val_label": val_label,
+                "name_label": name_label,
+            }
+
+        self._update_slider_states()
+
+    def _update_slider_states(self):
+        """Gray out sliders whose param is currently used as X or Y axis."""
+        x_param = self.x_var.get()
+        y_param = self.y_var.get()
+        axis_params = {x_param, y_param}
+
+        for param, widgets in self.slider_widgets.items():
+            is_axis = param in axis_params
+            fg_color = FG_DISABLED if is_axis else FG
+            bg_color = BG_DISABLED if is_axis else BG2
+            accent = FG_DISABLED if is_axis else ACCENT
+            state = tk.DISABLED if is_axis else tk.NORMAL
+
+            widgets["frame"].config(bg=bg_color)
+            widgets["name_label"].config(bg=bg_color, fg=fg_color)
+            widgets["val_label"].config(bg=bg_color, fg=accent)
+            widgets["slider"].config(
+                state=state,
+                bg=bg_color,
+                troughcolor=BG3 if not is_axis else BG_DISABLED
+            )
+
+    def _on_axis_change(self):
+        self._update_slider_states()
+        self.update_grid()
 
     def _on_slider(self, param, val_label):
         idx = self.slider_vars[param].get()
@@ -244,39 +328,25 @@ class ImageBrowser(tk.Tk):
             result[param] = self.slider_values[param][idx]
         return result
 
-    def _find_image(self, filters):
-        for entry in self.db:
-            p = entry["params"]
-            if all(p.get(k) == v for k, v in filters.items()):
-                return entry["file"]
-        return None
+    def _find_entry(self, filters):
+        """O(1) lookup via index."""
+        key = frozenset(filters.items())
+        return self._index.get(key)
 
-    def _load_image(self, path):
-        if path in self.image_cache:
-            return self.image_cache[path]
-        img = Image.open(path).resize((self.cell_size, self.cell_size), Image.LANCZOS)
-        tk_img = ImageTk.PhotoImage(img)
-        self.image_cache[path] = tk_img
-        return tk_img
-
-    def _make_empty_square(self):
-        key = "__empty__"
-        if key not in self.image_cache:
+    def _get_empty_image(self):
+        if self._empty_img is None:
             img = Image.new("RGB", (self.cell_size, self.cell_size), color=(220, 220, 220))
-            # Draw a subtle X
-            from PIL import ImageDraw
             draw = ImageDraw.Draw(img)
             m = 20
             s = self.cell_size
             draw.line([(m, m), (s - m, s - m)], fill=(180, 180, 180), width=2)
             draw.line([(s - m, m), (m, s - m)], fill=(180, 180, 180), width=2)
-            self.image_cache[key] = ImageTk.PhotoImage(img)
-        return self.image_cache[key]
+            self._empty_img = ImageTk.PhotoImage(img)
+        return self._empty_img
 
     def update_grid(self):
         for widget in self.grid_inner.winfo_children():
             widget.destroy()
-        self.image_cache.clear()
 
         x_param = self.x_var.get()
         y_param = self.y_var.get()
@@ -286,14 +356,20 @@ class ImageBrowser(tk.Tk):
             return
 
         filters = self._get_filter_values()
+
+        # Remove axis params from filters — they vary across the grid
+        filters.pop(x_param, None)
+        filters.pop(y_param, None)
+
         x_vals_all = self.all_params.get(x_param, [])
         y_vals_all = self.all_params.get(y_param, [])
 
+        # O(1) per cell now
         def has_image(x_val, y_val):
             f = dict(filters)
             f[x_param] = x_val
             f[y_param] = y_val
-            return self._find_image(f) is not None
+            return self._find_entry(f) is not None
 
         x_vals = [x for x in x_vals_all if any(has_image(x, y) for y in y_vals_all)]
         y_vals = [y for y in y_vals_all if any(has_image(x, y) for x in x_vals_all)]
@@ -305,20 +381,17 @@ class ImageBrowser(tk.Tk):
 
         cell_pad = 4
 
-        # Corner cell
         tk.Label(self.grid_inner, text="", bg=BG3,
                  width=10, height=2).grid(row=0, column=0, padx=cell_pad, pady=cell_pad, sticky="nsew")
 
-        # Column headers
         for col, xv in enumerate(x_vals):
-            tk.Label(self.grid_inner, text=f"{x_param} = {xv}",
+            tk.Label(self.grid_inner, text=f"{x_param}={xv}",
                      bg=BG3, fg=FG, font=FONT_HEADER,
-                     width=14, height=2, relief="flat").grid(
+                     width=14, height=2).grid(
                 row=0, column=col + 1, padx=cell_pad, pady=cell_pad, sticky="nsew")
 
-        # Rows
         for row, yv in enumerate(y_vals):
-            tk.Label(self.grid_inner, text=f"{y_param} = {yv}",
+            tk.Label(self.grid_inner, text=f"{y_param}={yv}",
                      bg=BG3, fg=FG, font=FONT_HEADER,
                      width=12, height=2).grid(
                 row=row + 1, column=0, padx=cell_pad, pady=cell_pad, sticky="nsew")
@@ -327,16 +400,16 @@ class ImageBrowser(tk.Tk):
                 f = dict(filters)
                 f[x_param] = xv
                 f[y_param] = yv
-                path = self._find_image(f)
+                entry = self._find_entry(f)
 
-                if path:
-                    img = self._load_image(path)
+                if entry and "thumb_path" in entry:
+                    img = self._get_tk_image(entry["thumb_path"])
                     lbl = tk.Label(self.grid_inner, image=img, bg=BG,
                                    cursor="hand2", relief="flat", bd=1)
                     lbl.image = img
-                    lbl.bind("<Button-1>", lambda e, p=path: self._open_full(p))
+                    lbl.bind("<Button-1>", lambda e, p=entry["file"]: self._open_full(p))
                 else:
-                    img = self._make_empty_square()
+                    img = self._get_empty_image()
                     lbl = tk.Label(self.grid_inner, image=img, bg=BG, relief="flat", bd=1)
                     lbl.image = img
 
