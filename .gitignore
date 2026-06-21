@@ -8,3 +8,5 @@ __pycache__/*
 /.idea/*
 /cmake-build-debug
 /cmake-build-debug/*
+/LCM/.thumb_cache
+/LCM/.thumb_cache/*
