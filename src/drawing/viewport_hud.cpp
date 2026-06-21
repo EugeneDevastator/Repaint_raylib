@@ -92,16 +92,11 @@ void ViewportHUD_Draw(AppState* state) {
     bool useViewRes = false;
     if (!state->editTexMode) {
 
-    // Determine render path based on relative pixel density
+    // Path B (viewport-resolution composite) only during crop mode or manual override.
+    // Path A (canvas-resolution composite) is always used otherwise because it correctly
+    // applies canvasView + clips to document bounds (required after crop accept).
     useViewRes = (state->framingMode == FRAME_CROP);
     if (!useViewRes && g_useViewRes) useViewRes = true;
-    if (!useViewRes) {
-        int vpW = (int)vpBounds.width, vpH = (int)vpBounds.height;
-        float compScrnW = (float)cw * state->camera.zoom;
-        float compScrnH = (float)ch * state->camera.zoom;
-        if (compScrnW < vpW && compScrnH < vpH)
-            useViewRes = true;
-    }
 
     if (useViewRes) {
         // Path B: composite at viewport resolution
