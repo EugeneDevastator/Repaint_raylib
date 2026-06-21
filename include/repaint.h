@@ -120,8 +120,8 @@ typedef struct {
 enum FramingMode { FRAME_DEFAULT, FRAME_CROP };
 
 // Helpers — explicit rounding, not hidden in a macro
-static inline int DocOutW(const Document* d) { return (int)(d->window.w * d->ppu + 0.5f); }
-static inline int DocOutH(const Document* d) { return (int)(d->window.h * d->ppu + 0.5f); }
+static inline int DocOutPxW(const Document* d) { return (int)(d->window.w * d->ppu + 0.5f); }
+static inline int DocOutPxH(const Document* d) { return (int)(d->window.h * d->ppu + 0.5f); }
 
 struct BrushDab  { float x, y; float srcX, srcY; d_RealBrush brush; };
 struct DrawCommand { float x, y; uint32_t color; float radius; };

@@ -46,8 +46,8 @@ static void EnsurePreviewRTs(void) {
 }
 
 void ViewportHUD_Draw(AppState* state) {
-    int cw = DocOutW(&state->doc);
-    int ch = DocOutH(&state->doc);
+    int cw = DocOutPxW(&state->doc);
+    int ch = DocOutPxH(&state->doc);
     if (cw < 1 || ch < 1) return;
 
     Rectangle vpBounds = viewport.bounds;
@@ -142,7 +142,7 @@ void ViewportHUD_Draw(AppState* state) {
         float dstX = -state->camera.target.x * state->camera.zoom + state->camera.offset.x;
         float dstY = -state->camera.target.y * state->camera.zoom + state->camera.offset.y;
         // Display at world-space extent so handles match; source texture
-        // (DocOutW×DocOutH) is stretched by DrawTexturePro when ppu≠1.
+        // (DocOutPxW×DocOutPxH) is stretched by DrawTexturePro when ppu≠1.
         float ww = state->doc.window.w, wh = state->doc.window.h;
         float dstW = ww * state->camera.zoom;
         float dstH = wh * state->camera.zoom;

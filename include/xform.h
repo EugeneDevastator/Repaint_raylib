@@ -15,15 +15,16 @@ void Xform_SetScale(float out[6], float sx, float sy);
 // ── RectXform — oriented rectangle in world-space ────────────────
 // mat maps from local space (pivot at origin) to world space.
 // w,h are the extent in world units — purely metadata, the matrix
-// does not depend on them.
+// does not depend on them.  When rot=0 and pivot is top-left:
+// the rectangle covers (cx,cy) .. (cx+w, cy+h).
 typedef struct {
     float mat[6];
     float w, h;
 } RectXform;
 
-// Build mat = translate(cx,cy) · rotate(rot).  When rot=0:
-//   mat = {1,0,cx, 0,1,cy}   — identity orientation at (cx,cy)
-RectXform RectXform_Center(float cx, float cy, float w, float h, float rot);
+// Build mat = translate(cx,cy) · rotate(rot).  (cx,cy) is the
+// pivot (local origin) position in world space.
+RectXform RectXform_Pivot(float cx, float cy, float w, float h, float rot);
 
 // Center = mat applied to local origin (0,0) = (mat[2], mat[5])
 static inline void RectXform_GetCenter(const RectXform* rx, float* cx, float* cy) {

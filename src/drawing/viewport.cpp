@@ -99,7 +99,6 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         Camera2D dc = state->camera;
         dc.zoom *= state->doc.ppu;
         if (!g_useViewRes) {
-            // Legacy path: canvasView has a world-space centering offset
             const float* cv = LayerStack_GetCanvasView();
             dc.target.x = (state->camera.target.x - cv[2]) / state->doc.ppu;
             dc.target.y = (state->camera.target.y - cv[5]) / state->doc.ppu;

@@ -32,7 +32,7 @@ void Xform_SetScale(float out[6], float sx, float sy) {
     out[3]=0;  out[4]=sy; out[5]=0;
 }
 
-RectXform RectXform_Center(float cx, float cy, float w, float h, float rot) {
+RectXform RectXform_Pivot(float cx, float cy, float w, float h, float rot) {
     RectXform rx;
     Xform_SetRot(rx.mat, rot);
     rx.mat[2] = cx;

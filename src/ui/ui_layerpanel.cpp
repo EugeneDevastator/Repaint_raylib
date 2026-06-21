@@ -259,7 +259,7 @@ void LayerPanel_Draw(AppState* state) {
             } else {
                 HudSetActive(state, HUD_NONE);
                 state->framingMode = FRAME_DEFAULT;
-                state->camera.target = Vector2{state->doc.window.mat[2], state->doc.window.mat[5]};
+                state->camera.target = Vector2{0, 0};
                 state->camera.zoom = 1.0f;
             }
             layersDirty = true;

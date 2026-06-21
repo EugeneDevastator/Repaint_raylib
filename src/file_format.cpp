@@ -265,7 +265,7 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
         memcpy(&loadRot, p, 4); p += 4;
     }
     doc->ppu = ppuFromFile;
-    doc->window = RectXform_Center(loadCx, loadCy, loadW, loadH, loadRot);
+    doc->window = RectXform_Pivot(loadCx, loadCy, loadW, loadH, loadRot);
 
     // ── Load layers ──────────────────────────────────────────────────
     if (ver < 5) {

@@ -25,14 +25,14 @@ float RngConv(float inval,float inmin,float inmax,float outmin,float outmax) {
 Document Doc_New(int w, int h) {
     Document d;
     d.ppu = 1.0f;
-    d.window = RectXform_Center(w*0.5f, h*0.5f, (float)w, (float)h, 0.0f);
+    d.window = RectXform_Pivot(0, 0, (float)w, (float)h, 0.0f);
     return d;
 }
 
 Document Doc_NewPPU(float ppu, float cw, float ch) {
     Document d;
     d.ppu = ppu;
-    d.window = RectXform_Center(cw*0.5f, ch*0.5f, cw, ch, 0.0f);
+    d.window = RectXform_Pivot(0, 0, cw, ch, 0.0f);
     return d;
 }
 
@@ -41,10 +41,10 @@ void ComputeCanvasMatrix(float ppu, const RectXform* rx, int outW, int outH, flo
     float c = rx->mat[0], s = rx->mat[1]; // cos(rot), sin(rot)
     mat[0] = ppu * c;
     mat[1] = ppu * s;
-    mat[2] = -ppu * (cx * c + cy * s) + outW * 0.5f;
+    mat[2] = -ppu * (cx * c + cy * s);
     mat[3] = -ppu * s;
     mat[4] = ppu * c;
-    mat[5] =  ppu * (cx * s - cy * c) + outH * 0.5f;
+    mat[5] =  ppu * (cx * s - cy * c);
 }
 
 void ApplyCanvasWindow(Document* doc) {
@@ -54,23 +54,23 @@ void ApplyCanvasWindow(Document* doc) {
     float ppu = doc->ppu;
 
     // Crop-only transform: position + rotation, no ppu.
-    // Maps old-world point to new-world where crop content is centered.
+    // Maps old-world point to new-world origin.
     float C[6] = {
-        c, s, -(cx * c + cy * s) + ww * 0.5f,
-        -s, c,  cx * s - cy * c + wh * 0.5f
+        c, s, -(cx * c + cy * s),
+        -s, c,  cx * s - cy * c
     };
     LayerStack_SetCanvasView(C);
     LayerStack_BakeCanvasWindow(doc);   // bakes C into layers, resets canvasView to identity
 
-    // ppu-only canvasView — no rotation, no window centering
+    // Identity canvasView — camera at (0,0) aligns with shifted layer pivot.
     float ppuCv[6] = {ppu, 0, 0, 0, ppu, 0};
     LayerStack_SetCanvasView(ppuCv);
 
-    // Reset window: no rotation, centered at (ww/2, wh/2), same world-unit extent
+    // Reset window: no rotation, pivot at origin, same world-unit extent
     doc->window.mat[0] = 1; doc->window.mat[1] = 0;
-    doc->window.mat[2] = ww * 0.5f;
+    doc->window.mat[2] = 0;
     doc->window.mat[3] = 0; doc->window.mat[4] = 1;
-    doc->window.mat[5] = wh * 0.5f;
+    doc->window.mat[5] = 0;
     doc->window.w = ww; doc->window.h = wh;
 
     LayerStack_SetRenderWindow((int)(ww * ppu + 0.5f), (int)(wh * ppu + 0.5f));

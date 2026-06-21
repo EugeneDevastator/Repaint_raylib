@@ -121,7 +121,7 @@ float g_pivotCursorX = 0.0f, g_pivotCursorY = 0.0f;
 // ── Helper: sync the canvas-window matrix + render window from Document ──
 // Returns the output pixel size via outW/outH.
 static void SyncCanvasFromDoc(const Document* doc, int* outW, int* outH) {
-    int cw = DocOutW(doc), ch = DocOutH(doc);
+    int cw = DocOutPxW(doc), ch = DocOutPxH(doc);
     if (outW) *outW = cw; if (outH) *outH = ch;
     float cv[6];
     ComputeCanvasMatrix(doc->ppu, &doc->window, cw, ch, cv);
@@ -208,7 +208,7 @@ void UpdateUI(AppState* state) {
         } else {
             HudSetActive(state, HUD_NONE);
             state->framingMode = FRAME_DEFAULT;
-            state->camera.target = Vector2{state->doc.window.mat[2], state->doc.window.mat[5]};
+            state->camera.target = Vector2{0, 0};
             state->camera.zoom = 1.0f;
         }
         layersDirty = true;
@@ -321,7 +321,7 @@ static void OnOpenResult(DialogResult r) {
                 memcpy(g_currentFilePath, r.output, len + 1);
             g_state->activeLayer = 0;
             SyncCanvasFromDoc(&g_state->doc, NULL, NULL);
-            g_state->camera.target = Vector2{g_state->doc.window.mat[2], g_state->doc.window.mat[5]};
+            g_state->camera.target = Vector2{0, 0};
             layersDirty = true;
         } else {
             // Try as a standard image (PNG, JPEG, BMP, GIF, etc.)
@@ -336,7 +336,7 @@ static void OnOpenResult(DialogResult r) {
                 g_state->doc = Doc_New(w, h);
                 g_state->activeLayer = 0;
                 SyncCanvasFromDoc(&g_state->doc, NULL, NULL);
-                g_state->camera.target = Vector2{g_state->doc.window.mat[2], g_state->doc.window.mat[5]};
+                g_state->camera.target = Vector2{0, 0};
                 g_state->camera.zoom = 1.0f;
                 int idx = LayerStack_Add(w, h);
                 LayerStack_UploadToGPU(idx, img);
@@ -349,7 +349,7 @@ static void OnOpenResult(DialogResult r) {
                 g_state->doc = Doc_New(w, h);
                 g_state->activeLayer = 0;
                 SyncCanvasFromDoc(&g_state->doc, NULL, NULL);
-                g_state->camera.target = Vector2{g_state->doc.window.mat[2], g_state->doc.window.mat[5]};
+                g_state->camera.target = Vector2{0, 0};
                 g_state->camera.zoom = 1.0f;
                 int idx = LayerStack_Add(w, h);
                 Image fillImg = GenImageColor(w, h, WHITE);
@@ -387,7 +387,7 @@ void app_new_document(int w, int h, Color fill) {
     g_state->doc = Doc_New(w, h);
     g_state->activeLayer = 0;
     SyncCanvasFromDoc(&g_state->doc, NULL, NULL);
-    g_state->camera.target = Vector2{g_state->doc.window.mat[2], g_state->doc.window.mat[5]};
+    g_state->camera.target = Vector2{0, 0};
     int idx = LayerStack_Add(w, h);
     RenderTexture2D rt = LayerStack_GetRT(idx);
     BeginTextureMode(rt);
@@ -449,7 +449,7 @@ void App_FileReload(void) {
     if (LoadRePaint(g_currentFilePath, &g_state->doc, g_state)) {
         g_state->activeLayer = 0;
         SyncCanvasFromDoc(&g_state->doc, NULL, NULL);
-        g_state->camera.target = Vector2{g_state->doc.window.mat[2], g_state->doc.window.mat[5]};
+        g_state->camera.target = Vector2{0, 0};
         layersDirty = true;
     }
 }
@@ -563,10 +563,10 @@ void App_Init(AppState* state) {
     g_undoManager = state->undo;
 
     g_recorder = new ReplayRecorder();
-    g_recorder->Reset(DocOutW(&state->doc), DocOutH(&state->doc));
+    g_recorder->Reset(DocOutPxW(&state->doc), DocOutPxH(&state->doc));
 
     state->camera = Camera2D{};
-    state->camera.target = Vector2{state->doc.window.mat[2], state->doc.window.mat[5]};
+    state->camera.target = Vector2{0, 0};
     state->camera.offset = Vector2{viewportBounds.x + viewportBounds.width * 0.5f, viewportBounds.y + viewportBounds.height * 0.5f};
 
     // ── Module stack ──

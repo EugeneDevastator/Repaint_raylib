@@ -24,12 +24,11 @@ static bool PointInCanvasWindow(Vector2 canvasPos, const RectXform* rx) {
     float c = rx->mat[0], s = -rx->mat[1]; // un-rotate: negate sin
     float localX = dx * c - dy * s;
     float localY = dx * s + dy * c;
-    float hw = rx->w * 0.5f, hh = rx->h * 0.5f;
-    return fabsf(localX) <= hw && fabsf(localY) <= hh;
+    return localX >= 0 && localX <= rx->w && localY >= 0 && localY <= rx->h;
 }
 
 static void UpdateCanvasPipeline(AppState* state, RectXform* rx) {
-    int outW = DocOutW(&state->doc), outH = DocOutH(&state->doc);
+    int outW = DocOutPxW(&state->doc), outH = DocOutPxH(&state->doc);
     float cv[6]; ComputeCanvasMatrix(state->doc.ppu, rx, outW, outH, cv);
     LayerStack_SetCanvasView(cv);
     LayerStack_SetRenderWindow(outW, outH);
@@ -38,19 +37,16 @@ static void UpdateCanvasPipeline(AppState* state, RectXform* rx) {
 
 static void ExitCropMode(AppState* state, bool accept) {
     if (accept) {
-        // ApplyCanvasWindow bakes canvasView into layer mats, resets canvasView
-        // to identity, resets window to full-frame, and calls SetRenderWindow.
         ApplyCanvasWindow(&state->doc);
     } else {
         state->doc.window = g_entryWindow;
-        // Re-sync pipeline from the restored window
-        int cw = DocOutW(&state->doc), ch = DocOutH(&state->doc);
+        int cw = DocOutPxW(&state->doc), ch = DocOutPxH(&state->doc);
         float cv[6]; ComputeCanvasMatrix(state->doc.ppu, &state->doc.window, cw, ch, cv);
         LayerStack_SetCanvasView(cv); LayerStack_SetRenderWindow(cw, ch);
     }
     state->framingMode = FRAME_DEFAULT;
     g_activeHud = HUD_NONE;
-    state->camera.target = Vector2{state->doc.window.mat[2], state->doc.window.mat[5]};
+    state->camera.target = Vector2{0, 0};
     state->camera.zoom = 1.0f;
     g_entrySaved = false;
     layersDirty = true;
@@ -102,13 +98,13 @@ bool CanvasXformModule::HandleInput(InputState& input, const DrawRect& rect) {
     RectXform* rx = &state->doc.window;
 
     float c = rx->mat[0], s = rx->mat[1];
-    float hw = rx->w * 0.5f, hh = rx->h * 0.5f;
     float cx = rx->mat[2], cy = rx->mat[5];
+    float w = rx->w, h = rx->h;
     Vector2 corners_doc[4] = {
-        {cx + (-hw)*c - (-hh)*s, cy + (-hw)*s + (-hh)*c},
-        {cx + (+hw)*c - (-hh)*s, cy + (+hw)*s + (-hh)*c},
-        {cx + (+hw)*c - (+hh)*s, cy + (+hw)*s + (+hh)*c},
-        {cx + (-hw)*c - (+hh)*s, cy + (-hw)*s + (+hh)*c},
+        {cx,                   cy},
+        {cx + w*c,             cy + w*s},
+        {cx + w*c - h*s,       cy + w*s + h*c},
+        {cx - h*s,             cy + h*c},
     };
     Vector2 sc[4];
     Vector2 centerSc = GetWorldToScreen2D(Vector2{cx, cy}, state->camera);
@@ -149,8 +145,8 @@ bool CanvasXformModule::HandleInput(InputState& input, const DrawRect& rect) {
         float sc = g_savedWin.mat[0], ss = g_savedWin.mat[1];
         float dx = canvasPos.x - g_savedWin.mat[2];
         float dy = canvasPos.y - g_savedWin.mat[5];
-        float initLx = (g_dragCorner == 0 || g_dragCorner == 3) ? -g_savedWin.w * 0.5f : g_savedWin.w * 0.5f;
-        float initLy = (g_dragCorner == 0 || g_dragCorner == 1) ? -g_savedWin.h * 0.5f : g_savedWin.h * 0.5f;
+        float initLx = (g_dragCorner == 0 || g_dragCorner == 3) ? 0.0f : g_savedWin.w;
+        float initLy = (g_dragCorner == 0 || g_dragCorner == 1) ? 0.0f : g_savedWin.h;
         float curLx =  dx * sc + dy * ss;
         float curLy = -dx * ss + dy * sc;
         float sx = (fabsf(initLx) > 0.001f) ? curLx / initLx : 1.0f;
@@ -202,13 +198,13 @@ void CanvasXformModule::DrawGL(const DrawRect& rect) {
 
     const RectXform* cw = &state->doc.window;
     float c = cw->mat[0], s = cw->mat[1];
-    float hw = cw->w * 0.5f, hh = cw->h * 0.5f;
     float cx = cw->mat[2], cy = cw->mat[5];
+    float w = cw->w, h = cw->h;
     Vector2 corners_doc[4] = {
-        {cx + (-hw)*c - (-hh)*s, cy + (-hw)*s + (-hh)*c},
-        {cx + (+hw)*c - (-hh)*s, cy + (+hw)*s + (-hh)*c},
-        {cx + (+hw)*c - (+hh)*s, cy + (+hw)*s + (+hh)*c},
-        {cx + (-hw)*c - (+hh)*s, cy + (-hw)*s + (+hh)*c},
+        {cx,                   cy},
+        {cx + w*c,             cy + w*s},
+        {cx + w*c - h*s,       cy + w*s + h*c},
+        {cx - h*s,             cy + h*c},
     };
 
     auto ws = [&](Vector2 wp) -> Vector2 {
@@ -219,7 +215,7 @@ void CanvasXformModule::DrawGL(const DrawRect& rect) {
     glEnable(GL_COLOR_LOGIC_OP);
     glLogicOp(GL_XOR);
 
-    // Center crosshair (pivot)
+    // Pivot crosshair
     Vector2 uip = ws(Vector2{cx, cy});
     float chLen = 12.0f;
     DrawLine(uip.x - chLen, uip.y, uip.x + chLen, uip.y, WHITE);
@@ -258,7 +254,7 @@ void CanvasXformModule::DrawGUI(const DrawRect& rect) {
 
     ImGui::Text("Canvas Window");
     ImGui::Separator();
-    int curW = DocOutW(&state->doc), curH = DocOutH(&state->doc);
+    int curW = DocOutPxW(&state->doc), curH = DocOutPxH(&state->doc);
     ImGui::Text("ppu: %.2f", state->doc.ppu);
     ImGui::Text("Size: %.0f x %.0f", state->doc.window.w, state->doc.window.h);
     ImGui::Text("rot: %.1f", RectXform_GetRot(&state->doc.window) * 180.0f / (float)M_PI);
@@ -281,7 +277,7 @@ void CanvasXformModule::DrawGUI(const DrawRect& rect) {
     if (ppiEdited) {
         state->doc.ppu *= powf(2.0f, g_ppiSlider);
         g_ppiSlider = 0.0f;
-        int outW = DocOutW(&state->doc), outH = DocOutH(&state->doc);
+        int outW = DocOutPxW(&state->doc), outH = DocOutPxH(&state->doc);
         float cv[6]; ComputeCanvasMatrix(state->doc.ppu, &state->doc.window, outW, outH, cv);
         LayerStack_SetCanvasView(cv);
         LayerStack_SetRenderWindow(outW, outH);
