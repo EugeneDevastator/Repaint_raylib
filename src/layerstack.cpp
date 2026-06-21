@@ -137,6 +137,7 @@ static void ShiftLayersDown(int from, int to) {
 // ── Helper: init a new slot with a blank image/RT at the given size ──
 static void InitLayerSlot(int idx, int w, int h) {
     LS.rt[idx]=Load16BitRT(w,h);
+    SetTextureFilter(LS.rt[idx].texture, TEXTURE_FILTER_BILINEAR);
     BeginTextureMode(LS.rt[idx]); ClearBackground(BLANK); EndTextureMode();
     LS.prop[idx]={}; LS.prop[idx].op=1; LS.prop[idx].visible=true;
     LS.prop[idx].blendmode=bmGamma; LS.prop[idx].xform = RectXform_Pivot(0, 0, (float)w, (float)h, 0);

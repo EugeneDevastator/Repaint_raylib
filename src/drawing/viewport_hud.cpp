@@ -89,21 +89,33 @@ void ViewportHUD_Draw(AppState* state) {
 
     bool usePresent = GetPresentInited();
     RenderTexture2D* docBlendTex = NULL;
+    bool useViewRes = false;
     if (!state->editTexMode) {
 
-    if (state->framingMode == FRAME_CROP) {
-        // Crop mode: render all layers to viewport-sized RT without canvas view,
-        // then draw the canvas window rectangle as an interactive overlay.
+    // Determine render path based on relative pixel density
+    useViewRes = (state->framingMode == FRAME_CROP);
+    if (!useViewRes && g_useViewRes) useViewRes = true;
+    if (!useViewRes) {
+        int vpW = (int)vpBounds.width, vpH = (int)vpBounds.height;
+        float compScrnW = (float)cw * state->camera.zoom;
+        float compScrnH = (float)ch * state->camera.zoom;
+        if (compScrnW < vpW && compScrnH < vpH)
+            useViewRes = true;
+    }
+
+    if (useViewRes) {
+        // Path B: composite at viewport resolution
         int vpW = (int)vpBounds.width, vpH = (int)vpBounds.height;
         if (vpW > 0 && vpH > 0) {
             if (g_viewResRT.id == 0 || g_viewResRT.texture.width != (unsigned)vpW || g_viewResRT.texture.height != (unsigned)vpH)
                 g_viewResRT = Load16BitRT(vpW, vpH);
+            float zoom = state->camera.zoom;
             float vOffX = state->camera.offset.x - vpBounds.x;
             float vOffY = state->camera.offset.y - vpBounds.y;
-            float vMat[6] = {state->camera.zoom, 0,
-                -state->camera.target.x * state->camera.zoom + vOffX, 0,
-                state->camera.zoom,
-                -state->camera.target.y * state->camera.zoom + vOffY};
+            float vMat[6] = {zoom, 0,
+                -state->camera.target.x * zoom + vOffX, 0,
+                zoom,
+                -state->camera.target.y * zoom + vOffY};
             LayerStack_ProduceCompositeView(g_viewResRT, vMat, vpW, vpH);
             if (usePresent) { BeginShaderMode(GetPresentShader()); LayerStack_SetPresentTexSize(vpW, vpH); LayerStack_SetPresentDither(true); }
             DrawTextureRec(g_viewResRT.texture,
@@ -111,38 +123,14 @@ void ViewportHUD_Draw(AppState* state) {
                 Vector2{vpBounds.x, vpBounds.y}, WHITE);
             if (usePresent) EndShaderMode();
             docBlendTex = &g_viewResRT;
-
         }
-    } else if (g_useViewRes) {
-        // Viewport-sized RT — recreate only when viewport changes size
-        int vpW = (int)vpBounds.width, vpH = (int)vpBounds.height;
-        if (g_viewResRT.id == 0 || g_viewResRT.texture.width != (unsigned)vpW || g_viewResRT.texture.height != (unsigned)vpH)
-            g_viewResRT = Load16BitRT(vpW, vpH);
-        if (vpW < 1 || vpH < 1) return;
-
-        float zoom = state->camera.zoom;
-        float vOffX = state->camera.offset.x - vpBounds.x;
-        float vOffY = state->camera.offset.y - vpBounds.y;
-        float vMat[6] = {zoom, 0,
-            -state->camera.target.x * zoom + vOffX, 0,
-            zoom,
-            -state->camera.target.y * zoom + vOffY};
-        LayerStack_ProduceCompositeView(g_viewResRT, vMat, vpW, vpH);
-        if (usePresent) { BeginShaderMode(GetPresentShader()); LayerStack_SetPresentTexSize(vpW, vpH); LayerStack_SetPresentDither(true); }
-        DrawTextureRec(g_viewResRT.texture,
-            Rectangle{0, 0, (float)vpW, (float)-vpH},
-            Vector2{vpBounds.x, vpBounds.y}, WHITE);
-        if (usePresent) EndShaderMode();
-        docBlendTex = &g_viewResRT;
     } else {
-        // Legacy: composite at canvas resolution, draw at camera position
+        // Path A: composite at canvas resolution, draw at camera position
         docBlendTex = DocBlender_Composite(state);
         if (!docBlendTex || docBlendTex->id == 0) return;
 
         float dstX = -state->camera.target.x * state->camera.zoom + state->camera.offset.x;
         float dstY = -state->camera.target.y * state->camera.zoom + state->camera.offset.y;
-        // Display at world-space extent so handles match; source texture
-        // (DocOutPxW×DocOutPxH) is stretched by DrawTexturePro when ppu≠1.
         float ww = state->doc.window.w, wh = state->doc.window.h;
         float dstW = ww * state->camera.zoom;
         float dstH = wh * state->camera.zoom;
@@ -187,7 +175,7 @@ void ViewportHUD_Draw(AppState* state) {
             // Copy the visible canvas area as background (needed for smudge, harmless for paint)
             BeginTextureMode(g_previewRT);
             ClearBackground(BLANK);
-            if (!g_useViewRes && docBlendTex) {
+            if (!useViewRes && docBlendTex) {
                 Camera2D prevCam = {};
                 prevCam.target = state->camera.target;
                 prevCam.offset = Vector2{PREVIEW_SZ * 0.5f, PREVIEW_SZ * 0.5f};
