@@ -37,27 +37,37 @@ Document Doc_NewPPU(float ppu, float cw, float ch) {
 }
 
 void ComputeCanvasMatrix(float ppu, const RectXform* rx, int outW, int outH, float mat[6]) {
+    (void)outW; (void)outH;
     float cx = rx->mat[2], cy = rx->mat[5];
-    float c = rx->mat[0], s = rx->mat[1]; // cos(rot), sin(rot)
-    mat[0] = ppu * c;
-    mat[1] = ppu * s;
-    mat[2] = -ppu * (cx * c + cy * s);
-    mat[3] = -ppu * s;
-    mat[4] = ppu * c;
-    mat[5] =  ppu * (cx * s - cy * c);
+    float a = rx->mat[0], b = rx->mat[1];
+    float c = rx->mat[3], d = rx->mat[4];
+    float det = a * d - b * c;
+    if (fabsf(det) < 0.0001f) { Xform_Identity(mat); return; }
+    float invDet = 1.0f / det;
+    // paint = ppu * W^(-1) * (world - P)
+    float ia = d * invDet, ib = -b * invDet;
+    float ic = -c * invDet, id = a * invDet;
+    mat[0] = ppu * ia;
+    mat[1] = ppu * ib;
+    mat[2] = -ppu * (ia * cx + ib * cy);
+    mat[3] = ppu * ic;
+    mat[4] = ppu * id;
+    mat[5] = -ppu * (ic * cx + id * cy);
 }
 
 void ApplyCanvasWindow(Document* doc) {
-    float c = doc->window.mat[0], s = doc->window.mat[1];
+    float a = doc->window.mat[0], b = doc->window.mat[1];
     float cx = doc->window.mat[2], cy = doc->window.mat[5];
+    float c = doc->window.mat[3], d = doc->window.mat[4];
     float ww = doc->window.w, wh = doc->window.h;
     float ppu = doc->ppu;
 
-    // Crop-only transform: position + rotation, no ppu.
-    // Maps old-world point to new-world origin.
+    // Crop transform = window's 2×2 matrix (handles rotation AND flips).
+    // Maps old-world content to new-world origin so that baking into layers
+    // preserves the visual output when canvasView becomes ppu-only.
     float C[6] = {
-        c, s, -(cx * c + cy * s),
-        -s, c,  cx * s - cy * c
+        a, b, -(a * cx + b * cy),
+        c, d, -(c * cx + d * cy)
     };
     LayerStack_SetCanvasView(C);
     LayerStack_BakeCanvasWindow(doc);   // bakes C into layers, resets canvasView to identity
@@ -73,5 +83,5 @@ void ApplyCanvasWindow(Document* doc) {
     doc->window.mat[5] = 0;
     doc->window.w = ww; doc->window.h = wh;
 
-    LayerStack_SetRenderWindow((int)(ww * ppu + 0.5f), (int)(wh * ppu + 0.5f));
+    LayerStack_SetRenderWindow((int)(fabsf(ww) * ppu + 0.5f), (int)(fabsf(wh) * ppu + 0.5f));
 }

@@ -71,8 +71,8 @@ typedef struct {
     float threshold;
     float feather;
     char layerName[256];
-    float mat[6];        // 2×3 affine matrix (row-major: [a,b,tx, c,d,ty])
-    int layerW, layerH;  // native resolution of this layer
+    RectXform xform;     // 2×3 affine matrix; w,h = extent in world units
+    int layerW, layerH;  // native texture resolution in pixels
     bool seamless;       // use seamless merge (3x3 tile wrap) on drop
     bool instanced;      // shares RT/texture with another layer
 } sLayerProps;
@@ -120,8 +120,8 @@ typedef struct {
 enum FramingMode { FRAME_DEFAULT, FRAME_CROP };
 
 // Helpers — explicit rounding, not hidden in a macro
-static inline int DocOutPxW(const Document* d) { return (int)(d->window.w * d->ppu + 0.5f); }
-static inline int DocOutPxH(const Document* d) { return (int)(d->window.h * d->ppu + 0.5f); }
+static inline int DocOutPxW(const Document* d) { return (int)(fabsf(d->window.w) * d->ppu + 0.5f); }
+static inline int DocOutPxH(const Document* d) { return (int)(fabsf(d->window.h) * d->ppu + 0.5f); }
 
 struct BrushDab  { float x, y; float srcX, srcY; d_RealBrush brush; };
 struct DrawCommand { float x, y; uint32_t color; float radius; };

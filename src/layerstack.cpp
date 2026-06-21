@@ -139,7 +139,7 @@ static void InitLayerSlot(int idx, int w, int h) {
     LS.rt[idx]=Load16BitRT(w,h);
     BeginTextureMode(LS.rt[idx]); ClearBackground(BLANK); EndTextureMode();
     LS.prop[idx]={}; LS.prop[idx].op=1; LS.prop[idx].visible=true;
-    LS.prop[idx].blendmode=bmGamma; LS.prop[idx].mat[0]=1; LS.prop[idx].mat[4]=1;
+    LS.prop[idx].blendmode=bmGamma; LS.prop[idx].xform = RectXform_Pivot(0, 0, (float)w, (float)h, 0);
     LS.prop[idx].threshold=0; LS.prop[idx].feather=1;
     LS.prop[idx].layerW=w; LS.prop[idx].layerH=h;
     char name[64]; snprintf(name, sizeof(name), "Layer %d", idx);
@@ -292,15 +292,6 @@ void LayerStack_MoveLayer(int from, int to) {
     LS.dirty=true;
 }
 
-void LayerStack_ApplyTransform(int idx, const float mat[6]) {
-    if(idx<0||idx>=LS.count) return;
-    sLayerProps*lp=&LS.prop[idx];
-    float a=mat[0],b=mat[1],tx=mat[2],c=mat[3],d=mat[4],ty=mat[5];
-    float ca=lp->mat[0],cb=lp->mat[1],ctx=lp->mat[2],cc=lp->mat[3],cd=lp->mat[4],cty=lp->mat[5];
-    lp->mat[0]=a*ca+b*cc; lp->mat[1]=a*cb+b*cd; lp->mat[2]=a*ctx+b*cty+tx;
-    lp->mat[3]=c*ca+d*cc; lp->mat[4]=c*cb+d*cd; lp->mat[5]=c*ctx+d*cty+ty;
-    LS.dirty=true;
-}
 
 // ── Sync ──────────────────────────────────────────────────────────────
 Image LayerStack_ReadFromGPU(int idx) {
@@ -381,7 +372,7 @@ static void MatInvMul(const float below[6], const float top[6], float out[6]) {
 }
 
 static Texture2D GetTransformedTop(int idx) {
-    float relMat[6]; MatInvMul(LS.prop[idx-1].mat, LS.prop[idx].mat, relMat);
+    float relMat[6]; MatInvMul(LS.prop[idx-1].xform.mat, LS.prop[idx].xform.mat, relMat);
     if(LS.layerTransRT.id==0) return LS.rt[idx].texture;
     int cw=CW(),ch=CH(),lw=LS.prop[idx].layerW,lh=LS.prop[idx].layerH;
     BakeTransform(LS.layerTransRT,LS.rt[idx].texture,relMat,lw,lh,cw,ch);
@@ -452,7 +443,7 @@ static void MergeDownImpl(int idx, bool seamless) {
     }
 
     // ── Seamless: 3×3 tile blend via shared helper ────────────────────
-    float relMat[6]; MatInvMul(LS.prop[idx-1].mat, LS.prop[idx].mat, relMat);
+    float relMat[6]; MatInvMul(LS.prop[idx-1].xform.mat, LS.prop[idx].xform.mat, relMat);
     RenderTexture2D bufA=Load16BitRT(bw,bh), bufB=Load16BitRT(bw,bh);
     if(bufA.id==0||bufB.id==0){ if(bufA.id>0)UnloadRenderTexture(bufA); if(bufB.id>0)UnloadRenderTexture(bufB); return; }
 
@@ -532,7 +523,7 @@ static RenderTexture2D* CompositeLayersInto(RenderTexture2D& a, RenderTexture2D&
         Texture2D layerTex=LS.rt[i].texture;
         sLayerProps*p=&LS.prop[i];
         float cmb[6];
-        Xform_Mul(cmb, cv, p->mat);
+        Xform_Mul(cmb, cv, p->xform.mat);
         if(LS.layerTransRT.id>0){
             BakeTransform(LS.layerTransRT,LS.rt[i].texture,cmb,LS.prop[i].layerW,LS.prop[i].layerH,cw,ch);
             layerTex=LS.layerTransRT.texture;
@@ -630,8 +621,8 @@ static void _viewBlendLoop(RenderTexture2D dst, RenderTexture2D tmp,
         float cmb[6];
         bool hasXform = transRT.id>0;
         if(hasXform){
-            if(viewMat) Xform_Mul(cmb, viewMat, LS.prop[i].mat);
-            else        memcpy(cmb, LS.prop[i].mat, sizeof(cmb));
+            if(viewMat) Xform_Mul(cmb, viewMat, LS.prop[i].xform.mat);
+            else        memcpy(cmb, LS.prop[i].xform.mat, sizeof(cmb));
             if(!p->seamless) { BakeTransform(transRT,LS.rt[i].texture,cmb,LS.prop[i].layerW,LS.prop[i].layerH,w,h); layerTex=transRT.texture; }
         }
         bool seamlessBlended=(p->seamless && LS.shaderInited && transRT.id>0);
@@ -714,7 +705,7 @@ void LayerStack_BakeSingleLayer(int idx, RenderTexture2D dst) {
     if (idx < 0 || idx >= LS.count) return;
     if (LS.rt[idx].id == 0 || dst.id == 0) return;
     EnsurePresentShader();
-    BakeTransform(dst, LS.rt[idx].texture, LS.prop[idx].mat,
+    BakeTransform(dst, LS.rt[idx].texture, LS.prop[idx].xform.mat,
                   LS.prop[idx].layerW, LS.prop[idx].layerH, 0, 0);
 }
 
@@ -724,7 +715,7 @@ bool LayerStack_GetSceneBounds(Rectangle* out) {
     float l=0, r=0, b=0, t=0;
     for (int i = 0; i < LS.count; i++) {
         if (!LS.prop[i].visible || LS.rt[i].id == 0) continue;
-        float* M = LS.prop[i].mat;
+        float* M = LS.prop[i].xform.mat;
         float lw = (float)LS.prop[i].layerW, lh = (float)LS.prop[i].layerH;
         float x0 = M[2];                    float y0 = M[5];
         float x1 = M[0]*lw + M[2];           float y1 = M[3]*lw + M[5];
@@ -749,8 +740,8 @@ void LayerStack_BakeCanvasWindow(const Document* doc) {
         if (LS.rt[i].id == 0) continue;
         sLayerProps* p = &LS.prop[i];
         float cmb[6];
-        Xform_Mul(cmb, LS.canvasView, p->mat);
-        memcpy(p->mat, cmb, 6*sizeof(float));
+        Xform_Mul(cmb, LS.canvasView, p->xform.mat);
+        memcpy(p->xform.mat, cmb, 6*sizeof(float));
     }
     Xform_Identity(LS.canvasView);
     LS.dirty = true;

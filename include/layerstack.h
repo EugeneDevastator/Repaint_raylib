@@ -26,7 +26,7 @@ void LayerStack_DeleteLayer(int idx);
 void LayerStack_DuplicateLayer(int idx);
 void LayerStack_DuplicateAsInstance(int idx);
 void LayerStack_MoveLayer(int from, int to);
-void LayerStack_ApplyTransform(int idx, const float mat[6]);
+
 void LayerStack_MergeDown(int idx);
 void LayerStack_MergeDownSeamless(int idx);
 

@@ -48,7 +48,7 @@ static void _writeProps(uint8_t** p, sLayerProps* lp) {
     *(*p)++ = lp->realidx;
     _wu32(p, nameLen);
     if (nameLen > 0) _wcpy(p, lp->layerName, nameLen);
-    _wcpy(p, lp->mat, 6 * sizeof(float));               // v4+
+    _wcpy(p, lp->xform.mat, 6 * sizeof(float));               // v4+
     _wu32(p, (uint32_t)lp->layerW);                     // v5+: native width
     _wu32(p, (uint32_t)lp->layerH);                     // v5+: native height
     _wcpy(p, &lp->threshold, sizeof(float));             // v5+: was missing before
@@ -72,8 +72,8 @@ static void _readProps(const uint8_t** p, sLayerProps* lp, uint32_t ver) {
     if (nameLen > 0) { memcpy(lp->layerName, *p, nameLen); *p += nameLen; }
     lp->layerName[nameLen] = '\0';
     // mat[6] — format v4+
-    if (ver >= 4) { memcpy(lp->mat, *p, 6 * sizeof(float)); *p += 6 * sizeof(float); }
-    else { lp->mat[0] = 1; lp->mat[1] = 0; lp->mat[2] = 0; lp->mat[3] = 0; lp->mat[4] = 1; lp->mat[5] = 0; }
+    if (ver >= 4) { memcpy(lp->xform.mat, *p, 6 * sizeof(float)); *p += 6 * sizeof(float); }
+    else { lp->xform.mat[0] = 1; lp->xform.mat[1] = 0; lp->xform.mat[2] = 0; lp->xform.mat[3] = 0; lp->xform.mat[4] = 1; lp->xform.mat[5] = 0; }
     // layerW, layerH — format v5+
     if (ver >= 5) {
         lp->layerW = (int)_ru32(p); lp->layerH = (int)_ru32(p);
@@ -292,7 +292,7 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
             int idx = LayerStack_Add(w, h);
             sLayerProps* lp = LayerStack_GetProps(idx);
             lp->op = 1; lp->visible = true; lp->blendmode = bmGamma;
-            lp->mat[0] = 1; lp->mat[4] = 1; lp->layerW = w; lp->layerH = h;
+            lp->xform.mat[0] = 1; lp->xform.mat[4] = 1; lp->layerW = w; lp->layerH = h;
             LayerStack_UploadToGPU(idx, preview);
         }
     } else {
@@ -334,6 +334,8 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
 
             int idx = LayerStack_Add(lw, lh);
             *LayerStack_GetProps(idx) = tempProps;
+            LayerStack_GetProps(idx)->xform.w = (float)lw;
+            LayerStack_GetProps(idx)->xform.h = (float)lh;
             LayerStack_GetProps(idx)->layerW = lw; LayerStack_GetProps(idx)->layerH = lh;
             LayerStack_UploadToGPU(idx, layerImg);
         }

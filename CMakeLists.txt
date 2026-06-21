@@ -101,6 +101,7 @@ set(SOURCES
     src/ui/ui_quickhud.cpp
     src/ui/ui_layerxform.cpp
     src/ui/ui_canvasxform.cpp
+    src/ui/transform_handle.cpp
     src/ui/ui_style.cpp
     src/ui/ui_texpanel.cpp
     src/undo.cpp

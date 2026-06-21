@@ -55,7 +55,7 @@ void LayerPanel_UpdatePreviews(AppState* state) {
         BeginTextureMode(dst); ClearBackground(BLANK);
         rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE,RL_ZERO,RL_FUNC_ADD);
         rlPushMatrix();
-        float* M = p->mat;
+        float* M = p->xform.mat;
         float mg[16]={sx*M[0],sy*M[3],0,0, sx*M[1],sy*M[4],0,0, 0,0,1,0, sx*M[2],sy*M[5],0,1};
         rlMultMatrixf(mg);
         DrawTextureRec(src,Rectangle{0,0,(float)p->layerW,(float)-p->layerH},Vector2{0,0},WHITE);

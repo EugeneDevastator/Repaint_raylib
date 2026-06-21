@@ -122,8 +122,8 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         if (state->editTexMode || active < 0 || active >= LayerStack_Count())
             return worldPt;
         sLayerProps* lp = LayerStack_GetProps(active);
-        float a = lp->mat[0], b = lp->mat[1], tx = lp->mat[2];
-        float c = lp->mat[3], d = lp->mat[4], ty = lp->mat[5];
+        float a = lp->xform.mat[0], b = lp->xform.mat[1], tx = lp->xform.mat[2];
+        float c = lp->xform.mat[3], d = lp->xform.mat[4], ty = lp->xform.mat[5];
         float det = a * d - b * c;
         if (fabsf(det) <= 0.0001f) return worldPt;
         float invDet = 1.0f / det;
@@ -141,7 +141,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
     // Subtract layer rotation so brush stamps appear upright in world space
     if (!state->editTexMode && active >= 0 && active < LayerStack_Count()) {
         sLayerProps* lp = LayerStack_GetProps(active);
-        float layerRot = atan2f(lp->mat[3], lp->mat[0]) * (180.0f / (float)M_PI);
+        float layerRot = atan2f(lp->xform.mat[3], lp->xform.mat[0]) * (180.0f / (float)M_PI);
         adjustedAngle -= layerRot;
     }
 
@@ -153,8 +153,8 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
     float layerScale = 1.0f;
     if (!state->editTexMode && active >= 0 && active < LayerStack_Count()) {
         sLayerProps* lp = LayerStack_GetProps(active);
-        float sx = sqrtf(lp->mat[0] * lp->mat[0] + lp->mat[3] * lp->mat[3]);
-        float sy = sqrtf(lp->mat[1] * lp->mat[1] + lp->mat[4] * lp->mat[4]);
+        float sx = sqrtf(lp->xform.mat[0] * lp->xform.mat[0] + lp->xform.mat[3] * lp->xform.mat[3]);
+        float sy = sqrtf(lp->xform.mat[1] * lp->xform.mat[1] + lp->xform.mat[4] * lp->xform.mat[4]);
         float avg = (sx + sy) * 0.5f;
         if (avg > 0.001f) layerScale = 1.0f / avg;
     }
