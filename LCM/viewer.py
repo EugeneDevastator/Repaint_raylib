@@ -17,12 +17,11 @@ KNOWN_PARAMS = ["str", "g", "res", "ns", "loops"]
 # Default values used when a param is missing from filename
 DEFAULTS = {
     "str": 1.0,
-    "g": 7.5,
+    "g": 7,
     "res": 512,
-    "ns": 20,
+    "ns": 4,
     "loops": 1
 }
-
 
 def parse_filename(filename):
     name = os.path.splitext(filename)[0]
@@ -30,15 +29,32 @@ def parse_filename(filename):
     params = {}
     for part in parts:
         part = part.replace("-", ".")
-        for p in KNOWN_PARAMS:
-            if part.startswith(p):
-                val_str = part[len(p):]
+        
+        # Try to split into key and value
+        # Match longest known key or rename key first
+        matched_key = None
+        matched_val = None
+        
+        # Build full candidate list: renames + known params
+        all_keys = list(RENAMES.keys()) + KNOWN_PARAMS
+        # Sort by length descending so "steps" matches before "s"
+        all_keys.sort(key=len, reverse=True)
+        
+        for key in all_keys:
+            if part.startswith(key):
+                val_str = part[len(key):]
                 try:
                     val = float(val_str) if "." in val_str else int(val_str)
-                    params[p] = val
+                    matched_key = key
+                    matched_val = val
+                    break
                 except ValueError:
                     pass
-                break
+        
+        if matched_key is not None:
+            # Apply rename if needed
+            final_key = RENAMES.get(matched_key, matched_key)
+            params[final_key] = matched_val
 
     # Fill in defaults for any missing params
     for k, v in DEFAULTS.items():
@@ -46,7 +62,6 @@ def parse_filename(filename):
             params[k] = v
 
     return params
-
 
 def load_database():
     db = []
