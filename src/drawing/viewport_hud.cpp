@@ -158,17 +158,17 @@ void ViewportHUD_Draw(AppState* state) {
             BeginTextureMode(g_previewRT);
             ClearBackground(BLANK);
             if (docBlendTex) {
-                Camera2D prevCam = {};
-                prevCam.target = state->camera.target;
-                prevCam.offset = Vector2{PREVIEW_SZ * 0.5f, PREVIEW_SZ * 0.5f};
-                prevCam.zoom   = 1.0f;
-                BeginMode2D(prevCam);
+                // Position the texture so the pixel under the camera target
+                // lands at the preview center — works regardless of ppu.
+                float texTX = state->camera.target.x * state->doc.ppu;
+                float texTY = state->camera.target.y * state->doc.ppu;
+                float drawX = PREVIEW_SZ * 0.5f - texTX;
+                float drawY = PREVIEW_SZ * 0.5f - texTY;
                 rlSetBlendMode(RL_BLEND_CUSTOM);
                 rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
                 DrawTextureRec(docBlendTex->texture,
                     Rectangle{0, 0, (float)docBlendTex->texture.width, (float)-docBlendTex->texture.height},
-                    Vector2{0, 0}, WHITE);
-                EndMode2D();
+                    Vector2{drawX, drawY}, WHITE);
             }
             // Draw preview strokes on top (same modulation flow as real stroke)
             StrokeEngine_DrawPreview(g_previewRT, bt, useTex, &zoomBrush, state->mode,
