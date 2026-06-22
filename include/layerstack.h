@@ -50,13 +50,6 @@ void  LayerStack_UploadToGPU(int idx, Image img);
 RenderTexture2D* LayerStack_Composite(void);
 Image LayerStack_CompositeWithDither(void);
 
-// New — render at arbitrary resolution with caller-owned destination
-// viewMat: 2×3 affine (NULL = identity). dst is written in-place.
-void LayerStack_ProduceCompositeView(RenderTexture2D dst, const float viewMat[6], int w, int h);
-void LayerStack_ProduceCompositeDitherView8b(Image* dst, const float viewMat[6], int w, int h);
-void LayerStack_ProduceComposite(RenderTexture2D dst, int w, int h);
-void LayerStack_ProduceCompositeDither8b(Image* dst, int w, int h);
-
 // Scene bounds — computes the bounding rectangle (in document-space units)
 // of all visible layers. Returns false if no visible layers.
 bool LayerStack_GetSceneBounds(Rectangle* out);
@@ -76,8 +69,5 @@ void   LayerStack_SetPresentTexSize(int w, int h);
 void   LayerStack_SetPresentDither(bool on);
 Texture2D LayerStack_GetCheckerTex(void);
 void   LayerStack_SetDirty(void);
-
-// ── Viewport resolution toggle ──
-extern bool g_useViewRes;
 
 #endif

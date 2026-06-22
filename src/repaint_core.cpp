@@ -62,13 +62,16 @@ void ApplyCanvasWindow(Document* doc) {
     float ww = doc->window.w, wh = doc->window.h;
     float ppu = doc->ppu;
 
-    // Crop transform = window's 2×2 matrix (handles rotation AND flips).
+    // Full 2×2 inverse of the window matrix (supports rotation).
     // Maps old-world content to new-world origin so that baking into layers
     // preserves the visual output when canvasView becomes ppu-only.
+    float det = a*d - b*c;
+    float invDet = (fabsf(det) < 0.0001f) ? 0.0f : 1.0f / det;
     float C[6] = {
-        a, b, -(a * cx + b * cy),
-        c, d, -(c * cx + d * cy)
+        d*invDet, -b*invDet, (-d*cx + b*cy)*invDet,
+        -c*invDet,  a*invDet, ( c*cx - a*cy)*invDet
     };
+    if (fabsf(det) < 0.0001f) { Xform_Identity(C); }
     LayerStack_SetCanvasView(C);
     LayerStack_BakeCanvasWindow(doc);   // bakes C into layers, resets canvasView to identity
 

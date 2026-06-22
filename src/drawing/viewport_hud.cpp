@@ -8,10 +8,6 @@
 extern Viewport viewport;
 extern bool layersDirty;
 extern bool g_seamlessPreview;
-extern bool g_useViewRes;
-
-// Cached viewport-resolution render target for "Use screen res" mode
-static RenderTexture2D g_viewResRT = {0};
 
 static RenderTexture2D g_previewRT = {0};   // brush preview (strokes on transparent bg)
 static int g_frameCounter = 0;
@@ -24,6 +20,10 @@ static unsigned int g_lastPreviewHash = 0;
 // the batch flushes and cause the next draw to target a stale slot.
 static Texture2D g_editCheckerTex = {0};
 static int g_editCheckerW = 0, g_editCheckerH = 0;
+
+// Crop-mode entry snapshot — frozen so scene stays static during crop resize/rotate
+static bool    g_cropFrozen = false;
+static float   g_cropEntryW = 0, g_cropEntryH = 0;
 
 static unsigned int ComputeBrushHash(d_Brush* b) {
     unsigned int h = 0;
@@ -49,6 +49,17 @@ void ViewportHUD_Draw(AppState* state) {
     int cw = DocOutPxW(&state->doc);
     int ch = DocOutPxH(&state->doc);
     if (cw < 1 || ch < 1) return;
+
+    // Freeze crop entry dimensions on entering crop mode
+    if (state->framingMode == FRAME_CROP) {
+        if (!g_cropFrozen) {
+            g_cropEntryW = state->doc.window.w;
+            g_cropEntryH = state->doc.window.h;
+            g_cropFrozen = true;
+        }
+    } else {
+        g_cropFrozen = false;
+    }
 
     Rectangle vpBounds = viewport.bounds;
     DrawRectangleRec(vpBounds, Color{55, 55, 55, 255});
@@ -89,52 +100,29 @@ void ViewportHUD_Draw(AppState* state) {
 
     bool usePresent = GetPresentInited();
     RenderTexture2D* docBlendTex = NULL;
-    bool useViewRes = false;
     if (!state->editTexMode) {
 
-    // Path B (viewport-resolution composite) only during crop mode or manual override.
-    // Path A (canvas-resolution composite) is always used otherwise because it correctly
-    // applies canvasView + clips to document bounds (required after crop accept).
-    useViewRes = (state->framingMode == FRAME_CROP);
-    if (!useViewRes && g_useViewRes) useViewRes = true;
-
-    if (useViewRes) {
-        // Path B: composite at viewport resolution
-        int vpW = (int)vpBounds.width, vpH = (int)vpBounds.height;
-        if (vpW > 0 && vpH > 0) {
-            if (g_viewResRT.id == 0 || g_viewResRT.texture.width != (unsigned)vpW || g_viewResRT.texture.height != (unsigned)vpH)
-                g_viewResRT = Load16BitRT(vpW, vpH);
-            float zoom = state->camera.zoom;
-            float vOffX = state->camera.offset.x - vpBounds.x;
-            float vOffY = state->camera.offset.y - vpBounds.y;
-            float vMat[6] = {zoom, 0,
-                -state->camera.target.x * zoom + vOffX, 0,
-                zoom,
-                -state->camera.target.y * zoom + vOffY};
-            LayerStack_ProduceCompositeView(g_viewResRT, vMat, vpW, vpH);
-            if (usePresent) { BeginShaderMode(GetPresentShader()); LayerStack_SetPresentTexSize(vpW, vpH); LayerStack_SetPresentDither(true); }
-            DrawTextureRec(g_viewResRT.texture,
-                Rectangle{0, 0, (float)vpW, (float)-vpH},
-                Vector2{vpBounds.x, vpBounds.y}, WHITE);
-            if (usePresent) EndShaderMode();
-            docBlendTex = &g_viewResRT;
-        }
-    } else {
-        // Path A: composite at canvas resolution, draw at camera position
+        // Single compositing pipeline (Path A): composite at canvas resolution
+        // with canvasView applied, then draw at the camera position on screen.
+        // During crop mode, canvasView/renderW are frozen — the scene is static
+        // and only the crop handles move. Accept bakes the window via ApplyCanvasWindow.
         docBlendTex = DocBlender_Composite(state);
         if (!docBlendTex || docBlendTex->id == 0) return;
 
+        float texW = (float)docBlendTex->texture.width;
+        float texH = (float)docBlendTex->texture.height;
         float dstX = -state->camera.target.x * state->camera.zoom + state->camera.offset.x;
         float dstY = -state->camera.target.y * state->camera.zoom + state->camera.offset.y;
-        float ww = state->doc.window.w, wh = state->doc.window.h;
+        float ww = state->framingMode == FRAME_CROP ? g_cropEntryW : state->doc.window.w;
+        float wh = state->framingMode == FRAME_CROP ? g_cropEntryH : state->doc.window.h;
         float dstW = ww * state->camera.zoom;
         float dstH = wh * state->camera.zoom;
-        Rectangle srcRect = {0, 0, (float)cw, (float)-ch};
+        Rectangle srcRect = {0, 0, texW, -texH};
         Rectangle dstRect = {dstX, dstY, dstW, dstH};
 
         if (g_seamlessPreview) {
             SetTextureWrap(docBlendTex->texture, TEXTURE_WRAP_REPEAT);
-            if (usePresent) { BeginShaderMode(GetPresentShader()); LayerStack_SetPresentTexSize(cw, ch); LayerStack_SetPresentDither(true); }
+            if (usePresent) { BeginShaderMode(GetPresentShader()); LayerStack_SetPresentTexSize((int)texW, (int)texH); LayerStack_SetPresentDither(true); }
             for (int dy = -1; dy <= 1; dy++)
                 for (int dx = -1; dx <= 1; dx++)
                     DrawTexturePro(docBlendTex->texture, srcRect,
@@ -142,11 +130,10 @@ void ViewportHUD_Draw(AppState* state) {
                         Vector2{0, 0}, 0.0f, WHITE);
             if (usePresent) EndShaderMode();
         } else {
-            if (usePresent) { BeginShaderMode(GetPresentShader()); LayerStack_SetPresentTexSize(cw, ch); LayerStack_SetPresentDither(true); }
+            if (usePresent) { BeginShaderMode(GetPresentShader()); LayerStack_SetPresentTexSize((int)texW, (int)texH); LayerStack_SetPresentDither(true); }
             DrawTexturePro(docBlendTex->texture, srcRect, dstRect, Vector2{0, 0}, 0.0f, WHITE);
             if (usePresent) EndShaderMode();
         }
-    }
     }
 
     // ── Brush preview overlay (quick HUD) ────────────────────────────
@@ -170,7 +157,7 @@ void ViewportHUD_Draw(AppState* state) {
             // Copy the visible canvas area as background (needed for smudge, harmless for paint)
             BeginTextureMode(g_previewRT);
             ClearBackground(BLANK);
-            if (!useViewRes && docBlendTex) {
+            if (docBlendTex) {
                 Camera2D prevCam = {};
                 prevCam.target = state->camera.target;
                 prevCam.offset = Vector2{PREVIEW_SZ * 0.5f, PREVIEW_SZ * 0.5f};
@@ -179,7 +166,7 @@ void ViewportHUD_Draw(AppState* state) {
                 rlSetBlendMode(RL_BLEND_CUSTOM);
                 rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
                 DrawTextureRec(docBlendTex->texture,
-                    Rectangle{0, 0, (float)cw, (float)-ch},
+                    Rectangle{0, 0, (float)docBlendTex->texture.width, (float)-docBlendTex->texture.height},
                     Vector2{0, 0}, WHITE);
                 EndMode2D();
             }
@@ -210,7 +197,6 @@ void ViewportHUD_Draw(AppState* state) {
 void ViewportHUD_Shutdown(void) {
     if (g_previewRT.id > 0) { UnloadRenderTexture(g_previewRT); g_previewRT = RenderTexture2D{0}; }
     if (g_editCheckerTex.id > 0) { UnloadTexture(g_editCheckerTex); g_editCheckerTex = Texture2D{0}; }
-    if (g_viewResRT.id > 0) { UnloadRenderTexture(g_viewResRT); g_viewResRT = RenderTexture2D{0}; }
     g_lastPreviewHash = 0;
     g_frameCounter = 0;
 }

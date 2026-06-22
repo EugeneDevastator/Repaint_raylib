@@ -6,8 +6,8 @@
 extern bool layersDirty;
 
 bool LayerXformModule::HandleInput(InputState& input, const DrawRect& rect) {
-    // Toggle mode on KEY_ONE
-    if (input.KeyPressed(KEY_ONE)) {
+    // Toggle mode on KEY_ONE — block while editing ImGui text widgets
+    if (!ImGui::IsAnyItemActive() && input.KeyPressed(KEY_ONE)) {
         if (g_activeHud == HUD_LAYER_XFORM) {
             HudSetActive(state, HUD_NONE);
         } else {

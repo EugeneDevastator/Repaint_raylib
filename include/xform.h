@@ -1,6 +1,8 @@
 #ifndef XFORM_H
 #define XFORM_H
 
+#include "raylib.h"
+
 // ── 2×3 affine matrix (row-major: [a, b, tx, c, d, ty]) ─────────
 // Pivot is always at (0,0). Matrix maps from local space to the
 // coordinate space of its parent, independent of any w/h extent.
@@ -33,5 +35,20 @@ static inline void RectXform_GetCenter(const RectXform* rx, float* cx, float* cy
 
 // Rotation angle = angle of mat's x-axis in world space
 float RectXform_GetRot(const RectXform* rx);
+
+// ── World-space helpers ──────────────────────────────────────────
+
+// Axis-aligned bounding box of an oriented rectangle in world space
+Rectangle GetWorldAABB(const RectXform* rx);
+
+// Intersection of two AABBs (quick overlap check for oriented rects).
+// Returns true if they intersect, optionally filling the intersection rect.
+bool GetWorldIntersectionAABB(const RectXform* a, const RectXform* b, Rectangle* out);
+
+// Convert world coordinates to pixel coordinates at the world origin.
+// pixel = world * ppu
+static inline Vector2 GetPixelCoord(float worldX, float worldY, float ppu) {
+    return Vector2{worldX * ppu, worldY * ppu};
+}
 
 #endif

@@ -111,7 +111,6 @@ bool g_seamlessPaint = false;
 bool g_seamlessPreview = false;
 int g_texScaleMode = 0;
 int g_texPanelAreaY = 0;
-bool g_useViewRes = false;
 UndoManager* g_undoManager = nullptr;
 ReplayRecorder* g_recorder = nullptr;
 bool g_replayPopupActive = false;
@@ -166,87 +165,92 @@ static Font g_dialogFont = {0};
 void UpdateUI(AppState* state) {
     Vector2 mousePos = GetMousePosition();
 
-    if (IsKeyPressed(KEY_TAB))
-        g_panelsVisible = !g_panelsVisible;
+    // Block keyboard shortcuts while editing an ImGui text widget
+    // (e.g. crop resolution fields, layer rename, file dialog).
+    bool inTextEdit = ImGui::IsAnyItemActive();
+    if (!inTextEdit) {
+        if (IsKeyPressed(KEY_TAB))
+            g_panelsVisible = !g_panelsVisible;
 
-    // Shift toggles quick HUD (not Ctrl+Shift which is undo/redo)
-    if (!IsKeyDown(KEY_LEFT_CONTROL) && (IsKeyPressed(KEY_LEFT_SHIFT) || IsKeyPressed(KEY_RIGHT_SHIFT))) {
-        if (g_activeHud == HUD_QUICK)
-            g_activeHud = HUD_NONE;
-        else
-            g_activeHud = HUD_QUICK;
-    }
+        // Shift toggles quick HUD (not Ctrl+Shift which is undo/redo)
+        if (!IsKeyDown(KEY_LEFT_CONTROL) && (IsKeyPressed(KEY_LEFT_SHIFT) || IsKeyPressed(KEY_RIGHT_SHIFT))) {
+            if (g_activeHud == HUD_QUICK)
+                g_activeHud = HUD_NONE;
+            else
+                g_activeHud = HUD_QUICK;
+        }
 
-    if (g_activeHud != HUD_QUICK)
-        quickPanelMouseMode = 0;
+        if (g_activeHud != HUD_QUICK)
+            quickPanelMouseMode = 0;
 
 
-    if (IsKeyPressed(KEY_TWO)) state->mode = eSmudge;
-    if (IsKeyPressed(KEY_THREE)) state->mode = ePolyStripe;
-    if (IsKeyPressed(KEY_FOUR)) state->mode = eDistort;
-    if (IsKeyPressed(KEY_FIVE)) state->mode = eContrast;
+        if (IsKeyPressed(KEY_TWO)) state->mode = eSmudge;
+        if (IsKeyPressed(KEY_THREE)) state->mode = ePolyStripe;
+        if (IsKeyPressed(KEY_FOUR)) state->mode = eDistort;
+        if (IsKeyPressed(KEY_FIVE)) state->mode = eContrast;
 
-    // Toggle framing mode (C key — "crop" framing)
-    if (IsKeyPressed(KEY_C)) {
-        bool enteringCrop = (state->framingMode == FRAME_DEFAULT);
-        if (enteringCrop) {
-            HudSetActive(state, HUD_CANVAS_XFORM);
-            state->framingMode = FRAME_CROP;
-            // Frame camera to show all layers
-            Rectangle sb; LayerStack_GetSceneBounds(&sb);
-            if (sb.width > 0 && sb.height > 0) {
-                float cx = sb.x + sb.width/2, cy = sb.y + sb.height/2;
-                state->camera.target = Vector2{cx, cy};
-                float pad = 1.1f;
-                float zoomX = viewport.bounds.width / (sb.width * pad);
-                float zoomY = viewport.bounds.height / (sb.height * pad);
-                state->camera.zoom = fminf(zoomX, zoomY);
+        // Toggle framing mode (C key — "crop" framing)
+        if (IsKeyPressed(KEY_C)) {
+            bool enteringCrop = (state->framingMode == FRAME_DEFAULT);
+            if (enteringCrop) {
+                HudSetActive(state, HUD_CANVAS_XFORM);
+                state->framingMode = FRAME_CROP;
+                // Frame camera to show all layers
+                Rectangle sb; LayerStack_GetSceneBounds(&sb);
+                if (sb.width > 0 && sb.height > 0) {
+                    float cx = sb.x + sb.width/2, cy = sb.y + sb.height/2;
+                    state->camera.target = Vector2{cx, cy};
+                    float pad = 1.1f;
+                    float zoomX = viewport.bounds.width / (sb.width * pad);
+                    float zoomY = viewport.bounds.height / (sb.height * pad);
+                    state->camera.zoom = fminf(zoomX, zoomY);
+                } else {
+                    state->camera.target = Vector2{0,0};
+                    state->camera.zoom = 1.0f;
+                }
             } else {
-                state->camera.target = Vector2{0,0};
+                HudSetActive(state, HUD_NONE);
+                state->framingMode = FRAME_DEFAULT;
+                state->camera.target = Vector2{0, 0};
                 state->camera.zoom = 1.0f;
             }
-        } else {
-            HudSetActive(state, HUD_NONE);
-            state->framingMode = FRAME_DEFAULT;
-            state->camera.target = Vector2{0, 0};
-            state->camera.zoom = 1.0f;
+            layersDirty = true;
         }
-        layersDirty = true;
-    }
 
-    // Undo / Redo
-    if (IsKeyDown(KEY_LEFT_CONTROL) && !IsKeyDown(KEY_LEFT_SHIFT) && IsKeyPressed(KEY_Z)) {
-        if (state->undo) {
-            TexSlotID slot = state->editTexMode ? state->editTexSlot : LayerStack_GetSlotID(state->activeLayer);
-            if (TM_IsValid(slot))
-                state->undo->Undo(state, slot);
+        // Undo / Redo
+        if (IsKeyDown(KEY_LEFT_CONTROL) && !IsKeyDown(KEY_LEFT_SHIFT) && IsKeyPressed(KEY_Z)) {
+            if (state->undo) {
+                TexSlotID slot = state->editTexMode ? state->editTexSlot : LayerStack_GetSlotID(state->activeLayer);
+                if (TM_IsValid(slot))
+                    state->undo->Undo(state, slot);
+            }
         }
-    }
-    if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyDown(KEY_LEFT_SHIFT) && IsKeyPressed(KEY_Z)) {
-        if (state->undo) {
-            TexSlotID slot = state->editTexMode ? state->editTexSlot : LayerStack_GetSlotID(state->activeLayer);
-            if (TM_IsValid(slot))
-                state->undo->Redo(state, slot);
+        if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyDown(KEY_LEFT_SHIFT) && IsKeyPressed(KEY_Z)) {
+            if (state->undo) {
+                TexSlotID slot = state->editTexMode ? state->editTexSlot : LayerStack_GetSlotID(state->activeLayer);
+                if (TM_IsValid(slot))
+                    state->undo->Redo(state, slot);
+            }
         }
-    }
 
-    // Replay confirmation popup
-    if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyDown(KEY_LEFT_SHIFT) && IsKeyPressed(KEY_R)) {
-        if (g_recorder) g_replayPopupActive = true;
-    }
+        // Replay confirmation popup
+        if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyDown(KEY_LEFT_SHIFT) && IsKeyPressed(KEY_R)) {
+            if (g_recorder) g_replayPopupActive = true;
+        }
 
-    // Toggle texture editing mode with T key
-    if (IsKeyPressed(KEY_T)) {
-        if (state->editTexMode) {
-            state->editTexMode = 0;
-            state->editTexSlot = TM_INVALID_SLOT;
-        } else if (TM_Count(TM_BUCKET_USER) > 0) {
-            state->editTexMode = 1;
-            if (!TM_IsValid(state->editTexSlot)) {
-                // Find first valid slot
-                for (int s = 0; s < TM_SLOTS_PER_BUCKET; s++) {
-                    TexSlotID id = {TM_BUCKET_USER, (uint8_t)s};
-                    if (TM_IsValid(id)) { state->editTexSlot = id; break; }
+        // Toggle texture editing mode with T key
+        if (IsKeyPressed(KEY_T)) {
+            if (state->editTexMode) {
+                state->editTexMode = 0;
+                state->editTexSlot = TM_INVALID_SLOT;
+            } else if (TM_Count(TM_BUCKET_USER) > 0) {
+                state->editTexMode = 1;
+                if (!TM_IsValid(state->editTexSlot)) {
+                    // Find first valid slot
+                    for (int s = 0; s < TM_SLOTS_PER_BUCKET; s++) {
+                        TexSlotID id = {TM_BUCKET_USER, (uint8_t)s};
+                        if (TM_IsValid(id)) { state->editTexSlot = id; break; }
+                    }
                 }
             }
         }

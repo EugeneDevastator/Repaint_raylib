@@ -94,15 +94,12 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
     Vector2 canvasPos;
     if (state->framingMode == FRAME_DEFAULT && state->doc.ppu != 1.0f) {
         // Construct a camera whose GetScreenToWorld2D is the inverse of the
-        // display pipeline (vMat or canvasView + dstRect), which scales by
-        // cam_zoom × ppu.
+        // display pipeline (canvasView + dstRect), which scales by cam_zoom × ppu.
         Camera2D dc = state->camera;
         dc.zoom *= state->doc.ppu;
-        if (!g_useViewRes) {
-            const float* cv = LayerStack_GetCanvasView();
-            dc.target.x = (state->camera.target.x - cv[2]) / state->doc.ppu;
-            dc.target.y = (state->camera.target.y - cv[5]) / state->doc.ppu;
-        }
+        const float* cv = LayerStack_GetCanvasView();
+        dc.target.x = (state->camera.target.x - cv[2]) / state->doc.ppu;
+        dc.target.y = (state->camera.target.y - cv[5]) / state->doc.ppu;
         canvasPos = GetScreenToWorld2D(mousePos, dc);
     } else {
         canvasPos = GetScreenToWorld2D(mousePos, state->camera);
@@ -269,11 +266,9 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                         if (state->framingMode == FRAME_DEFAULT && state->doc.ppu != 1.0f) {
                             Camera2D dc = state->camera;
                             dc.zoom *= state->doc.ppu;
-                            if (!g_useViewRes) {
-                                const float* cv = LayerStack_GetCanvasView();
-                                dc.target.x = (state->camera.target.x - cv[2]) / state->doc.ppu;
-                                dc.target.y = (state->camera.target.y - cv[5]) / state->doc.ppu;
-                            }
+                            const float* cv = LayerStack_GetCanvasView();
+                            dc.target.x = (state->camera.target.x - cv[2]) / state->doc.ppu;
+                            dc.target.y = (state->camera.target.y - cv[5]) / state->doc.ppu;
                             worldPos = GetScreenToWorld2D(screenPos, dc);
                         } else {
                             worldPos = GetScreenToWorld2D(screenPos, state->camera);

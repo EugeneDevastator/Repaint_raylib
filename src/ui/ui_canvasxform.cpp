@@ -12,14 +12,8 @@ static RectXform g_entryWindow = {};  // saved on entering crop mode (for discar
 static bool     g_entrySaved = false;
 static Vector2  g_cropCursor = {0, 0}; // independent rotation center
 static float    g_ppiSlider = 0.0f;
-
-static void UpdateCanvasPipeline(AppState* state, const RectXform* rx) {
-    int outW = DocOutPxW(&state->doc), outH = DocOutPxH(&state->doc);
-    float cv[6]; ComputeCanvasMatrix(state->doc.ppu, rx, outW, outH, cv);
-    LayerStack_SetCanvasView(cv);
-    LayerStack_SetRenderWindow(outW, outH);
-    layersDirty = true;
-}
+static int      g_cropPixelW = 0;      // resolution text fields (pixels)
+static int      g_cropPixelH = 0;
 
 static void ExitCropMode(AppState* state, bool accept) {
     if (accept) {
@@ -60,6 +54,12 @@ bool CanvasXformModule::HandleInput(InputState& input, const DrawRect& rect) {
         g_cropCursor.y = m[5] + (m[3]*w + m[4]*h) * 0.5f;
     }
 
+    // Block transform interaction while editing ImGui text fields
+    if (ImGui::IsAnyItemActive()) {
+        input.mouseCaptured = ImGui::IsAnyItemHovered();
+        return false;
+    }
+
     // Accept / discard keys
     if (IsKeyPressed(KEY_E)) {
         ExitCropMode(state, true);
@@ -89,10 +89,6 @@ bool CanvasXformModule::HandleInput(InputState& input, const DrawRect& rect) {
         input.MousePressed(MOUSE_RIGHT_BUTTON),
         &rect);
 
-    if (changed) {
-        UpdateCanvasPipeline(state, &state->doc.window);
-    }
-
     return changed;
 }
 
@@ -117,13 +113,31 @@ void CanvasXformModule::DrawGUI(const DrawRect& rect) {
 
     ImGui::Text("Canvas Window");
     ImGui::Separator();
-    int curW = DocOutPxW(&state->doc), curH = DocOutPxH(&state->doc);
     ImGui::Text("ppu: %.2f", state->doc.ppu);
-    ImGui::Text("Size: %.0f x %.0f", state->doc.window.w, state->doc.window.h);
-    ImGui::Text("rot: %.1f", RectXform_GetRot(&state->doc.window) * 180.0f / (float)M_PI);
 
-    ImGui::Separator();
-    ImGui::Text("Output: %d x %d", curW, curH);
+    // Pixel-resolution text fields — sync from doc when not actively editing
+    if (!ImGui::IsAnyItemActive()) {
+        g_cropPixelW = DocOutPxW(&state->doc);
+        g_cropPixelH = DocOutPxH(&state->doc);
+    }
+    ImGui::Text("Res (px)");
+    ImGui::SetNextItemWidth(70);
+    bool wEdited = ImGui::InputInt("##cw", &g_cropPixelW, 0, 0);
+    bool wDeact = ImGui::IsItemDeactivatedAfterEdit();
+    if (wEdited && g_cropPixelW < 1) g_cropPixelW = 1;
+    ImGui::SameLine();
+    ImGui::Text("x");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(70);
+    bool hEdited = ImGui::InputInt("##ch", &g_cropPixelH, 0, 0);
+    bool hDeact = ImGui::IsItemDeactivatedAfterEdit();
+    if (hEdited && g_cropPixelH < 1) g_cropPixelH = 1;
+    if (wDeact || hDeact) {
+        state->doc.window.w = (float)g_cropPixelW / state->doc.ppu;
+        state->doc.window.h = (float)g_cropPixelH / state->doc.ppu;
+    }
+
+    ImGui::Text("rot: %.1f", RectXform_GetRot(&state->doc.window) * 180.0f / (float)M_PI);
     ImGui::Separator();
     ImGui::Text("PPI");
     ImGui::SetNextItemWidth(-1);
@@ -140,11 +154,6 @@ void CanvasXformModule::DrawGUI(const DrawRect& rect) {
     if (ppiEdited) {
         state->doc.ppu *= powf(2.0f, g_ppiSlider);
         g_ppiSlider = 0.0f;
-        int outW = DocOutPxW(&state->doc), outH = DocOutPxH(&state->doc);
-        float cv[6]; ComputeCanvasMatrix(state->doc.ppu, &state->doc.window, outW, outH, cv);
-        LayerStack_SetCanvasView(cv);
-        LayerStack_SetRenderWindow(outW, outH);
-        layersDirty = true;
     }
 
     ImGui::Separator();

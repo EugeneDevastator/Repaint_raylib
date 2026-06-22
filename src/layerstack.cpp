@@ -597,110 +597,10 @@ Image LayerStack_CompositeWithDither(void) {
 }
 
 // ── New compositing API (caller-owned targets, arbitrary resolution) ──
-
-static void _viewBlendLoop(RenderTexture2D dst, RenderTexture2D tmp,
-                            const float viewMat[6], int w, int h) {
-    RenderTexture2D* src=&dst;
-    RenderTexture2D* dstBuf=&tmp;
-
-    // Own transform RT sized to match the output — layerTransRT may be wrong size
-    RenderTexture2D transRT={0};
-    bool ownsTrans=false;
-    if(LS.layerTransRT.id>0 && LS.layerTransRT.texture.width>=(unsigned)w && LS.layerTransRT.texture.height>=(unsigned)h)
-        transRT=LS.layerTransRT;
-    else{
-        transRT=Load16BitRT(w,h);
-        ownsTrans=true;
-    }
-
-    for(int i=0;i<LS.count;i++){
-        if(!LS.prop[i].visible||LS.rt[i].id==0) continue;
-
-        // Combined transform: viewMat × layerMat (canvasView is folded into viewMat by caller)
-        sLayerProps*p=&LS.prop[i];
-        Texture2D layerTex=LS.rt[i].texture;
-        float cmb[6];
-        bool hasXform = transRT.id>0;
-        if(hasXform){
-            if(viewMat) Xform_Mul(cmb, viewMat, LS.prop[i].xform.mat);
-            else        memcpy(cmb, LS.prop[i].xform.mat, sizeof(cmb));
-            if(!p->seamless) { BakeTransform(transRT,LS.rt[i].texture,cmb,LS.prop[i].layerW,LS.prop[i].layerH,w,h); layerTex=transRT.texture; }
-        }
-        bool seamlessBlended=(p->seamless && LS.shaderInited && transRT.id>0);
-        if(seamlessBlended) {
-            int lw=p->layerW, lh=p->layerH;
-            BlendSeamlessTiles(*src,*dstBuf,LS.rt[i].texture,cmb,lw,lh,w,h,
-                p->op,p->blendmode,p->threshold,p->feather,transRT);
-            // *src holds the result, *dstBuf is free — no swap needed.
-        } else if(LS.shaderInited) {
-            ApplyBlendShader(*dstBuf,src->texture,layerTex,p->op,p->blendmode,p->threshold,p->feather,w,h);
-            RenderTexture2D*t=src; src=dstBuf; dstBuf=t;
-        } else {
-            BeginTextureMode(*dstBuf); ClearBackground(BLANK);
-            DrawTextureRec(src->texture,FullRect(w,h),Vector2{0,0},WHITE);
-            DrawTextureRec(layerTex,FullRect(w,h),Vector2{0,0},ColorAlpha(WHITE,p->op));
-            EndTextureMode();
-            RenderTexture2D*t=src; src=dstBuf; dstBuf=t;
-        }
-    }
-    // If final result is in tmp, copy to dst
-    if(src!=&dst) CopyRT(dst,*src,w,h);
-    if(ownsTrans) UnloadRenderTexture(transRT);
-}
-
-void LayerStack_ProduceCompositeView(RenderTexture2D dst, const float viewMat[6], int w, int h) {
-    if(w<1||h<1||dst.id==0) return;
-    EnsureShader();
-    EnsureChecker(CW(),CH());  // ensure checker texture exists
-    RenderTexture2D tmp=Load16BitRT(w,h);
-
-    // Seed accumulator with checkerboard at canvas position — matches legacy
-    // behaviour where the checkerboard is the first "layer" in the composite.
-    BeginTextureMode(dst); ClearBackground(BLANK);
-    if(LS.checkerTex.id>0 && CW()>0 && CH()>0){
-        rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE,RL_ZERO,RL_FUNC_ADD);
-        rlPushMatrix();
-        float vm[6];
-        if(viewMat){ vm[0]=viewMat[0]; vm[1]=viewMat[1]; vm[2]=viewMat[2]; vm[3]=viewMat[3]; vm[4]=viewMat[4]; vm[5]=viewMat[5]; }
-        else{ vm[0]=1; vm[1]=0; vm[2]=0; vm[3]=0; vm[4]=1; vm[5]=0; }
-        float m[16]={vm[0],vm[3],0,0, vm[1],vm[4],0,0, 0,0,1,0, vm[2],vm[5],0,1};
-        rlMultMatrixf(m);
-        DrawTextureRec(LS.checkerTex,FullRect(CW(),CH()),Vector2{0,0},WHITE);
-        rlPopMatrix(); rlSetBlendMode(RL_BLEND_ALPHA);
-    }
-    EndTextureMode();
-
-    _viewBlendLoop(dst,tmp,viewMat,w,h);
-    UnloadRenderTexture(tmp);
-    rlSetBlendMode(RL_BLEND_ALPHA);
-}
-
-void LayerStack_ProduceComposite(RenderTexture2D dst, int w, int h) {
-    LayerStack_ProduceCompositeView(dst,NULL,w,h);
-}
-
-void LayerStack_ProduceCompositeDitherView8b(Image* dst, const float viewMat[6], int w, int h) {
-    if(w<1||h<1||!dst) return;
-    EnsureShader(); EnsurePresentShader();
-    RenderTexture2D a=Load16BitRT(w,h),b=Load16BitRT(w,h);
-    BeginTextureMode(a); ClearBackground(BLANK); EndTextureMode();
-    _viewBlendLoop(a,b,viewMat,w,h);
-    // a holds the final 16-bit composite — apply present shader into b, read back as 8-bit
-    BeginTextureMode(b); ClearBackground(BLANK);
-    if(LS.presentInited)BeginShaderMode(LS.presentShader);
-    if(LS.locTexSize>=0){ float ts[2]={(float)w,(float)h}; SetShaderValue(LS.presentShader,LS.locTexSize,ts,SHADER_UNIFORM_VEC2); }
-    LayerStack_SetPresentDither(true);
-    DrawTextureRec(a.texture,FullRect(w,h),Vector2{0,0},WHITE);
-    if(LS.presentInited)EndShaderMode(); EndTextureMode();
-    *dst=LoadImageFromTexture(b.texture); ImageFlipVertical(dst);
-    ImageFormat(dst,PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
-    UnloadRenderTexture(a); UnloadRenderTexture(b);
-    rlSetBlendMode(RL_BLEND_ALPHA);
-}
-
-void LayerStack_ProduceCompositeDither8b(Image* dst, int w, int h) {
-    LayerStack_ProduceCompositeDitherView8b(dst,NULL,w,h);
-}
+// NOTE: _viewBlendLoop and ProduceCompositeView were removed.
+// Path A (LayerStack_Composite → CompositeLayersInto) is the single
+// compositing pipeline — it correctly applies canvasView per layer.
+// Canvas-resolution compositing is cached via LS.dirty.
 
 void LayerStack_BakeSingleLayer(int idx, RenderTexture2D dst) {
     if (idx < 0 || idx >= LS.count) return;
@@ -713,23 +613,20 @@ void LayerStack_BakeSingleLayer(int idx, RenderTexture2D dst) {
 bool LayerStack_GetSceneBounds(Rectangle* out) {
     if (!out) return false;
     bool any = false;
-    float l=0, r=0, b=0, t=0;
+    Rectangle aabb = {0};
     for (int i = 0; i < LS.count; i++) {
         if (!LS.prop[i].visible || LS.rt[i].id == 0) continue;
-        float* M = LS.prop[i].xform.mat;
-        float lw = (float)LS.prop[i].layerW, lh = (float)LS.prop[i].layerH;
-        float x0 = M[2];                    float y0 = M[5];
-        float x1 = M[0]*lw + M[2];           float y1 = M[3]*lw + M[5];
-        float x2 = M[1]*lh + M[2];           float y2 = M[4]*lh + M[5];
-        float x3 = M[0]*lw + M[1]*lh + M[2]; float y3 = M[3]*lw + M[4]*lh + M[5];
-        float mx = fminf(fminf(x0,x1),fminf(x2,x3));
-        float my = fminf(fminf(y0,y1),fminf(y2,y3));
-        float Mx = fmaxf(fmaxf(x0,x1),fmaxf(x2,x3));
-        float My = fmaxf(fmaxf(y0,y1),fmaxf(y2,y3));
-        if (!any) { l=mx; r=Mx; b=my; t=My; any=true; }
-        else { l=fminf(l,mx); r=fmaxf(r,Mx); b=fminf(b,my); t=fmaxf(t,My); }
+        Rectangle layerBB = GetWorldAABB(&LS.prop[i].xform);
+        if (!any) { aabb = layerBB; any = true; }
+        else {
+            float l = fminf(aabb.x, layerBB.x);
+            float t = fminf(aabb.y, layerBB.y);
+            float r = fmaxf(aabb.x + aabb.width, layerBB.x + layerBB.width);
+            float b = fmaxf(aabb.y + aabb.height, layerBB.y + layerBB.height);
+            aabb.x = l; aabb.y = t; aabb.width = r-l; aabb.height = b-t;
+        }
     }
-    out->x = l; out->y = b; out->width = r-l; out->height = t-b;
+    *out = aabb;
     return any;
 }
 

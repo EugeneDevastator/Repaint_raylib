@@ -45,3 +45,32 @@ RectXform RectXform_Pivot(float cx, float cy, float w, float h, float rot) {
 float RectXform_GetRot(const RectXform* rx) {
     return atan2f(rx->mat[1], rx->mat[0]);
 }
+
+Rectangle GetWorldAABB(const RectXform* rx) {
+    float a = rx->mat[0], b = rx->mat[1], tx = rx->mat[2];
+    float c = rx->mat[3], d = rx->mat[4], ty = rx->mat[5];
+    float w = rx->w, h = rx->h;
+    float x0 = tx,           y0 = ty;
+    float x1 = a*w + tx,     y1 = c*w + ty;
+    float x2 = b*h + tx,     y2 = d*h + ty;
+    float x3 = a*w + b*h + tx, y3 = c*w + d*h + ty;
+    float l = fminf(fminf(x0,x1), fminf(x2,x3));
+    float r = fmaxf(fmaxf(x0,x1), fmaxf(x2,x3));
+    float t = fminf(fminf(y0,y1), fminf(y2,y3));
+    float bt = fmaxf(fmaxf(y0,y1), fmaxf(y2,y3));
+    return Rectangle{l, t, r-l, bt-t};
+}
+
+bool GetWorldIntersectionAABB(const RectXform* a, const RectXform* b, Rectangle* out) {
+    Rectangle aa = GetWorldAABB(a);
+    Rectangle bb = GetWorldAABB(b);
+    float l = fmaxf(aa.x, bb.x);
+    float t = fmaxf(aa.y, bb.y);
+    float r = fminf(aa.x + aa.width, bb.x + bb.width);
+    float bt = fminf(aa.y + aa.height, bb.y + bb.height);
+    if (l < r && t < bt) {
+        if (out) { out->x = l; out->y = t; out->width = r-l; out->height = bt-t; }
+        return true;
+    }
+    return false;
+}
