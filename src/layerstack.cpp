@@ -516,9 +516,12 @@ static void EnsurePresentShader(void) {
 
 // ── Helper: run the ping-pong layer blend loop ──
 // Returns pointer to whichever RT holds the final accumulated result.
-static RenderTexture2D* CompositeLayersInto(RenderTexture2D& a, RenderTexture2D& b, int cw, int ch) {
+// When viewMat is non-NULL it replaces LS.canvasView (used by CompositeViewInto).
+static RenderTexture2D* CompositeLayersInto(RenderTexture2D& a, RenderTexture2D& b, int cw, int ch, const float* viewMat) {
     RenderTexture2D*src=&a,*dst=&b;
-    float cv[6]; memcpy(cv, LS.canvasView, 6*sizeof(float));
+    float cv[6];
+    if(viewMat) memcpy(cv, viewMat, 6*sizeof(float));
+    else        memcpy(cv, LS.canvasView, 6*sizeof(float));
     for(int i=0;i<LS.count;i++){
         if(!LS.prop[i].visible||LS.rt[i].id==0) continue;
         Texture2D layerTex=LS.rt[i].texture;
@@ -534,7 +537,6 @@ static RenderTexture2D* CompositeLayersInto(RenderTexture2D& a, RenderTexture2D&
             int lw=p->layerW, lh=p->layerH;
             BlendSeamlessTiles(*src,*dst,LS.rt[i].texture,cmb,lw,lh,cw,ch,
                 p->op,p->blendmode,p->threshold,p->feather,LS.layerTransRT);
-            // *src holds the result, *dst is free — no swap needed.
         } else if(LS.shaderInited) {
             ApplyBlendShader(*dst,src->texture,layerTex,p->op,p->blendmode,p->threshold,p->feather,cw,ch);
             RenderTexture2D*tmp=src; src=dst; dst=tmp;
@@ -547,6 +549,10 @@ static RenderTexture2D* CompositeLayersInto(RenderTexture2D& a, RenderTexture2D&
         }
     }
     return src;
+}
+
+static RenderTexture2D* CompositeLayersInto(RenderTexture2D& a, RenderTexture2D& b, int cw, int ch) {
+    return CompositeLayersInto(a, b, cw, ch, NULL);
 }
 
 bool LayerStack_PresentInited(void) { return LS.presentInited; }
@@ -596,11 +602,35 @@ Image LayerStack_CompositeWithDither(void) {
     UnloadRenderTexture(a); UnloadRenderTexture(b); return result;
 }
 
+// ── View-matrix compositing (bypasses canvasView, used by crop mode) ──
+void LayerStack_CompositeViewInto(RenderTexture2D dst, const float viewMat[6], int w, int h) {
+    if(w<1||h<1||dst.id==0) return;
+    EnsureChecker(CW(),CH()); EnsureShader();
+    RenderTexture2D tmp=Load16BitRT(w,h);
+    // Seed with checkerboard at canvas position transformed by viewMat
+    BeginTextureMode(dst); ClearBackground(BLANK);
+    if(LS.checkerTex.id>0 && CW()>0 && CH()>0){
+        rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE,RL_ZERO,RL_FUNC_ADD);
+        float vm[6]; memcpy(vm, viewMat ? viewMat : LS.canvasView, sizeof(vm));
+        float m[16]={vm[0],vm[3],0,0, vm[1],vm[4],0,0, 0,0,1,0, vm[2],vm[5],0,1};
+        rlPushMatrix(); rlMultMatrixf(m);
+        DrawTextureRec(LS.checkerTex, FullRect(CW(),CH()), Vector2{0,0}, WHITE);
+        rlPopMatrix(); rlSetBlendMode(RL_BLEND_ALPHA);
+    }
+    EndTextureMode();
+    // Use viewport-sized transRT so layers beyond the canvas aren't clipped
+    bool ownsTrans=false;
+    RenderTexture2D savedTransRT=LS.layerTransRT;
+    if(LS.layerTransRT.id==0 || LS.layerTransRT.texture.width<(unsigned)w || LS.layerTransRT.texture.height<(unsigned)h){
+        LS.layerTransRT=Load16BitRT(w,h); ownsTrans=true;
+    }
+    CompositeLayersInto(dst, tmp, w, h, viewMat);
+    if(ownsTrans){ UnloadRenderTexture(LS.layerTransRT); LS.layerTransRT=savedTransRT; }
+    UnloadRenderTexture(tmp);
+    rlSetBlendMode(RL_BLEND_ALPHA);
+}
+
 // ── New compositing API (caller-owned targets, arbitrary resolution) ──
-// NOTE: _viewBlendLoop and ProduceCompositeView were removed.
-// Path A (LayerStack_Composite → CompositeLayersInto) is the single
-// compositing pipeline — it correctly applies canvasView per layer.
-// Canvas-resolution compositing is cached via LS.dirty.
 
 void LayerStack_BakeSingleLayer(int idx, RenderTexture2D dst) {
     if (idx < 0 || idx >= LS.count) return;

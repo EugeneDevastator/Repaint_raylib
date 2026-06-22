@@ -50,6 +50,10 @@ void  LayerStack_UploadToGPU(int idx, Image img);
 RenderTexture2D* LayerStack_Composite(void);
 Image LayerStack_CompositeWithDither(void);
 
+// Composite into a caller-owned RT at arbitrary resolution using a
+// view matrix in place of canvasView (no window clipping).
+void LayerStack_CompositeViewInto(RenderTexture2D dst, const float viewMat[6], int w, int h);
+
 // Scene bounds — computes the bounding rectangle (in document-space units)
 // of all visible layers. Returns false if no visible layers.
 bool LayerStack_GetSceneBounds(Rectangle* out);

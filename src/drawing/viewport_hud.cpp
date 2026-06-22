@@ -21,9 +21,8 @@ static unsigned int g_lastPreviewHash = 0;
 static Texture2D g_editCheckerTex = {0};
 static int g_editCheckerW = 0, g_editCheckerH = 0;
 
-// Crop-mode entry snapshot — frozen so scene stays static during crop resize/rotate
-static bool    g_cropFrozen = false;
-static float   g_cropEntryW = 0, g_cropEntryH = 0;
+// Viewport-resolution RT for crop mode (bypasses canvasView clipping)
+static RenderTexture2D g_viewResRT = {0};
 
 static unsigned int ComputeBrushHash(d_Brush* b) {
     unsigned int h = 0;
@@ -49,17 +48,6 @@ void ViewportHUD_Draw(AppState* state) {
     int cw = DocOutPxW(&state->doc);
     int ch = DocOutPxH(&state->doc);
     if (cw < 1 || ch < 1) return;
-
-    // Freeze crop entry dimensions on entering crop mode
-    if (state->framingMode == FRAME_CROP) {
-        if (!g_cropFrozen) {
-            g_cropEntryW = state->doc.window.w;
-            g_cropEntryH = state->doc.window.h;
-            g_cropFrozen = true;
-        }
-    } else {
-        g_cropFrozen = false;
-    }
 
     Rectangle vpBounds = viewport.bounds;
     DrawRectangleRec(vpBounds, Color{55, 55, 55, 255});
@@ -102,37 +90,56 @@ void ViewportHUD_Draw(AppState* state) {
     RenderTexture2D* docBlendTex = NULL;
     if (!state->editTexMode) {
 
-        // Single compositing pipeline (Path A): composite at canvas resolution
-        // with canvasView applied, then draw at the camera position on screen.
-        // During crop mode, canvasView/renderW are frozen — the scene is static
-        // and only the crop handles move. Accept bakes the window via ApplyCanvasWindow.
-        docBlendTex = DocBlender_Composite(state);
-        if (!docBlendTex || docBlendTex->id == 0) return;
-
-        float texW = (float)docBlendTex->texture.width;
-        float texH = (float)docBlendTex->texture.height;
-        float dstX = -state->camera.target.x * state->camera.zoom + state->camera.offset.x;
-        float dstY = -state->camera.target.y * state->camera.zoom + state->camera.offset.y;
-        float ww = state->framingMode == FRAME_CROP ? g_cropEntryW : state->doc.window.w;
-        float wh = state->framingMode == FRAME_CROP ? g_cropEntryH : state->doc.window.h;
-        float dstW = ww * state->camera.zoom;
-        float dstH = wh * state->camera.zoom;
-        Rectangle srcRect = {0, 0, texW, -texH};
-        Rectangle dstRect = {dstX, dstY, dstW, dstH};
-
-        if (g_seamlessPreview) {
-            SetTextureWrap(docBlendTex->texture, TEXTURE_WRAP_REPEAT);
-            if (usePresent) { BeginShaderMode(GetPresentShader()); LayerStack_SetPresentTexSize((int)texW, (int)texH); LayerStack_SetPresentDither(true); }
-            for (int dy = -1; dy <= 1; dy++)
-                for (int dx = -1; dx <= 1; dx++)
-                    DrawTexturePro(docBlendTex->texture, srcRect,
-                        Rectangle{dstX + dx * dstW, dstY + dy * dstH, dstW, dstH},
-                        Vector2{0, 0}, 0.0f, WHITE);
-            if (usePresent) EndShaderMode();
+        if (state->framingMode == FRAME_CROP) {
+            // Crop mode: render all layers to viewport-sized RT with camera
+            // view matrix — no canvasView clipping, full scene visible.
+            int vpW = (int)vpBounds.width, vpH = (int)vpBounds.height;
+            if (vpW > 0 && vpH > 0) {
+                if (g_viewResRT.id == 0 || g_viewResRT.texture.width != (unsigned)vpW || g_viewResRT.texture.height != (unsigned)vpH)
+                    g_viewResRT = Load16BitRT(vpW, vpH);
+                float vOffX = state->camera.offset.x - vpBounds.x;
+                float vOffY = state->camera.offset.y - vpBounds.y;
+                float vMat[6] = {state->camera.zoom, 0,
+                    -state->camera.target.x * state->camera.zoom + vOffX, 0,
+                    state->camera.zoom,
+                    -state->camera.target.y * state->camera.zoom + vOffY};
+                LayerStack_CompositeViewInto(g_viewResRT, vMat, vpW, vpH);
+                if (usePresent) { BeginShaderMode(GetPresentShader()); LayerStack_SetPresentTexSize(vpW, vpH); LayerStack_SetPresentDither(true); }
+                DrawTextureRec(g_viewResRT.texture,
+                    Rectangle{0, 0, (float)vpW, (float)-vpH},
+                    Vector2{vpBounds.x, vpBounds.y}, WHITE);
+                if (usePresent) EndShaderMode();
+                docBlendTex = &g_viewResRT;
+            }
         } else {
-            if (usePresent) { BeginShaderMode(GetPresentShader()); LayerStack_SetPresentTexSize((int)texW, (int)texH); LayerStack_SetPresentDither(true); }
-            DrawTexturePro(docBlendTex->texture, srcRect, dstRect, Vector2{0, 0}, 0.0f, WHITE);
-            if (usePresent) EndShaderMode();
+            // Normal mode: composite at canvas resolution with canvasView
+            docBlendTex = DocBlender_Composite(state);
+            if (!docBlendTex || docBlendTex->id == 0) return;
+
+            float texW = (float)docBlendTex->texture.width;
+            float texH = (float)docBlendTex->texture.height;
+            float dstX = -state->camera.target.x * state->camera.zoom + state->camera.offset.x;
+            float dstY = -state->camera.target.y * state->camera.zoom + state->camera.offset.y;
+            float ww = state->doc.window.w, wh = state->doc.window.h;
+            float dstW = ww * state->camera.zoom;
+            float dstH = wh * state->camera.zoom;
+            Rectangle srcRect = {0, 0, texW, -texH};
+            Rectangle dstRect = {dstX, dstY, dstW, dstH};
+
+            if (g_seamlessPreview) {
+                SetTextureWrap(docBlendTex->texture, TEXTURE_WRAP_REPEAT);
+                if (usePresent) { BeginShaderMode(GetPresentShader()); LayerStack_SetPresentTexSize((int)texW, (int)texH); LayerStack_SetPresentDither(true); }
+                for (int dy = -1; dy <= 1; dy++)
+                    for (int dx = -1; dx <= 1; dx++)
+                        DrawTexturePro(docBlendTex->texture, srcRect,
+                            Rectangle{dstX + dx * dstW, dstY + dy * dstH, dstW, dstH},
+                            Vector2{0, 0}, 0.0f, WHITE);
+                if (usePresent) EndShaderMode();
+            } else {
+                if (usePresent) { BeginShaderMode(GetPresentShader()); LayerStack_SetPresentTexSize((int)texW, (int)texH); LayerStack_SetPresentDither(true); }
+                DrawTexturePro(docBlendTex->texture, srcRect, dstRect, Vector2{0, 0}, 0.0f, WHITE);
+                if (usePresent) EndShaderMode();
+            }
         }
     }
 
@@ -157,7 +164,7 @@ void ViewportHUD_Draw(AppState* state) {
             // Copy the visible canvas area as background (needed for smudge, harmless for paint)
             BeginTextureMode(g_previewRT);
             ClearBackground(BLANK);
-            if (docBlendTex) {
+            if (state->framingMode != FRAME_CROP && docBlendTex) {
                 // Position the texture so the pixel under the camera target
                 // lands at the preview center — works regardless of ppu.
                 float texTX = state->camera.target.x * state->doc.ppu;
@@ -196,6 +203,7 @@ void ViewportHUD_Draw(AppState* state) {
 
 void ViewportHUD_Shutdown(void) {
     if (g_previewRT.id > 0) { UnloadRenderTexture(g_previewRT); g_previewRT = RenderTexture2D{0}; }
+    if (g_viewResRT.id > 0) { UnloadRenderTexture(g_viewResRT); g_viewResRT = RenderTexture2D{0}; }
     if (g_editCheckerTex.id > 0) { UnloadTexture(g_editCheckerTex); g_editCheckerTex = Texture2D{0}; }
     g_lastPreviewHash = 0;
     g_frameCounter = 0;
