@@ -302,14 +302,7 @@ void App_Close(AppState* state);
 bool App_IsDialogActive(void);
 void UpdateUI(AppState* state);
 
-// Layer compositing — delegates to LayerStack
-RenderTexture2D* DocBlender_Composite(AppState* state);
-bool GetPresentInited(void);
-Shader GetPresentShader(void);
-Image CompositeLayersWithDither(AppState* state);
-void MergeDownLayer(AppState* state, int idx);
-void UnloadViewportRenderer(void);
-void ReloadViewportShader(void);
+
 
 // File format
 bool SaveRePaint(const char* path, Document* doc, AppState* state);

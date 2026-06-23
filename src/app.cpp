@@ -14,6 +14,7 @@
 #include "ui_leftpanel.h"
 #include "ui_texpanel.h"
 #include "compositor.h"
+#include "viewport_manager.h"
 #include "layerstack.h"
 #include "undo.h"
 #include "replay_recorder.h"
@@ -487,7 +488,7 @@ void App_FileSnap(void) {
     }
 
     /* GPU composite + dither → 8-bit snapshot */
-    Image flat = CompositeLayersWithDither(g_state);
+    Image flat = ViewportManager_CompositeWithDither();
 
     /* build path: Snaps/snap_YYYYMMDD_HHMMSS.png */
     {
@@ -546,6 +547,7 @@ void App_Init(AppState* state) {
     Changelog_Init();
     DrawSplash("Creating canvas...");
 
+    ViewportManager_Init();
     Compositor_Init();
     LayerStack_Init();
     app_new_document(1024, 768, WHITE);
@@ -897,11 +899,11 @@ void App_Draw(AppState* state) {
 void App_Close(AppState* state) {
     networkBroker.SaveConfig();
     networkBroker.Disconnect();
-    LayerStack_Shutdown();
+    ViewportManager_Shutdown();
     Compositor_Shutdown();
+    LayerStack_Shutdown();
 
     LeftPanel_Shutdown();
-    UnloadViewportRenderer();
     ViewportHUD_Shutdown();
     Modulators_Shutdown();
     UnloadPenIcons();

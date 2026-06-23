@@ -1,5 +1,6 @@
 #include "repaint.h"
 #include "compositor.h"
+#include "viewport_manager.h"
 #include "render_utils.h"
 #include "layerstack.h"
 #include "imgui.h"
@@ -93,7 +94,7 @@ static void CommitLayerOp(AppState* state, d_LAction* lact) {
         }
         case laDrop: {
             int idx = lact->layer;
-            MergeDownLayer(state, idx);
+            ViewportManager_MergeDown(idx);
             if (state->activeLayer >= LayerStack_Count())
                 state->activeLayer = LayerStack_Count() - 1;
             break;
@@ -143,7 +144,7 @@ void LayerPanel_Draw(AppState* state) {
     if (ImGui::Button("Drop", ImVec2(bw, 36)) && state->activeLayer > 0) {
         sLayerProps* lp = LayerStack_GetProps(state->activeLayer);
         if (lp->seamless) {
-            LayerStack_MergeDownSeamless(state->activeLayer);
+            ViewportManager_MergeDownSeamless(state->activeLayer);
             if (state->activeLayer >= LayerStack_Count())
                 state->activeLayer = LayerStack_Count() - 1;
             layersDirty = true;

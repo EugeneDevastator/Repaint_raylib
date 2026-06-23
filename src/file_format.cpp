@@ -1,5 +1,6 @@
 #include "file_format.h"
 #include "repaint.h"
+#include "viewport_manager.h"
 #include "rlgl.h"
 #include <stdlib.h>
 #include <string.h>
@@ -90,7 +91,7 @@ bool SaveRePaint(const char* path, Document* doc, AppState* state) {
     if (!path || !doc || LayerStack_Count() < 1) return false;
 
     // 1. GPU composite + dithered 8-bit preview (for file thumbnails)
-    Image flat = CompositeLayersWithDither(state);
+    Image flat = ViewportManager_CompositeWithDither();
     int compSize = 0;
     unsigned char* compPng = ExportImageToMemory(flat, ".png", &compSize);
     UnloadImage(flat);

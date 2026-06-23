@@ -117,7 +117,7 @@ set(SOURCES
     src/drawing/brush_blend.cpp
     src/drawing/brush_tex.cpp
     src/drawing/viewport.cpp
-    src/drawing/viewport_renderer.cpp
+    src/viewport_manager.cpp
     src/drawing/viewport_hud.cpp
     src/drawing/stroke.cpp
     src/drawing/stroke_engine.cpp

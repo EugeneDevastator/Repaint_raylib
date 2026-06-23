@@ -27,9 +27,6 @@ void LayerStack_DuplicateLayer(int idx);
 void LayerStack_DuplicateAsInstance(int idx);
 void LayerStack_MoveLayer(int from, int to);
 
-void LayerStack_MergeDown(int idx);
-void LayerStack_MergeDownSeamless(int idx);
-
 // ── Accessors ───────────────────────────────────────────────────────
 int            LayerStack_Count(void);
 sLayerProps*   LayerStack_GetProps(int idx);

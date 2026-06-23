@@ -1,5 +1,6 @@
 #include "ui_leftpanel.h"
 #include "brush_blend.h"
+#include "viewport_manager.h"
 #include "rlImGui.h"
 #include "imgui.h"
 #include "imgui_internal.h"
@@ -123,7 +124,7 @@ void LeftPanel_Draw(AppState* state) {
     if (ImGui::Button("Reload Shaders", ImVec2(-1, 0))) {
         BrushBlend_Shutdown();
         BrushBlend_Init();
-        ReloadViewportShader();
+        ViewportManager_ReloadShader();
     }
 
     if (ImGui::Button("Changelog", ImVec2(-1, 0))) {

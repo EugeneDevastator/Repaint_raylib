@@ -3,21 +3,32 @@
 
 #include "repaint.h"
 
+typedef struct {
+    float opacity;
+    int blendMode;
+    float threshold;
+    float feather;
+    bool seamless;
+} CompositorBlendParams;
+
 void Compositor_Init(void);
 void Compositor_Shutdown(void);
 void Compositor_ReloadShader(void);
 
-// Canvas-resolution composite (cached via dirty flag)
-RenderTexture2D* Compositor_Composite(void);
+// Blit a texture onto dst, clipped to dstRegion (scissor in dst pixels).
+// combined = viewXform->mat * xform->mat  (compositor multiplies them internally)
+// For params->seamless: 3×3 tile wrap using viewXform as reference frame.
+void Compositor_BlitLayerOnto(
+    Texture2D srcTex, const RectXform* xform,
+    const CompositorBlendParams* params,
+    const RectXform* viewXform,
+    RenderTexture2D dst, Rectangle dstRegion);
 
-// Composite with dithering, returns 8-bit image
-Image Compositor_CompositeWithDither(void);
-
-// Composite into caller-owned RT at arbitrary resolution with view matrix
-void Compositor_CompositeViewInto(RenderTexture2D dst, const float viewMat[6], int w, int h);
-
-// Merge-down: blend top layer into bottom, returns merged RT (caller owns)
-RenderTexture2D Compositor_MergeBlend(int topIdx, int bottomIdx, bool seamless);
+// Merge top texture into bottom RT. Pure wrapper around BlitLayerOnto.
+void Compositor_ApplyLayerToLayer(
+    Texture2D topTex, const RectXform* topXform,
+    const CompositorBlendParams* params,
+    RenderTexture2D bottomRT, const RectXform* bottomXform);
 
 // Present shader access
 bool     Compositor_PresentInited(void);
@@ -27,8 +38,5 @@ void     Compositor_SetPresentDither(bool on);
 
 // Checker texture
 Texture2D Compositor_GetCheckerTex(void);
-
-// Mark composite cache as dirty
-void Compositor_SetDirty(void);
 
 #endif

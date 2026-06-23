@@ -1,5 +1,6 @@
 #include "repaint.h"
 #include "compositor.h"
+#include "viewport_manager.h"
 #include "render_utils.h"
 #include "rlgl.h"
 #include "stroke_engine.h"
@@ -87,7 +88,7 @@ void ViewportHUD_Draw(AppState* state) {
         }
     }
 
-    bool usePresent = GetPresentInited();
+    bool usePresent = Compositor_PresentInited();
     RenderTexture2D* docBlendTex = NULL;
     if (!state->editTexMode) {
 
@@ -100,12 +101,12 @@ void ViewportHUD_Draw(AppState* state) {
                     g_viewResRT = Load16BitRT(vpW, vpH);
                 float vOffX = state->camera.offset.x - vpBounds.x;
                 float vOffY = state->camera.offset.y - vpBounds.y;
-                float vMat[6] = {state->camera.zoom, 0,
-                    -state->camera.target.x * state->camera.zoom + vOffX, 0,
-                    state->camera.zoom,
-                    -state->camera.target.y * state->camera.zoom + vOffY};
-                Compositor_CompositeViewInto(g_viewResRT, vMat, vpW, vpH);
-                if (usePresent) { BeginShaderMode(GetPresentShader()); Compositor_SetPresentTexSize(vpW, vpH); Compositor_SetPresentDither(true); }
+                RectXform vXf;
+                vXf.mat[0]=state->camera.zoom; vXf.mat[1]=0; vXf.mat[2]=-state->camera.target.x*state->camera.zoom+vOffX;
+                vXf.mat[3]=0; vXf.mat[4]=state->camera.zoom; vXf.mat[5]=-state->camera.target.y*state->camera.zoom+vOffY;
+                vXf.w=0; vXf.h=0;
+                ViewportManager_CompositeViewInto(g_viewResRT, &vXf, vpW, vpH);
+                if (usePresent) { BeginShaderMode(Compositor_GetPresentShader()); Compositor_SetPresentTexSize(vpW, vpH); Compositor_SetPresentDither(true); }
                 DrawTextureRec(g_viewResRT.texture,
                     Rectangle{0, 0, (float)vpW, (float)-vpH},
                     Vector2{vpBounds.x, vpBounds.y}, WHITE);
@@ -114,7 +115,7 @@ void ViewportHUD_Draw(AppState* state) {
             }
         } else {
             // Normal mode: composite at canvas resolution with canvasView
-            docBlendTex = DocBlender_Composite(state);
+            docBlendTex = ViewportManager_Composite();
             if (!docBlendTex || docBlendTex->id == 0) return;
 
             float texW = (float)docBlendTex->texture.width;
@@ -129,7 +130,7 @@ void ViewportHUD_Draw(AppState* state) {
 
             if (g_seamlessPreview) {
                 SetTextureWrap(docBlendTex->texture, TEXTURE_WRAP_REPEAT);
-                if (usePresent) { BeginShaderMode(GetPresentShader()); Compositor_SetPresentTexSize((int)texW, (int)texH); Compositor_SetPresentDither(true); }
+                if (usePresent) { BeginShaderMode(Compositor_GetPresentShader()); Compositor_SetPresentTexSize((int)texW, (int)texH); Compositor_SetPresentDither(true); }
                 for (int dy = -1; dy <= 1; dy++)
                     for (int dx = -1; dx <= 1; dx++)
                         DrawTexturePro(docBlendTex->texture, srcRect,
@@ -137,7 +138,7 @@ void ViewportHUD_Draw(AppState* state) {
                             Vector2{0, 0}, 0.0f, WHITE);
                 if (usePresent) EndShaderMode();
             } else {
-                if (usePresent) { BeginShaderMode(GetPresentShader()); Compositor_SetPresentTexSize((int)texW, (int)texH); Compositor_SetPresentDither(true); }
+                if (usePresent) { BeginShaderMode(Compositor_GetPresentShader()); Compositor_SetPresentTexSize((int)texW, (int)texH); Compositor_SetPresentDither(true); }
                 DrawTexturePro(docBlendTex->texture, srcRect, dstRect, Vector2{0, 0}, 0.0f, WHITE);
                 if (usePresent) EndShaderMode();
             }

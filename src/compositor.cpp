@@ -1,5 +1,4 @@
 #include "compositor.h"
-#include "layerstack.h"
 #include "render_utils.h"
 #include "RaylibUtils.h"
 #include "xform.h"
@@ -10,9 +9,11 @@
 
 // ── Internal state ────────────────────────────────────────────────────
 static struct {
-    RenderTexture2D accumA, accumB, layerTransRT;
-    bool accumInited;
+    RenderTexture2D layerTransRT;
+    bool transInited;
+    int transW, transH;
     Texture2D checkerTex; bool checkerValid;
+    int checkerW, checkerH;
     Shader blendShader; bool shaderInited;
     int locLayerTex, locLayerAlpha, locBmIdx, locLayerThreshold, locLayerFeather;
     int locUnderTex;
@@ -20,15 +21,8 @@ static struct {
     int locPresentTex;
     int locTexSize;
     int locApplyDither;
-    int curCanvasW, curCanvasH;
-    RenderTexture2D* finalAcc;
-    bool dirty;
 } CS;
 
-bool layersDirty = true;
-
-static int CW(void) { return LayerStack_RenderW(); }
-static int CH(void) { return LayerStack_RenderH(); }
 static Rectangle FullRect(int w, int h) { return Rectangle{0,0,(float)w,(float)-h}; }
 
 // ── Shader loading ────────────────────────────────────────────────────
@@ -66,16 +60,9 @@ static void EnsurePresentShader(void) {
     }
 }
 
-// ── Accumulator / checker management ─────────────────────────────────
-static void EnsureAccumulators(int w, int h) {
-    if(CS.accumInited&&CS.curCanvasW==w&&CS.curCanvasH==h) return;
-    if(CS.accumInited){ UnloadRenderTexture(CS.accumA); UnloadRenderTexture(CS.accumB); UnloadRenderTexture(CS.layerTransRT); }
-    CS.accumA=Load16BitRT(w,h); CS.accumB=Load16BitRT(w,h); CS.layerTransRT=Load16BitRT(w,h);
-    CS.curCanvasW=w; CS.curCanvasH=h; CS.accumInited=true; CS.finalAcc=NULL; CS.dirty=true;
-}
-
+// ── Checker ───────────────────────────────────────────────────────────
 static void EnsureChecker(int w, int h) {
-    if(CS.checkerValid&&CS.checkerTex.width==w&&CS.checkerTex.height==h) return;
+    if(CS.checkerValid&&CS.checkerW==w&&CS.checkerH==h) return;
     if(CS.checkerTex.id>0)UnloadTexture(CS.checkerTex);
     Image img=GenImageColor(w,h,BLANK);
     for(int y=0;y<h;y+=8) for(int x=0;x<w;x+=8){
@@ -83,37 +70,18 @@ static void EnsureChecker(int w, int h) {
         Color col=light?Color{70,70,75,255}:Color{55,55,60,255};
         ImageDrawRectangle(&img,x,y,8,8,col);
     }
-    CS.checkerTex=LoadTextureFromImage(img); UnloadImage(img); CS.checkerValid=true;
+    CS.checkerTex=LoadTextureFromImage(img); UnloadImage(img);
+    CS.checkerW=w; CS.checkerH=h; CS.checkerValid=true;
 }
 
-// ── Matrix ───────────────────────────────────────────────────────────
-static Texture2D GetTransformedTop(int idx) {
-    sLayerProps* belowProp = LayerStack_GetProps(idx-1);
-    sLayerProps* topProp = LayerStack_GetProps(idx);
-    if(!belowProp||!topProp) return LayerStack_GetRT(idx).texture;
-    float relMat[6]; Xform_MulInv(relMat, topProp->xform.mat, belowProp->xform.mat);
-    if(CS.layerTransRT.id==0) return LayerStack_GetRT(idx).texture;
-    int cw=CW(),ch=CH(),lw=topProp->layerW,lh=topProp->layerH;
-    (void)cw;(void)ch;
-    rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE,RL_ZERO,RL_FUNC_ADD);
-    BeginTextureMode(CS.layerTransRT); ClearBackground(BLANK);
-    EnsurePresentShader();
-    if(CS.presentInited) {
-        BeginShaderMode(CS.presentShader);
-        Compositor_SetPresentTexSize(lw, lh);
-        Compositor_SetPresentDither(false);
-    }
-    bool flip = (relMat[0]*relMat[4] - relMat[1]*relMat[3]) < 0.0f;
-    if (flip) { rlDisableBackfaceCulling(); rlDrawRenderBatchActive(); }
-    rlPushMatrix();
-    float m[16]={relMat[0],relMat[3],0,0, relMat[1],relMat[4],0,0, 0,0,1,0, relMat[2],relMat[5],0,1};
-    rlMultMatrixf(m);
-    DrawTextureRec(LayerStack_GetRT(idx).texture,Rectangle{0,0,(float)lw,(float)-lh},Vector2{0,0},WHITE);
-    rlPopMatrix();
-    if (flip) { rlDrawRenderBatchActive(); rlEnableBackfaceCulling(); }
-    if(CS.presentInited) EndShaderMode();
-    EndTextureMode();
-    return CS.layerTransRT.texture;
+// ── Temp rectification RT ────────────────────────────────────────────
+static RenderTexture2D GetTransRT(int needW, int needH) {
+    if(CS.transInited&&CS.transW>=needW&&CS.transH>=needH)
+        return CS.layerTransRT;
+    if(CS.transInited){ UnloadRenderTexture(CS.layerTransRT); CS.transInited=false; }
+    CS.layerTransRT=Load16BitRT(needW,needH);
+    CS.transW=needW; CS.transH=needH; CS.transInited=true;
+    return CS.layerTransRT;
 }
 
 // ── Bake / blend helpers ────────────────────────────────────────────
@@ -181,47 +149,6 @@ static void CopyRT(RenderTexture2D dst, RenderTexture2D src, int w, int h) {
     EndTextureMode();
 }
 
-// ── Ping-pong layer blend loop ──────────────────────────────────────
-static RenderTexture2D* CompositeLayersInto(RenderTexture2D& a, RenderTexture2D& b, int cw, int ch, const float* viewMat) {
-    RenderTexture2D*src=&a,*dst=&b;
-    float cv[6];
-    if(viewMat) memcpy(cv, viewMat, 6*sizeof(float));
-    else { const float* lscv = LayerStack_GetCanvasView(); memcpy(cv, lscv, 6*sizeof(float)); }
-    int count = LayerStack_Count();
-    for(int i=0;i<count;i++){
-        sLayerProps* p = LayerStack_GetProps(i);
-        RenderTexture2D layerRT = LayerStack_GetRT(i);
-        if(!p||!p->visible||layerRT.id==0) continue;
-        Texture2D layerTex=layerRT.texture;
-        float cmb[6];
-        Xform_Mul(cmb, cv, p->xform.mat);
-        if(CS.layerTransRT.id>0){
-            BakeTransform(CS.layerTransRT,layerTex,cmb,p->layerW,p->layerH);
-            layerTex=CS.layerTransRT.texture;
-        }
-        bool seamlessBlended=(p->seamless && CS.shaderInited && CS.layerTransRT.id>0);
-        if(seamlessBlended) {
-            int lw=p->layerW, lh=p->layerH;
-            BlendSeamlessTiles(*src,*dst,LayerStack_GetRT(i).texture,cmb,lw,lh,cw,ch,
-                p->op,p->blendmode,p->threshold,p->feather,CS.layerTransRT);
-        } else if(CS.shaderInited) {
-            ApplyBlend(*dst,src->texture,layerTex,p->op,p->blendmode,p->threshold,p->feather,cw,ch);
-            RenderTexture2D*tmp=src; src=dst; dst=tmp;
-        } else {
-            BeginTextureMode(*dst); ClearBackground(BLANK);
-            DrawTextureRec(src->texture,FullRect(cw,ch),Vector2{0,0},WHITE);
-            DrawTextureRec(layerTex,FullRect(cw,ch),Vector2{0,0},ColorAlpha(WHITE,p->op));
-            EndTextureMode();
-            RenderTexture2D*tmp=src; src=dst; dst=tmp;
-        }
-    }
-    return src;
-}
-
-static RenderTexture2D* CompositeLayersInto(RenderTexture2D& a, RenderTexture2D& b, int cw, int ch) {
-    return CompositeLayersInto(a, b, cw, ch, NULL);
-}
-
 // ── Public API ────────────────────────────────────────────────────────
 
 void Compositor_Init(void) {
@@ -229,7 +156,7 @@ void Compositor_Init(void) {
 }
 
 void Compositor_Shutdown(void) {
-    if(CS.accumInited){ UnloadRenderTexture(CS.accumA); UnloadRenderTexture(CS.accumB); UnloadRenderTexture(CS.layerTransRT); CS.accumInited=false; }
+    if(CS.transInited){ UnloadRenderTexture(CS.layerTransRT); CS.transInited=false; }
     if(CS.checkerValid){ UnloadTexture(CS.checkerTex); CS.checkerValid=false; }
     if(CS.shaderInited){ UnloadShader(CS.blendShader); CS.shaderInited=false; }
     if(CS.presentInited){ UnloadShader(CS.presentShader); CS.presentInited=false; }
@@ -237,104 +164,126 @@ void Compositor_Shutdown(void) {
 }
 
 void Compositor_ReloadShader(void) {
-    if(CS.shaderInited){ UnloadShader(CS.blendShader); CS.shaderInited=false; CS.dirty=true; }
+    if(CS.shaderInited){ UnloadShader(CS.blendShader); CS.shaderInited=false; }
     LoadBlendShader();
 }
 
-RenderTexture2D* Compositor_Composite(void) {
-    int cw=CW(),ch=CH(); if(cw<1||ch<1) return NULL;
-    EnsureAccumulators(cw,ch); EnsureChecker(cw,ch); EnsureShader(); EnsurePresentShader();
-    if(!(CS.dirty||layersDirty)){ rlSetBlendMode(RL_BLEND_ALPHA); return (CS.accumInited&&CS.finalAcc)?CS.finalAcc:NULL; }
-    CS.dirty=false; layersDirty=false;
-    BeginTextureMode(CS.accumA); ClearBackground(BLANK); DrawTexture(CS.checkerTex,0,0,WHITE); EndTextureMode();
-    CS.finalAcc=CompositeLayersInto(CS.accumA,CS.accumB,cw,ch);
-    rlSetBlendMode(RL_BLEND_ALPHA);
-    return (CS.accumInited&&CS.finalAcc)?CS.finalAcc:NULL;
-}
-
-Image Compositor_CompositeWithDither(void) {
-    int cw=CW(),ch=CH(); if(cw<1||ch<1) return (Image){0};
-    EnsureShader(); EnsurePresentShader();
-    RenderTexture2D a=Load16BitRT(cw,ch),b=Load16BitRT(cw,ch);
-    BeginTextureMode(a); ClearBackground(BLANK); EndTextureMode();
-    RenderTexture2D* finalAcc=CompositeLayersInto(a,b,cw,ch);
-    RenderTexture2D*out=(finalAcc==&a) ? &b : &a;
-    BeginTextureMode(*out); ClearBackground(BLANK);
-    if(CS.presentInited)BeginShaderMode(CS.presentShader);
-    if(CS.locTexSize>=0){ float ts[2]={(float)cw,(float)ch}; SetShaderValue(CS.presentShader,CS.locTexSize,ts,SHADER_UNIFORM_VEC2); }
-    Compositor_SetPresentDither(true);
-    DrawTextureRec(finalAcc->texture,FullRect(cw,ch),Vector2{0,0},WHITE);
-    if(CS.presentInited)EndShaderMode(); EndTextureMode();
-    rlSetBlendMode(RL_BLEND_ALPHA);
-    Image result=LoadImageFromTexture(out->texture); ImageFlipVertical(&result);
-    ImageFormat(&result,PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
-    UnloadRenderTexture(a); UnloadRenderTexture(b); return result;
-}
-
-void Compositor_CompositeViewInto(RenderTexture2D dst, const float viewMat[6], int w, int h) {
-    if(w<1||h<1||dst.id==0) return;
-    EnsureChecker(CW(),CH()); EnsureShader();
-    RenderTexture2D tmp=Load16BitRT(w,h);
-    BeginTextureMode(dst); ClearBackground(BLANK);
-    if(CS.checkerTex.id>0 && CW()>0 && CH()>0){
-        rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE,RL_ZERO,RL_FUNC_ADD);
-        float vm[6];
-        if(viewMat) memcpy(vm, viewMat, 6*sizeof(float));
-        else { const float* lscv = LayerStack_GetCanvasView(); memcpy(vm, lscv, 6*sizeof(float)); }
-        float m[16]={vm[0],vm[3],0,0, vm[1],vm[4],0,0, 0,0,1,0, vm[2],vm[5],0,1};
-        rlPushMatrix(); rlMultMatrixf(m);
-        DrawTextureRec(CS.checkerTex, FullRect(CW(),CH()), Vector2{0,0}, WHITE);
-        rlPopMatrix(); rlSetBlendMode(RL_BLEND_ALPHA);
-    }
-    EndTextureMode();
-    bool ownsTrans=false;
-    RenderTexture2D savedTransRT=CS.layerTransRT;
-    if(CS.layerTransRT.id==0 || CS.layerTransRT.texture.width<(unsigned)w || CS.layerTransRT.texture.height<(unsigned)h){
-        CS.layerTransRT=Load16BitRT(w,h); ownsTrans=true;
-    }
-    RenderTexture2D* finalAcc=CompositeLayersInto(dst, tmp, w, h, viewMat);
-    if(finalAcc && finalAcc!=&dst){
-        BeginTextureMode(dst); ClearBackground(BLANK);
-        DrawTextureRec(finalAcc->texture,FullRect(w,h),Vector2{0,0},WHITE);
-        EndTextureMode();
-    }
-    if(ownsTrans){ UnloadRenderTexture(CS.layerTransRT); CS.layerTransRT=savedTransRT; }
-    UnloadRenderTexture(tmp);
-    rlSetBlendMode(RL_BLEND_ALPHA);
-}
-
-RenderTexture2D Compositor_MergeBlend(int topIdx, int bottomIdx, bool seamless) {
-    sLayerProps* bottomProp = LayerStack_GetProps(bottomIdx);
-    sLayerProps* topProp = LayerStack_GetProps(topIdx);
-    RenderTexture2D bottomRT = LayerStack_GetRT(bottomIdx);
-    RenderTexture2D topRT = LayerStack_GetRT(topIdx);
+void Compositor_BlitLayerOnto(
+    Texture2D srcTex, const RectXform* xform,
+    const CompositorBlendParams* params,
+    const RectXform* viewXform,
+    RenderTexture2D dst, Rectangle dstRegion)
+{
+    if(srcTex.id==0||dst.id==0) return;
+    int sw=srcTex.width, sh=srcTex.height;
+    if(sw<1||sh<1) return;
     EnsureShader();
-    if(!CS.shaderInited||!bottomProp||!topProp||bottomRT.id==0||topRT.id==0)
-        return (RenderTexture2D){0};
-    int cw=CW(),ch=CH(),bw=bottomProp->layerW,bh=bottomProp->layerH;
-    int lw=topProp->layerW,lh=topProp->layerH;
+    if(!CS.shaderInited) return;
 
-    if(!seamless) {
-        Texture2D topTex=GetTransformedTop(topIdx);
-        RenderTexture2D mergedRT=Load16BitRT(bw,bh);
-        if(mergedRT.id==0) return (RenderTexture2D){0};
-        ApplyBlend(mergedRT,bottomRT.texture,topTex,
-            topProp->op,topProp->blendmode,topProp->threshold,topProp->feather,bw,bh);
-        return mergedRT;
+    // Combined transform: output = viewXform->mat * xform->mat
+    float cmb[6];
+    Xform_Mul(cmb, viewXform->mat, xform->mat);
+
+    if(params->seamless) {
+        // 3×3 tile — render directly into dst at dstRegion
+        RenderTexture2D transRT = GetTransRT(sw, sh);
+        RenderTexture2D bufA=Load16BitRT((int)dstRegion.width,(int)dstRegion.height);
+        RenderTexture2D bufB=Load16BitRT((int)dstRegion.width,(int)dstRegion.height);
+        if(bufA.id==0||bufB.id==0){
+            if(bufA.id>0)UnloadRenderTexture(bufA);
+            if(bufB.id>0)UnloadRenderTexture(bufB);
+            return;
+        }
+        // Seed with dst content at dstRegion
+        CopyRT(bufA, dst, (int)dstRegion.width, (int)dstRegion.height);
+        BlendSeamlessTiles(bufA,bufB,srcTex,cmb,sw,sh,
+            (int)dstRegion.width,(int)dstRegion.height,
+            params->opacity,params->blendMode,params->threshold,params->feather,transRT);
+        // Copy result back to dst at dstRegion
+        BeginTextureMode(dst);
+        rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE,RL_ZERO,RL_FUNC_ADD);
+        DrawTextureRec(bufA.texture,FullRect((int)dstRegion.width,(int)dstRegion.height),
+            Vector2{dstRegion.x,dstRegion.y},WHITE);
+        rlSetBlendMode(RL_BLEND_ALPHA);
+        EndTextureMode();
+        UnloadRenderTexture(bufA); UnloadRenderTexture(bufB);
+        return;
     }
 
-    // Seamless
-    float relMat[6]; Xform_MulInv(relMat, topProp->xform.mat, bottomProp->xform.mat);
-    RenderTexture2D bufA=Load16BitRT(bw,bh), bufB=Load16BitRT(bw,bh);
-    if(bufA.id==0||bufB.id==0){
-        if(bufA.id>0)UnloadRenderTexture(bufA); if(bufB.id>0)UnloadRenderTexture(bufB);
-        return (RenderTexture2D){0};
-    }
-    CopyRT(bufA,bottomRT,bw,bh);
-    BlendSeamlessTiles(bufA,bufB,topRT.texture,relMat,lw,lh,cw,ch,
-        topProp->op,topProp->blendmode,topProp->threshold,topProp->feather,CS.layerTransRT);
-    UnloadRenderTexture(bufB);
-    return bufA;
+    // Non-seamless: compute AABB, clip to dstRegion, rectify, blend
+    RectXform rx;
+    memcpy(rx.mat, cmb, sizeof(cmb));
+    rx.w = xform->w; rx.h = xform->h;
+    Rectangle aabb = GetWorldAABB(&rx);
+    // Clip aabb to dstRegion
+    float l = fmaxf(aabb.x, dstRegion.x);
+    float t = fmaxf(aabb.y, dstRegion.y);
+    float r = fminf(aabb.x + aabb.width, dstRegion.x + dstRegion.width);
+    float b = fminf(aabb.y + aabb.height, dstRegion.y + dstRegion.height);
+    if(l>=r||t>=b) return;
+    int clipW=(int)(r-l), clipH=(int)(b-t);
+    if(clipW<1||clipH<1) return;
+
+    // Offset combined transform by the clip offset
+    float clipMat[6];
+    memcpy(clipMat, cmb, sizeof(cmb));
+    clipMat[2] -= l;
+    clipMat[5] -= t;
+
+    RenderTexture2D transRT = GetTransRT(clipW, clipH);
+    BakeTransform(transRT, srcTex, clipMat, sw, sh);
+
+    // Blend into dst at clip position using dst's existing content as base
+    // We need a temp RT for the blend output, size = clipW x clipH
+    RenderTexture2D baseBuf = Load16BitRT(clipW, clipH);
+    if(baseBuf.id==0) return;
+    // Copy dst clip region into baseBuf (correct underlay for blend)
+    BeginTextureMode(baseBuf);
+    rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE,RL_ZERO,RL_FUNC_ADD);
+    ClearBackground(BLANK);
+    DrawTextureRec(dst.texture, Rectangle{l, t, (float)clipW, (float)-clipH}, Vector2{0,0}, WHITE);
+    rlSetBlendMode(RL_BLEND_ALPHA);
+    EndTextureMode();
+    // Blend layer onto baseBuf, result into blendBuf
+    RenderTexture2D blendBuf = Load16BitRT(clipW, clipH);
+    if(blendBuf.id==0) { UnloadRenderTexture(baseBuf); return; }
+    ApplyBlend(blendBuf, baseBuf.texture, transRT.texture,
+        params->opacity,params->blendMode,params->threshold,params->feather,clipW,clipH);
+    UnloadRenderTexture(baseBuf);
+    // Copy blend result into dst at clip position
+    BeginTextureMode(dst);
+    rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE,RL_ZERO,RL_FUNC_ADD);
+    DrawTextureRec(blendBuf.texture, FullRect(clipW,clipH), Vector2{l,t}, WHITE);
+    rlSetBlendMode(RL_BLEND_ALPHA);
+    EndTextureMode();
+    UnloadRenderTexture(blendBuf);
+}
+
+void Compositor_ApplyLayerToLayer(
+    Texture2D topTex, const RectXform* topXform,
+    const CompositorBlendParams* params,
+    RenderTexture2D bottomRT, const RectXform* bottomXform)
+{
+    if(topTex.id==0||bottomRT.id==0) return;
+    int bw=bottomRT.texture.width, bh=bottomRT.texture.height;
+    if(bw<1||bh<1) return;
+
+    // Compute relative transform: top-local → bottom-local
+    float relMat[6];
+    Xform_MulInv(relMat, topXform->mat, bottomXform->mat);
+
+    // Build viewXform from relMat
+    RectXform viewXf;
+    memcpy(viewXf.mat, relMat, sizeof(relMat));
+    viewXf.w = topXform->w;
+    viewXf.h = topXform->h;
+
+    // Identity layer xform — the viewXform already incorporates both
+    RectXform identity = {};
+    Xform_Identity(identity.mat);
+
+    Compositor_BlitLayerOnto(topTex, &identity, params, &viewXf,
+        bottomRT, Rectangle{0,0,(float)bw,(float)bh});
 }
 
 bool Compositor_PresentInited(void) { return CS.presentInited; }
@@ -346,8 +295,5 @@ void Compositor_SetPresentDither(bool on) {
     if(CS.locApplyDither>=0){ int v=on?1:0; SetShaderValue(CS.presentShader,CS.locApplyDither,&v,SHADER_UNIFORM_INT); }
 }
 Texture2D Compositor_GetCheckerTex(void) {
-    int cw=CW(),ch=CH();
-    if(cw>0&&ch>0) EnsureChecker(cw,ch);
     return CS.checkerTex;
 }
-void Compositor_SetDirty(void) { CS.dirty=true; }

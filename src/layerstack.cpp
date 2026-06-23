@@ -1,8 +1,7 @@
 #include "layerstack.h"
-#include "compositor.h"
+#include "undo.h"
 #include "render_utils.h"
 #include "RaylibUtils.h"
-#include "undo.h"
 #include "texture_manager.h"
 #include "rlgl.h"
 #include "external/glad.h"
@@ -18,9 +17,6 @@ static struct {
     int renderW, renderH;
     float canvasView[6];
 } LS;
-
-static int CW(void) { return LS.renderW; }
-static int CH(void) { return LS.renderH; }
 
 // ── Helper: unload a single slot's GPU/CPU resources (no array shift) ──
 static void UnloadLayerSlotResources(int idx) {
@@ -78,23 +74,11 @@ static void InitLayerSlot(int idx, int w, int h) {
     LS.slotID[idx]=TM_Register(TM_BUCKET_LAYER, LS.rt[idx], name, false, w, h);
 }
 
-// ── Helper: sync texture-manager slot RT + dims with current layer ──
-static void SetSlotFromLayer(int idx) {
-    TexSlot* ts = TM_Get(LS.slotID[idx]);
-    if (ts) { ts->rt = LS.rt[idx]; ts->w = LS.prop[idx].layerW; ts->h = LS.prop[idx].layerH; }
-}
-
 // ── Helper: remove a layer slot (unload resources + shift down) ──
 static void RemoveLayerSlot(int idx) {
     UnloadLayerSlotResources(idx);
     ShiftLayersDown(idx,LS.count-1);
     LS.count--;
-}
-
-static bool IsRTShared(int idx) {
-    if(!LS.rt[idx].id) return false;
-    for(int j=0;j<LS.count;j++) if(j!=idx && LS.rt[j].id==LS.rt[idx].id) return true;
-    return false;
 }
 
 // ── Init / shutdown ──────────────────────────────────────────────────
@@ -192,53 +176,6 @@ void LayerStack_MoveLayer(int from, int to) {
     RenderTexture2D mvRT=LS.rt[from]; sLayerProps mvProp=LS.prop[from]; TexSlotID mvSlot=LS.slotID[from];
     if(from<to) ShiftLayersDown(from,to); else ShiftLayersUp(from,to);
     LS.prop[to]=mvProp; LS.rt[to]=mvRT; LS.slotID[to]=mvSlot;
-}
-
-// ── Merge down ────────────────────────────────────────────────────────
-void LayerStack_MergeDown(int idx) {
-    if(idx<=0||idx>=LS.count||LS.rt[idx].id==0||LS.rt[idx-1].id==0) return;
-    RenderTexture2D mergedRT = Compositor_MergeBlend(idx, idx-1, false);
-    if(mergedRT.id==0) return;
-    int bw=LS.prop[idx-1].layerW, bh=LS.prop[idx-1].layerH;
-    bool bottomShared = IsRTShared(idx-1);
-    if(bottomShared) {
-        BeginTextureMode(LS.rt[idx-1]);
-        rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE,RL_ZERO,RL_FUNC_ADD);
-        ClearBackground(BLANK);
-        DrawTextureRec(mergedRT.texture,Rectangle{0,0,(float)bw,(float)-bh},Vector2{0,0},WHITE);
-        rlSetBlendMode(RL_BLEND_ALPHA);
-        EndTextureMode();
-        UnloadRenderTexture(mergedRT);
-    } else {
-        RenderTexture2D oldRT=LS.rt[idx-1]; LS.rt[idx-1]=mergedRT; UnloadRenderTexture(oldRT);
-    }
-    SetSlotFromLayer(idx-1);
-    TexSlotID sidTop = LS.slotID[idx], sidBot = LS.slotID[idx-1];
-    RemoveLayerSlot(idx);
-    if (g_undoManager) { g_undoManager->InvalidateSlot(sidTop); g_undoManager->InvalidateSlot(sidBot); }
-}
-
-void LayerStack_MergeDownSeamless(int idx) {
-    if(idx<=0||idx>=LS.count||LS.rt[idx].id==0||LS.rt[idx-1].id==0) return;
-    RenderTexture2D mergedRT = Compositor_MergeBlend(idx, idx-1, true);
-    if(mergedRT.id==0) return;
-    int bw=LS.prop[idx-1].layerW, bh=LS.prop[idx-1].layerH;
-    bool bottomShared = IsRTShared(idx-1);
-    if(bottomShared) {
-        BeginTextureMode(LS.rt[idx-1]);
-        rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE,RL_ZERO,RL_FUNC_ADD);
-        ClearBackground(BLANK);
-        DrawTextureRec(mergedRT.texture,Rectangle{0,0,(float)bw,(float)-bh},Vector2{0,0},WHITE);
-        rlSetBlendMode(RL_BLEND_ALPHA);
-        EndTextureMode();
-        UnloadRenderTexture(mergedRT);
-    } else {
-        RenderTexture2D oldRT=LS.rt[idx-1]; LS.rt[idx-1]=mergedRT; UnloadRenderTexture(oldRT);
-    }
-    SetSlotFromLayer(idx-1);
-    TexSlotID sidTop = LS.slotID[idx], sidBot = LS.slotID[idx-1];
-    RemoveLayerSlot(idx);
-    if (g_undoManager) { g_undoManager->InvalidateSlot(sidTop); g_undoManager->InvalidateSlot(sidBot); }
 }
 
 // ── GPU ↔ CPU transfer ────────────────────────────────────────────────
