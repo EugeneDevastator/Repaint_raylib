@@ -245,6 +245,7 @@ void LayerPanel_Draw(AppState* state) {
             bool enteringCrop = (state->framingMode == FRAME_DEFAULT);
             if (enteringCrop) {
                 HudSetActive(state, HUD_CANVAS_XFORM);
+                state->cropEntryWindow = state->doc.window;
                 state->framingMode = FRAME_CROP;
                 Rectangle sb; LayerStack_GetSceneBounds(&sb);
                 if (sb.width > 0 && sb.height > 0) {

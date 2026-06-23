@@ -196,6 +196,7 @@ void UpdateUI(AppState* state) {
             bool enteringCrop = (state->framingMode == FRAME_DEFAULT);
             if (enteringCrop) {
                 HudSetActive(state, HUD_CANVAS_XFORM);
+                state->cropEntryWindow = state->doc.window;
                 state->framingMode = FRAME_CROP;
                 // Frame camera to show all layers
                 Rectangle sb; LayerStack_GetSceneBounds(&sb);

@@ -108,7 +108,7 @@ void ViewportHUD_Draw(AppState* state) {
                 // Compute checker rect: crop rect AABB in world-space, transformed to viewport pixels
                 Rectangle checkerRect = {0,0,0,0};
                 {
-                    Rectangle cropAABB = GetWorldAABB(&state->doc.window);
+                    Rectangle cropAABB = GetWorldAABB(&state->cropEntryWindow);
                     float l = vXf.mat[0]*cropAABB.x + vXf.mat[1]*cropAABB.y + vXf.mat[2];
                     float t = vXf.mat[3]*cropAABB.x + vXf.mat[4]*cropAABB.y + vXf.mat[5];
                     float r = vXf.mat[0]*(cropAABB.x+cropAABB.width) + vXf.mat[1]*(cropAABB.y+cropAABB.height) + vXf.mat[2];

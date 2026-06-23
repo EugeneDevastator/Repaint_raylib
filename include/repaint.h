@@ -184,6 +184,7 @@ struct AppState {
     Camera2D camera;
     int mode, eraseMode;
     int framingMode;          // FRAME_DEFAULT or FRAME_CROP
+    RectXform cropEntryWindow; // saved on entering crop mode (for checker reference)
     TexSlotID brushTexSlot;   // texture used as brush stamp pattern — set by Quick HUD only
     TexSlotID editTexSlot;    // texture being edited (when editTexMode==1) — set by Layer Panel only
     bool brushTexActive;
