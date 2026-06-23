@@ -1,4 +1,5 @@
 #include "repaint.h"
+#include "compositor.h"
 #include "dialog.h"
 #include "replay_recorder.h"
 #include "platform_clipboard.h"
@@ -23,10 +24,7 @@ static void ImportImage(Image img) {
 
     int w = img.width, h = img.height;
     int idx = LayerStack_Add(w, h);
-    Image* layerImg = LayerStack_GetImage(idx);
-    UnloadImage(*layerImg);
-    *layerImg = img;
-    LayerStack_SyncRTFromImage(idx);
+    LayerStack_UploadToGPU(idx, img);
 }
 
 static void _updateWorkingDir(const char* path) {
@@ -54,19 +52,22 @@ static void OnDropResult(DialogResult r) {
             int w = img.width, h = img.height;
 
             if (asNewDoc) {
+                Compositor_Shutdown(); Compositor_Init();
                 LayerStack_Shutdown();
                 LayerStack_Init();
                 s_state->doc = Doc_New(w, h);
                 s_state->activeLayer = 0;
-                s_state->camera.target = Vector2{(float)w * 0.5f, (float)h * 0.5f};
+                { int cw = DocOutPxW(&s_state->doc), ch = DocOutPxH(&s_state->doc);
+                float cv[6]; ComputeCanvasMatrix(s_state->doc.ppu, &s_state->doc.window, cw, ch, cv);
+                LayerStack_SetCanvasView(cv); LayerStack_SetRenderWindow(cw, ch); }
+                s_state->camera.target = Vector2{0, 0};
                 s_state->camera.zoom = 1.0f;
-                LayerStack_SetRenderWindow(w, h);
                 ImportImage(img);
             } else {
                 ImportImage(img);
             }
             layersDirty = true;
-            if (g_recorder) g_recorder->Reset(s_state->doc.width, s_state->doc.height);
+            if (g_recorder) g_recorder->Reset(DocOutPxW(&s_state->doc), DocOutPxH(&s_state->doc));
         } else {
             UnloadImage(img);
         }
@@ -109,19 +110,22 @@ static void OnPasteResult(DialogResult r) {
         int w = img.width, h = img.height;
 
         if (asNewDoc && s_state) {
+            Compositor_Shutdown(); Compositor_Init();
             LayerStack_Shutdown();
             LayerStack_Init();
             s_state->doc = Doc_New(w, h);
             s_state->activeLayer = 0;
-            s_state->camera.target = Vector2{(float)w * 0.5f, (float)h * 0.5f};
+            { int cw = DocOutPxW(&s_state->doc), ch = DocOutPxH(&s_state->doc);
+            float cv[6]; ComputeCanvasMatrix(s_state->doc.ppu, &s_state->doc.window, cw, ch, cv);
+            LayerStack_SetCanvasView(cv); LayerStack_SetRenderWindow(cw, ch); }
+            s_state->camera.target = Vector2{0, 0};
             s_state->camera.zoom = 1.0f;
-            LayerStack_SetRenderWindow(w, h);
             ImportImage(img);
-            if (g_recorder) g_recorder->Reset(w, h);
+            if (g_recorder) g_recorder->Reset(DocOutPxW(&s_state->doc), DocOutPxH(&s_state->doc));
         } else {
             ImportImage(img);
-            if (g_recorder) g_recorder->Reset(s_state ? s_state->doc.width : w,
-                                               s_state ? s_state->doc.height : h);
+            if (g_recorder) g_recorder->Reset(s_state ? DocOutPxW(&s_state->doc) : w,
+                                               s_state ? DocOutPxH(&s_state->doc) : h);
         }
         layersDirty = true;
     } else {

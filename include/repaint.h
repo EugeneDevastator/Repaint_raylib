@@ -2,6 +2,7 @@
 #define REPAINT_H
 
 #include "raylib.h"
+#include "xform.h"
 #include "brush_draw.h"
 #include "ui_style.h"
 #include "ui_rect.h"
@@ -70,20 +71,13 @@ typedef struct {
     float threshold;
     float feather;
     char layerName[256];
-    float mat[6];        // 2×3 affine matrix (row-major: [a,b,tx, c,d,ty])
-    int layerW, layerH;  // native resolution of this layer
+    RectXform xform;     // 2×3 affine matrix; w,h = extent in world units
+    int layerW, layerH;  // native texture resolution in pixels
     bool seamless;       // use seamless merge (3x3 tile wrap) on drop
     bool instanced;      // shares RT/texture with another layer
 } sLayerProps;
 
-#define MAX_BRUSH_TEX 32
-#define BUILTIN_TEX_COUNT 4
-
-typedef struct {
-    int id; char name[64]; int w, h;
-    RenderTexture2D rt; Image cpuImage;
-    bool dirty; bool builtIn;
-} BrushTexture;
+#include "texture_manager.h"
 
 typedef struct {
     PackedFloat Prad_in, Prad_out;
@@ -117,8 +111,17 @@ typedef struct { uint8_t ToolID; d_Brush Brush; uint8_t startseed, Noisemode; d_
 typedef struct { d_Stroke Stroke; d_Brush BrushFrom, Brush; uint8_t BrushID,NoiseID,Noisemode,ToolID,startseed,layer; float spacing; uint8_t scatter,rRadout,rRadrel,rScale,rScaleRel,rAngle,rSpacing,rSpread,rOp,rSol,rSol2,rCrv,rCop,rPwr,rHue,rSat,rLit; } d_Section;
 typedef struct { uint8_t ActID; int16_t layer, layerto; uint8_t bm; float op; bool vis; Rectangle rect; } d_LAction;
 
-// Document — base resolution for viewport / export
-typedef struct { int width, height; } Document;
+// Document — resolution (ppu) + canvas window framing
+typedef struct {
+    float ppu;       // pixels per unit (default 256)
+    RectXform window; // framing rectangle in document space
+} Document;
+
+enum FramingMode { FRAME_DEFAULT, FRAME_CROP };
+
+// Helpers — explicit rounding, not hidden in a macro
+static inline int DocOutPxW(const Document* d) { return (int)(fabsf(d->window.w) * d->ppu + 0.5f); }
+static inline int DocOutPxH(const Document* d) { return (int)(fabsf(d->window.h) * d->ppu + 0.5f); }
 
 struct BrushDab  { float x, y; float srcX, srcY; d_RealBrush brush; };
 struct DrawCommand { float x, y; uint32_t color; float radius; };
@@ -180,9 +183,11 @@ struct AppState {
     int activeLayer;
     Camera2D camera;
     int mode, eraseMode;
-    BrushTexture brushTex[MAX_BRUSH_TEX];
-    int brushTexCount;
-    int activeBrushTex;
+    int framingMode;          // FRAME_DEFAULT or FRAME_CROP
+    RectXform cropEntryWindow; // saved on entering crop mode (for checker reference)
+    TexSlotID brushTexSlot;   // texture used as brush stamp pattern — set by Quick HUD only
+    TexSlotID editTexSlot;    // texture being edited (when editTexMode==1) — set by Layer Panel only
+    bool brushTexActive;
     int editTexMode;
     float initialAngle;
 };
@@ -195,7 +200,15 @@ float RngConv(float inval, float inmin, float inmax, float outmin, float outmax)
 
 // Document operations
 Document Doc_New(int w, int h);
+Document Doc_NewPPU(float ppu, float cw, float ch);
 void app_new_document(int w, int h, Color fill);
+
+// Canvas window matrix — pure function, maps document coords → output pixel coords
+void ComputeCanvasMatrix(float ppu, const RectXform* rx, int outW, int outH, float mat[6]);
+
+// Commit the canvas window: bake the window transform into all layers,
+// reset document to identity window at the new size.
+void ApplyCanvasWindow(Document* doc);
 
 // LayerStack — all layer management lives here
 #include "layerstack.h"
@@ -229,6 +242,7 @@ extern int g_texPanelAreaY; // y-coordinate for the texture panel in the Quick H
 #define HUD_NONE 0
 #define HUD_QUICK 1
 #define HUD_LAYER_XFORM 2
+#define HUD_CANVAS_XFORM 3
 extern int g_activeHud;
 
 #define QP_SLIDER_W 28
@@ -276,9 +290,6 @@ void XORgizmo_HandleInput(AppState* state);
 void Viewport_DrawDebugOverlays(Viewport* vp, AppState* state);
 
 extern bool layersDirty;
-void LayerStack_SetDirty(void);
-bool LayerStack_PresentInited(void);
-Shader LayerStack_GetPresentShader(void);
 
 void ViewportHUD_Draw(AppState* state);
 void ViewportHUD_Shutdown(void);
@@ -292,28 +303,18 @@ void App_Close(AppState* state);
 bool App_IsDialogActive(void);
 void UpdateUI(AppState* state);
 
-// Layer compositing — delegates to LayerStack
-RenderTexture2D* DocBlender_Composite(AppState* state);
-bool GetPresentInited(void);
-Shader GetPresentShader(void);
-Image CompositeLayersWithDither(AppState* state);
-void MergeDownLayer(AppState* state, int idx);
-void UnloadViewportRenderer(void);
-void ReloadViewportShader(void);
 
-// Legacy sync (called by viewport after strokes, delegates to LayerStack)
-void SyncLayerTexture(AppState* state, int layer);
 
 // File format
 bool SaveRePaint(const char* path, Document* doc, AppState* state);
 bool LoadRePaint(const char* path, Document* doc, AppState* state);
 
-void BrushTex_Init(AppState* state);
-int  BrushTex_Add(AppState* state, const char* name, int w, int h);
-void BrushTex_Delete(AppState* state, int idx);
-void BrushTex_SetActive(AppState* state, int idx);
-void BrushTex_SyncAll(AppState* state);
-Texture2D BrushTex_GetThumb(AppState* state, int idx);
+void        BrushTex_Init(AppState* state);
+TexSlotID   BrushTex_Add(AppState* state, const char* name, int w, int h);
+void        BrushTex_Delete(AppState* state, TexSlotID id);
+void        BrushTex_SetActive(AppState* state, TexSlotID id);
+Texture2D   BrushTex_GetThumb(AppState* state, TexSlotID id);
+TexSlotID   BrushTex_GetSlot(AppState* state, int userTexSlot);
 
 extern Texture2D g_activeBrushTex, g_defaultBrushTex;
 
@@ -379,6 +380,18 @@ struct LayerXformModule : IModule {
     void DrawGUI(const DrawRect& rect) override;
 };
 
+struct CanvasXformModule : IModule {
+    AppState* state;
+    explicit CanvasXformModule(AppState* s) : state(s) {}
+    const char* Name() const override { return "CanvasXform"; }
+    bool HandleInput(InputState& input, const DrawRect& rect) override;
+    void DrawGL(const DrawRect& rect) override;
+    void DrawGUI(const DrawRect& rect) override;
+    void OnExit() override;
+};
+
 extern ModuleStack g_moduleStack;
+
+void HudSetActive(AppState* state, int newHud);
 
 #endif

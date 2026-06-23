@@ -2,6 +2,7 @@
 #include "layerstack.h"
 #include "brush_blend.h"
 #include "repaint.h"
+#include "texture_manager.h"
 
 StrokeThrottle* g_throttle = nullptr;
 
@@ -18,9 +19,9 @@ int StrokeThrottle::DrawPending(AppState* state, int pixelBudget) {
         if (m_dabIdx >= m_dabCount) {
             if (m_segHead == m_segTail) break;
             SegmentData& seg = m_segQ[m_segHead];
-            m_targetType = seg.targetType;
-            m_targetId = seg.targetId;
-            m_userTexIdx = seg.userTexIdx;
+            m_targetSlot = seg.targetSlot;
+            m_userTexBucket = seg.userTexBucket;
+            m_userTexSlot = seg.userTexSlot;
             m_seamless = seg.seamless != 0;
             m_pixelPerfect = seg.pixelPerfect != 0;
             if (seg.isStrokeStart) m_hasPrevAngle = false;
@@ -60,16 +61,14 @@ int StrokeThrottle::DrawPending(AppState* state, int pixelBudget) {
             RenderTexture2D rt = {0};
             Texture2D brushTex = {0};
             bool useTexture = false;
-            if (m_targetType == 1) {
-                if (m_targetId < state->brushTexCount && state->brushTex[m_targetId].rt.id > 0)
-                    rt = state->brushTex[m_targetId].rt;
-            } else {
-                if (m_targetId < LayerStack_Count()) {
-                    rt = LayerStack_GetRT(m_targetId);
-                    if (m_userTexIdx > 0 && (m_userTexIdx - 1u) < (uint8_t)state->brushTexCount) {
-                        brushTex = state->brushTex[m_userTexIdx - 1].rt.texture;
-                        useTexture = true;
-                    }
+            TexSlot* ts = TM_Get(m_targetSlot);
+            if (ts && ts->rt.id > 0) {
+                rt = ts->rt;
+                TexSlotID btId = {m_userTexBucket, m_userTexSlot};
+                TexSlot* bts = TM_Get(btId);
+                if (bts) {
+                    brushTex = bts->rt.texture;
+                    useTexture = true;
                 }
             }
 

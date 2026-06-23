@@ -1,4 +1,5 @@
 #include "repaint.h"
+#include "texture_manager.h"
 #include "raylib.h"
 
 Texture2D g_activeBrushTex = {0};
@@ -19,9 +20,12 @@ void UserTexture_Shutdown(void) {
 }
 
 void UserTexture_Update(AppState* state) {
-    if (state->activeBrushTex >= 0 && state->activeBrushTex < state->brushTexCount) {
-        g_activeBrushTex = state->brushTex[state->activeBrushTex].rt.texture;
-    } else {
-        g_activeBrushTex = g_defaultBrushTex;
+    if (TM_IsValid(state->brushTexSlot)) {
+        TexSlot* ts = TM_Get(state->brushTexSlot);
+        if (ts) {
+            g_activeBrushTex = ts->rt.texture;
+            return;
+        }
     }
+    g_activeBrushTex = g_defaultBrushTex;
 }

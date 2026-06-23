@@ -1,5 +1,6 @@
 #include "ui_leftpanel.h"
 #include "brush_blend.h"
+#include "viewport_manager.h"
 #include "rlImGui.h"
 #include "imgui.h"
 #include "imgui_internal.h"
@@ -50,11 +51,28 @@ void LeftPanel_Draw(AppState* state) {
 
     ImGui::Spacing();
 
-    // Blend mode
+    // Blend mode (compact list, single-click select)
     {
         int blend = (int)state->currentBrush.Realb.bmidx;
         if (blend < 0 || blend >= g_blendModeCount) blend = 0;
-        DrawRadioGroup("Blend Mode", &blend, g_blendModeNames, g_blendModeCount);
+        ImGui::Text("Blend Mode");
+        float listH = g_blendModeCount * ImGui::GetTextLineHeight();
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(1, 1, 1, 1));
+        ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, ImVec2(0.5f, 0.5f));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+        ImGui::BeginChild("##blendlist", ImVec2(0, listH),
+            ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+        for (int bi = 0; bi < g_blendModeCount; bi++) {
+            ImGui::PushID(bi);
+            if (ImGui::Selectable(g_blendModeNames[bi], blend == bi))
+                blend = bi;
+            ImGui::PopID();
+        }
+        ImGui::EndChild();
+        ImGui::PopStyleVar(4);
+        ImGui::PopStyleColor();
         state->currentBrush.Realb.bmidx = (uint8_t)blend;
     }
 
@@ -106,7 +124,7 @@ void LeftPanel_Draw(AppState* state) {
     if (ImGui::Button("Reload Shaders", ImVec2(-1, 0))) {
         BrushBlend_Shutdown();
         BrushBlend_Init();
-        ReloadViewportShader();
+        ViewportManager_ReloadShader();
     }
 
     if (ImGui::Button("Changelog", ImVec2(-1, 0))) {

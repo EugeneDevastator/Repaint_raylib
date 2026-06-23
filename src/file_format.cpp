@@ -1,11 +1,13 @@
 #include "file_format.h"
 #include "repaint.h"
+#include "viewport_manager.h"
+#include "rlgl.h"
 #include <stdlib.h>
 #include <string.h>
 
 #define MAGIC      "REPAINT"
 #define MAGIC_LEN  8
-#define FILE_VER   5
+#define FILE_VER   6
 
 /* ── Write helpers ─────────────────────────────────────────────────────── */
 
@@ -47,7 +49,7 @@ static void _writeProps(uint8_t** p, sLayerProps* lp) {
     *(*p)++ = lp->realidx;
     _wu32(p, nameLen);
     if (nameLen > 0) _wcpy(p, lp->layerName, nameLen);
-    _wcpy(p, lp->mat, 6 * sizeof(float));               // v4+
+    _wcpy(p, lp->xform.mat, 6 * sizeof(float));               // v4+
     _wu32(p, (uint32_t)lp->layerW);                     // v5+: native width
     _wu32(p, (uint32_t)lp->layerH);                     // v5+: native height
     _wcpy(p, &lp->threshold, sizeof(float));             // v5+: was missing before
@@ -71,8 +73,8 @@ static void _readProps(const uint8_t** p, sLayerProps* lp, uint32_t ver) {
     if (nameLen > 0) { memcpy(lp->layerName, *p, nameLen); *p += nameLen; }
     lp->layerName[nameLen] = '\0';
     // mat[6] — format v4+
-    if (ver >= 4) { memcpy(lp->mat, *p, 6 * sizeof(float)); *p += 6 * sizeof(float); }
-    else { lp->mat[0] = 1; lp->mat[1] = 0; lp->mat[2] = 0; lp->mat[3] = 0; lp->mat[4] = 1; lp->mat[5] = 0; }
+    if (ver >= 4) { memcpy(lp->xform.mat, *p, 6 * sizeof(float)); *p += 6 * sizeof(float); }
+    else { lp->xform.mat[0] = 1; lp->xform.mat[1] = 0; lp->xform.mat[2] = 0; lp->xform.mat[3] = 0; lp->xform.mat[4] = 1; lp->xform.mat[5] = 0; }
     // layerW, layerH — format v5+
     if (ver >= 5) {
         lp->layerW = (int)_ru32(p); lp->layerH = (int)_ru32(p);
@@ -89,13 +91,13 @@ bool SaveRePaint(const char* path, Document* doc, AppState* state) {
     if (!path || !doc || LayerStack_Count() < 1) return false;
 
     // 1. GPU composite + dithered 8-bit preview (for file thumbnails)
-    Image flat = CompositeLayersWithDither(state);
+    Image flat = ViewportManager_CompositeWithDither();
     int compSize = 0;
     unsigned char* compPng = ExportImageToMemory(flat, ".png", &compSize);
     UnloadImage(flat);
     if (!compPng || compSize <= 0) return false;
 
-    // 2. Serialize each layer's props (pixel data written later from the live image)
+    // 2. Serialize each layer's props (pixel data written later from live GPU RTs)
     int lc = LayerStack_Count();
     size_t totalExtra = 0;
     uint32_t pixelDepth = 1;  // 1 = raw R16G16B16A16
@@ -113,76 +115,91 @@ bool SaveRePaint(const char* path, Document* doc, AppState* state) {
         totalExtra += 4 + blobs[i].propsSz + 4 + rawSz;
     }
 
-    // 3. Serialize user textures (skip built-in defaults)
-    int tc = state->brushTexCount - BUILTIN_TEX_COUNT;
-    if (tc < 0) tc = 0;
+    // 3. Serialize user textures (skip built-in defaults) — read RT→temp PNG
+    struct { TexSlotID id; uint8_t* png; int pngSz; } texBlobs[256];
+    int tc = 0;
+    for (int s = 0; s < TM_SLOTS_PER_BUCKET && tc < 256; s++) {
+        TexSlotID id = {TM_BUCKET_USER, (uint8_t)s};
+        TexSlot* ts = TM_Get(id);
+        if (!ts || ts->builtIn) continue;
+        if (ts->rt.id == 0) continue;
+        Image texImg = LoadImageFromTexture(ts->rt.texture);
+        ImageFlipVertical(&texImg);
+        if (texImg.format != PIXELFORMAT_UNCOMPRESSED_R8G8B8A8)
+            ImageFormat(&texImg, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+        int pngSz = 0;
+        uint8_t* png = ExportImageToMemory(texImg, ".png", &pngSz);
+        UnloadImage(texImg);
+        texBlobs[tc].id = id;
+        texBlobs[tc].png = png;
+        texBlobs[tc].pngSz = pngSz;
+        tc++;
+    }
+
+    // Compute total texture section size
     size_t texTotalSz = 0;
-    int* texPngSizes = (int*)calloc(tc, sizeof(int));
-    unsigned char** texPngData = (unsigned char**)calloc(tc, sizeof(unsigned char*));
     for (int i = 0; i < tc; i++) {
-        int idx = i + BUILTIN_TEX_COUNT;
-        Image texPngImg = state->brushTex[idx].cpuImage;
-        bool owned = false;
-        if (texPngImg.data && texPngImg.format != PIXELFORMAT_UNCOMPRESSED_R8G8B8A8) {
-            texPngImg = ImageCopy(texPngImg);
-            ImageFormat(&texPngImg, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
-            owned = true;
-        }
-        texPngData[i] = ExportImageToMemory(texPngImg, ".png", &texPngSizes[i]);
-        if (owned) UnloadImage(texPngImg);
-        if (texPngData[i]) texTotalSz += 4 + 4 + 4 + 4 + 64 + texPngSizes[i];
+        if (texBlobs[i].png) texTotalSz += 4 + 4 + 4 + 4 + 64 + texBlobs[i].pngSz;
     }
 
     // 4. Write final buffer
-    size_t hdrSz = MAGIC_LEN + 4 + 4 + 4 + 4 + 4; // +4 for pixelDepth
+    size_t hdrSz = MAGIC_LEN + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4; // +ppu,reserved,5×cw
     size_t totalSz = compSize + hdrSz + totalExtra + texTotalSz + 4;
     uint8_t* buf = (uint8_t*)malloc(totalSz);
     if (!buf) {
         for (int i = 0; i < lc; i++) free(blobs[i].propsData);
         MemFree(compPng);
-        for (int i = 0; i < tc; i++) if (texPngData[i]) MemFree(texPngData[i]);
-        free(texPngSizes); free(texPngData); return false;
+        for (int i = 0; i < tc; i++) if (texBlobs[i].png) MemFree(texBlobs[i].png);
+        return false;
     }
 
     uint8_t* p = buf;
     _wcpy(&p, compPng, compSize);
     _wcpy(&p, MAGIC, MAGIC_LEN);
     _wu32(&p, FILE_VER);
-    _wu32(&p, (uint32_t)doc->width);
-    _wu32(&p, (uint32_t)doc->height);
+    _wcpy(&p, &doc->ppu, 4);            // v6: ppu (was width)
+    { uint32_t _z=0; _wu32(&p,_z); }   // reserved (was height)
     _wu32(&p, (uint32_t)lc);
     _wu32(&p, pixelDepth);
+    // Store decomposed RectXform as cx, cy, w, h, rotation (same v6 format)
+    { float cx=doc->window.mat[2], cy=doc->window.mat[5];
+      float rot = RectXform_GetRot(&doc->window);
+      _wcpy(&p, &cx, 4); _wcpy(&p, &cy, 4); }
+    _wcpy(&p, &doc->window.w, 4);
+    _wcpy(&p, &doc->window.h, 4);
+    { float rot = RectXform_GetRot(&doc->window);
+      _wcpy(&p, &rot, 4); }
 
     for (int i = 0; i < lc; i++) {
+        Image layerImg = LayerStack_ReadFromGPU(i);
         sLayerProps* props = LayerStack_GetProps(i);
-        Image* img = LayerStack_GetImage(i);
         _wu32(&p, (uint32_t)blobs[i].propsSz);
         _wcpy(&p, blobs[i].propsData, blobs[i].propsSz);
-        // pixelDepth == 1: write raw R16G16B16A16 pixel data (8 bytes/px)
         int rawSz = props->layerW * props->layerH * 8;
         _wu32(&p, (uint32_t)rawSz);
-        _wcpy(&p, img->data, rawSz);
+        _wcpy(&p, layerImg.data, rawSz);
+        UnloadImage(layerImg);
     }
 
     /* User texture section (built-in defaults not saved) */
     _wu32(&p, (uint32_t)tc);
     for (int i = 0; i < tc; i++) {
-        int idx = i + BUILTIN_TEX_COUNT;
-        uint32_t nlen = (uint32_t)strnlen(state->brushTex[idx].name, 64);
+        TexSlot* ts = TM_Get(texBlobs[i].id);
+        if (!ts) continue;
+        uint32_t nlen = (uint32_t)strnlen(ts->name, 64);
         _wu32(&p, nlen);
-        _wcpy(&p, state->brushTex[idx].name, nlen);
-        _wu32(&p, (uint32_t)state->brushTex[idx].w);
-        _wu32(&p, (uint32_t)state->brushTex[idx].h);
-        _wu32(&p, (uint32_t)texPngSizes[i]);
-        if (texPngSizes[i] > 0) _wcpy(&p, texPngData[i], texPngSizes[i]);
+        _wcpy(&p, ts->name, nlen);
+        _wu32(&p, (uint32_t)ts->w);
+        _wu32(&p, (uint32_t)ts->h);
+        _wu32(&p, (uint32_t)texBlobs[i].pngSz);
+        if (texBlobs[i].pngSz > 0) _wcpy(&p, texBlobs[i].png, texBlobs[i].pngSz);
     }
 
     bool ok = SaveFileData(path, buf, (int)totalSz);
 
     for (int i = 0; i < lc; i++) free(blobs[i].propsData);
     MemFree(compPng);
-    for (int i = 0; i < tc; i++) if (texPngData[i]) MemFree(texPngData[i]);
-    free(texPngSizes); free(texPngData);
+    for (int i = 0; i < tc; i++) if (texBlobs[i].png) MemFree(texBlobs[i].png);
     free(buf);
     return ok;
 }
@@ -216,16 +233,42 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
     p += MAGIC_LEN;
 
     uint32_t ver = _ru32(&p);
-    uint32_t w = _ru32(&p), h = _ru32(&p);
-    if (w < 1 || w > 32768 || h < 1 || h > 32768) { UnloadFileData(fileData); return false; }
-    uint32_t lc = _ru32(&p);
-    if (lc < 1 || lc > 256) { UnloadFileData(fileData); return false; }
 
+    // ── Parse header (version-dependent layout) ─────────────────────
+    float ppuFromFile = 1.0f;
+    float loadCx=0, loadCy=0, loadW=0, loadH=0, loadRot=0;
+    uint32_t lc = 0;
     uint32_t pixelDepth = 0;
-    if (ver >= 5) pixelDepth = _ru32(&p);
+    int oldFileW = 0, oldFileH = 0;  // used by v3/v4 fallback path
 
-    doc->width = (int)w; doc->height = (int)h;
+    if (ver < 6) {
+        // v3-v5: w,h are pixel dimensions
+        uint32_t w = _ru32(&p), h = _ru32(&p);
+        if (w < 1 || w > 32768 || h < 1 || h > 32768) { UnloadFileData(fileData); return false; }
+        ppuFromFile = 1.0f;
+        loadCx = w * 0.5f; loadCy = h * 0.5f;
+        loadW = (float)w; loadH = (float)h; loadRot = 0.0f;
+        oldFileW = (int)w; oldFileH = (int)h;
+        lc = _ru32(&p);
+        if (lc < 1 || lc > 256) { UnloadFileData(fileData); return false; }
+        if (ver >= 5) pixelDepth = _ru32(&p);
+    } else {
+        // v6+ : ppu (float) + CanvasWindow data
+        memcpy(&ppuFromFile, p, 4); p += 4;
+        p += 4; // reserved (was height)
+        lc = _ru32(&p);
+        if (lc < 1 || lc > 256) { UnloadFileData(fileData); return false; }
+        pixelDepth = _ru32(&p);
+        memcpy(&loadCx, p, 4); p += 4;
+        memcpy(&loadCy, p, 4); p += 4;
+        memcpy(&loadW,  p, 4); p += 4;
+        memcpy(&loadH,  p, 4); p += 4;
+        memcpy(&loadRot, p, 4); p += 4;
+    }
+    doc->ppu = ppuFromFile;
+    doc->window = RectXform_Pivot(loadCx, loadCy, loadW, loadH, loadRot);
 
+    // ── Load layers ──────────────────────────────────────────────────
     if (ver < 5) {
         // v3/v4: skip per-layer blobs, load composite preview as single layer
         for (uint32_t i = 0; i < lc; i++) {
@@ -235,9 +278,10 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
             uint32_t pngSz = _ru32(&p); if ((int)(p - fileData) + (int)pngSz > fileSz) { UnloadFileData(fileData); return false; }
             p += pngSz;
         }
+        int w = oldFileW, h = oldFileH;
         Image preview = LoadImageFromMemory(".png", fileData, (int)(offset + 12));
         if (preview.data) {
-            if (preview.width != (int)w || preview.height != (int)h) ImageResize(&preview, (int)w, (int)h);
+            if (preview.width != w || preview.height != h) ImageResize(&preview, w, h);
             int pxCount = preview.width * preview.height;
             uint16_t* d16 = (uint16_t*)malloc(pxCount * 4 * sizeof(uint16_t));
             uint8_t* s8 = (uint8_t*)preview.data;
@@ -246,13 +290,11 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
                 d16[pi*4+2] = (uint16_t)s8[pi*4+2]*257; d16[pi*4+3] = (uint16_t)s8[pi*4+3]*257;
             }
             free(preview.data); preview.data = d16; preview.format = PIXELFORMAT_UNCOMPRESSED_R16G16B16A16;
-            int idx = LayerStack_Add((int)w, (int)h);
-            UnloadImage(*LayerStack_GetImage(idx));
-            *LayerStack_GetImage(idx) = preview;
+            int idx = LayerStack_Add(w, h);
             sLayerProps* lp = LayerStack_GetProps(idx);
             lp->op = 1; lp->visible = true; lp->blendmode = bmGamma;
-            lp->mat[0] = 1; lp->mat[4] = 1; lp->layerW = (int)w; lp->layerH = (int)h;
-            LayerStack_SyncRTFromImage(idx);
+            lp->xform.mat[0] = 1; lp->xform.mat[4] = 1; lp->layerW = w; lp->layerH = h;
+            LayerStack_UploadToGPU(idx, preview);
         }
     } else {
         // v5+: load each layer at its native resolution
@@ -264,8 +306,8 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
             const uint8_t* propStart = p;
             _readProps(&p, &tempProps, ver);
             p = propStart + propSz;
-            int lw = tempProps.layerW > 0 ? tempProps.layerW : (int)w;
-            int lh = tempProps.layerH > 0 ? tempProps.layerH : (int)h;
+            int lw = tempProps.layerW > 0 ? tempProps.layerW : oldFileW;
+            int lh = tempProps.layerH > 0 ? tempProps.layerH : oldFileH;
 
             uint32_t dataSz = _ru32(&p);
             if ((int)(p - fileData) + (int)dataSz > fileSz) { UnloadFileData(fileData); return false; }
@@ -292,36 +334,32 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
             }
 
             int idx = LayerStack_Add(lw, lh);
-            *LayerStack_GetImage(idx) = layerImg;
             *LayerStack_GetProps(idx) = tempProps;
+            LayerStack_GetProps(idx)->xform.w = (float)lw;
+            LayerStack_GetProps(idx)->xform.h = (float)lh;
             LayerStack_GetProps(idx)->layerW = lw; LayerStack_GetProps(idx)->layerH = lh;
-            // Upload the loaded CPU image to the GPU render target
-            LayerStack_SyncRTFromImage(idx);
+            LayerStack_UploadToGPU(idx, layerImg);
         }
     }
 
     // Load textures (v2+)
     if (ver >= 2 && state != NULL) {
-        uint32_t tc = _ru32(&p);
-        if (ver < 3) {
-            for (int t = 0; t < state->brushTexCount; t++) {
-                if (state->brushTex[t].rt.id > 0) UnloadRenderTexture(state->brushTex[t].rt);
-                if (state->brushTex[t].cpuImage.data) UnloadImage(state->brushTex[t].cpuImage);
-            }
-            state->brushTexCount = 0;
-        } else {
-            for (int t = BUILTIN_TEX_COUNT; t < state->brushTexCount; t++) {
-                if (state->brushTex[t].rt.id > 0) UnloadRenderTexture(state->brushTex[t].rt);
-                if (state->brushTex[t].cpuImage.data) UnloadImage(state->brushTex[t].cpuImage);
-            }
-            memset(&state->brushTex[BUILTIN_TEX_COUNT], 0,
-                (MAX_BRUSH_TEX - BUILTIN_TEX_COUNT) * sizeof(BrushTexture));
-            state->brushTexCount = BUILTIN_TEX_COUNT;
+        // Remove existing non-built-in user textures
+        TexSlotID toRemove[256];
+        int removeCount = 0;
+        for (int s = 0; s < TM_SLOTS_PER_BUCKET && removeCount < 256; s++) {
+            TexSlotID id = {TM_BUCKET_USER, (uint8_t)s};
+            TexSlot* ts = TM_Get(id);
+            if (ts && !ts->builtIn) toRemove[removeCount++] = id;
         }
-        state->activeBrushTex = -1;
+        for (int i = 0; i < removeCount; i++) TM_Remove(toRemove[i]);
 
-        uint32_t maxTc = (ver < 3) ? MAX_BRUSH_TEX : (MAX_BRUSH_TEX - BUILTIN_TEX_COUNT);
-        if (tc > maxTc) tc = maxTc;
+        state->brushTexSlot = TM_INVALID_SLOT;
+        state->editTexSlot = TM_INVALID_SLOT;
+        state->editTexMode = 0;
+        state->brushTexActive = false;
+
+        uint32_t tc = _ru32(&p);
         for (uint32_t ti = 0; ti < tc; ti++) {
             uint32_t nlen = _ru32(&p);
             if (nlen > 63) nlen = 63;
@@ -330,21 +368,30 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
             uint32_t tw = _ru32(&p);
             uint32_t th = _ru32(&p);
             uint32_t tsz = _ru32(&p);
-            int idx = BrushTex_Add(state, name, (int)tw, (int)th);
-            if (idx >= 0 && tsz > 0 && (int)(p - fileData) + (int)tsz <= fileSz) {
+            TexSlotID id = BrushTex_Add(state, name, (int)tw, (int)th);
+            if (TM_IsValid(id) && tsz > 0 && (int)(p - fileData) + (int)tsz <= fileSz) {
                 Image timg = LoadImageFromMemory(".png", p, (int)tsz);
                 p += tsz;
                 if (timg.data) {
                     ImageFormat(&timg, PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
-                    UnloadImage(state->brushTex[idx].cpuImage);
-                    state->brushTex[idx].cpuImage = timg;
-                    state->brushTex[idx].dirty = true;
+                    TexSlot* ts = TM_Get(id);
+                    if (ts) {
+                        Texture2D tmp = LoadTextureFromImage(timg);
+                        BeginTextureMode(ts->rt);
+                        ClearBackground(BLANK);
+                        rlSetBlendMode(RL_BLEND_CUSTOM);
+                        rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+                        DrawTexture(tmp, 0, 0, WHITE);
+                        rlSetBlendMode(RL_BLEND_ALPHA);
+                        EndTextureMode();
+                        UnloadTexture(tmp);
+                    }
+                    UnloadImage(timg);
                 }
             } else {
                 p += tsz;
             }
         }
-        BrushTex_SyncAll(state);
     }
 
     UnloadFileData(fileData);

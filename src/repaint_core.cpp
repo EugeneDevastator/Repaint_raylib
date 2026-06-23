@@ -1,4 +1,6 @@
 #include "repaint.h"
+#include "xform.h"
+#include "layerstack.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -20,4 +22,69 @@ float RngConv(float inval,float inmin,float inmax,float outmin,float outmax) {
     return (outmax-outmin)*inrel+outmin;
 }
 
-Document Doc_New(int w, int h) { Document d; d.width=w; d.height=h; return d; }
+Document Doc_New(int w, int h) {
+    Document d;
+    d.ppu = 1.0f;
+    d.window = RectXform_Pivot(0, 0, (float)w, (float)h, 0.0f);
+    return d;
+}
+
+Document Doc_NewPPU(float ppu, float cw, float ch) {
+    Document d;
+    d.ppu = ppu;
+    d.window = RectXform_Pivot(0, 0, cw, ch, 0.0f);
+    return d;
+}
+
+void ComputeCanvasMatrix(float ppu, const RectXform* rx, int outW, int outH, float mat[6]) {
+    (void)outW; (void)outH;
+    float cx = rx->mat[2], cy = rx->mat[5];
+    float a = rx->mat[0], b = rx->mat[1];
+    float c = rx->mat[3], d = rx->mat[4];
+    float det = a * d - b * c;
+    if (fabsf(det) < 0.0001f) { Xform_Identity(mat); return; }
+    float invDet = 1.0f / det;
+    // paint = ppu * W^(-1) * (world - P)
+    float ia = d * invDet, ib = -b * invDet;
+    float ic = -c * invDet, id = a * invDet;
+    mat[0] = ppu * ia;
+    mat[1] = ppu * ib;
+    mat[2] = -ppu * (ia * cx + ib * cy);
+    mat[3] = ppu * ic;
+    mat[4] = ppu * id;
+    mat[5] = -ppu * (ic * cx + id * cy);
+}
+
+void ApplyCanvasWindow(Document* doc) {
+    float a = doc->window.mat[0], b = doc->window.mat[1];
+    float cx = doc->window.mat[2], cy = doc->window.mat[5];
+    float c = doc->window.mat[3], d = doc->window.mat[4];
+    float ww = doc->window.w, wh = doc->window.h;
+    float ppu = doc->ppu;
+
+    // Full 2×2 inverse of the window matrix (supports rotation).
+    // Maps old-world content to new-world origin so that baking into layers
+    // preserves the visual output when canvasView becomes ppu-only.
+    float det = a*d - b*c;
+    float invDet = (fabsf(det) < 0.0001f) ? 0.0f : 1.0f / det;
+    float C[6] = {
+        d*invDet, -b*invDet, (-d*cx + b*cy)*invDet,
+        -c*invDet,  a*invDet, ( c*cx - a*cy)*invDet
+    };
+    if (fabsf(det) < 0.0001f) { Xform_Identity(C); }
+    LayerStack_SetCanvasView(C);
+    LayerStack_BakeCanvasWindow(doc);   // bakes C into layers, resets canvasView to identity
+
+    // Identity canvasView — camera at (0,0) aligns with shifted layer pivot.
+    float ppuCv[6] = {ppu, 0, 0, 0, ppu, 0};
+    LayerStack_SetCanvasView(ppuCv);
+
+    // Reset window: no rotation, pivot at origin, same world-unit extent
+    doc->window.mat[0] = 1; doc->window.mat[1] = 0;
+    doc->window.mat[2] = 0;
+    doc->window.mat[3] = 0; doc->window.mat[4] = 1;
+    doc->window.mat[5] = 0;
+    doc->window.w = ww; doc->window.h = wh;
+
+    LayerStack_SetRenderWindow((int)(fabsf(ww) * ppu + 0.5f), (int)(fabsf(wh) * ppu + 0.5f));
+}

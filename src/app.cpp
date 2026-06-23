@@ -13,6 +13,8 @@
 #include "test_broker.h"
 #include "ui_leftpanel.h"
 #include "ui_texpanel.h"
+#include "compositor.h"
+#include "viewport_manager.h"
 #include "layerstack.h"
 #include "undo.h"
 #include "replay_recorder.h"
@@ -91,16 +93,42 @@ void SyncImGuiInput(void) {
 float g_splashAlpha = 1.0f;
 static Texture2D g_splashTex = {0};
 int g_activeHud = HUD_NONE;
+
+void HudSetActive(AppState* state, int newHud) {
+    if (newHud == g_activeHud) return;
+    const char* name = nullptr;
+    switch (g_activeHud) {
+        case HUD_CANVAS_XFORM: name = "CanvasXform"; break;
+        case HUD_LAYER_XFORM:  name = "LayerXform";  break;
+        case HUD_QUICK:        name = "QuickHud";    break;
+    }
+    if (name) {
+        IModule* mod = g_moduleStack.Find(name);
+        if (mod) mod->OnExit();
+    }
+    g_activeHud = newHud;
+}
+
 bool g_seamlessPaint = false;
 bool g_seamlessPreview = false;
 int g_texScaleMode = 0;
 int g_texPanelAreaY = 0;
-bool g_useViewRes = false;
 UndoManager* g_undoManager = nullptr;
 ReplayRecorder* g_recorder = nullptr;
 bool g_replayPopupActive = false;
 bool g_pixelPerfect = false;
 float g_pivotCursorX = 0.0f, g_pivotCursorY = 0.0f;
+
+// ── Helper: sync the canvas-window matrix + render window from Document ──
+// Returns the output pixel size via outW/outH.
+static void SyncCanvasFromDoc(const Document* doc, int* outW, int* outH) {
+    int cw = DocOutPxW(doc), ch = DocOutPxH(doc);
+    if (outW) *outW = cw; if (outH) *outH = ch;
+    float cv[6];
+    ComputeCanvasMatrix(doc->ppu, &doc->window, cw, ch, cv);
+    LayerStack_SetCanvasView(cv);
+    LayerStack_SetRenderWindow(cw, ch);
+}
 
 static void DrawSplash(const char* msg) {
     int sw = GetScreenWidth(), sh = GetScreenHeight();
@@ -139,53 +167,80 @@ static Font g_dialogFont = {0};
 void UpdateUI(AppState* state) {
     Vector2 mousePos = GetMousePosition();
 
-    if (IsKeyPressed(KEY_TAB))
-        g_panelsVisible = !g_panelsVisible;
+    // Block keyboard shortcuts while editing an ImGui text widget
+    // (e.g. crop resolution fields, layer rename, file dialog).
+    bool inTextEdit = ImGui::IsAnyItemActive();
+    if (!inTextEdit) {
+        if (IsKeyPressed(KEY_TAB))
+            g_panelsVisible = !g_panelsVisible;
 
-    // Shift toggles quick HUD (not Ctrl+Shift which is undo/redo)
-    if (!IsKeyDown(KEY_LEFT_CONTROL) && (IsKeyPressed(KEY_LEFT_SHIFT) || IsKeyPressed(KEY_RIGHT_SHIFT))) {
-        if (g_activeHud == HUD_QUICK)
-            g_activeHud = HUD_NONE;
-        else
-            g_activeHud = HUD_QUICK;
-    }
-
-    if (g_activeHud != HUD_QUICK)
-        quickPanelMouseMode = 0;
-
-
-    if (IsKeyPressed(KEY_TWO)) state->mode = eSmudge;
-    if (IsKeyPressed(KEY_THREE)) state->mode = ePolyStripe;
-    if (IsKeyPressed(KEY_FOUR)) state->mode = eDistort;
-    if (IsKeyPressed(KEY_FIVE)) state->mode = eContrast;
-
-    // Undo / Redo
-    if (IsKeyDown(KEY_LEFT_CONTROL) && !IsKeyDown(KEY_LEFT_SHIFT) && IsKeyPressed(KEY_Z)) {
-        if (state->undo) {
-            int idx = state->editTexMode ? state->activeBrushTex : state->activeLayer;
-            state->undo->Undo(state, idx, state->editTexMode);
+        // Shift toggles quick HUD (not Ctrl+Shift which is undo/redo)
+        if (!IsKeyDown(KEY_LEFT_CONTROL) && (IsKeyPressed(KEY_LEFT_SHIFT) || IsKeyPressed(KEY_RIGHT_SHIFT))) {
+            if (g_activeHud == HUD_QUICK)
+                g_activeHud = HUD_NONE;
+            else
+                g_activeHud = HUD_QUICK;
         }
-    }
-    if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyDown(KEY_LEFT_SHIFT) && IsKeyPressed(KEY_Z)) {
-        if (state->undo) {
-            int idx = state->editTexMode ? state->activeBrushTex : state->activeLayer;
-            state->undo->Redo(state, idx, state->editTexMode);
+
+        if (g_activeHud != HUD_QUICK)
+            quickPanelMouseMode = 0;
+
+
+        if (IsKeyPressed(KEY_TWO)) state->mode = eSmudge;
+        if (IsKeyPressed(KEY_THREE)) state->mode = ePolyStripe;
+        if (IsKeyPressed(KEY_FOUR)) state->mode = eDistort;
+        if (IsKeyPressed(KEY_FIVE)) state->mode = eContrast;
+
+        // Toggle framing mode (C key — "crop" framing)
+        if (IsKeyPressed(KEY_C)) {
+            bool enteringCrop = (state->framingMode == FRAME_DEFAULT);
+            if (enteringCrop) {
+                HudSetActive(state, HUD_CANVAS_XFORM);
+                state->cropEntryWindow = state->doc.window;
+                state->framingMode = FRAME_CROP;
+            } else {
+                HudSetActive(state, HUD_NONE);
+                state->framingMode = FRAME_DEFAULT;
+            }
+            layersDirty = true;
         }
-    }
 
-    // Replay confirmation popup
-    if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyDown(KEY_LEFT_SHIFT) && IsKeyPressed(KEY_R)) {
-        if (g_recorder) g_replayPopupActive = true;
-    }
+        // Undo / Redo
+        if (IsKeyDown(KEY_LEFT_CONTROL) && !IsKeyDown(KEY_LEFT_SHIFT) && IsKeyPressed(KEY_Z)) {
+            if (state->undo) {
+                TexSlotID slot = state->editTexMode ? state->editTexSlot : LayerStack_GetSlotID(state->activeLayer);
+                if (TM_IsValid(slot))
+                    state->undo->Undo(state, slot);
+            }
+        }
+        if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyDown(KEY_LEFT_SHIFT) && IsKeyPressed(KEY_Z)) {
+            if (state->undo) {
+                TexSlotID slot = state->editTexMode ? state->editTexSlot : LayerStack_GetSlotID(state->activeLayer);
+                if (TM_IsValid(slot))
+                    state->undo->Redo(state, slot);
+            }
+        }
 
-    // Toggle texture editing mode with T key
-    if (IsKeyPressed(KEY_T)) {
-        if (state->editTexMode) {
-            state->editTexMode = 0;
-            state->activeBrushTex = -1;
-        } else if (state->brushTexCount > 0) {
-            state->editTexMode = 1;
-            if (state->activeBrushTex < 0) state->activeBrushTex = 0;
+        // Replay confirmation popup
+        if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyDown(KEY_LEFT_SHIFT) && IsKeyPressed(KEY_R)) {
+            if (g_recorder) g_replayPopupActive = true;
+        }
+
+        // Toggle texture editing mode with T key
+        if (IsKeyPressed(KEY_T)) {
+            if (state->editTexMode) {
+                state->editTexMode = 0;
+                state->editTexSlot = TM_INVALID_SLOT;
+            } else if (TM_Count(TM_BUCKET_USER) > 0) {
+                state->editTexMode = 1;
+                if (!TM_IsValid(state->editTexSlot)) {
+                    // Find first valid slot
+                    for (int s = 0; s < TM_SLOTS_PER_BUCKET; s++) {
+                        TexSlotID id = {TM_BUCKET_USER, (uint8_t)s};
+                        if (TM_IsValid(id)) { state->editTexSlot = id; break; }
+                    }
+                }
+            }
         }
     }
 
@@ -251,17 +306,14 @@ static void _updateWorkingDir(const char* path) {
 
 static void OnOpenResult(DialogResult r) {
     if (r.wasClosed && r.success && r.output[0]) {
-        LayerStack_Shutdown(); LayerStack_Init();
+        Compositor_Shutdown(); Compositor_Init(); LayerStack_Shutdown(); LayerStack_Init();
         if (LoadRePaint(r.output, &g_state->doc, g_state)) {
             int len = (int)strlen(r.output);
             if (len < (int)sizeof(g_currentFilePath) - 1)
                 memcpy(g_currentFilePath, r.output, len + 1);
             g_state->activeLayer = 0;
-            g_state->camera.target = Vector2{
-                (float)g_state->doc.width * 0.5f,
-                (float)g_state->doc.height * 0.5f
-            };
-            LayerStack_SetRenderWindow(g_state->doc.width, g_state->doc.height);
+            SyncCanvasFromDoc(&g_state->doc, NULL, NULL);
+            g_state->camera.target = Vector2{0, 0};
             layersDirty = true;
         } else {
             // Try as a standard image (PNG, JPEG, BMP, GIF, etc.)
@@ -275,14 +327,11 @@ static void OnOpenResult(DialogResult r) {
                 }
                 g_state->doc = Doc_New(w, h);
                 g_state->activeLayer = 0;
-                g_state->camera.target = Vector2{(float)w * 0.5f, (float)h * 0.5f};
+                SyncCanvasFromDoc(&g_state->doc, NULL, NULL);
+                g_state->camera.target = Vector2{0, 0};
                 g_state->camera.zoom = 1.0f;
-                LayerStack_SetRenderWindow(w, h);
                 int idx = LayerStack_Add(w, h);
-                Image* layerImg = LayerStack_GetImage(idx);
-                UnloadImage(*layerImg);
-                *layerImg = img;  // transfer ownership
-                LayerStack_SyncRTFromImage(idx);
+                LayerStack_UploadToGPU(idx, img);
                 layersDirty = true;
                 // Don't set g_currentFilePath — imported images should be
                 // saved as .re.png via Save As before they can be reloaded.
@@ -291,15 +340,13 @@ static void OnOpenResult(DialogResult r) {
                 int w = 800, h = 600;
                 g_state->doc = Doc_New(w, h);
                 g_state->activeLayer = 0;
-                g_state->camera.target = Vector2{(float)w * 0.5f, (float)h * 0.5f};
+                SyncCanvasFromDoc(&g_state->doc, NULL, NULL);
+                g_state->camera.target = Vector2{0, 0};
                 g_state->camera.zoom = 1.0f;
-                LayerStack_SetRenderWindow(w, h);
                 int idx = LayerStack_Add(w, h);
-                Image* layerImg = LayerStack_GetImage(idx);
-                UnloadImage(*layerImg);
-                *layerImg = GenImageColor(w, h, WHITE);
-                ImageFormat(layerImg, PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
-                LayerStack_SyncRTFromImage(idx);
+                Image fillImg = GenImageColor(w, h, WHITE);
+                ImageFormat(&fillImg, PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
+                LayerStack_UploadToGPU(idx, fillImg);
                 layersDirty = true;
                 if (g_recorder) {
                     g_recorder->Reset(w, h);
@@ -331,14 +378,9 @@ static void OnSaveResult(DialogResult r) {
 void app_new_document(int w, int h, Color fill) {
     g_state->doc = Doc_New(w, h);
     g_state->activeLayer = 0;
-    g_state->camera.target = Vector2{(float)w * 0.5f, (float)h * 0.5f};
-    g_state->camera.zoom = 1.0f;
-    LayerStack_SetRenderWindow(w, h);
+    SyncCanvasFromDoc(&g_state->doc, NULL, NULL);
+    g_state->camera.target = Vector2{0, 0};
     int idx = LayerStack_Add(w, h);
-    Image* img = LayerStack_GetImage(idx);
-    UnloadImage(*img);
-    *img = GenImageColor(w, h, fill);
-    ImageFormat(img, PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
     RenderTexture2D rt = LayerStack_GetRT(idx);
     BeginTextureMode(rt);
     ClearBackground(fill);
@@ -348,7 +390,7 @@ void app_new_document(int w, int h, Color fill) {
 }
 
 static void DoCreateNew(void) {
-    LayerStack_Shutdown(); LayerStack_Init();
+    Compositor_Shutdown(); Compositor_Init(); LayerStack_Shutdown(); LayerStack_Init();
     app_new_document(g_newW, g_newH, WHITE);
     layersDirty = true;
     g_newCanvasActive = false;
@@ -395,14 +437,11 @@ void App_FileReload(void) {
     snprintf(backupPath, sizeof(backupPath), "%s/%s_backup_%08x%s",
              dir, fname, (hash / 65536) % 0xFFFFFFFFu, ".re.png");
     SaveRePaint(backupPath, &g_state->doc, g_state);
-    LayerStack_Shutdown(); LayerStack_Init();
+    Compositor_Shutdown(); Compositor_Init(); LayerStack_Shutdown(); LayerStack_Init();
     if (LoadRePaint(g_currentFilePath, &g_state->doc, g_state)) {
         g_state->activeLayer = 0;
-        g_state->camera.target = Vector2{
-            (float)g_state->doc.width * 0.5f,
-            (float)g_state->doc.height * 0.5f
-        };
-        LayerStack_SetRenderWindow(g_state->doc.width, g_state->doc.height);
+        SyncCanvasFromDoc(&g_state->doc, NULL, NULL);
+        g_state->camera.target = Vector2{0, 0};
         layersDirty = true;
     }
 }
@@ -410,10 +449,35 @@ void App_FileReload(void) {
 
 
 void App_FileSnap(void) {
+    /* If this is an unsaved new document, auto-save it first */
+    if (!g_currentFilePath[0]) {
+        time_t now = time(NULL);
+        struct tm* t = localtime(&now);
+        const char* appDir = GetApplicationDirectory();
+        char savePath[1024];
+        snprintf(savePath, sizeof(savePath), "%sSaves/auto_%04d%02d%02d_%02d%02d%02d.re.png",
+                 appDir,
+                 t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
+                 t->tm_hour, t->tm_min, t->tm_sec);
+
+        if (SaveRePaint(savePath, &g_state->doc, g_state)) {
+            int len = (int)strlen(savePath);
+            if (len < (int)sizeof(g_currentFilePath) - 1)
+                memcpy(g_currentFilePath, savePath, len + 1);
+            if (g_recorder) {
+                char rpPath[1024];
+                snprintf(rpPath, sizeof(rpPath), "%s.re.play", savePath);
+                g_recorder->Save(rpPath);
+            }
+            _updateWorkingDir(savePath);
+        }
+    }
+
     /* GPU composite + dither → 8-bit snapshot */
-    Image flat = CompositeLayersWithDither(g_state);
+    Image flat = ViewportManager_CompositeWithDither();
 
     /* build path: Snaps/snap_YYYYMMDD_HHMMSS.png */
+    {
     time_t now = time(NULL);
     struct tm* t = localtime(&now);
     const char* appDir = GetApplicationDirectory();
@@ -425,6 +489,7 @@ void App_FileSnap(void) {
 
     ExportImage(flat, path);
     UnloadImage(flat);
+    }
 }
 
 /* ── App_Init ──────────────────────────────────────────────────────────── */
@@ -468,6 +533,8 @@ void App_Init(AppState* state) {
     Changelog_Init();
     DrawSplash("Creating canvas...");
 
+    ViewportManager_Init();
+    Compositor_Init();
     LayerStack_Init();
     app_new_document(1024, 768, WHITE);
 
@@ -490,10 +557,13 @@ void App_Init(AppState* state) {
     g_undoManager = state->undo;
 
     g_recorder = new ReplayRecorder();
-    g_recorder->Reset(state->doc.width, state->doc.height);
+    g_recorder->Reset(DocOutPxW(&state->doc), DocOutPxH(&state->doc));
 
     state->camera = Camera2D{};
-    state->camera.target = Vector2{(float)state->doc.width * 0.5f, (float)state->doc.height * 0.5f};
+    state->camera.target = Vector2{
+        state->doc.window.mat[0]*state->doc.window.w*0.5f + state->doc.window.mat[1]*state->doc.window.h*0.5f + state->doc.window.mat[2],
+        state->doc.window.mat[3]*state->doc.window.w*0.5f + state->doc.window.mat[4]*state->doc.window.h*0.5f + state->doc.window.mat[5]
+    };
     state->camera.offset = Vector2{viewportBounds.x + viewportBounds.width * 0.5f, viewportBounds.y + viewportBounds.height * 0.5f};
 
     // ── Module stack ──
@@ -503,6 +573,7 @@ void App_Init(AppState* state) {
     g_moduleStack.Add(std::unique_ptr<IModule>(new ViewportModule(state)), vpRect);
     g_moduleStack.Add(std::unique_ptr<IModule>(new QuickHudModule(state)), vpRect);
     g_moduleStack.Add(std::unique_ptr<IModule>(new LayerXformModule(state)), vpRect);
+    g_moduleStack.Add(std::unique_ptr<IModule>(new CanvasXformModule(state)), vpRect);
     g_moduleStack.Add(std::unique_ptr<IModule>(new RightPanelModule(state)),
         DrawRect{(float)(sw - RIGHT_PANEL_WIDTH), 0, (float)RIGHT_PANEL_WIDTH, (float)sh});
     g_moduleStack.Add(std::unique_ptr<IModule>(new LeftPanelModule(state)),
@@ -588,6 +659,7 @@ void App_Draw(AppState* state) {
     g_moduleStack.SetRect("Viewport",    vpRect);
     g_moduleStack.SetRect("QuickHud",    vpRect);
     g_moduleStack.SetRect("LayerXform",  vpRect);
+    g_moduleStack.SetRect("CanvasXform", vpRect);
     g_moduleStack.SetRect("RightPanel",  rightRect);
 
     BeginDrawing();
@@ -620,10 +692,6 @@ void App_Draw(AppState* state) {
 
     if (viewport.broker) viewport.broker->poll(state);
     if (g_recorder) g_recorder->poll(state);
-    if (viewport.strokeEnded) {
-        SyncLayerTexture(state, viewport.endLayer);
-        viewport.strokeEnded = false;
-    }
 
     // ── Module GL draws (viewport canvas + overlays) ──
     g_moduleStack.DrawGL();
@@ -820,19 +888,17 @@ void App_Draw(AppState* state) {
 void App_Close(AppState* state) {
     networkBroker.SaveConfig();
     networkBroker.Disconnect();
+    ViewportManager_Shutdown();
+    Compositor_Shutdown();
     LayerStack_Shutdown();
 
     LeftPanel_Shutdown();
-    UnloadViewportRenderer();
     ViewportHUD_Shutdown();
     Modulators_Shutdown();
     UnloadPenIcons();
     QuickPanel_Shutdown();
-    // Cleanup brush textures
-    for (int i = 0; i < state->brushTexCount; i++) {
-        if (state->brushTex[i].rt.id > 0) UnloadRenderTexture(state->brushTex[i].rt);
-        if (state->brushTex[i].cpuImage.data) UnloadImage(state->brushTex[i].cpuImage);
-    }
+    // Cleanup all textures via TextureManager
+    TM_Shutdown();
     if (g_dialogFont.texture.id > 0) UnloadFont(g_dialogFont);
     UIStyle::Shutdown();
     BrushBlend_Shutdown();

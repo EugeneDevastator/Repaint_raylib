@@ -1,33 +1,41 @@
 #pragma once
 #include "raylib.h"
+#include "texture_manager.h"
 #include <deque>
 
 struct AppState;
 
 struct UndoEntry {
-    Image snapshot;      // ImageCopy of the layer before the stroke
-    int layerIndex;      // which layer this applies to
+    RenderTexture2D snapshot{};
 
-    // Cleanup helper
-    void Free() { if (snapshot.data) UnloadImage(snapshot); snapshot.data = nullptr; }
+    void Free() { if (snapshot.id) UnloadRenderTexture(snapshot); snapshot = {0}; }
+    ~UndoEntry() { Free(); }
+    UndoEntry() = default;
+    UndoEntry(UndoEntry&& other) noexcept : snapshot(other.snapshot) { other.snapshot = {0}; }
+    UndoEntry& operator=(UndoEntry&& other) noexcept {
+        if (this != &other) { Free(); snapshot = other.snapshot; other.snapshot = {0}; }
+        return *this;
+    }
+    UndoEntry(const UndoEntry&) = delete;
+    UndoEntry& operator=(const UndoEntry&) = delete;
 };
 
 class UndoManager {
 public:
     static const int MAX_UNDO = 20;
+    static const int MAX_SLOTS = TM_BUCKETS * TM_SLOTS_PER_BUCKET;
 
-    void Snapshot(AppState* state, int idx, bool isTexture = false);
-    bool Undo(AppState* state, int idx, bool isTexture = false);
-    bool Redo(AppState* state, int idx, bool isTexture = false);
-    void ClearRedo(int idx, bool isTexture = false);
-    void ClearLayer(int idx);
+    void Snapshot(AppState* state, TexSlotID slot);
+    bool Undo(AppState* state, TexSlotID slot);
+    bool Redo(AppState* state, TexSlotID slot);
     void InvalidateAll();
+    void InvalidateSlot(TexSlotID slot);
 
     ~UndoManager() { InvalidateAll(); }
 
 private:
-    std::deque<UndoEntry> m_undo[256];
-    std::deque<UndoEntry> m_redo[256];
-    std::deque<UndoEntry> m_texUndo[256];
-    std::deque<UndoEntry> m_texRedo[256];
+    int flatIdx(TexSlotID id) const { return id.bucket * TM_SLOTS_PER_BUCKET + id.slot; }
+
+    std::deque<UndoEntry> m_undo[MAX_SLOTS];
+    std::deque<UndoEntry> m_redo[MAX_SLOTS];
 };

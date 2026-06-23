@@ -1,4 +1,5 @@
 #include "repaint.h"
+#include "texture_manager.h"
 #include "rlgl.h"
 #include <math.h>
 #include <string.h>
@@ -13,10 +14,11 @@ static bool hasSuffix(const char* str, const char* suffix) {
 }
 
 void BrushTex_Init(AppState* state) {
-    state->brushTexCount = 0;
-    state->activeBrushTex = -1;
+    TM_Init();
+    state->brushTexSlot = TM_INVALID_SLOT;
+    state->editTexSlot = TM_INVALID_SLOT;
+    state->brushTexActive = false;
     state->editTexMode = 0;
-    memset(state->brushTex, 0, sizeof(state->brushTex));
 
     const char* ad = GetApplicationDirectory();
     char noiseDir[1024];
@@ -42,88 +44,68 @@ void BrushTex_Init(AppState* state) {
             ImageResize(&img, TEX_DIM, TEX_DIM);
             ImageFormat(&img, PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
 
-            int idx = BrushTex_Add(state, texName, img.width, img.height);
-            if (idx >= 0) {
-                BrushTexture* bt = &state->brushTex[idx];
-                UnloadImage(bt->cpuImage);
-                bt->cpuImage = img;
-                bt->dirty = true;
-            } else {
-                UnloadImage(img);
+            TexSlotID id = BrushTex_Add(state, texName, img.width, img.height);
+            if (TM_IsValid(id)) {
+                TexSlot* ts = TM_Get(id);
+                if (ts) {
+                    ts->builtIn = true;
+                    Texture2D tmp = LoadTextureFromImage(img);
+                    BeginTextureMode(ts->rt);
+                    ClearBackground(BLANK);
+                    rlSetBlendMode(RL_BLEND_CUSTOM);
+                    rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+                    DrawTexture(tmp, 0, 0, WHITE);
+                    rlSetBlendMode(RL_BLEND_ALPHA);
+                    EndTextureMode();
+                    UnloadTexture(tmp);
+                }
             }
+            UnloadImage(img);
         }
         closedir(d);
     }
-
-    // Mark all textures loaded from Noise/ as bundled
-    for (int i = 0; i < state->brushTexCount; i++)
-        state->brushTex[i].builtIn = true;
-
-    BrushTex_SyncAll(state);
 }
 
-int BrushTex_Add(AppState* state, const char* name, int w, int h) {
-    if (state->brushTexCount >= MAX_BRUSH_TEX) return -1;
-    int idx = state->brushTexCount++;
-    BrushTexture* bt = &state->brushTex[idx];
-    bt->id = idx;
-    snprintf(bt->name, sizeof(bt->name), "%s", name ? name : "Texture");
-    bt->w = w;
-    bt->h = h;
-    bt->rt = Load16BitRT(w, h);
-    bt->cpuImage = GenImageColor(w, h, BLANK);
-    ImageFormat(&bt->cpuImage, PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
-    // Upload blank CPU image to RT — this properly initialises the GPU texture
-    // even if ClearBackground + BeginTextureMode target an incomplete FBO.
-    bt->dirty = true;
-    bt->builtIn = false;
-    if (bt->rt.id > 0) {
-        Texture2D blank = LoadTextureFromImage(bt->cpuImage);
-        BeginTextureMode(bt->rt);
-        ClearBackground(BLANK);
-        DrawTexture(blank, 0, 0, WHITE);
-        EndTextureMode();
-        UnloadTexture(blank);
-        bt->dirty = false;
+TexSlotID BrushTex_Add(AppState* state, const char* name, int w, int h) {
+    (void)state;
+    return TM_Add(TM_BUCKET_USER, w, h, name, false);
+}
+
+void BrushTex_Delete(AppState* state, TexSlotID id) {
+    if (!TM_IsValid(id)) return;
+    TexSlot* ts = TM_Get(id);
+    if (!ts || ts->builtIn) return;
+    if (state->editTexSlot == id) {
+        state->editTexSlot = TM_INVALID_SLOT;
+        state->editTexMode = 0;
     }
-    return idx;
+    if (state->brushTexSlot == id) {
+        state->brushTexSlot = TM_INVALID_SLOT;
+        state->brushTexActive = false;
+    }
+    TM_Remove(id);
 }
 
-void BrushTex_Delete(AppState* state, int idx) {
-    if (idx < 0 || idx >= state->brushTexCount) return;
-    BrushTexture* bt = &state->brushTex[idx];
-    if (bt->builtIn) return;
-    if (bt->rt.id > 0) UnloadRenderTexture(bt->rt);
-    if (bt->cpuImage.data) UnloadImage(bt->cpuImage);
-    // Shift remaining
-    for (int i = idx; i < state->brushTexCount - 1; i++)
-        state->brushTex[i] = state->brushTex[i + 1];
-    state->brushTexCount--;
-    if (state->activeBrushTex == idx) state->activeBrushTex = -1;
-    else if (state->activeBrushTex > idx) state->activeBrushTex--;
-}
-
-void BrushTex_SetActive(AppState* state, int idx) {
-    state->activeBrushTex = (idx >= 0 && idx < state->brushTexCount) ? idx : -1;
-}
-
-void BrushTex_SyncAll(AppState* state) {
-    for (int i = 0; i < state->brushTexCount; i++) {
-        BrushTexture* bt = &state->brushTex[i];
-        if (!bt->dirty || !bt->cpuImage.data) continue;
-        bt->dirty = false;
-        // Upload CPU image to 16-bit RT
-        Texture2D tmp = LoadTextureFromImage(bt->cpuImage);
-        BeginTextureMode(bt->rt);
-        ClearBackground(BLANK);
-        DrawTexture(tmp, 0, 0, WHITE);
-        EndTextureMode();
-        UnloadTexture(tmp);
+void BrushTex_SetActive(AppState* state, TexSlotID id) {
+    if (!TM_IsValid(id)) {
+        state->brushTexSlot = TM_INVALID_SLOT;
+        state->brushTexActive = false;
+    } else {
+        state->brushTexSlot = id;
+        state->brushTexActive = true;
     }
 }
 
-Texture2D BrushTex_GetThumb(AppState* state, int idx) {
-    // Return the GPU texture for thumb display
-    if (idx < 0 || idx >= state->brushTexCount) return Texture2D{0};
-    return state->brushTex[idx].rt.texture;
+Texture2D BrushTex_GetThumb(AppState* state, TexSlotID id) {
+    (void)state;
+    TexSlot* ts = TM_Get(id);
+    return ts ? ts->rt.texture : Texture2D{0};
+}
+
+TexSlotID BrushTex_GetSlot(AppState* state, int userTexSlot) {
+    (void)state;
+    if (userTexSlot <= 0) return TM_INVALID_SLOT;
+    uint8_t slot = (uint8_t)(userTexSlot - 1);
+    TexSlotID id = {TM_BUCKET_USER, slot};
+    return TM_IsValid(id) ? id : TM_INVALID_SLOT;
 }

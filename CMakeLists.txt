@@ -80,9 +80,12 @@ set(SOURCES
     src/app.cpp
     src/modulators.cpp
     src/brush_preset.cpp
-    src/layermanager.cpp
+    src/compositor.cpp
+    src/render_utils.cpp
     src/layerstack.cpp
+    src/texture_manager.cpp
     src/repaint_core.cpp
+    src/xform.cpp
     src/file_format.cpp
     src/app_config.cpp
     src/usertextures.cpp
@@ -99,6 +102,8 @@ set(SOURCES
     src/ui/ui_changelog.cpp
     src/ui/ui_quickhud.cpp
     src/ui/ui_layerxform.cpp
+    src/ui/ui_canvasxform.cpp
+    src/ui/transform_handle.cpp
     src/ui/ui_style.cpp
     src/ui/ui_texpanel.cpp
     src/undo.cpp
@@ -112,7 +117,7 @@ set(SOURCES
     src/drawing/brush_blend.cpp
     src/drawing/brush_tex.cpp
     src/drawing/viewport.cpp
-    src/drawing/viewport_renderer.cpp
+    src/viewport_manager.cpp
     src/drawing/viewport_hud.cpp
     src/drawing/stroke.cpp
     src/drawing/stroke_engine.cpp

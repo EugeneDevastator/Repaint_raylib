@@ -225,7 +225,7 @@ size_t LayerProps_Serialize(sLayerProps* lp, uint8_t* buf, size_t cap) {
         memcpy(buf + off, lp->layerName, nameLen); off += nameLen;
     }
     // mat[6] — affine transform
-    memcpy(buf + off, lp->mat, 6 * sizeof(float)); off += 6 * sizeof(float);
+    memcpy(buf + off, lp->xform.mat, 6 * sizeof(float)); off += 6 * sizeof(float);
     return off;
 }
 
@@ -252,17 +252,17 @@ bool LayerProps_Deserialize(sLayerProps* lp, uint8_t* buf, size_t len) {
     lp->layerName[nameLen] = '\0';
     // mat[6] — affine transform (may be absent in old packets)
     if (off + 6*sizeof(float) <= len) {
-        memcpy(lp->mat, buf + off, 6 * sizeof(float)); off += 6 * sizeof(float);
+        memcpy(lp->xform.mat, buf + off, 6 * sizeof(float)); off += 6 * sizeof(float);
     } else {
-        lp->mat[0] = 1; lp->mat[1] = 0; lp->mat[2] = 0;
-        lp->mat[3] = 0; lp->mat[4] = 1; lp->mat[5] = 0;
+        lp->xform.mat[0] = 1; lp->xform.mat[1] = 0; lp->xform.mat[2] = 0;
+        lp->xform.mat[3] = 0; lp->xform.mat[4] = 1; lp->xform.mat[5] = 0;
     }
     return true;
 }
 
 size_t Segment_Serialize(const SegmentData& seg, uint8_t* buf, size_t cap) {
     size_t need = sizeof(Vector2)*4 + sizeof(CollapsedBrush)*2 + sizeof(uint16_t)
-                + sizeof(uint8_t)*3 + sizeof(float)*2;
+                + sizeof(TexSlotID) + sizeof(uint8_t)*2 + sizeof(float)*2;
     if (cap < need) return 0;
     size_t off = 0;
     memcpy(buf + off, &seg.pos1, sizeof(Vector2)); off += sizeof(Vector2);
@@ -272,8 +272,8 @@ size_t Segment_Serialize(const SegmentData& seg, uint8_t* buf, size_t cap) {
     memcpy(buf + off, &seg.brushFrom, sizeof(CollapsedBrush)); off += sizeof(CollapsedBrush);
     memcpy(buf + off, &seg.brush, sizeof(CollapsedBrush)); off += sizeof(CollapsedBrush);
     memcpy(buf + off, &seg.seed, sizeof(uint16_t)); off += sizeof(uint16_t);
-    buf[off++] = seg.targetId;     // was layer in NetSegment
-    buf[off++] = seg.tool;         // was toolID
+    memcpy(buf + off, &seg.targetSlot, sizeof(TexSlotID)); off += sizeof(TexSlotID);
+    buf[off++] = seg.tool;
     buf[off++] = seg.seamless;
     memcpy(buf + off, &seg.smudgeSrcX, sizeof(float)); off += sizeof(float);
     memcpy(buf + off, &seg.smudgeSrcY, sizeof(float)); off += sizeof(float);
@@ -282,7 +282,7 @@ size_t Segment_Serialize(const SegmentData& seg, uint8_t* buf, size_t cap) {
 
 bool Segment_Deserialize(SegmentData* seg, uint8_t* buf, size_t len) {
     size_t need = sizeof(Vector2)*4 + sizeof(CollapsedBrush)*2 + sizeof(uint16_t)
-                + sizeof(uint8_t)*3 + sizeof(float)*2;
+                + sizeof(TexSlotID) + sizeof(uint8_t)*2 + sizeof(float)*2;
     if (len < need) return false;
     size_t off = 0;
     memcpy(&seg->pos1, buf + off, sizeof(Vector2)); off += sizeof(Vector2);
@@ -292,9 +292,8 @@ bool Segment_Deserialize(SegmentData* seg, uint8_t* buf, size_t len) {
     memcpy(&seg->brushFrom, buf + off, sizeof(CollapsedBrush)); off += sizeof(CollapsedBrush);
     memcpy(&seg->brush, buf + off, sizeof(CollapsedBrush)); off += sizeof(CollapsedBrush);
     memcpy(&seg->seed, buf + off, sizeof(uint16_t)); off += sizeof(uint16_t);
-    seg->targetId = buf[off++];     // was layer
-    seg->targetType = 0;            // old protocol assumed layer painting
-    seg->tool = buf[off++];         // was toolID
+    memcpy(&seg->targetSlot, buf + off, sizeof(TexSlotID)); off += sizeof(TexSlotID);
+    seg->tool = buf[off++];
     seg->seamless = buf[off++];
     seg->pixelPerfect = 0;          // old protocol didn't have this
     seg->dabOffset = 0;

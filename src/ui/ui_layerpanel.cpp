@@ -1,4 +1,7 @@
 #include "repaint.h"
+#include "compositor.h"
+#include "viewport_manager.h"
+#include "render_utils.h"
 #include "layerstack.h"
 #include "imgui.h"
 #include "network_broker.h"
@@ -8,6 +11,9 @@
 extern bool layersDirty;
 extern Texture2D g_blendModeIcon;
 extern bool g_blendIconLoaded;
+
+// Texture list state — which user texture is selected in the layer panel
+static int g_layerTexSelected = -1;
 
 // ── Layer preview texture cache ──────────────────────────────────────
 #define MAX_PREVIEWS 64
@@ -19,7 +25,7 @@ static int g_previewW = 0, g_previewH = 0;
 // transform into a small preview RT matching canvas proportion.
 void LayerPanel_UpdatePreviews(AppState* state) {
     int count = LayerStack_Count();
-    int cw = state->doc.width, ch = state->doc.height;
+    int cw = (int)state->doc.window.w, ch = (int)state->doc.window.h;
     if (cw < 1 || ch < 1 || count < 1) return;
 
     int pw = (int)(36.0f * cw / ch);
@@ -52,7 +58,7 @@ void LayerPanel_UpdatePreviews(AppState* state) {
         BeginTextureMode(dst); ClearBackground(BLANK);
         rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE,RL_ZERO,RL_FUNC_ADD);
         rlPushMatrix();
-        float* M = p->mat;
+        float* M = p->xform.mat;
         float mg[16]={sx*M[0],sy*M[3],0,0, sx*M[1],sy*M[4],0,0, 0,0,1,0, sx*M[2],sy*M[5],0,1};
         rlMultMatrixf(mg);
         DrawTextureRec(src,Rectangle{0,0,(float)p->layerW,(float)-p->layerH},Vector2{0,0},WHITE);
@@ -88,7 +94,7 @@ static void CommitLayerOp(AppState* state, d_LAction* lact) {
         }
         case laDrop: {
             int idx = lact->layer;
-            MergeDownLayer(state, idx);
+            ViewportManager_MergeDown(idx);
             if (state->activeLayer >= LayerStack_Count())
                 state->activeLayer = LayerStack_Count() - 1;
             break;
@@ -138,7 +144,7 @@ void LayerPanel_Draw(AppState* state) {
     if (ImGui::Button("Drop", ImVec2(bw, 36)) && state->activeLayer > 0) {
         sLayerProps* lp = LayerStack_GetProps(state->activeLayer);
         if (lp->seamless) {
-            LayerStack_MergeDownSeamless(state->activeLayer);
+            ViewportManager_MergeDownSeamless(state->activeLayer);
             if (state->activeLayer >= LayerStack_Count())
                 state->activeLayer = LayerStack_Count() - 1;
             layersDirty = true;
@@ -233,13 +239,27 @@ void LayerPanel_Draw(AppState* state) {
         snprintf(idxBuf, sizeof(idxBuf), "Layer %d / %d", state->activeLayer + 1, LayerStack_Count());
         ImGui::Text("%s", idxBuf);
     }
-    ImGui::Checkbox("Use screen res", &g_useViewRes);
+    {
+        const char* frameLabel = (state->framingMode == FRAME_CROP) ? "Framing: Crop" : "Framing: Canvas";
+        if (ImGui::Button(frameLabel, ImVec2(-1, 0))) {
+            bool enteringCrop = (state->framingMode == FRAME_DEFAULT);
+            if (enteringCrop) {
+                HudSetActive(state, HUD_CANVAS_XFORM);
+                state->cropEntryWindow = state->doc.window;
+                state->framingMode = FRAME_CROP;
+            } else {
+                HudSetActive(state, HUD_NONE);
+                state->framingMode = FRAME_DEFAULT;
+            }
+            layersDirty = true;
+        }
+    }
 
     ImGui::Separator();
 
     {
         float avail = ImGui::GetContentRegionAvail().y;
-        float listH = avail * 0.7f;
+        float listH = avail * 0.35f;
         if (listH < 10.0f) listH = 10.0f;
         if (ImGui::BeginChild("LayerList", ImVec2(0, listH), false)) {
             float prevRMaxY = ImGui::GetCursorScreenPos().y;
@@ -280,8 +300,10 @@ void LayerPanel_Draw(AppState* state) {
                 } else if (dragging) {
                     ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0,0,0,0));
                 }
-                if (ImGui::Selectable(lname, isActive, 0, selSize))
+                if (ImGui::Selectable(lname, isActive, 0, selSize)) {
                     state->activeLayer = idx;
+                    if (state->editTexMode) state->editTexMode = 0;
+                }
                 if (isActive) ImGui::PopStyleColor(2);
                 else if (dragging) ImGui::PopStyleColor(1);
 
@@ -330,13 +352,111 @@ void LayerPanel_Draw(AppState* state) {
         ImGui::EndChild();
     }
 
+    // ── User texture section ──
+    ImGui::Separator();
+
+    ImGui::PushID("tex");
+    {
+        float aw = ImGui::GetContentRegionAvail().x;
+        float btnW = (aw - ImGui::GetStyle().ItemSpacing.x * 2) / 3.0f;
+        if (btnW < 30.0f) btnW = 30.0f;
+
+        if (ImGui::Button("+Tex", ImVec2(btnW, 24))) {
+            char name[64];
+            snprintf(name, sizeof(name), "Texture %d", TM_Count(TM_BUCKET_USER) + 1);
+            TexSlotID id = BrushTex_Add(state, name, 512, 512);
+            if (TM_IsValid(id)) {
+                g_layerTexSelected = id.slot;
+                state->editTexMode = 1;
+                state->editTexSlot = id;
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Dup", ImVec2(btnW, 24))) {
+            if (g_layerTexSelected >= 0) {
+                TexSlotID srcId = {TM_BUCKET_USER, (uint8_t)g_layerTexSelected};
+                TexSlot* srcTs = TM_Get(srcId);
+                if (srcTs && TM_IsValid(srcId)) {
+                    TexSlotID di = BrushTex_Add(state, srcTs->name, srcTs->w, srcTs->h);
+                    if (TM_IsValid(di)) {
+                        TexSlot* dstTs = TM_Get(di);
+                        if (dstTs) {
+                            BeginTextureMode(dstTs->rt);
+                            ClearBackground(BLANK);
+                            rlSetBlendMode(RL_BLEND_CUSTOM);
+                            rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+                            DrawTextureRec(srcTs->rt.texture,
+                                Rectangle{0, 0, (float)srcTs->w, (float)-srcTs->h},
+                                Vector2{0, 0}, WHITE);
+                            rlSetBlendMode(RL_BLEND_ALPHA);
+                            EndTextureMode();
+                            g_layerTexSelected = di.slot;
+                            state->editTexMode = 1;
+                            state->editTexSlot = di;
+                        }
+                    }
+                }
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Del", ImVec2(btnW, 24))) {
+            if (g_layerTexSelected >= 0) {
+                TexSlotID id = {TM_BUCKET_USER, (uint8_t)g_layerTexSelected};
+                TexSlot* ts = TM_Get(id);
+                if (ts && !ts->builtIn) {
+                    BrushTex_Delete(state, id);
+                    g_layerTexSelected = -1;
+                }
+            }
+        }
+
+        float texAvail = ImGui::GetContentRegionAvail().y;
+        float texListH = texAvail * 0.65f;
+        if (texListH < 10.0f) texListH = 10.0f;
+        if (ImGui::BeginChild("UserTexList", ImVec2(0, texListH), false)) {
+            for (int s = 0; s < TM_SLOTS_PER_BUCKET; s++) {
+                TexSlotID id = {TM_BUCKET_USER, (uint8_t)s};
+                TexSlot* ts = TM_Get(id);
+                if (!ts || ts->builtIn) continue;
+
+                ImGui::PushID(s);
+                bool isEditing = (state->editTexMode && state->editTexSlot == id);
+                bool isSel = (g_layerTexSelected == s);
+
+                Texture2D thumb = BrushTex_GetThumb(state, id);
+                if (thumb.id > 0) {
+                    ImGui::Image((ImTextureID)(intptr_t)thumb.id, ImVec2(36, 36), ImVec2(0, 1), ImVec2(1, 0));
+                    ImGui::SameLine();
+                }
+
+                if (isEditing) {
+                    ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.25f, 0.50f, 0.95f, 0.8f));
+                    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.30f, 0.55f, 0.95f, 0.9f));
+                }
+                if (ImGui::Selectable(ts->name, isSel, 0, ImVec2(0, 36))) {
+                    g_layerTexSelected = s;
+                    if (state->editTexMode && state->editTexSlot == id) {
+                        state->editTexMode = 0;
+                    } else {
+                        state->editTexMode = 1;
+                        state->editTexSlot = id;
+                    }
+                }
+                if (isEditing) ImGui::PopStyleColor(2);
+
+                ImGui::PopID();
+            }
+        }
+        ImGui::EndChild();
+    }
+    ImGui::PopID();
+
     // Network lobby panel (bottom of layers)
     {
         ImGui::Separator();
         float netH = ImGui::GetContentRegionAvail().y;
         if (netH < 10.0f) netH = 10.0f;
-        if (ImGui::BeginChild("NetworkLobby", ImVec2(0, netH), false,
-                ImGuiWindowFlags_NoScrollbar)) {
+        if (ImGui::BeginChild("NetworkLobby", ImVec2(0, netH), false)) {
             ImGui::Text("Server");
             ImGui::Separator();
             float btnW = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;

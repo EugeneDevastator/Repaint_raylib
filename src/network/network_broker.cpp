@@ -1,4 +1,5 @@
 #include "network_broker.h"
+#include "viewport_manager.h"
 #include "layerstack.h"
 #include "serialize.h"
 #include "sock_platform.h"
@@ -261,8 +262,7 @@ void NetworkBroker::ProcessReceived(uint8_t hid, uint8_t* data, uint32_t size) {
             seg.seamless = 0;
             seg.smudgeSrcX = seg.pos1.x;
             seg.smudgeSrcY = seg.pos1.y;
-            seg.targetType = 0;
-            seg.targetId = act.layer;
+            seg.targetSlot = LayerStack_GetSlotID(act.layer);
             EnqueueRemoteSegment(seg);
         }
         break;
@@ -360,7 +360,7 @@ void NetworkBroker::ProcessReceived(uint8_t hid, uint8_t* data, uint32_t size) {
         case laDrop: {
             int idx = lact.layer;
             if (idx <= 0 || idx >= LayerStack_Count()) break;
-            MergeDownLayer(appState, idx);
+            ViewportManager_MergeDown(idx);
             if (appState->activeLayer >= LayerStack_Count())
                 appState->activeLayer = LayerStack_Count() - 1;
             layersDirty = true;

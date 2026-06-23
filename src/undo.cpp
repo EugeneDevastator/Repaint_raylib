@@ -1,178 +1,148 @@
 #include "undo.h"
 #include "repaint.h"
+#include "viewport_manager.h"
+#include "render_utils.h"
 #include "layerstack.h"
+#include "texture_manager.h"
+#include "rlgl.h"
 
-// ── Helpers to sync a brush texture RT ↔ CPU image ────────────────────────
-static void SyncBrushTexFromRT(AppState* state, int texIdx) {
-    if (texIdx < 0 || texIdx >= state->brushTexCount) return;
-    BrushTexture* bt = &state->brushTex[texIdx];
-    if (bt->rt.id == 0) return;
-    Image img = LoadImageFromTexture(bt->rt.texture);
-    if (img.data) {
-        if (bt->cpuImage.data) UnloadImage(bt->cpuImage);
-        bt->cpuImage = img;
-    }
-}
-
-static void SyncBrushTexFromImage(AppState* state, int texIdx) {
-    if (texIdx < 0 || texIdx >= state->brushTexCount) return;
-    BrushTexture* bt = &state->brushTex[texIdx];
-    if (!bt->cpuImage.data || bt->rt.id == 0) return;
-    Texture2D tmp = LoadTextureFromImage(bt->cpuImage);
-    BeginTextureMode(bt->rt);
+static void CopyRT(RenderTexture2D dst, RenderTexture2D src, int w, int h) {
+    BeginTextureMode(dst);
+    rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE,RL_ZERO,RL_FUNC_ADD);
     ClearBackground(BLANK);
-    DrawTexture(tmp, 0, 0, WHITE);
+    DrawTextureRec(src.texture, Rectangle{0,0,(float)w,(float)-h}, Vector2{0,0}, WHITE);
+    rlSetBlendMode(RL_BLEND_ALPHA);
     EndTextureMode();
-    UnloadTexture(tmp);
 }
 
-void UndoManager::Snapshot(AppState* state, int idx, bool isTexture) {
-    if (isTexture) {
-        if (idx < 0 || idx >= state->brushTexCount) return;
-        if (state->brushTex[idx].rt.id == 0) return;
-        SyncBrushTexFromRT(state, idx);
-        Image* src = &state->brushTex[idx].cpuImage;
-        if (!src || !src->data) return;
-        UndoEntry entry;
-        entry.snapshot = ImageCopy(*src);
-        entry.layerIndex = idx;
-        auto& st = m_texUndo[idx];
-        st.push_back(std::move(entry));
-        while ((int)st.size() > MAX_UNDO) {
-            st.front().Free();
-            st.pop_front();
-        }
+void UndoManager::Snapshot(AppState* state, TexSlotID slot) {
+    (void)state;
+    int w = 0, h = 0;
+    RenderTexture2D srcRT = {0};
+
+    if (slot.bucket == TM_BUCKET_LAYER) {
+        int li = LayerStack_FindLayerBySlot(slot);
+        if (li < 0) return;
+        srcRT = LayerStack_GetRT(li);
+        sLayerProps* p = LayerStack_GetProps(li);
+        if (!p || srcRT.id == 0) return;
+        w = p->layerW;
+        h = p->layerH;
     } else {
-        if (idx < 0 || idx >= LayerStack_Count()) return;
-        LayerStack_SyncImageFromRT(idx);
-        Image* src = LayerStack_GetImage(idx);
-        if (!src || !src->data) return;
-        UndoEntry entry;
-        entry.snapshot = ImageCopy(*src);
-        entry.layerIndex = idx;
-        auto& st = m_undo[idx];
-        st.push_back(std::move(entry));
-        while ((int)st.size() > MAX_UNDO) {
-            st.front().Free();
-            st.pop_front();
-        }
+        TexSlot* ts = TM_Get(slot);
+        if (!ts || ts->rt.id == 0) return;
+        srcRT = ts->rt;
+        w = ts->rt.texture.width;
+        h = ts->rt.texture.height;
     }
+
+    RenderTexture2D snapRT = Load16BitRT(w, h);
+    if (snapRT.id == 0) return;
+    CopyRT(snapRT, srcRT, w, h);
+
+    UndoEntry entry;
+    entry.snapshot = snapRT;
+    auto& st = m_undo[flatIdx(slot)];
+    st.push_back(std::move(entry));
+    while ((int)st.size() > MAX_UNDO)
+        st.pop_front();
 }
 
-bool UndoManager::Undo(AppState* state, int idx, bool isTexture) {
-    if (isTexture) {
-        if (idx < 0 || idx >= state->brushTexCount) return false;
-        auto& st = m_texUndo[idx];
-        if (st.empty()) return false;
-        SyncBrushTexFromRT(state, idx);
-        Image* cur = &state->brushTex[idx].cpuImage;
-        if (!cur || !cur->data) return false;
-        UndoEntry redo;
-        redo.snapshot = ImageCopy(*cur);
-        redo.layerIndex = idx;
-        m_texRedo[idx].push_back(std::move(redo));
-        UndoEntry& undo = st.back();
-        UnloadImage(*cur);
-        *cur = undo.snapshot;
-        undo.snapshot.data = nullptr;
-        undo.snapshot = {0};
-        SyncBrushTexFromImage(state, idx);
-        st.pop_back();
-        return true;
+bool UndoManager::Undo(AppState* state, TexSlotID slot) {
+    (void)state;
+    auto& st = m_undo[flatIdx(slot)];
+    if (st.empty()) return false;
+
+    int w = 0, h = 0;
+    RenderTexture2D srcRT = {0};
+
+    if (slot.bucket == TM_BUCKET_LAYER) {
+        int li = LayerStack_FindLayerBySlot(slot);
+        if (li < 0) return false;
+        srcRT = LayerStack_GetRT(li);
+        sLayerProps* p = LayerStack_GetProps(li);
+        if (!p || srcRT.id == 0) return false;
+        w = p->layerW;
+        h = p->layerH;
     } else {
-        if (idx < 0 || idx >= LayerStack_Count()) return false;
-        auto& st = m_undo[idx];
-        if (st.empty()) return false;
-        LayerStack_SyncImageFromRT(idx);
-        Image* cur = LayerStack_GetImage(idx);
-        if (!cur || !cur->data) return false;
-        UndoEntry redo;
-        redo.snapshot = ImageCopy(*cur);
-        redo.layerIndex = idx;
-        m_redo[idx].push_back(std::move(redo));
-        UndoEntry& undo = st.back();
-        UnloadImage(*cur);
-        *cur = undo.snapshot;
-        undo.snapshot.data = nullptr;
-        undo.snapshot = {0};
-        LayerStack_SyncRTFromImage(idx);
-        st.pop_back();
-        return true;
+        TexSlot* ts = TM_Get(slot);
+        if (!ts || ts->rt.id == 0) return false;
+        srcRT = ts->rt;
+        w = ts->rt.texture.width;
+        h = ts->rt.texture.height;
     }
+
+    // Save current state as redo
+    RenderTexture2D redoRT = Load16BitRT(w, h);
+    if (redoRT.id == 0) return false;
+    CopyRT(redoRT, srcRT, w, h);
+    UndoEntry redo;
+    redo.snapshot = redoRT;
+    auto& rs = m_redo[flatIdx(slot)];
+    rs.push_back(std::move(redo));
+
+    // Restore from undo
+    UndoEntry& undo = st.back();
+    CopyRT(srcRT, undo.snapshot, w, h);
+    st.pop_back();
+
+    if (slot.bucket == TM_BUCKET_LAYER) ViewportManager_SetDirty();
+    layersDirty = true;
+    return true;
 }
 
-bool UndoManager::Redo(AppState* state, int idx, bool isTexture) {
-    if (isTexture) {
-        if (idx < 0 || idx >= state->brushTexCount) return false;
-        auto& st = m_texRedo[idx];
-        if (st.empty()) return false;
-        SyncBrushTexFromRT(state, idx);
-        Image* cur = &state->brushTex[idx].cpuImage;
-        if (!cur || !cur->data) return false;
-        UndoEntry reundo;
-        reundo.snapshot = ImageCopy(*cur);
-        reundo.layerIndex = idx;
-        m_texUndo[idx].push_back(std::move(reundo));
-        UndoEntry& redo = st.back();
-        UnloadImage(*cur);
-        *cur = redo.snapshot;
-        redo.snapshot.data = nullptr;
-        redo.snapshot = {0};
-        SyncBrushTexFromImage(state, idx);
-        st.pop_back();
-        return true;
+bool UndoManager::Redo(AppState* state, TexSlotID slot) {
+    (void)state;
+    auto& st = m_redo[flatIdx(slot)];
+    if (st.empty()) return false;
+
+    int w = 0, h = 0;
+    RenderTexture2D srcRT = {0};
+
+    if (slot.bucket == TM_BUCKET_LAYER) {
+        int li = LayerStack_FindLayerBySlot(slot);
+        if (li < 0) return false;
+        srcRT = LayerStack_GetRT(li);
+        sLayerProps* p = LayerStack_GetProps(li);
+        if (!p || srcRT.id == 0) return false;
+        w = p->layerW;
+        h = p->layerH;
     } else {
-        if (idx < 0 || idx >= LayerStack_Count()) return false;
-        auto& st = m_redo[idx];
-        if (st.empty()) return false;
-        LayerStack_SyncImageFromRT(idx);
-        Image* cur = LayerStack_GetImage(idx);
-        if (!cur || !cur->data) return false;
-        UndoEntry reundo;
-        reundo.snapshot = ImageCopy(*cur);
-        reundo.layerIndex = idx;
-        m_undo[idx].push_back(std::move(reundo));
-        UndoEntry& redo = st.back();
-        UnloadImage(*cur);
-        *cur = redo.snapshot;
-        redo.snapshot.data = nullptr;
-        redo.snapshot = {0};
-        LayerStack_SyncRTFromImage(idx);
-        st.pop_back();
-        return true;
+        TexSlot* ts = TM_Get(slot);
+        if (!ts || ts->rt.id == 0) return false;
+        srcRT = ts->rt;
+        w = ts->rt.texture.width;
+        h = ts->rt.texture.height;
     }
-}
 
-void UndoManager::ClearRedo(int idx, bool isTexture) {
-    if (idx < 0 || idx >= 256) return;
-    auto& st = isTexture ? m_texRedo[idx] : m_redo[idx];
-    for (auto& e : st) e.Free();
-    st.clear();
-}
+    // Save current state back to undo
+    RenderTexture2D reundoRT = Load16BitRT(w, h);
+    if (reundoRT.id == 0) return false;
+    CopyRT(reundoRT, srcRT, w, h);
+    UndoEntry reundo;
+    reundo.snapshot = reundoRT;
+    auto& us = m_undo[flatIdx(slot)];
+    us.push_back(std::move(reundo));
 
-void UndoManager::ClearLayer(int idx) {
-    if (idx < 0 || idx >= 256) return;
-    for (auto& e : m_undo[idx]) e.Free();
-    m_undo[idx].clear();
-    for (auto& e : m_redo[idx]) e.Free();
-    m_redo[idx].clear();
-    for (auto& e : m_texUndo[idx]) e.Free();
-    m_texUndo[idx].clear();
-    for (auto& e : m_texRedo[idx]) e.Free();
-    m_texRedo[idx].clear();
+    // Restore from redo
+    UndoEntry& redo = st.back();
+    CopyRT(srcRT, redo.snapshot, w, h);
+    st.pop_back();
+
+    if (slot.bucket == TM_BUCKET_LAYER) ViewportManager_SetDirty();
+    layersDirty = true;
+    return true;
 }
 
 void UndoManager::InvalidateAll() {
-    for (auto& st : m_undo)
-        for (auto& e : st) e.Free();
-    for (auto& st : m_redo)
-        for (auto& e : st) e.Free();
-    for (auto& st : m_texUndo)
-        for (auto& e : st) e.Free();
-    for (auto& st : m_texRedo)
-        for (auto& e : st) e.Free();
     for (auto& st : m_undo) st.clear();
     for (auto& st : m_redo) st.clear();
-    for (auto& st : m_texUndo) st.clear();
-    for (auto& st : m_texRedo) st.clear();
+}
+
+void UndoManager::InvalidateSlot(TexSlotID slot) {
+    int fi = flatIdx(slot);
+    if (fi >= 0 && fi < MAX_SLOTS) {
+        m_undo[fi].clear();
+        m_redo[fi].clear();
+    }
 }

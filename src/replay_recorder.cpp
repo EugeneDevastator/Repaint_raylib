@@ -1,5 +1,6 @@
 #include "replay_recorder.h"
 #include "layerstack.h"
+#include "texture_manager.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -36,11 +37,11 @@ void ReplayRecorder::Play(AppState* state) {
     if (!state) { printf("[REPLAY] Play: state is NULL!\n"); fflush(stdout); return; }
     printf("[REPLAY] Play: %d segs, canvas=%dx%d, doc=%dx%d, layer=%d\n",
         (int)m_segs.size(), m_canvasW, m_canvasH,
-        state->doc.width, state->doc.height, state->activeLayer);
+        DocOutPxW(&state->doc), DocOutPxH(&state->doc), state->activeLayer);
     fflush(stdout);
 
-    float sx = (float)state->doc.width  / (float)(m_canvasW > 0 ? m_canvasW : 512);
-    float sy = (float)state->doc.height / (float)(m_canvasH > 0 ? m_canvasH : 512);
+    float sx = (float)DocOutPxW(&state->doc)  / (float)(m_canvasW > 0 ? m_canvasW : 512);
+    float sy = (float)DocOutPxH(&state->doc) / (float)(m_canvasH > 0 ? m_canvasH : 512);
     printf("[REPLAY] sx=%.3f sy=%.3f\n", sx, sy); fflush(stdout);
 
     RenderTexture2D rt = LayerStack_GetRT(state->activeLayer);
@@ -67,8 +68,10 @@ void ReplayRecorder::Play(AppState* state) {
 
         Texture2D replayTex = {0};
         bool replayUseTex = false;
-        if (dseg.userTexIdx > 0 && (dseg.userTexIdx - 1u) < (uint8_t)state->brushTexCount) {
-            replayTex = state->brushTex[dseg.userTexIdx - 1].rt.texture;
+        TexSlotID texId = {dseg.userTexBucket, dseg.userTexSlot};
+        TexSlot* ts = TM_Get(texId);
+        if (ts) {
+            replayTex = ts->rt.texture;
             replayUseTex = true;
         }
         DrawSegment(dseg, rt, replayTex, replayUseTex, dseg.seamless != 0, 0, dseg.pixelPerfect != 0);
