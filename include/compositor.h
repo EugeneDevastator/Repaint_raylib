@@ -37,6 +37,7 @@ void     Compositor_SetPresentTexSize(int w, int h);
 void     Compositor_SetPresentDither(bool on);
 
 // Checker texture
+void     Compositor_EnsureChecker(int w, int h);
 Texture2D Compositor_GetCheckerTex(void);
 
 #endif

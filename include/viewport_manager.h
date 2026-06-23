@@ -15,7 +15,7 @@ void ViewportManager_ReloadShader(void);
 // Canvas-resolution cached composite
 RenderTexture2D* ViewportManager_Composite(void);
 Image ViewportManager_CompositeWithDither(void);
-void ViewportManager_CompositeViewInto(RenderTexture2D dst, const RectXform* viewXform, int w, int h);
+void ViewportManager_CompositeViewInto(RenderTexture2D dst, const RectXform* viewXform, int w, int h, const Rectangle* checkerRect = NULL);
 
 void ViewportManager_SetDirty(void);
 

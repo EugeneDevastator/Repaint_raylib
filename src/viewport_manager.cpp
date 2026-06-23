@@ -53,6 +53,7 @@ RenderTexture2D* ViewportManager_Composite(void) {
     VM.dirty=false; layersDirty=false;
 
     // Seed with checker
+    Compositor_EnsureChecker(cw, ch);
     BeginTextureMode(VM.accumA); ClearBackground(BLANK);
     Texture2D ck = Compositor_GetCheckerTex();
     if(ck.id>0) DrawTexture(ck,0,0,WHITE);
@@ -126,9 +127,22 @@ Image ViewportManager_CompositeWithDither(void) {
     return result;
 }
 
-void ViewportManager_CompositeViewInto(RenderTexture2D dst, const RectXform* viewXform, int w, int h) {
+void ViewportManager_CompositeViewInto(RenderTexture2D dst, const RectXform* viewXform, int w, int h, const Rectangle* checkerRect) {
     if(w<1||h<1||dst.id==0) return;
-    BeginTextureMode(dst); ClearBackground(BLANK); EndTextureMode();
+    int cw=LayerStack_RenderW(), ch=LayerStack_RenderH();
+
+    BeginTextureMode(dst); ClearBackground(BLANK);
+
+    // Draw checker in crop region area of viewport
+    if(checkerRect && checkerRect->width>0 && checkerRect->height>0 && cw>0 && ch>0) {
+        Compositor_EnsureChecker(cw, ch);
+        Texture2D ck = Compositor_GetCheckerTex();
+        if(ck.id>0)
+            DrawTexturePro(ck, Rectangle{0,0,(float)cw,(float)ch},
+                *checkerRect, Vector2{0,0}, 0, WHITE);
+    }
+
+    EndTextureMode();
 
     int count = LayerStack_Count();
     for(int i=0;i<count;i++){

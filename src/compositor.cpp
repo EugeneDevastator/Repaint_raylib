@@ -213,7 +213,7 @@ void Compositor_BlitLayerOnto(
     // Non-seamless: compute AABB, clip to dstRegion, rectify, blend
     RectXform rx;
     memcpy(rx.mat, cmb, sizeof(cmb));
-    rx.w = xform->w; rx.h = xform->h;
+    rx.w = sw; rx.h = sh;
     Rectangle aabb = GetWorldAABB(&rx);
     // Clip aabb to dstRegion
     float l = fmaxf(aabb.x, dstRegion.x);
@@ -294,6 +294,9 @@ void Compositor_SetPresentTexSize(int w, int h) {
 }
 void Compositor_SetPresentDither(bool on) {
     if(CS.locApplyDither>=0){ int v=on?1:0; SetShaderValue(CS.presentShader,CS.locApplyDither,&v,SHADER_UNIFORM_INT); }
+}
+void Compositor_EnsureChecker(int w, int h) {
+    if(w>0&&h>0) EnsureChecker(w,h);
 }
 Texture2D Compositor_GetCheckerTex(void) {
     return CS.checkerTex;

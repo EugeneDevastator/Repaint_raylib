@@ -105,7 +105,17 @@ void ViewportHUD_Draw(AppState* state) {
                 vXf.mat[0]=state->camera.zoom; vXf.mat[1]=0; vXf.mat[2]=-state->camera.target.x*state->camera.zoom+vOffX;
                 vXf.mat[3]=0; vXf.mat[4]=state->camera.zoom; vXf.mat[5]=-state->camera.target.y*state->camera.zoom+vOffY;
                 vXf.w=0; vXf.h=0;
-                ViewportManager_CompositeViewInto(g_viewResRT, &vXf, vpW, vpH);
+                // Compute checker rect: crop rect AABB in world-space, transformed to viewport pixels
+                Rectangle checkerRect = {0,0,0,0};
+                {
+                    Rectangle cropAABB = GetWorldAABB(&state->doc.window);
+                    float l = vXf.mat[0]*cropAABB.x + vXf.mat[1]*cropAABB.y + vXf.mat[2];
+                    float t = vXf.mat[3]*cropAABB.x + vXf.mat[4]*cropAABB.y + vXf.mat[5];
+                    float r = vXf.mat[0]*(cropAABB.x+cropAABB.width) + vXf.mat[1]*(cropAABB.y+cropAABB.height) + vXf.mat[2];
+                    float b = vXf.mat[3]*(cropAABB.x+cropAABB.width) + vXf.mat[4]*(cropAABB.y+cropAABB.height) + vXf.mat[5];
+                    if(r>l&&b>t) checkerRect = {l,t,r-l,b-t};
+                }
+                ViewportManager_CompositeViewInto(g_viewResRT, &vXf, vpW, vpH, &checkerRect);
                 if (usePresent) { BeginShaderMode(Compositor_GetPresentShader()); Compositor_SetPresentTexSize(vpW, vpH); Compositor_SetPresentDither(true); }
                 DrawTextureRec(g_viewResRT.texture,
                     Rectangle{0, 0, (float)vpW, (float)-vpH},
