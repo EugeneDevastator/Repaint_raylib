@@ -1,6 +1,7 @@
 #include "render_utils.h"
 #include "rlgl.h"
 #include "external/glad.h"
+#include <cstddef>
 
 unsigned int CreateTexRGBA16(int w, int h) {
     unsigned int id;
