@@ -247,23 +247,9 @@ void LayerPanel_Draw(AppState* state) {
                 HudSetActive(state, HUD_CANVAS_XFORM);
                 state->cropEntryWindow = state->doc.window;
                 state->framingMode = FRAME_CROP;
-                Rectangle sb; LayerStack_GetSceneBounds(&sb);
-                if (sb.width > 0 && sb.height > 0) {
-                    float cx = sb.x + sb.width/2, cy = sb.y + sb.height/2;
-                    state->camera.target = Vector2{cx, cy};
-                    float pad = 1.1f;
-                    float zoomX = viewport.bounds.width / (sb.width * pad);
-                    float zoomY = viewport.bounds.height / (sb.height * pad);
-                    state->camera.zoom = fminf(zoomX, zoomY);
-                } else {
-                    state->camera.target = Vector2{0,0};
-                    state->camera.zoom = 1.0f;
-                }
             } else {
                 HudSetActive(state, HUD_NONE);
                 state->framingMode = FRAME_DEFAULT;
-                state->camera.target = Vector2{0, 0};
-                state->camera.zoom = 1.0f;
             }
             layersDirty = true;
         }

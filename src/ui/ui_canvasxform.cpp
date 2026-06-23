@@ -18,6 +18,10 @@ static int      g_cropPixelH = 0;
 static void ExitCropMode(AppState* state, bool accept) {
     if (accept) {
         ApplyCanvasWindow(&state->doc);
+        state->camera.target = Vector2{
+            state->doc.window.mat[0]*state->doc.window.w*0.5f + state->doc.window.mat[1]*state->doc.window.h*0.5f + state->doc.window.mat[2],
+            state->doc.window.mat[3]*state->doc.window.w*0.5f + state->doc.window.mat[4]*state->doc.window.h*0.5f + state->doc.window.mat[5]
+        };
     } else {
         state->doc.window = g_entryWindow;
         int cw = DocOutPxW(&state->doc), ch = DocOutPxH(&state->doc);
@@ -26,8 +30,6 @@ static void ExitCropMode(AppState* state, bool accept) {
     }
     state->framingMode = FRAME_DEFAULT;
     g_activeHud = HUD_NONE;
-    state->camera.target = Vector2{0, 0};
-    state->camera.zoom = 1.0f;
     g_entrySaved = false;
     layersDirty = true;
 }
