@@ -241,7 +241,8 @@ void Compositor_BlitLayerOnto(
     BeginTextureMode(baseBuf);
     rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE,RL_ZERO,RL_FUNC_ADD);
     ClearBackground(BLANK);
-    DrawTextureRec(dst.texture, Rectangle{l, t, (float)clipW, (float)-clipH}, Vector2{0,0}, WHITE);
+    int dstH = dst.texture.height;
+    DrawTextureRec(dst.texture, Rectangle{l, (float)(dstH - (int)t - clipH), (float)clipW, (float)-clipH}, Vector2{0,0}, WHITE);
     rlSetBlendMode(RL_BLEND_ALPHA);
     EndTextureMode();
     // Blend layer onto baseBuf, result into blendBuf
