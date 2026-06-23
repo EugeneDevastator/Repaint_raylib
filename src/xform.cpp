@@ -11,6 +11,20 @@ void Xform_Mul(float out[6], const float a[6], const float b[6]) {
     out[5] = a[3]*b[2] + a[4]*b[5] + a[5];
 }
 
+void Xform_MulInv(float out[6], const float a[6], const float b[6]) {
+    float det = b[0]*b[4] - b[1]*b[3];
+    if(fabsf(det) < 0.0001f){ memcpy(out, a, 6*sizeof(float)); return; }
+    float id = 1.0f/det;
+    float ib0 =  b[4]*id, ib1 = -b[1]*id, ibtx = (b[1]*b[5] - b[4]*b[2])*id;
+    float ib3 = -b[3]*id, ib4 =  b[0]*id, ibty = (b[3]*b[2] - b[0]*b[5])*id;
+    out[0] = a[0]*ib0 + a[1]*ib3;
+    out[1] = a[0]*ib1 + a[1]*ib4;
+    out[2] = a[0]*ibtx + a[1]*ibty + a[2];
+    out[3] = a[3]*ib0 + a[4]*ib3;
+    out[4] = a[3]*ib1 + a[4]*ib4;
+    out[5] = a[3]*ibtx + a[4]*ibty + a[5];
+}
+
 void Xform_Identity(float out[6]) {
     out[0]=1; out[1]=0; out[2]=0;
     out[3]=0; out[4]=1; out[5]=0;

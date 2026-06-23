@@ -9,6 +9,7 @@
 
 // out = a × b  (2×3 matrix multiplication)
 void Xform_Mul     (float out[6], const float a[6], const float b[6]);
+void Xform_MulInv  (float out[6], const float a[6], const float b[6]); // out = a × b^(-1)
 void Xform_Identity(float out[6]);
 void Xform_SetTrans(float out[6], float tx, float ty);
 void Xform_SetRot  (float out[6], float angle);  // CCW radians

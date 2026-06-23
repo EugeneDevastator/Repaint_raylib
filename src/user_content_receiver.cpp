@@ -1,4 +1,5 @@
 #include "repaint.h"
+#include "compositor.h"
 #include "dialog.h"
 #include "replay_recorder.h"
 #include "platform_clipboard.h"
@@ -51,6 +52,7 @@ static void OnDropResult(DialogResult r) {
             int w = img.width, h = img.height;
 
             if (asNewDoc) {
+                Compositor_Shutdown(); Compositor_Init();
                 LayerStack_Shutdown();
                 LayerStack_Init();
                 s_state->doc = Doc_New(w, h);
@@ -108,6 +110,7 @@ static void OnPasteResult(DialogResult r) {
         int w = img.width, h = img.height;
 
         if (asNewDoc && s_state) {
+            Compositor_Shutdown(); Compositor_Init();
             LayerStack_Shutdown();
             LayerStack_Init();
             s_state->doc = Doc_New(w, h);

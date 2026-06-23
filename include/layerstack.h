@@ -3,7 +3,7 @@
 
 // ── LayerStack — self-contained layer data source ───────────────────
 // Owns all layer images, props, GPU render targets, display textures,
-// compositing, and the layer-blend shader.
+// and the layer-blend shader.
 // No AppState dependency — everything is internal.
 
 #include "repaint.h"
@@ -45,33 +45,18 @@ int  LayerStack_FindLayerBySlot(TexSlotID slot);
 Image LayerStack_ReadFromGPU(int idx);
 void  LayerStack_UploadToGPU(int idx, Image img);
 
-// ── Compositing ─────────────────────────────────────────────────────
-// Legacy — renders into internal accumulators at SetRenderWindow resolution
-RenderTexture2D* LayerStack_Composite(void);
-Image LayerStack_CompositeWithDither(void);
-
-// Composite into a caller-owned RT at arbitrary resolution using a
-// view matrix in place of canvasView (no window clipping).
-void LayerStack_CompositeViewInto(RenderTexture2D dst, const float viewMat[6], int w, int h);
-
 // Scene bounds — computes the bounding rectangle (in document-space units)
 // of all visible layers. Returns false if no visible layers.
 bool LayerStack_GetSceneBounds(Rectangle* out);
 
-// ── Bake a single layer's transformed content into a caller-owned RT ──
+// Bake a single layer's transformed content into a caller-owned RT
 void LayerStack_BakeSingleLayer(int idx, RenderTexture2D dst);
 
-// ── Canvas-window commit: pre-multiply canvasView into every layer's
-//     transform (non-destructive — image data is untouched). ──
+// Canvas-window commit: pre-multiply canvasView into every layer's
+// transform (non-destructive — image data is untouched).
 void LayerStack_BakeCanvasWindow(const Document* doc);
 
-// ── For viewport/renderer access ─────────────────────────────────────
+// For viewport/renderer access
 const float* LayerStack_GetCanvasView(void);
-bool   LayerStack_PresentInited(void);
-Shader LayerStack_GetPresentShader(void);
-void   LayerStack_SetPresentTexSize(int w, int h);
-void   LayerStack_SetPresentDither(bool on);
-Texture2D LayerStack_GetCheckerTex(void);
-void   LayerStack_SetDirty(void);
 
 #endif

@@ -1,4 +1,6 @@
 #include "repaint.h"
+#include "compositor.h"
+#include "render_utils.h"
 #include "layerstack.h"
 #include "imgui.h"
 #include "network_broker.h"

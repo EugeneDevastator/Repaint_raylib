@@ -1,5 +1,7 @@
 #include "undo.h"
 #include "repaint.h"
+#include "compositor.h"
+#include "render_utils.h"
 #include "layerstack.h"
 #include "texture_manager.h"
 #include "rlgl.h"
@@ -84,7 +86,7 @@ bool UndoManager::Undo(AppState* state, TexSlotID slot) {
     CopyRT(srcRT, undo.snapshot, w, h);
     st.pop_back();
 
-    if (slot.bucket == TM_BUCKET_LAYER) LayerStack_SetDirty();
+    if (slot.bucket == TM_BUCKET_LAYER) Compositor_SetDirty();
     layersDirty = true;
     return true;
 }
@@ -127,7 +129,7 @@ bool UndoManager::Redo(AppState* state, TexSlotID slot) {
     CopyRT(srcRT, redo.snapshot, w, h);
     st.pop_back();
 
-    if (slot.bucket == TM_BUCKET_LAYER) LayerStack_SetDirty();
+    if (slot.bucket == TM_BUCKET_LAYER) Compositor_SetDirty();
     layersDirty = true;
     return true;
 }

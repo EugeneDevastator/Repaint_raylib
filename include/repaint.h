@@ -289,9 +289,6 @@ void XORgizmo_HandleInput(AppState* state);
 void Viewport_DrawDebugOverlays(Viewport* vp, AppState* state);
 
 extern bool layersDirty;
-void LayerStack_SetDirty(void);
-bool LayerStack_PresentInited(void);
-Shader LayerStack_GetPresentShader(void);
 
 void ViewportHUD_Draw(AppState* state);
 void ViewportHUD_Shutdown(void);

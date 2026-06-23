@@ -1,10 +1,8 @@
 #include "texture_manager.h"
+#include "render_utils.h"
 #include "raylib.h"
 #include <stdio.h>
 #include <string.h>
-
-// Load16BitRT is defined in layerstack.cpp — forward-declared here.
-RenderTexture2D Load16BitRT(int width, int height);
 
 static struct {
     TexSlot slots[TM_BUCKETS][TM_SLOTS_PER_BUCKET];

@@ -13,6 +13,7 @@
 #include "test_broker.h"
 #include "ui_leftpanel.h"
 #include "ui_texpanel.h"
+#include "compositor.h"
 #include "layerstack.h"
 #include "undo.h"
 #include "replay_recorder.h"
@@ -318,7 +319,7 @@ static void _updateWorkingDir(const char* path) {
 
 static void OnOpenResult(DialogResult r) {
     if (r.wasClosed && r.success && r.output[0]) {
-        LayerStack_Shutdown(); LayerStack_Init();
+        Compositor_Shutdown(); Compositor_Init(); LayerStack_Shutdown(); LayerStack_Init();
         if (LoadRePaint(r.output, &g_state->doc, g_state)) {
             int len = (int)strlen(r.output);
             if (len < (int)sizeof(g_currentFilePath) - 1)
@@ -402,7 +403,7 @@ void app_new_document(int w, int h, Color fill) {
 }
 
 static void DoCreateNew(void) {
-    LayerStack_Shutdown(); LayerStack_Init();
+    Compositor_Shutdown(); Compositor_Init(); LayerStack_Shutdown(); LayerStack_Init();
     app_new_document(g_newW, g_newH, WHITE);
     layersDirty = true;
     g_newCanvasActive = false;
@@ -449,7 +450,7 @@ void App_FileReload(void) {
     snprintf(backupPath, sizeof(backupPath), "%s/%s_backup_%08x%s",
              dir, fname, (hash / 65536) % 0xFFFFFFFFu, ".re.png");
     SaveRePaint(backupPath, &g_state->doc, g_state);
-    LayerStack_Shutdown(); LayerStack_Init();
+    Compositor_Shutdown(); Compositor_Init(); LayerStack_Shutdown(); LayerStack_Init();
     if (LoadRePaint(g_currentFilePath, &g_state->doc, g_state)) {
         g_state->activeLayer = 0;
         SyncCanvasFromDoc(&g_state->doc, NULL, NULL);
@@ -545,6 +546,7 @@ void App_Init(AppState* state) {
     Changelog_Init();
     DrawSplash("Creating canvas...");
 
+    Compositor_Init();
     LayerStack_Init();
     app_new_document(1024, 768, WHITE);
 
@@ -896,6 +898,7 @@ void App_Close(AppState* state) {
     networkBroker.SaveConfig();
     networkBroker.Disconnect();
     LayerStack_Shutdown();
+    Compositor_Shutdown();
 
     LeftPanel_Shutdown();
     UnloadViewportRenderer();

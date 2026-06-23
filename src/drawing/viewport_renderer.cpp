@@ -1,13 +1,12 @@
 #include "repaint.h"
+#include "compositor.h"
 #include "layerstack.h"
 #include "rlgl.h"
 
-bool layersDirty = true;
-
-RenderTexture2D* DocBlender_Composite(AppState* state) { (void)state; return LayerStack_Composite(); }
-void ReloadViewportShader(void) { LayerStack_ReloadShader(); }
+RenderTexture2D* DocBlender_Composite(AppState* state) { (void)state; return Compositor_Composite(); }
+void ReloadViewportShader(void) { Compositor_ReloadShader(); }
 void MergeDownLayer(AppState* state, int idx) { (void)state; LayerStack_MergeDown(idx); }
-bool GetPresentInited(void) { return LayerStack_PresentInited(); }
-Shader GetPresentShader(void) { return LayerStack_GetPresentShader(); }
-Image CompositeLayersWithDither(AppState* state) { (void)state; return LayerStack_CompositeWithDither(); }
-void UnloadViewportRenderer(void) { LayerStack_Shutdown(); }
+bool GetPresentInited(void) { return Compositor_PresentInited(); }
+Shader GetPresentShader(void) { return Compositor_GetPresentShader(); }
+Image CompositeLayersWithDither(AppState* state) { (void)state; return Compositor_CompositeWithDither(); }
+void UnloadViewportRenderer(void) { LayerStack_Shutdown(); Compositor_Shutdown(); }

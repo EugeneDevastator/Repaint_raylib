@@ -1,4 +1,6 @@
 #include "repaint.h"
+#include "compositor.h"
+#include "render_utils.h"
 #include "rlgl.h"
 #include "stroke_engine.h"
 #include <math.h>
@@ -6,7 +8,6 @@
 #define PREVIEW_SZ 512
 
 extern Viewport viewport;
-extern bool layersDirty;
 extern bool g_seamlessPreview;
 
 static RenderTexture2D g_previewRT = {0};   // brush preview (strokes on transparent bg)
@@ -103,8 +104,8 @@ void ViewportHUD_Draw(AppState* state) {
                     -state->camera.target.x * state->camera.zoom + vOffX, 0,
                     state->camera.zoom,
                     -state->camera.target.y * state->camera.zoom + vOffY};
-                LayerStack_CompositeViewInto(g_viewResRT, vMat, vpW, vpH);
-                if (usePresent) { BeginShaderMode(GetPresentShader()); LayerStack_SetPresentTexSize(vpW, vpH); LayerStack_SetPresentDither(true); }
+                Compositor_CompositeViewInto(g_viewResRT, vMat, vpW, vpH);
+                if (usePresent) { BeginShaderMode(GetPresentShader()); Compositor_SetPresentTexSize(vpW, vpH); Compositor_SetPresentDither(true); }
                 DrawTextureRec(g_viewResRT.texture,
                     Rectangle{0, 0, (float)vpW, (float)-vpH},
                     Vector2{vpBounds.x, vpBounds.y}, WHITE);
@@ -128,7 +129,7 @@ void ViewportHUD_Draw(AppState* state) {
 
             if (g_seamlessPreview) {
                 SetTextureWrap(docBlendTex->texture, TEXTURE_WRAP_REPEAT);
-                if (usePresent) { BeginShaderMode(GetPresentShader()); LayerStack_SetPresentTexSize((int)texW, (int)texH); LayerStack_SetPresentDither(true); }
+                if (usePresent) { BeginShaderMode(GetPresentShader()); Compositor_SetPresentTexSize((int)texW, (int)texH); Compositor_SetPresentDither(true); }
                 for (int dy = -1; dy <= 1; dy++)
                     for (int dx = -1; dx <= 1; dx++)
                         DrawTexturePro(docBlendTex->texture, srcRect,
@@ -136,7 +137,7 @@ void ViewportHUD_Draw(AppState* state) {
                             Vector2{0, 0}, 0.0f, WHITE);
                 if (usePresent) EndShaderMode();
             } else {
-                if (usePresent) { BeginShaderMode(GetPresentShader()); LayerStack_SetPresentTexSize((int)texW, (int)texH); LayerStack_SetPresentDither(true); }
+                if (usePresent) { BeginShaderMode(GetPresentShader()); Compositor_SetPresentTexSize((int)texW, (int)texH); Compositor_SetPresentDither(true); }
                 DrawTexturePro(docBlendTex->texture, srcRect, dstRect, Vector2{0, 0}, 0.0f, WHITE);
                 if (usePresent) EndShaderMode();
             }
