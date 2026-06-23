@@ -128,21 +128,7 @@ Image ViewportManager_CompositeWithDither(void) {
 
 void ViewportManager_CompositeViewInto(RenderTexture2D dst, const RectXform* viewXform, int w, int h) {
     if(w<1||h<1||dst.id==0) return;
-    int cw=CW(), ch=CH();
-    Texture2D ck = Compositor_GetCheckerTex();
-    RenderTexture2D tmp=Load16BitRT(w,h);
-
-    // Seed checker at canvas position transformed by viewXform
-    BeginTextureMode(dst); ClearBackground(BLANK);
-    if(ck.id>0 && cw>0 && ch>0){
-        rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE,RL_ZERO,RL_FUNC_ADD);
-        float vm[6]; memcpy(vm, viewXform->mat, sizeof(vm));
-        float m[16]={vm[0],vm[3],0,0, vm[1],vm[4],0,0, 0,0,1,0, vm[2],vm[5],0,1};
-        rlPushMatrix(); rlMultMatrixf(m);
-        DrawTextureRec(ck,FullRect(cw,ch),Vector2{0,0},WHITE);
-        rlPopMatrix(); rlSetBlendMode(RL_BLEND_ALPHA);
-    }
-    EndTextureMode();
+    BeginTextureMode(dst); ClearBackground(BLANK); EndTextureMode();
 
     int count = LayerStack_Count();
     for(int i=0;i<count;i++){
@@ -157,7 +143,6 @@ void ViewportManager_CompositeViewInto(RenderTexture2D dst, const RectXform* vie
         Compositor_BlitLayerOnto(rt.texture, &p->xform, &bp, viewXform,
             dst, Rectangle{0,0,(float)w,(float)h});
     }
-    UnloadRenderTexture(tmp);
     rlSetBlendMode(RL_BLEND_ALPHA);
 }
 

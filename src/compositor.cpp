@@ -76,7 +76,7 @@ static void EnsureChecker(int w, int h) {
 
 // ── Temp rectification RT ────────────────────────────────────────────
 static RenderTexture2D GetTransRT(int needW, int needH) {
-    if(CS.transInited&&CS.transW>=needW&&CS.transH>=needH)
+    if(CS.transInited&&CS.transW==needW&&CS.transH==needH)
         return CS.layerTransRT;
     if(CS.transInited){ UnloadRenderTexture(CS.layerTransRT); CS.transInited=false; }
     CS.layerTransRT=Load16BitRT(needW,needH);
