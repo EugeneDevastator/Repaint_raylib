@@ -32,6 +32,8 @@ static bool            g_processing = false;
 static std::thread*    g_workThread = nullptr;
 static std::atomic<bool>  g_threadDone{false};
 static std::atomic<bool>  g_threadSuccess{false};
+static std::atomic<bool> g_progressUpdated{false};
+static char               g_progressMsg[256] = "";
 static uint8_t*        g_threadAlphaPng  = nullptr;
 static size_t          g_threadAlphaSize = 0;
 static Image           g_sourceRGB       = {0};
@@ -43,10 +45,17 @@ struct MatteWork {
     uint8_t* triPng; size_t triSize;
 };
 
+static void MatteProgressCb(const char* msg) {
+    strncpy(g_progressMsg, msg, sizeof(g_progressMsg) - 1);
+    g_progressMsg[sizeof(g_progressMsg) - 1] = '\0';
+    g_progressUpdated.store(true, std::memory_order_release);
+}
+
 static void MatteWorker(MatteWork work) {
     uint8_t* outPng = nullptr;
     size_t outSize = 0;
-    int ret = matte_request(work.rgbPng, work.rgbSize, work.triPng, work.triSize, &outPng, &outSize);
+    int ret = matte_request(work.rgbPng, work.rgbSize, work.triPng, work.triSize,
+                            &outPng, &outSize, MatteProgressCb);
     if (ret == 0) {
         g_threadAlphaPng  = outPng;
         g_threadAlphaSize = outSize;
@@ -55,6 +64,14 @@ static void MatteWorker(MatteWork work) {
     g_threadDone    = true;
     MemFree(work.rgbPng);
     MemFree(work.triPng);
+}
+
+// Poll progress from worker thread and update status text.
+static void PollProgress(void) {
+    if (g_progressUpdated.load(std::memory_order_acquire)) {
+        strncpy(g_statusText, g_progressMsg, sizeof(g_statusText) - 1);
+        g_progressUpdated.store(false, std::memory_order_relaxed);
+    }
 }
 
 // Frees thread handle + alpha PNG, but preserves g_sourceRGB for Accept.
@@ -209,6 +226,7 @@ bool NNHudModule::HandleInput(InputState& input, const DrawRect& rect) {
 
 void NNHudModule::DrawGL(const DrawRect& rect) {
     if (g_activeHud != HUD_NN) return;
+    PollProgress();
     if (g_threadDone) ProcessThreadResult();
 
     int count = LayerStack_Count();
@@ -265,6 +283,7 @@ void NNHudModule::DrawGL(const DrawRect& rect) {
 
 void NNHudModule::DrawGUI(const DrawRect& rect) {
     if (g_activeHud != HUD_NN) return;
+    PollProgress();
     if (g_threadDone) ProcessThreadResult();
 
     int count = LayerStack_Count();

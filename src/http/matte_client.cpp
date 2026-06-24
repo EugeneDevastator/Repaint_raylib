@@ -21,7 +21,8 @@ static uint32_t read32be(const uint8_t* buf) {
 int matte_request(
     const uint8_t* rgb_png,  size_t rgb_size,
     const uint8_t* tri_png,  size_t tri_size,
-    uint8_t** out_png, size_t* out_size)
+    uint8_t** out_png, size_t* out_size,
+    MatteProgressFn progress_fn)
 {
     if (!rgb_png || rgb_size == 0 || !tri_png || tri_size == 0)
         return -1;
@@ -31,8 +32,6 @@ int matte_request(
 
     int ok = -1;
     uint8_t hdr[4];
-    uint32_t resp_size = 0;
-    uint8_t* resp = NULL;
 
     // Send RGB size + data
     write32be(hdr, (uint32_t)rgb_size);
@@ -44,19 +43,34 @@ int matte_request(
     if (!sock_send_all(s, hdr, 4)) goto cleanup;
     if (!sock_send_all(s, tri_png, tri_size)) goto cleanup;
 
-    // Receive response size
-    if (!sock_recv_all(s, hdr, 4)) goto cleanup;
-    resp_size = read32be(hdr);
-    if (resp_size == 0) goto cleanup;
+    // Receive loop: type byte + 4B length + data
+    while (1) {
+        uint8_t type;
+        if (!sock_recv_all(s, &type, 1)) goto cleanup;
 
-    // Receive response data
-    resp = (uint8_t*)malloc(resp_size);
-    if (!resp) goto cleanup;
-    if (!sock_recv_all(s, resp, resp_size)) { free(resp); resp = NULL; goto cleanup; }
+        if (!sock_recv_all(s, hdr, 4)) goto cleanup;
+        uint32_t len = read32be(hdr);
+        if (len == 0) goto cleanup;
 
-    *out_png  = resp;
-    *out_size = resp_size;
-    ok = 0;
+        if (type == 'P') {
+            char* msg = (char*)malloc(len + 1);
+            if (!msg) goto cleanup;
+            if (!sock_recv_all(s, (uint8_t*)msg, len)) { free(msg); goto cleanup; }
+            msg[len] = '\0';
+            if (progress_fn) progress_fn(msg);
+            free(msg);
+        } else if (type == 'R') {
+            uint8_t* resp = (uint8_t*)malloc(len);
+            if (!resp) goto cleanup;
+            if (!sock_recv_all(s, resp, len)) { free(resp); goto cleanup; }
+            *out_png  = resp;
+            *out_size = len;
+            ok = 0;
+            break;
+        } else {
+            goto cleanup;
+        }
+    }
 
 cleanup:
     sock_close(s);
