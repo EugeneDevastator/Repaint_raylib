@@ -33,13 +33,14 @@ jobs:
           pip freeze | grep -iv '^pip=\|^setuptools=\|^wheel=\|^-e ' > NNModelServer/requirements.txt
 
           # Download portable Python (python-build-standalone ~30MB)
-          curl -sL "https://github.com/astral-sh/python-build-standalone/releases/download/20250115/cpython-3.11.11-x86_64-unknown-linux-gnu-pgo+lto-full.tar.gz" -o python.tar.gz
+          curl -sL "https://github.com/astral-sh/python-build-standalone/releases/download/20250115/cpython-3.11.11+20250115-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz" -o python.tar.gz
           mkdir -p pyextract
           tar -xzf python.tar.gz -C pyextract
-          # The archive has a single top-level dir; rename it to python and zip
           cd pyextract
-          topdir="$(ls | head -1)"
+          topdir="$(ls -A | head -1)"
           mv "$topdir" python
+          # Bootstrap pip (install_only_stripped doesn't include pip)
+          python/bin/python3 -m ensurepip --upgrade 2>/dev/null || true
           zip -r ../python.zip python
           cd ..
           rm -rf pyextract python.tar.gz
@@ -93,12 +94,14 @@ jobs:
           pip freeze | grep -iv '^pip=\|^setuptools=\|^wheel=\|^-e ' > NNModelServer/requirements.txt
 
           # Download portable Python
-          curl -sL "https://github.com/astral-sh/python-build-standalone/releases/download/20250115/cpython-3.11.11-x86_64-pc-windows-msvc-pgo+lto-full.tar.gz" -o python.tar.gz
+          curl -sL "https://github.com/astral-sh/python-build-standalone/releases/download/20250115/cpython-3.11.11+20250115-x86_64-pc-windows-msvc-shared-install_only_stripped.tar.gz" -o python.tar.gz
           mkdir -p pyextract
           tar -xzf python.tar.gz -C pyextract
           cd pyextract
-          topdir="$(ls | head -1)"
+          topdir="$(ls -A | head -1)"
           mv "$topdir" python
+          # Bootstrap pip
+          python/python.exe -m ensurepip --upgrade 2>/dev/null || true
           zip -r ../python.zip python
           cd ..
           rm -rf pyextract python.tar.gz
@@ -160,12 +163,14 @@ jobs:
             TRIPLE="x86_64-apple-darwin"
           fi
 
-          curl -sL "https://github.com/astral-sh/python-build-standalone/releases/download/20250115/cpython-3.11.11-${TRIPLE}-pgo+lto-full.tar.gz" -o python.tar.gz
+          curl -sL "https://github.com/astral-sh/python-build-standalone/releases/download/20250115/cpython-3.11.11+20250115-${TRIPLE}-install_only_stripped.tar.gz" -o python.tar.gz
           mkdir -p pyextract
           tar -xzf python.tar.gz -C pyextract
           cd pyextract
-          topdir="$(ls | head -1)"
+          topdir="$(ls -A | head -1)"
           mv "$topdir" python
+          # Bootstrap pip
+          python/bin/python3 -m ensurepip --upgrade 2>/dev/null || true
           zip -r ../python.zip python
           cd ..
           rm -rf pyextract python.tar.gz
