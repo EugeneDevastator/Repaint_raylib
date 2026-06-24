@@ -1,0 +1,20 @@
+=== Batch 3 Changelog ===
+
+1. Refactored SizeMul to be applied directly in UpdateUI
+   - SizeMul is now applied to rad_out and rad_in in app.cpp UpdateUI
+   - Removed separate SizeMul application from all stroke engine paths (viewport.cpp)
+   - Brush state now always contains final computed sizes
+   - Only 3 params control brush overall size: radOut, radIn (as ratio), SizeMul
+
+2. Removed redundant scale field from brush structs
+   - Removed 'scale' from d_RealBrush and d_PackedBrush
+   - Updated pack/unpack functions in repaint_core.cpp
+   - Updated Stroke_BlendBrushes and Stroke_UnpackSection in stroke.cpp
+   - SizeMul BParam is now the only size multiplier
+
+3. Fixed stroke preview to update every 10 frames
+   - Preview now updates every 10 frames regardless of param changes
+   - Also updates immediately when any brush parameter changes (hash-based detection)
+   - Uses same per-dab jitter logic as the real stroke engine (size, hardness, opacity, SizeMul)
+   - Applies scatter perpendicular to stroke direction
+   - Segment draws diagonally to upper right corner

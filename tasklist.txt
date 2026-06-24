@@ -1,0 +1,14 @@
+=== batch bugfix ===
+. double chekc what happens with brush when radius is 1 or less -it still draws with 2pixel diameter, but we should end up with 1 px diameter, then fade opacity if brush is even smaller.
+.better interpolation - add spline interpolation to segments, that can be defined few parameters that will be fed into segment engine. This means we cant show stroke right away and need few segments - thats ok. for the brush preview - use some parameters for smooth curved segment.
+. add few configuration tresholds (as consts for now) that will define
+- when angle is considered hard and should break segment smoothing
+- add toggle on the left panel to toggle stroke smoothing
+
+
+=== tablet batch ===
+. implement tablet - wintab for windows, libinput on linux. Windows: GetPointerPenInfo (zero deps, built into OS). 
+. implement pressure tablet mode for sliders - port and update parameter application architecture
+. make it so that tablet implementation never touches raylib - check how network is decoupled and do it same way.
+
+. ===

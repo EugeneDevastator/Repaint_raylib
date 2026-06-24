@@ -1,0 +1,11 @@
+read progess like this:
+
+loop:
+    read 1 byte → type
+    if type == 'P':
+        read 4-byte length → n
+        read n bytes → show progress string
+    if type == 'R':
+        read 4-byte length → n
+        read n bytes → that's your PNG result
+        break

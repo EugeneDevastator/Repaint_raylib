@@ -1,0 +1,13 @@
+build/*
+build
+build_cmake
+build_cmake/*
+__pycache__
+__pycache__/*
+/.idea
+/.idea/*
+/cmake-build-debug
+/cmake-build-debug/*
+/LCM/.thumb_cache
+/LCM/.thumb_cache/*
+/NNModelServer/models
