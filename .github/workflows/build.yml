@@ -1,14 +1,77 @@
-name: Build NNServer
+name: Build & Release
 
 on:
   push:
     branches: ["**"]
-    paths:
-      - 'NNModelServer/**'
-      - '.github/workflows/build-nnserver.yml'
 
 jobs:
-  build-nnserver-linux:
+  app-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libx11-dev libxrandr-dev libxinerama-dev \
+            libxcursor-dev libxi-dev libgl1-mesa-dev
+
+      - name: Configure
+        run: cmake --preset linux-release
+
+      - name: Build
+        run: cmake --build build/linux-release --parallel
+
+      - name: Package
+        run: |
+          mkdir -p dist/repaint-linux
+          cp build/linux-release/bin/repaint dist/repaint-linux/
+          cp -r shaders dist/repaint-linux/ 2>/dev/null || true
+          cp -r resources dist/repaint-linux/ 2>/dev/null || true
+          zip -r repaint-linux.zip dist/repaint-linux
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-linux
+          path: repaint-linux.zip
+
+  app-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-make zip
+
+      - name: Configure
+        shell: msys2 {0}
+        run: cmake --preset win64-release -DCMAKE_MAKE_PROGRAM=mingw32-make
+
+      - name: Build
+        shell: msys2 {0}
+        run: cmake --build build/win64-release --parallel
+
+      - name: Package
+        shell: msys2 {0}
+        run: |
+          mkdir -p dist/repaint-windows
+          cp build/win64-release/bin/repaint.exe dist/repaint-windows/
+          cp "$MINGW_PREFIX/bin/libwinpthread-1.dll"  dist/repaint-windows/
+          cp "$MINGW_PREFIX/bin/libgcc_s_seh-1.dll"   dist/repaint-windows/
+          cp "$MINGW_PREFIX/bin/libstdc++-6.dll"       dist/repaint-windows/
+          cp -r shaders   dist/repaint-windows/ 2>/dev/null || true
+          cp -r resources dist/repaint-windows/ 2>/dev/null || true
+          cd dist && zip -r ../repaint-windows.zip repaint-windows
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-windows
+          path: repaint-windows.zip
+
+  nnserver-linux:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,12 +82,9 @@ jobs:
       - name: Build
         run: |
           set -ex
-
-          # Pin exact dependency versions
           pip install numpy Pillow torch transformers
           pip freeze | grep -iv '^pip=\|^setuptools=\|^wheel=\|^-e ' > NNModelServer/requirements.txt
 
-          # Download portable Python
           curl -sL "https://github.com/astral-sh/python-build-standalone/releases/download/20250115/cpython-3.11.11+20250115-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz" -o python.tar.gz
           mkdir -p pyextract
           tar -xzf python.tar.gz -C pyextract
@@ -58,7 +118,7 @@ jobs:
           name: nnserver-linux
           path: nnserver-linux.zip
 
-  build-nnserver-windows:
+  nnserver-windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -70,7 +130,6 @@ jobs:
         shell: bash
         run: |
           set -ex
-
           pip install numpy Pillow torch transformers
           pip freeze | grep -iv '^pip=\|^setuptools=\|^wheel=\|^-e ' > NNModelServer/requirements.txt
 
@@ -109,7 +168,7 @@ jobs:
           name: nnserver-windows
           path: nnserver-windows.zip
 
-  build-nnserver-mac:
+  nnserver-mac:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -120,7 +179,6 @@ jobs:
       - name: Build
         run: |
           set -ex
-
           pip install numpy Pillow torch transformers
           pip freeze | grep -iv '^pip=\|^setuptools=\|^wheel=\|^-e ' > NNModelServer/requirements.txt
 
@@ -163,3 +221,58 @@ jobs:
         with:
           name: nnserver-mac
           path: nnserver-mac.zip
+
+  bundle:
+    needs:
+      - app-linux
+      - app-windows
+      - nnserver-linux
+      - nnserver-windows
+      - nnserver-mac
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: _dl
+
+      - name: Bundle linux
+        run: |
+          mkdir -p _out/repaint-linux
+          unzip _dl/app-linux/repaint-linux.zip -d _tmp/al
+          cp -r _tmp/al/dist/repaint-linux/* _out/repaint-linux/
+          unzip _dl/nnserver-linux/nnserver-linux.zip -d _tmp/nl
+          mkdir -p _out/repaint-linux/NNServer
+          cp -r _tmp/nl/dist-server/* _out/repaint-linux/NNServer/
+          cd _out && zip -r ../repaint-linux-full.zip repaint-linux
+
+      - name: Bundle windows
+        run: |
+          mkdir -p _out/repaint-windows
+          unzip _dl/app-windows/repaint-windows.zip -d _tmp/aw
+          cp -r _tmp/aw/dist/repaint-windows/* _out/repaint-windows/
+          unzip _dl/nnserver-windows/nnserver-windows.zip -d _tmp/nw
+          mkdir -p _out/repaint-windows/NNServer
+          cp -r _tmp/nw/dist-server/* _out/repaint-windows/NNServer/
+          cd _out && zip -r ../repaint-windows-full.zip repaint-windows
+
+      - name: Bundle mac
+        run: |
+          mkdir -p _out/repaint-mac
+          unzip _dl/nnserver-mac/nnserver-mac.zip -d _tmp/nm
+          mkdir -p _out/repaint-mac/NNServer
+          cp -r _tmp/nm/dist-server/* _out/repaint-mac/NNServer/
+          cd _out && zip -r ../repaint-mac-full.zip repaint-mac
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Latest Build
+          prerelease: true
+          files: |
+            repaint-linux-full.zip
+            repaint-windows-full.zip
+            repaint-mac-full.zip
