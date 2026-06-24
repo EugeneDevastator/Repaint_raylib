@@ -16,24 +16,51 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Cache nnserver binary
-        id: cache-nnserver
+      - name: Cache nnserver bootstrap
+        id: cache
         uses: actions/cache@v4
         with:
           path: dist-server
           key: nnserver-linux-${{ hashFiles('NNModelServer/**') }}
 
       - name: Build
-        if: steps.cache-nnserver.outputs.cache-hit != 'true'
+        if: steps.cache.outputs.cache-hit != 'true'
         run: |
-          pip install pyinstaller numpy Pillow torch transformers
-          pyinstaller --onefile NNModelServer/nnserver.py --name nnserver
+          set -ex
+
+          # Pin exact dependency versions
+          pip install numpy Pillow torch transformers
+          pip freeze | grep -iv '^pip=\|^setuptools=\|^wheel=\|^-e ' > NNModelServer/requirements.txt
+
+          # Download portable Python (python-build-standalone ~30MB)
+          curl -sL "https://github.com/astral-sh/python-build-standalone/releases/download/20250115/cpython-3.11.11-x86_64-unknown-linux-gnu-pgo+lto-full.tar.gz" -o python.tar.gz
+          mkdir -p pyextract
+          tar -xzf python.tar.gz -C pyextract
+          # The archive has a single top-level dir; rename it to python and zip
+          cd pyextract
+          topdir="$(ls | head -1)"
+          mv "$topdir" python
+          zip -r ../python.zip python
+          cd ..
+          rm -rf pyextract python.tar.gz
+
+          # Build bootstrap (stdlib only — numpy/torch etc excluded)
+          pip install pyinstaller
+          pyinstaller --onefile NNModelServer/nnserver_bootstrap.py --name nnserver \
+            --add-data python.zip:. \
+            --add-data NNModelServer/nnserver_core.py:. \
+            --add-data NNModelServer/requirements.txt:. \
+            --exclude-module numpy --exclude-module PIL --exclude-module torch \
+            --exclude-module transformers --exclude-module huggingface_hub \
+            --exclude-module matplotlib --exclude-module scipy --exclude-module sympy \
+            --exclude-module pandas --exclude-module tkinter
+          rm -rf python.zip
+
           mkdir -p dist-server
           cp dist/nnserver dist-server/
 
       - name: Package
-        run: |
-          zip -r nnserver-linux.zip dist-server
+        run: zip -r nnserver-linux.zip dist-server
 
       - uses: actions/upload-artifact@v4
         with:
@@ -48,20 +75,48 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Cache nnserver binary
-        id: cache-nnserver
+      - name: Cache nnserver bootstrap
+        id: cache
         uses: actions/cache@v4
         with:
           path: dist-server
           key: nnserver-windows-${{ hashFiles('NNModelServer/**') }}
 
       - name: Build
-        if: steps.cache-nnserver.outputs.cache-hit != 'true'
+        if: steps.cache.outputs.cache-hit != 'true'
+        shell: bash
         run: |
-          pip install pyinstaller numpy Pillow torch transformers
-          pyinstaller --onefile NNModelServer/nnserver.py --name nnserver
-          mkdir dist-server
-          copy dist\nnserver.exe dist-server\
+          set -ex
+
+          # Pin exact dependency versions
+          pip install numpy Pillow torch transformers
+          pip freeze | grep -iv '^pip=\|^setuptools=\|^wheel=\|^-e ' > NNModelServer/requirements.txt
+
+          # Download portable Python
+          curl -sL "https://github.com/astral-sh/python-build-standalone/releases/download/20250115/cpython-3.11.11-x86_64-pc-windows-msvc-pgo+lto-full.tar.gz" -o python.tar.gz
+          mkdir -p pyextract
+          tar -xzf python.tar.gz -C pyextract
+          cd pyextract
+          topdir="$(ls | head -1)"
+          mv "$topdir" python
+          zip -r ../python.zip python
+          cd ..
+          rm -rf pyextract python.tar.gz
+
+          # Build bootstrap
+          pip install pyinstaller
+          pyinstaller --onefile NNModelServer/nnserver_bootstrap.py --name nnserver \
+            --add-data python.zip:. \
+            --add-data NNModelServer/nnserver_core.py:. \
+            --add-data NNModelServer/requirements.txt:. \
+            --exclude-module numpy --exclude-module PIL --exclude-module torch \
+            --exclude-module transformers --exclude-module huggingface_hub \
+            --exclude-module matplotlib --exclude-module scipy --exclude-module sympy \
+            --exclude-module pandas --exclude-module tkinter
+          rm -rf python.zip
+
+          mkdir -p dist-server
+          cp dist/nnserver.exe dist-server/
 
       - name: Package
         shell: powershell
@@ -81,24 +136,56 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Cache nnserver binary
-        id: cache-nnserver
+      - name: Cache nnserver bootstrap
+        id: cache
         uses: actions/cache@v4
         with:
           path: dist-server
           key: nnserver-mac-${{ hashFiles('NNModelServer/**') }}
 
       - name: Build
-        if: steps.cache-nnserver.outputs.cache-hit != 'true'
+        if: steps.cache.outputs.cache-hit != 'true'
         run: |
-          pip install pyinstaller numpy Pillow torch transformers
-          pyinstaller --onefile NNModelServer/nnserver.py --name nnserver
+          set -ex
+
+          # Pin exact dependency versions
+          pip install numpy Pillow torch transformers
+          pip freeze | grep -iv '^pip=\|^setuptools=\|^wheel=\|^-e ' > NNModelServer/requirements.txt
+
+          # Detect arch for the right Python build
+          ARCH=$(uname -m)
+          if [ "$ARCH" = "arm64" ]; then
+            TRIPLE="aarch64-apple-darwin"
+          else
+            TRIPLE="x86_64-apple-darwin"
+          fi
+
+          curl -sL "https://github.com/astral-sh/python-build-standalone/releases/download/20250115/cpython-3.11.11-${TRIPLE}-pgo+lto-full.tar.gz" -o python.tar.gz
+          mkdir -p pyextract
+          tar -xzf python.tar.gz -C pyextract
+          cd pyextract
+          topdir="$(ls | head -1)"
+          mv "$topdir" python
+          zip -r ../python.zip python
+          cd ..
+          rm -rf pyextract python.tar.gz
+
+          pip install pyinstaller
+          pyinstaller --onefile NNModelServer/nnserver_bootstrap.py --name nnserver \
+            --add-data python.zip:. \
+            --add-data NNModelServer/nnserver_core.py:. \
+            --add-data NNModelServer/requirements.txt:. \
+            --exclude-module numpy --exclude-module PIL --exclude-module torch \
+            --exclude-module transformers --exclude-module huggingface_hub \
+            --exclude-module matplotlib --exclude-module scipy --exclude-module sympy \
+            --exclude-module pandas --exclude-module tkinter
+          rm -rf python.zip
+
           mkdir -p dist-server
           cp dist/nnserver dist-server/
 
       - name: Package
-        run: |
-          zip -r nnserver-mac.zip dist-server
+        run: zip -r nnserver-mac.zip dist-server
 
       - uses: actions/upload-artifact@v4
         with:
