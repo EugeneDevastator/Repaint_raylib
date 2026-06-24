@@ -56,7 +56,7 @@ jobs:
       - name: Build
         if: needs.check-hash.outputs.cache-hit-linux != 'true'
         run: |
-          pip install pyinstaller fastapi uvicorn huggingface_hub
+          pip install pyinstaller numpy Pillow torch transformers
           pyinstaller --onefile NNModelServer/nnserver.py --name nnserver
           mkdir -p dist-server
           cp dist/nnserver dist-server/
@@ -101,7 +101,7 @@ jobs:
       - name: Build
         if: needs.check-hash.outputs.cache-hit-windows != 'true'
         run: |
-          pip install pyinstaller fastapi uvicorn huggingface_hub
+          pip install pyinstaller numpy Pillow torch transformers
           pyinstaller --onefile NNModelServer/nnserver.py --name nnserver
           mkdir dist-server
           copy dist\nnserver.exe dist-server\
@@ -147,7 +147,7 @@ jobs:
       - name: Build
         if: needs.check-hash.outputs.cache-hit-mac != 'true'
         run: |
-          pip install pyinstaller fastapi uvicorn huggingface_hub
+          pip install pyinstaller numpy Pillow torch transformers
           pyinstaller --onefile NNModelServer/nnserver.py --name nnserver
           mkdir -p dist-server
           cp dist/nnserver dist-server/

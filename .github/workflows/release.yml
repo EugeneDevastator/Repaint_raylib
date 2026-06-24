@@ -2,7 +2,7 @@ name: Release
 
 on:
   workflow_run:
-    workflows: ["Build App", "Build NNServer"]
+    workflows: ["Build NNServer"]
     branches: [main]
     types: [completed]
 
@@ -16,42 +16,42 @@ jobs:
     if: github.event.workflow_run.conclusion == 'success'
     steps:
       - name: Download artifacts from Build App
-        uses: dawidd6/action-download-artifact@v3
+        uses: dawidd6/action-download-artifact@v21
         with:
           workflow: build-app.yml
-          branch: main
+          commit: ${{ github.event.workflow_run.head_sha }}
           name: repaint-linux
           path: artifacts/
 
       - name: Download artifacts from Build App
-        uses: dawidd6/action-download-artifact@v3
+        uses: dawidd6/action-download-artifact@v21
         with:
           workflow: build-app.yml
-          branch: main
+          commit: ${{ github.event.workflow_run.head_sha }}
           name: repaint-windows
           path: artifacts/
 
       - name: Download artifacts from Build NNServer
-        uses: dawidd6/action-download-artifact@v3
+        uses: dawidd6/action-download-artifact@v21
         with:
           workflow: build-nnserver.yml
-          branch: main
+          commit: ${{ github.event.workflow_run.head_sha }}
           name: nnserver-linux
           path: artifacts/
 
       - name: Download artifacts from Build NNServer
-        uses: dawidd6/action-download-artifact@v3
+        uses: dawidd6/action-download-artifact@v21
         with:
           workflow: build-nnserver.yml
-          branch: main
+          commit: ${{ github.event.workflow_run.head_sha }}
           name: nnserver-windows
           path: artifacts/
 
       - name: Download artifacts from Build NNServer
-        uses: dawidd6/action-download-artifact@v3
+        uses: dawidd6/action-download-artifact@v21
         with:
           workflow: build-nnserver.yml
-          branch: main
+          commit: ${{ github.event.workflow_run.head_sha }}
           name: nnserver-mac
           path: artifacts/
 
