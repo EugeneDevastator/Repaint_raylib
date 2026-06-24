@@ -38,7 +38,7 @@ jobs:
           tar -xzf python.tar.gz -C pyextract
           cd pyextract
           topdir="$(ls -A | head -1)"
-          mv "$topdir" python
+          if [ "$topdir" != "python" ]; then mv "$topdir" python; fi
           # Bootstrap pip (install_only_stripped doesn't include pip)
           python/bin/python3 -m ensurepip --upgrade 2>/dev/null || true
           zip -r ../python.zip python
@@ -99,7 +99,7 @@ jobs:
           tar -xzf python.tar.gz -C pyextract
           cd pyextract
           topdir="$(ls -A | head -1)"
-          mv "$topdir" python
+          if [ "$topdir" != "python" ]; then mv "$topdir" python; fi
           # Bootstrap pip
           python/python.exe -m ensurepip --upgrade 2>/dev/null || true
           zip -r ../python.zip python
@@ -168,7 +168,7 @@ jobs:
           tar -xzf python.tar.gz -C pyextract
           cd pyextract
           topdir="$(ls -A | head -1)"
-          mv "$topdir" python
+          if [ "$topdir" != "python" ]; then mv "$topdir" python; fi
           # Bootstrap pip
           python/bin/python3 -m ensurepip --upgrade 2>/dev/null || true
           zip -r ../python.zip python
