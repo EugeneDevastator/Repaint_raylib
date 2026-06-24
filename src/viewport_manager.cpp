@@ -105,7 +105,7 @@ Image ViewportManager_CompositeWithDither(void) {
         bp.threshold=p->threshold; bp.feather=p->feather;
         bp.seamless=p->seamless;
         Compositor_BlitLayerOnto(rt.texture, &p->xform, &bp, &viewXform,
-            a, FullRect(cw,ch));
+            a, Rectangle{0,0,(float)cw,(float)ch});
     }
 
     // Apply dither via present shader
