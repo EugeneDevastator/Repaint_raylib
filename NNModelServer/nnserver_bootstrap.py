@@ -75,10 +75,14 @@ def main():
     bundle_dir = get_bundle_dir()
 
     python_exe = ensure_python(install_dir, bundle_dir)
+
+    # Copy files to install dir before ensure_deps needs them
+    ensure_file(install_dir, bundle_dir, "requirements.txt")
+    ensure_file(install_dir, bundle_dir, "nnserver_core.py")
+
     ensure_deps(install_dir, python_exe)
 
-    core_py = ensure_file(install_dir, bundle_dir, "nnserver_core.py")
-    ensure_file(install_dir, bundle_dir, "requirements.txt")
+    core_py = install_dir / "nnserver_core.py"
 
     env = os.environ.copy()
     env["PYTHONPATH"] = str(install_dir / "deps")
