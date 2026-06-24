@@ -67,14 +67,14 @@ jobs:
         run: |
           git config user.email "ci@ci" && git config user.name "CI"
           mkdir -p /tmp/nn-cache
-          cp nnserver-linux-${{ needs.check-hash.outputs.hash }}.zip /tmp/nn-cache/
+          mv nnserver-linux-${{ needs.check-hash.outputs.hash }}.zip /tmp/nn-cache/
           git fetch origin cache-artifacts 2>/dev/null || true
           git checkout origin/cache-artifacts 2>/dev/null || git checkout --orphan cache-artifacts
-          cp /tmp/nn-cache/nnserver-linux-${{ needs.check-hash.outputs.hash }}.zip .
+          mv /tmp/nn-cache/nnserver-linux-${{ needs.check-hash.outputs.hash }}.zip .
           rm -rf /tmp/nn-cache
           git add nnserver-linux-${{ needs.check-hash.outputs.hash }}.zip
           git commit -m "cache nnserver-linux ${{ needs.check-hash.outputs.hash }}"
-          git push origin HEAD:cache-artifacts
+          git push origin HEAD:cache-artifacts 2>/dev/null || git push origin HEAD:cache-artifacts --force
       - uses: actions/upload-artifact@v4
         with:
           name: nnserver-linux
@@ -113,14 +113,14 @@ jobs:
         run: |
           git config user.email "ci@ci" && git config user.name "CI"
           mkdir -p /tmp/nn-cache
-          cp nnserver-windows-${{ needs.check-hash.outputs.hash }}.zip /tmp/nn-cache/
+          mv nnserver-windows-${{ needs.check-hash.outputs.hash }}.zip /tmp/nn-cache/
           git fetch origin cache-artifacts 2>/dev/null || true
           git checkout origin/cache-artifacts 2>/dev/null || git checkout --orphan cache-artifacts
-          cp /tmp/nn-cache/nnserver-windows-${{ needs.check-hash.outputs.hash }}.zip .
+          mv /tmp/nn-cache/nnserver-windows-${{ needs.check-hash.outputs.hash }}.zip .
           rm -rf /tmp/nn-cache
           git add nnserver-windows-${{ needs.check-hash.outputs.hash }}.zip
           git commit -m "cache nnserver-windows ${{ needs.check-hash.outputs.hash }}"
-          git push origin HEAD:cache-artifacts
+          git push origin HEAD:cache-artifacts 2>/dev/null || git push origin HEAD:cache-artifacts --force
       - uses: actions/upload-artifact@v4
         with:
           name: nnserver-windows
@@ -158,14 +158,14 @@ jobs:
         run: |
           git config user.email "ci@ci" && git config user.name "CI"
           mkdir -p /tmp/nn-cache
-          cp nnserver-mac-${{ needs.check-hash.outputs.hash }}.zip /tmp/nn-cache/
+          mv nnserver-mac-${{ needs.check-hash.outputs.hash }}.zip /tmp/nn-cache/
           git fetch origin cache-artifacts 2>/dev/null || true
           git checkout origin/cache-artifacts 2>/dev/null || git checkout --orphan cache-artifacts
-          cp /tmp/nn-cache/nnserver-mac-${{ needs.check-hash.outputs.hash }}.zip .
+          mv /tmp/nn-cache/nnserver-mac-${{ needs.check-hash.outputs.hash }}.zip .
           rm -rf /tmp/nn-cache
           git add nnserver-mac-${{ needs.check-hash.outputs.hash }}.zip
           git commit -m "cache nnserver-mac ${{ needs.check-hash.outputs.hash }}"
-          git push origin HEAD:cache-artifacts
+          git push origin HEAD:cache-artifacts 2>/dev/null || git push origin HEAD:cache-artifacts --force
       - uses: actions/upload-artifact@v4
         with:
           name: nnserver-mac
