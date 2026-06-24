@@ -1,5 +1,6 @@
 #include "repaint.h"
 #include "layerstack.h"
+#include "viewport_manager.h"
 #include "matte_client.h"
 #include "render_utils.h"
 #include "rlgl.h"
@@ -34,6 +35,7 @@ static std::atomic<bool>  g_threadSuccess{false};
 static uint8_t*        g_threadAlphaPng  = nullptr;
 static size_t          g_threadAlphaSize = 0;
 static Image           g_sourceRGB       = {0};
+static int             g_srcLayerIdx     = -1;
 static char            g_statusText[256] = "";
 
 struct MatteWork {
@@ -53,6 +55,20 @@ static void MatteWorker(MatteWork work) {
     g_threadDone    = true;
     MemFree(work.rgbPng);
     MemFree(work.triPng);
+}
+
+// Frees thread handle + alpha PNG, but preserves g_sourceRGB for Accept.
+static void CleanupThreadOnly(void) {
+    if (g_workThread) {
+        if (!g_threadDone) g_workThread->detach();
+        else g_workThread->join();
+        delete g_workThread;
+        g_workThread = nullptr;
+    }
+    if (g_threadAlphaPng) { MemFree(g_threadAlphaPng); g_threadAlphaPng = nullptr; }
+    g_threadAlphaSize = 0;
+    g_threadDone      = false;
+    g_threadSuccess   = false;
 }
 
 static void CancelWorkThread(void) {
@@ -77,9 +93,11 @@ static void CancelWorkThread(void) {
 
 void NNHud_Shutdown(void) {
     CancelWorkThread();
+    if (g_sourceRGB.data) { UnloadImage(g_sourceRGB); g_sourceRGB = {0}; }
     if (g_resultRT.id > 0) { UnloadRenderTexture(g_resultRT); g_resultRT = {0}; }
     g_hasResult  = false;
     g_processing = false;
+    g_srcLayerIdx = -1;
 }
 
 static void ProcessThreadResult(void) {
@@ -167,7 +185,7 @@ static void ProcessThreadResult(void) {
 
     snprintf(g_statusText, sizeof(g_statusText), "Result ready");
     g_hasResult = true;
-    CancelWorkThread(); // frees thread + sourceRGB
+    CleanupThreadOnly(); // frees thread + alpha PNG, keeps g_sourceRGB
 }
 
 // ── Module ───────────────────────────────────────────────────────────
@@ -203,11 +221,12 @@ void NNHudModule::DrawGL(const DrawRect& rect) {
 
     // Layout: 3 squares side-by-side at top-center of viewport
     float pad = 10.0f;
-    float previewSz = 120.0f;
+    float previewSz = 240.0f;
     float spacing = 8.0f;
     float totalW = 3.0f * previewSz + 2.0f * spacing;
     float startX = rect.x + (rect.w - totalW) * 0.5f;
     float startY = rect.y + pad;
+    float labelH = 22.0f;
 
     struct Preview { Texture2D tex; int tw, th; const char* label; };
     Preview pre[3] = {
@@ -235,6 +254,12 @@ void NNHudModule::DrawGL(const DrawRect& rect) {
                 Rectangle{dx, dy, dw, dh},
                 Vector2{0,0}, 0.0f, WHITE);
         }
+        // Label below
+        int fontSize = 18;
+        const char* txt = pre[i].label;
+        int tw2 = MeasureText(txt, fontSize);
+        DrawText(txt, (int)(px + (previewSz - tw2) * 0.5f),
+                 (int)(startY + previewSz + 4), fontSize, WHITE);
     }
 }
 
@@ -244,15 +269,16 @@ void NNHudModule::DrawGUI(const DrawRect& rect) {
 
     int count = LayerStack_Count();
     bool canGetMask = (state->activeLayer >= 1 && !g_processing && count >= 2);
-    bool canAccept  = g_hasResult && g_resultRT.id > 0;
+    bool canAccept  = g_hasResult && g_resultRT.id > 0 && g_srcLayerIdx >= 0;
 
     // Position toolbar below the preview squares
     float pad = 10.0f;
-    float previewSz = 120.0f;
+    float previewSz = 240.0f;
     float spacing = 8.0f;
     float totalW = 3.0f * previewSz + 2.0f * spacing;
     float startX = rect.x + (rect.w - totalW) * 0.5f;
-    float btnY = rect.y + pad + previewSz + 6.0f;
+    float labelH = 22.0f;
+    float btnY = rect.y + pad + previewSz + labelH + 6.0f;
 
     ImGui::SetNextWindowPos(ImVec2(startX, btnY), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(totalW, 0), ImGuiCond_Always);
@@ -268,12 +294,14 @@ void NNHudModule::DrawGUI(const DrawRect& rect) {
 
     ImGui::BeginDisabled(!canGetMask);
     if (ImGui::Button("Get Mask", ImVec2(totalW * 0.45f, 28))) {
+        CancelWorkThread(); // cancel any previous in-flight work + free old sourceRGB
         g_processing = true;
         g_hasResult  = false;
         g_statusText[0] = '\0';
 
         int activeIdx = state->activeLayer;
         int belowIdx  = activeIdx - 1;
+        g_srcLayerIdx = belowIdx;
 
         // Capture source RGB on main thread (GPU read)
         g_sourceRGB = LoadImageFromTexture(LayerStack_GetRT(belowIdx).texture);
@@ -315,22 +343,11 @@ void NNHudModule::DrawGUI(const DrawRect& rect) {
 
     ImGui::BeginDisabled(!canAccept);
     if (ImGui::Button("Accept Result", ImVec2(totalW * 0.45f, 28))) {
-        int w = g_sourceRGB.width, h = g_sourceRGB.height;
-        int idx = LayerStack_Add(w, h);
-        if (idx >= 0) {
-            RenderTexture2D rt = LayerStack_GetRT(idx);
-            if (rt.id > 0) {
-                BeginTextureMode(rt);
-                ClearBackground(BLANK);
-                rlSetBlendMode(RL_BLEND_CUSTOM);
-                rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
-                DrawTextureRec(g_resultRT.texture,
-                    Rectangle{0,0,(float)w,(float)-h},
-                    Vector2{0,0}, WHITE);
-                rlSetBlendMode(RL_BLEND_ALPHA);
-                EndTextureMode();
-            }
-            state->activeLayer = idx;
+        int newIdx = ViewportManager_AcceptMatte(g_srcLayerIdx, g_sourceRGB);
+        g_sourceRGB = {0};
+        g_srcLayerIdx = -1;
+        if (newIdx >= 0) {
+            state->activeLayer = newIdx;
             layersDirty = true;
         }
     }
@@ -347,7 +364,8 @@ void NNHudModule::DrawGUI(const DrawRect& rect) {
 }
 
 void NNHudModule::OnExit(void) {
-    // Keep resultRT cached, but cancel any in-flight work
     CancelWorkThread();
+    if (g_sourceRGB.data) { UnloadImage(g_sourceRGB); g_sourceRGB = {0}; }
     g_processing = false;
+    g_srcLayerIdx = -1;
 }

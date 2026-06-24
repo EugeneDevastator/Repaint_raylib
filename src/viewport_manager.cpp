@@ -219,3 +219,13 @@ void ViewportManager_MergeDownSeamless(int idx) {
     }
     ViewportManager_SetDirty();
 }
+
+int ViewportManager_AcceptMatte(int srcIdx, Image matteImage) {
+    int n = LayerStack_Count();
+    if (srcIdx < 0 || srcIdx >= n || !matteImage.data) return -1;
+    LayerStack_DuplicateLayer(srcIdx);
+    int newIdx = srcIdx + 1;
+    LayerStack_UploadToGPU(newIdx, matteImage);
+    ViewportManager_SetDirty();
+    return newIdx;
+}
