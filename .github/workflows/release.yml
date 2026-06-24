@@ -1,0 +1,64 @@
+name: Release
+
+on:
+  workflow_run:
+    workflows: ["Build App", "Build NNServer"]
+    branches: [main]
+    types: [completed]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: Download artifacts from Build App
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          workflow: build-app.yml
+          branch: main
+          name: repaint-linux
+          path: artifacts/
+
+      - name: Download artifacts from Build App
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          workflow: build-app.yml
+          branch: main
+          name: repaint-windows
+          path: artifacts/
+
+      - name: Download artifacts from Build NNServer
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          workflow: build-nnserver.yml
+          branch: main
+          name: nnserver-linux
+          path: artifacts/
+
+      - name: Download artifacts from Build NNServer
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          workflow: build-nnserver.yml
+          branch: main
+          name: nnserver-windows
+          path: artifacts/
+
+      - name: Download artifacts from Build NNServer
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          workflow: build-nnserver.yml
+          branch: main
+          name: nnserver-mac
+          path: artifacts/
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Latest Build
+          prerelease: true
+          files: artifacts/**
