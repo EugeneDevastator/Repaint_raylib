@@ -33,11 +33,29 @@ def send_blob(sock, data):
     sock.sendall(struct.pack(">I", len(data)))
     sock.sendall(data)
 
-def run_matte(rgb_bytes, tri_bytes):
+def send_progress(sock, message: str):
+    """Send a progress string. Type byte 'P' + length-prefixed UTF-8 string."""
+    data = message.encode("utf-8")
+    sock.sendall(b'P')
+    send_blob(sock, data)
+
+def send_result(sock, data: bytes):
+    """Send final result. Type byte 'R' + length-prefixed blob."""
+    sock.sendall(b'R')
+    send_blob(sock, data)
+
+def run_matte(rgb_bytes, tri_bytes, progress_cb=None):
+    def prog(msg):
+        print(msg, flush=True)
+        if progress_cb:
+            progress_cb(msg)
+
+    prog("Step 1/4: Decoding images...")
     image      = Image.open(io.BytesIO(rgb_bytes)).convert("RGB")
     trimap_raw = Image.open(io.BytesIO(tri_bytes)).convert("L")
     orig_size  = image.size
 
+    prog("Step 2/4: Posterizing trimap...")
     trimap_np  = np.array(trimap_raw, dtype=np.uint8)
     posterized = np.zeros_like(trimap_np)
     posterized[trimap_np >= 192] = 255
@@ -50,10 +68,12 @@ def run_matte(rgb_bytes, tri_bytes):
     image  = image.resize((w, h))
     trimap = trimap.resize((w, h))
 
+    prog("Step 3/4: Running model inference...")
     inputs = processor(images=image, trimaps=trimap, return_tensors="pt")
     with torch.no_grad():
         outputs = model(**inputs)
 
+    prog("Step 4/4: Encoding result...")
     alpha     = outputs.alphas[0, 0].cpu().numpy()
     alpha_img = Image.fromarray((alpha * 255).astype(np.uint8), mode="L")
     alpha_img = alpha_img.resize(orig_size, Image.BILINEAR)
@@ -67,8 +87,12 @@ class MatteHandler(socketserver.BaseRequestHandler):
         try:
             rgb_bytes = recv_blob(self.request)
             tri_bytes = recv_blob(self.request)
-            result    = run_matte(rgb_bytes, tri_bytes)
-            send_blob(self.request, result)
+
+            def progress_cb(msg):
+                send_progress(self.request, msg)
+
+            result = run_matte(rgb_bytes, tri_bytes, progress_cb=progress_cb)
+            send_result(self.request, result)
             print(f"OK  {self.client_address}  out={len(result)} bytes", flush=True)
         except Exception as e:
             print(f"ERR {self.client_address}: {e}", flush=True)

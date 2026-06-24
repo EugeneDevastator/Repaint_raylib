@@ -1,98 +1,11 @@
-The server takes two PNG files via multipart form upload and returns a PNG. From C, the simplest approach is to just use **libcurl** with multipart form — it's still HTTP but you don't need to think about REST, just binary blobs in and binary blob out.
+read progess like this:
 
-```c
-// matte_client.h
-#pragma once
-#include <stddef.h>
-
-// Returns malloc'd PNG bytes in out_png, sets out_size.
-// Returns 0 on success.
-int matte_request(
-    const char* server_url,      // "http://127.0.0.1:8000/matte"
-    const unsigned char* rgb_png,    size_t rgb_size,
-    const unsigned char* tri_png,    size_t tri_size,
-    unsigned char** out_png,     size_t* out_size
-);
-```
-
-```c
-// matte_client.c
-#include "matte_client.h"
-#include <curl/curl.h>
-#include <stdlib.h>
-#include <string.h>
-
-typedef struct { unsigned char* data; size_t size; } Buffer;
-
-static size_t write_cb(void* ptr, size_t sz, size_t nmemb, void* userdata) {
-    Buffer* buf = userdata;
-    size_t n = sz * nmemb;
-    buf->data = realloc(buf->data, buf->size + n);
-    memcpy(buf->data + buf->size, ptr, n);
-    buf->size += n;
-    return n;
-}
-
-int matte_request(
-    const char* url,
-    const unsigned char* rgb_png,  size_t rgb_size,
-    const unsigned char* tri_png,  size_t tri_size,
-    unsigned char** out_png, size_t* out_size)
-{
-    CURL* curl = curl_easy_init();
-    if (!curl) return -1;
-
-    Buffer resp = {0};
-
-    curl_mime* form = curl_mime_init(curl);
-
-    curl_mimepart* part;
-
-    part = curl_mime_addpart(form);
-    curl_mime_name(part, "rgb");
-    curl_mime_data(part, (const char*)rgb_png, rgb_size);
-    curl_mime_filename(part, "rgb.png");
-    curl_mime_type(part, "image/png");
-
-    part = curl_mime_addpart(form);
-    curl_mime_name(part, "trimask");
-    curl_mime_data(part, (const char*)tri_png, tri_size);
-    curl_mime_filename(part, "trimask.png");
-    curl_mime_type(part, "image/png");
-
-    curl_easy_setopt(curl, CURLOPT_URL, url);
-    curl_easy_setopt(curl, CURLOPT_MIMEPOST, form);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_cb);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &resp);
-
-    CURLcode res = curl_easy_perform(curl);
-
-    curl_mime_free(form);
-    curl_easy_cleanup(curl);
-
-    if (res != CURLE_OK) { free(resp.data); return -1; }
-
-    *out_png  = resp.data;
-    *out_size = resp.size;
-    return 0;
-}
-```
-
-**Usage:**
-```c
-unsigned char* alpha_png;
-size_t alpha_size;
-
-if (matte_request("http://127.0.0.1:8000/matte",
-        rgb_data, rgb_len,
-        tri_data, tri_len,
-        &alpha_png, &alpha_size) == 0)
-{
-    // decode alpha_png with stb_image or similar
-    free(alpha_png);
-}
-```
-
-**Link with:** `-lcurl`
-
-If you truly want zero-HTTP binary protocol, you'd need to rewrite the server side too — not worth it unless you have latency issues. The multipart approach is effectively just "send two blobs, get one blob back."
+loop:
+    read 1 byte → type
+    if type == 'P':
+        read 4-byte length → n
+        read n bytes → show progress string
+    if type == 'R':
+        read 4-byte length → n
+        read n bytes → that's your PNG result
+        break
