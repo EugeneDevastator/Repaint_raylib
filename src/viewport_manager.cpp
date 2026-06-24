@@ -89,6 +89,7 @@ Image ViewportManager_CompositeWithDither(void) {
     // Render all layers into a fresh RT
     RenderTexture2D a=Load16BitRT(cw,ch), b=Load16BitRT(cw,ch);
     if(a.id==0||b.id==0){ if(a.id>0)UnloadRenderTexture(a); if(b.id>0)UnloadRenderTexture(b); return (Image){0}; }
+    BeginTextureMode(a); ClearBackground(BLANK); EndTextureMode();
     RectXform viewXform;
     const float* cv = LayerStack_GetCanvasView();
     memcpy(viewXform.mat, cv, 6*sizeof(float));
