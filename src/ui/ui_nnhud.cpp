@@ -343,6 +343,11 @@ void NNHudModule::DrawGUI(const DrawRect& rect) {
 
     ImGui::BeginDisabled(!canAccept);
     if (ImGui::Button("Accept Result", ImVec2(totalW * 0.45f, 28))) {
+        // Duplicate source layer (preserves name, blend mode, etc.)
+        // then upload g_sourceRGB (which has NN alpha baked in) into it.
+        // g_sourceRGB comes from LoadImageFromTexture (bottom-up), but
+        // UploadToGPU expects top-down — flip to compensate.
+        if (g_sourceRGB.data) ImageFlipVertical(&g_sourceRGB);
         int newIdx = ViewportManager_AcceptMatte(g_srcLayerIdx, g_sourceRGB);
         g_sourceRGB = {0};
         g_srcLayerIdx = -1;
@@ -350,6 +355,7 @@ void NNHudModule::DrawGUI(const DrawRect& rect) {
             state->activeLayer = newIdx;
             layersDirty = true;
         }
+        g_hasResult = false;
     }
     ImGui::EndDisabled();
 
