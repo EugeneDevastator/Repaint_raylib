@@ -102,7 +102,7 @@ jobs:
           if [ "$topdir" != "python" ]; then mv "$topdir" python; fi
           # Bootstrap pip
           python/python.exe -m ensurepip --upgrade 2>/dev/null || true
-          zip -r ../python.zip python
+          python -c "import shutil; shutil.make_archive('../python', 'zip', 'python')"
           cd ..
           rm -rf pyextract python.tar.gz
 
