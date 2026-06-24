@@ -243,6 +243,7 @@ extern int g_texPanelAreaY; // y-coordinate for the texture panel in the Quick H
 #define HUD_QUICK 1
 #define HUD_LAYER_XFORM 2
 #define HUD_CANVAS_XFORM 3
+#define HUD_NN 4
 extern int g_activeHud;
 
 #define QP_SLIDER_W 28
@@ -389,6 +390,18 @@ struct CanvasXformModule : IModule {
     void DrawGUI(const DrawRect& rect) override;
     void OnExit() override;
 };
+
+struct NNHudModule : IModule {
+    AppState* state;
+    explicit NNHudModule(AppState* s) : state(s) {}
+    const char* Name() const override { return "NNHud"; }
+    bool HandleInput(InputState& input, const DrawRect& rect) override;
+    void DrawGL(const DrawRect& rect) override;
+    void DrawGUI(const DrawRect& rect) override;
+    void OnExit() override;
+};
+
+void NNHud_Shutdown(void);
 
 extern ModuleStack g_moduleStack;
 
