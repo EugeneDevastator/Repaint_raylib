@@ -9,6 +9,8 @@ from PIL import Image
 import torch
 from transformers import VitMatteForImageMatting, VitMatteImageProcessor
 
+#use lcm later
+
 MODEL_TAG = "vitsmall_dist646"
 MODEL_ID  = "hustvl/vitmatte-small-distinctions-646"
 MODEL_DIR = Path(__file__).parent / "models" / f"vitmatte_model_{MODEL_TAG}"
