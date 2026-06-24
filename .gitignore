@@ -10,3 +10,4 @@ __pycache__/*
 /cmake-build-debug/*
 /LCM/.thumb_cache
 /LCM/.thumb_cache/*
+/NNModelServer/models
