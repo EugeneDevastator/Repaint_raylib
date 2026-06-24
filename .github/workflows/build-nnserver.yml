@@ -7,165 +7,99 @@ on:
       - 'NNModelServer/**'
       - '.github/workflows/build-nnserver.yml'
 
-permissions:
-  contents: write
-
 jobs:
-  check-hash:
-    runs-on: ubuntu-latest
-    outputs:
-      hash: ${{ steps.hash.outputs.hash }}
-      cache-hit-linux: ${{ steps.check.outputs.linux }}
-      cache-hit-windows: ${{ steps.check.outputs.windows }}
-      cache-hit-mac: ${{ steps.check.outputs.mac }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Compute hash
-        id: hash
-        run: echo "hash=$(find NNModelServer -type f | sort | xargs sha256sum | sha256sum | cut -d' ' -f1)" >> $GITHUB_OUTPUT
-      - name: Check cache branch
-        id: check
-        run: |
-          git fetch origin cache-artifacts 2>/dev/null || true
-          for platform in linux windows mac; do
-            if git show origin/cache-artifacts:nnserver-${platform}-${{ steps.hash.outputs.hash }}.zip > /dev/null 2>&1; then
-              echo "${platform}=true" >> $GITHUB_OUTPUT
-            else
-              echo "${platform}=false" >> $GITHUB_OUTPUT
-            fi
-          done
-
   build-nnserver-linux:
-    needs: check-hash
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Pull from cache
-        if: needs.check-hash.outputs.cache-hit-linux == 'true'
-        run: |
-          git fetch origin cache-artifacts
-          git checkout origin/cache-artifacts -- nnserver-linux-${{ needs.check-hash.outputs.hash }}.zip
-          mkdir -p dist-server
-          unzip nnserver-linux-${{ needs.check-hash.outputs.hash }}.zip -d tmp
-          cp tmp/dist-server/nnserver dist-server/
-          zip -r nnserver-linux.zip dist-server
       - uses: actions/setup-python@v5
-        if: needs.check-hash.outputs.cache-hit-linux != 'true'
         with:
           python-version: "3.11"
+
+      - name: Cache nnserver binary
+        id: cache-nnserver
+        uses: actions/cache@v4
+        with:
+          path: dist-server
+          key: nnserver-linux-${{ hashFiles('NNModelServer/**') }}
+
       - name: Build
-        if: needs.check-hash.outputs.cache-hit-linux != 'true'
+        if: steps.cache-nnserver.outputs.cache-hit != 'true'
         run: |
           pip install pyinstaller numpy Pillow torch transformers
           pyinstaller --onefile NNModelServer/nnserver.py --name nnserver
           mkdir -p dist-server
           cp dist/nnserver dist-server/
-          zip -r nnserver-linux-${{ needs.check-hash.outputs.hash }}.zip dist-server
-          cp nnserver-linux-${{ needs.check-hash.outputs.hash }}.zip nnserver-linux.zip
-      - name: Push to cache branch
-        if: needs.check-hash.outputs.cache-hit-linux != 'true'
+
+      - name: Package
         run: |
-          git config user.email "ci@ci" && git config user.name "CI"
-          mkdir -p /tmp/nn-cache
-          mv nnserver-linux-${{ needs.check-hash.outputs.hash }}.zip /tmp/nn-cache/
-          git fetch origin cache-artifacts 2>/dev/null || true
-          git checkout origin/cache-artifacts 2>/dev/null || git checkout --orphan cache-artifacts
-          mv /tmp/nn-cache/nnserver-linux-${{ needs.check-hash.outputs.hash }}.zip .
-          rm -rf /tmp/nn-cache
-          git add nnserver-linux-${{ needs.check-hash.outputs.hash }}.zip
-          git commit -m "cache nnserver-linux ${{ needs.check-hash.outputs.hash }}"
-          git push origin HEAD:cache-artifacts 2>/dev/null || git push origin HEAD:cache-artifacts --force
+          zip -r nnserver-linux.zip dist-server
+
       - uses: actions/upload-artifact@v4
         with:
           name: nnserver-linux
           path: nnserver-linux.zip
 
   build-nnserver-windows:
-    needs: check-hash
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Pull from cache
-        if: needs.check-hash.outputs.cache-hit-windows == 'true'
-        run: |
-          git fetch origin cache-artifacts
-          git checkout origin/cache-artifacts -- nnserver-windows-${{ needs.check-hash.outputs.hash }}.zip
-          mkdir dist-server
-          powershell Expand-Archive nnserver-windows-${{ needs.check-hash.outputs.hash }}.zip -DestinationPath tmp
-          copy tmp\dist-server\nnserver.exe dist-server\
-          powershell Compress-Archive dist-server nnserver-windows.zip
       - uses: actions/setup-python@v5
-        if: needs.check-hash.outputs.cache-hit-windows != 'true'
         with:
           python-version: "3.11"
+
+      - name: Cache nnserver binary
+        id: cache-nnserver
+        uses: actions/cache@v4
+        with:
+          path: dist-server
+          key: nnserver-windows-${{ hashFiles('NNModelServer/**') }}
+
       - name: Build
-        if: needs.check-hash.outputs.cache-hit-windows != 'true'
+        if: steps.cache-nnserver.outputs.cache-hit != 'true'
         run: |
           pip install pyinstaller numpy Pillow torch transformers
           pyinstaller --onefile NNModelServer/nnserver.py --name nnserver
           mkdir dist-server
           copy dist\nnserver.exe dist-server\
-          powershell Compress-Archive dist-server nnserver-windows-${{ needs.check-hash.outputs.hash }}.zip
-          copy nnserver-windows-${{ needs.check-hash.outputs.hash }}.zip nnserver-windows.zip
-      - name: Push to cache branch
-        if: needs.check-hash.outputs.cache-hit-windows != 'true'
-        shell: bash
+
+      - name: Package
+        shell: powershell
         run: |
-          git config user.email "ci@ci" && git config user.name "CI"
-          mkdir -p /tmp/nn-cache
-          mv nnserver-windows-${{ needs.check-hash.outputs.hash }}.zip /tmp/nn-cache/
-          git fetch origin cache-artifacts 2>/dev/null || true
-          git checkout origin/cache-artifacts 2>/dev/null || git checkout --orphan cache-artifacts
-          mv /tmp/nn-cache/nnserver-windows-${{ needs.check-hash.outputs.hash }}.zip .
-          rm -rf /tmp/nn-cache
-          git add nnserver-windows-${{ needs.check-hash.outputs.hash }}.zip
-          git commit -m "cache nnserver-windows ${{ needs.check-hash.outputs.hash }}"
-          git push origin HEAD:cache-artifacts 2>/dev/null || git push origin HEAD:cache-artifacts --force
+          Compress-Archive -Path dist-server -DestinationPath nnserver-windows.zip
+
       - uses: actions/upload-artifact@v4
         with:
           name: nnserver-windows
           path: nnserver-windows.zip
 
   build-nnserver-mac:
-    needs: check-hash
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Pull from cache
-        if: needs.check-hash.outputs.cache-hit-mac == 'true'
-        run: |
-          git fetch origin cache-artifacts
-          git checkout origin/cache-artifacts -- nnserver-mac-${{ needs.check-hash.outputs.hash }}.zip
-          mkdir -p dist-server
-          unzip nnserver-mac-${{ needs.check-hash.outputs.hash }}.zip -d tmp
-          cp tmp/dist-server/nnserver dist-server/
-          zip -r nnserver-mac.zip dist-server
       - uses: actions/setup-python@v5
-        if: needs.check-hash.outputs.cache-hit-mac != 'true'
         with:
           python-version: "3.11"
+
+      - name: Cache nnserver binary
+        id: cache-nnserver
+        uses: actions/cache@v4
+        with:
+          path: dist-server
+          key: nnserver-mac-${{ hashFiles('NNModelServer/**') }}
+
       - name: Build
-        if: needs.check-hash.outputs.cache-hit-mac != 'true'
+        if: steps.cache-nnserver.outputs.cache-hit != 'true'
         run: |
           pip install pyinstaller numpy Pillow torch transformers
           pyinstaller --onefile NNModelServer/nnserver.py --name nnserver
           mkdir -p dist-server
           cp dist/nnserver dist-server/
-          zip -r nnserver-mac-${{ needs.check-hash.outputs.hash }}.zip dist-server
-          cp nnserver-mac-${{ needs.check-hash.outputs.hash }}.zip nnserver-mac.zip
-      - name: Push to cache branch
-        if: needs.check-hash.outputs.cache-hit-mac != 'true'
+
+      - name: Package
         run: |
-          git config user.email "ci@ci" && git config user.name "CI"
-          mkdir -p /tmp/nn-cache
-          mv nnserver-mac-${{ needs.check-hash.outputs.hash }}.zip /tmp/nn-cache/
-          git fetch origin cache-artifacts 2>/dev/null || true
-          git checkout origin/cache-artifacts 2>/dev/null || git checkout --orphan cache-artifacts
-          mv /tmp/nn-cache/nnserver-mac-${{ needs.check-hash.outputs.hash }}.zip .
-          rm -rf /tmp/nn-cache
-          git add nnserver-mac-${{ needs.check-hash.outputs.hash }}.zip
-          git commit -m "cache nnserver-mac ${{ needs.check-hash.outputs.hash }}"
-          git push origin HEAD:cache-artifacts 2>/dev/null || git push origin HEAD:cache-artifacts --force
+          zip -r nnserver-mac.zip dist-server
+
       - uses: actions/upload-artifact@v4
         with:
           name: nnserver-mac
