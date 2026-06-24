@@ -89,6 +89,7 @@ Image ViewportManager_CompositeWithDither(void) {
     // Render all layers into a fresh RT
     RenderTexture2D a=Load16BitRT(cw,ch), b=Load16BitRT(cw,ch);
     if(a.id==0||b.id==0){ if(a.id>0)UnloadRenderTexture(a); if(b.id>0)UnloadRenderTexture(b); return (Image){0}; }
+    BeginTextureMode(a); ClearBackground(BLANK); EndTextureMode();
     RectXform viewXform;
     const float* cv = LayerStack_GetCanvasView();
     memcpy(viewXform.mat, cv, 6*sizeof(float));
@@ -217,4 +218,14 @@ void ViewportManager_MergeDownSeamless(int idx) {
         g_undoManager->InvalidateSlot(sidBot);
     }
     ViewportManager_SetDirty();
+}
+
+int ViewportManager_AcceptMatte(int srcIdx, Image matteImage) {
+    int n = LayerStack_Count();
+    if (srcIdx < 0 || srcIdx >= n || !matteImage.data) return -1;
+    LayerStack_DuplicateLayer(srcIdx);
+    int newIdx = srcIdx + 1;
+    LayerStack_UploadToGPU(newIdx, matteImage);
+    ViewportManager_SetDirty();
+    return newIdx;
 }

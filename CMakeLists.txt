@@ -101,6 +101,7 @@ set(SOURCES
     src/ui/ui_leftpanel.cpp
     src/ui/ui_changelog.cpp
     src/ui/ui_quickhud.cpp
+    src/ui/ui_nnhud.cpp
     src/ui/ui_layerxform.cpp
     src/ui/ui_canvasxform.cpp
     src/ui/transform_handle.cpp
@@ -109,6 +110,8 @@ set(SOURCES
     src/undo.cpp
     src/replay_recorder.cpp
     src/user_content_receiver.cpp
+    # ── http ─────────────────────────────────────────────────────────
+    src/http/matte_client.cpp
     # ── sensors ───────────────────────────────────────────────────────
     src/sensors/tablet.cpp
     src/sensors/input_filter.cpp
@@ -156,6 +159,7 @@ endif()
 
 target_include_directories(repaint PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/http
     ${CMAKE_CURRENT_SOURCE_DIR}/dialog
     ${CMAKE_CURRENT_SOURCE_DIR}/raylib_utils
     ${CMAKE_CURRENT_SOURCE_DIR}/LocalPlayer

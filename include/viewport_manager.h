@@ -23,4 +23,9 @@ void ViewportManager_SetDirty(void);
 void ViewportManager_MergeDown(int idx);
 void ViewportManager_MergeDownSeamless(int idx);
 
+// Accept matte NN result: duplicate srcIdx layer, upload composited matte
+// image (R16G16B16A16), return new layer index, or -1 on failure.
+// Takes ownership of matteImage (unloads on success).
+int ViewportManager_AcceptMatte(int srcIdx, Image matteImage);
+
 #endif
