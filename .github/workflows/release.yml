@@ -15,45 +15,73 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event.workflow_run.conclusion == 'success'
     steps:
-      - name: Download artifacts from Build App
+      - uses: actions/checkout@v4
+
+      - name: Download repaint-linux
         uses: dawidd6/action-download-artifact@v21
         with:
           workflow: build-app.yml
-          commit: ${{ github.event.workflow_run.head_sha }}
+          branch: main
           name: repaint-linux
-          path: artifacts/
+          path: _dl/repaint-linux
 
-      - name: Download artifacts from Build App
+      - name: Download repaint-windows
         uses: dawidd6/action-download-artifact@v21
         with:
           workflow: build-app.yml
-          commit: ${{ github.event.workflow_run.head_sha }}
+          branch: main
           name: repaint-windows
-          path: artifacts/
+          path: _dl/repaint-windows
 
-      - name: Download artifacts from Build NNServer
+      - name: Download nnserver-linux
         uses: dawidd6/action-download-artifact@v21
         with:
           workflow: build-nnserver.yml
           commit: ${{ github.event.workflow_run.head_sha }}
           name: nnserver-linux
-          path: artifacts/
+          path: _dl/nnserver-linux
 
-      - name: Download artifacts from Build NNServer
+      - name: Download nnserver-windows
         uses: dawidd6/action-download-artifact@v21
         with:
           workflow: build-nnserver.yml
           commit: ${{ github.event.workflow_run.head_sha }}
           name: nnserver-windows
-          path: artifacts/
+          path: _dl/nnserver-windows
 
-      - name: Download artifacts from Build NNServer
+      - name: Download nnserver-mac
         uses: dawidd6/action-download-artifact@v21
         with:
           workflow: build-nnserver.yml
           commit: ${{ github.event.workflow_run.head_sha }}
           name: nnserver-mac
-          path: artifacts/
+          path: _dl/nnserver-mac
+
+      - name: Bundle repaint-linux-full
+        run: |
+          out=_out/repaint-linux
+          mkdir -p "$out"
+          cp -r _dl/repaint-linux/dist/repaint-linux/* "$out/"
+          mkdir -p "$out/NNServer"
+          cp -r _dl/nnserver-linux/dist-server/* "$out/NNServer/"
+          cd _out && zip -r ../repaint-linux-full.zip repaint-linux
+
+      - name: Bundle repaint-windows-full
+        run: |
+          out=_out/repaint-windows
+          mkdir -p "$out"
+          cp -r _dl/repaint-windows/dist/repaint-windows/* "$out/"
+          mkdir -p "$out/NNServer"
+          cp -r _dl/nnserver-windows/dist-server/* "$out/NNServer/"
+          cd _out && zip -r ../repaint-windows-full.zip repaint-windows
+
+      - name: Bundle repaint-mac-full
+        run: |
+          out=_out/repaint-mac
+          mkdir -p "$out"
+          mkdir -p "$out/NNServer"
+          cp -r _dl/nnserver-mac/dist-server/* "$out/NNServer/"
+          cd _out && zip -r ../repaint-mac-full.zip repaint-mac
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
@@ -61,4 +89,4 @@ jobs:
           tag_name: latest
           name: Latest Build
           prerelease: true
-          files: artifacts/**
+          files: repaint-*-full.zip
