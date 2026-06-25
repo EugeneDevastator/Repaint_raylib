@@ -57,3 +57,7 @@ bool ClipboardPlatform_GetCustomData(const char* name, void** data, size_t* size
     (void)name; (void)data; (void)size;
     return false;
 }
+
+void ClipboardPlatform_SetPNG(const void* data, size_t size) {
+    (void)data; (void)size;
+}

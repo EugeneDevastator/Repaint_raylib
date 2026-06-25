@@ -173,6 +173,27 @@ bool ClipboardPlatform_SetFilePath(const char* path) {
     return true;
 }
 
+// ── Helper: allocate a CF_DIBV5 handle from BGRA pixel data ───────────
+static HANDLE CreateDibV5(int w, int h, DWORD pixelBytes, const BYTE* pixBuf) {
+    DWORD v5HdrSize = sizeof(BITMAPV5HEADER);
+    HANDLE hDib = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, v5HdrSize + pixelBytes);
+    if (!hDib) return NULL;
+    BYTE* d = (BYTE*)GlobalLock(hDib);
+    if (!d) { GlobalFree(hDib); return NULL; }
+    BITMAPV5HEADER* v5 = (BITMAPV5HEADER*)d;
+    v5->bV5Size          = v5HdrSize;
+    v5->bV5Width         = w;
+    v5->bV5Height        = h;
+    v5->bV5Planes        = 1;
+    v5->bV5BitCount      = 32;
+    v5->bV5Compression   = BI_RGB;
+    v5->bV5SizeImage     = pixelBytes;
+    v5->bV5AlphaMask     = 0xFF000000;
+    memcpy(d + v5HdrSize, pixBuf, pixelBytes);
+    GlobalUnlock(hDib);
+    return hDib;
+}
+
 // ── Custom data (private clipboard format) ────────────────────────────
 bool ClipboardPlatform_GetCustomData(const char* name, void** data, size_t* size) {
     UINT fmt = RegisterClipboardFormatA(name);
@@ -241,31 +262,7 @@ bool ClipboardPlatform_SetImageWithCustom(int w, int h, const void* rgba8,
         GlobalUnlock(hDib);
     }
 
-    // ── CF_DIBV5 (alpha channel mask) ──
-    // Using BI_RGB with explicit alpha mask — this is the most compatible
-    // way to signal alpha on the clipboard.  Many apps ignore CF_DIBV5
-    // with BI_BITFIELDS but honour BI_RGB + bV5AlphaMask.
-    DWORD v5HdrSize = sizeof(BITMAPV5HEADER);
-    HANDLE hDibV5 = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, v5HdrSize + pixelBytes);
-    if (hDibV5) {
-        BYTE* d = (BYTE*)GlobalLock(hDibV5);
-        if (d) {
-            BITMAPV5HEADER* v5 = (BITMAPV5HEADER*)d;
-            v5->bV5Size          = v5HdrSize;
-            v5->bV5Width         = w;
-            v5->bV5Height        = h;
-            v5->bV5Planes        = 1;
-            v5->bV5BitCount      = 32;
-            v5->bV5Compression   = BI_RGB;
-            v5->bV5SizeImage     = pixelBytes;
-            v5->bV5AlphaMask     = 0xFF000000;
-            memcpy(d + v5HdrSize, pixBuf, pixelBytes);
-            GlobalUnlock(hDibV5);
-        } else {
-            GlobalFree(hDibV5);
-            hDibV5 = NULL;
-        }
-    }
+    HANDLE hDibV5 = CreateDibV5(w, h, pixelBytes, pixBuf);
 
     free(pixBuf);
 
@@ -340,28 +337,7 @@ bool ClipboardPlatform_SetImage(int w, int h, const void* rgba) {
         GlobalUnlock(hDib);
     }
 
-    // ── CF_DIBV5 (alpha channel mask) ──
-    DWORD v5HdrSize = sizeof(BITMAPV5HEADER);
-    HANDLE hDibV5 = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, v5HdrSize + pixelBytes);
-    if (hDibV5) {
-        BYTE* d = (BYTE*)GlobalLock(hDibV5);
-        if (d) {
-            BITMAPV5HEADER* v5 = (BITMAPV5HEADER*)d;
-            v5->bV5Size          = v5HdrSize;
-            v5->bV5Width         = w;
-            v5->bV5Height        = h;
-            v5->bV5Planes        = 1;
-            v5->bV5BitCount      = 32;
-            v5->bV5Compression   = BI_RGB;
-            v5->bV5SizeImage     = pixelBytes;
-            v5->bV5AlphaMask     = 0xFF000000;
-            memcpy(d + v5HdrSize, pixBuf, pixelBytes);
-            GlobalUnlock(hDibV5);
-        } else {
-            GlobalFree(hDibV5);
-            hDibV5 = NULL;
-        }
-    }
+    HANDLE hDibV5 = CreateDibV5(w, h, pixelBytes, pixBuf);
 
     free(pixBuf);
 
