@@ -173,7 +173,102 @@ bool ClipboardPlatform_SetFilePath(const char* path) {
     return true;
 }
 
-// ── Image copy ────────────────────────────────────────────────────────
+// ── Custom data (private clipboard format) ────────────────────────────
+bool ClipboardPlatform_GetCustomData(const char* name, void** data, size_t* size) {
+    UINT fmt = RegisterClipboardFormatA(name);
+    if (!fmt || !IsClipboardFormatAvailable(fmt)) return false;
+
+    if (!OpenClipboard(NULL)) return false;
+    HANDLE h = GetClipboardData(fmt);
+    if (!h) { CloseClipboard(); return false; }
+
+    void* src = GlobalLock(h);
+    if (!src) { CloseClipboard(); return false; }
+
+    SIZE_T sz = GlobalSize(h);
+    *data = malloc((size_t)sz);
+    if (*data) {
+        memcpy(*data, src, (size_t)sz);
+        *size = (size_t)sz;
+    }
+    GlobalUnlock(h);
+    CloseClipboard();
+    return *data != NULL;
+}
+
+// ── Combined image + custom data copy (single OpenClipboard cycle) ────
+bool ClipboardPlatform_SetImageWithCustom(int w, int h, const void* rgba8,
+    const char* customName, const void* customData, size_t customSize)
+{
+    int bpp = 32;
+    int stride = ((w * bpp + 31) / 32) * 4;
+    DWORD headerSize = sizeof(BITMAPINFOHEADER);
+    DWORD pixelBytes = h * stride;
+    DWORD dibSize = headerSize + pixelBytes;
+
+    // Allocate DIB
+    HANDLE hDib = GlobalAlloc(GMEM_MOVEABLE, dibSize);
+    if (!hDib) return false;
+    BYTE* dst = (BYTE*)GlobalLock(hDib);
+    if (!dst) { GlobalFree(hDib); return false; }
+
+    BITMAPINFOHEADER* bi = (BITMAPINFOHEADER*)dst;
+    bi->biSize          = headerSize;
+    bi->biWidth         = w;
+    bi->biHeight        = h;
+    bi->biPlanes        = 1;
+    bi->biBitCount      = (WORD)bpp;
+    bi->biCompression   = BI_RGB;
+    bi->biSizeImage     = pixelBytes;
+    bi->biXPelsPerMeter = 0;
+    bi->biYPelsPerMeter = 0;
+    bi->biClrUsed       = 0;
+    bi->biClrImportant  = 0;
+
+    BYTE* pixels = dst + headerSize;
+    const BYTE* src = (const BYTE*)rgba8;
+    int rowBytes = w * 4;
+    for (int y = 0; y < h; y++) {
+        int dstY = h - 1 - y;
+        BYTE* dRow = pixels + dstY * stride;
+        const BYTE* sRow = src + y * rowBytes;
+        for (int x = 0; x < w; x++) {
+            dRow[x * 4 + 0] = sRow[x * 4 + 2];
+            dRow[x * 4 + 1] = sRow[x * 4 + 1];
+            dRow[x * 4 + 2] = sRow[x * 4 + 0];
+            dRow[x * 4 + 3] = sRow[x * 4 + 3];
+        }
+    }
+    GlobalUnlock(hDib);
+
+    // Allocate custom format data
+    HANDLE hCustom = NULL;
+    UINT customFmt = 0;
+    if (customName && customData && customSize > 0) {
+        customFmt = RegisterClipboardFormatA(customName);
+        if (customFmt) {
+            hCustom = GlobalAlloc(GMEM_MOVEABLE, customSize);
+            if (hCustom) {
+                void* cDst = GlobalLock(hCustom);
+                if (cDst) { memcpy(cDst, customData, customSize); GlobalUnlock(hCustom); }
+                else { GlobalFree(hCustom); hCustom = NULL; }
+            }
+        }
+    }
+
+    if (!OpenClipboard(NULL)) {
+        GlobalFree(hDib);
+        if (hCustom) GlobalFree(hCustom);
+        return false;
+    }
+    EmptyClipboard();
+    SetClipboardData(CF_DIB, hDib);
+    if (hCustom && customFmt) SetClipboardData(customFmt, hCustom);
+    CloseClipboard();
+    return true;
+}
+
+// ── Image copy (8-bit only — used when no 16-bit data) ────────────────
 bool ClipboardPlatform_SetImage(int w, int h, const void* rgba) {
     int bpp = 32;
     int stride = ((w * bpp + 31) / 32) * 4;   // padded byte width per row

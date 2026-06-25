@@ -45,3 +45,15 @@ bool ClipboardPlatform_SetFilePath(const char* path) {
     (void)path;
     return false;
 }
+
+bool ClipboardPlatform_SetImageWithCustom(int w, int h, const void* rgba8,
+    const char* customName, const void* customData, size_t customSize)
+{
+    (void)w; (void)h; (void)rgba8; (void)customName; (void)customData; (void)customSize;
+    return false;
+}
+
+bool ClipboardPlatform_GetCustomData(const char* name, void** data, size_t* size) {
+    (void)name; (void)data; (void)size;
+    return false;
+}

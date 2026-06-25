@@ -259,7 +259,7 @@ void UpdateUI(AppState* state) {
                                     rt, Rectangle{0, 0, (float)cw, (float)ch});
                             }
                             rlSetBlendMode(RL_BLEND_ALPHA);
-                            Clipboard_CopyTexture(rt.texture);
+                            Clipboard_CopyRT16(rt);
                             UnloadRenderTexture(rt);
                             DisplayInfoText("Copied merged");
                         }
@@ -269,7 +269,7 @@ void UpdateUI(AppState* state) {
                     // Ctrl+C — copy active layer
                     RenderTexture2D rt = LayerStack_GetRT(state->activeLayer);
                     if (rt.id > 0) {
-                        Clipboard_CopyTexture(rt.texture);
+                        Clipboard_CopyRT16(rt);
                         g_lastCopyCPress = now;
                         DisplayInfoText("Copied layer");
                     }

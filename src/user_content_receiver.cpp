@@ -13,6 +13,7 @@ static AppState* s_state = NULL;
 
 /* ── Clipboard paste state ─────────────────────────────────────────── */
 static unsigned char* s_clipboardPixels = NULL;
+static uint16_t* s_clipboardPixels16 = NULL;
 static int s_clipboardW = 0, s_clipboardH = 0;
 
 /* ── Import an image as new doc or new layer ────────────────────────── */
@@ -78,19 +79,30 @@ static void OnDropResult(DialogResult r) {
 
 /* ── Paste callback (from clipboard image or file) ──────────────────── */
 static void OnPasteResult(DialogResult r) {
-    bool hasPixels = (s_clipboardPixels != NULL);
-    bool hasPath   = (s_pendingPath[0] != '\0');
+    bool hasPixels16 = (s_clipboardPixels16 != NULL);
+    bool hasPixels8  = !hasPixels16 && (s_clipboardPixels != NULL);
+    bool hasPath     = (s_pendingPath[0] != '\0');
 
-    if (!r.wasClosed || !r.success || !r.output[0] || !(hasPixels || hasPath)) {
-        if (s_clipboardPixels) { free(s_clipboardPixels); s_clipboardPixels = NULL; }
+    if (!r.wasClosed || !r.success || !r.output[0] || !(hasPixels16 || hasPixels8 || hasPath)) {
+        if (s_clipboardPixels)  { free(s_clipboardPixels);  s_clipboardPixels = NULL; }
+        if (s_clipboardPixels16){ free(s_clipboardPixels16); s_clipboardPixels16 = NULL; }
         s_pendingPath[0] = '\0';
         return;
     }
 
     bool asNewDoc = (strcmp(r.output, "New Doc") == 0);
     Image img = {0};
+    bool pastedAs16 = false;
 
-    if (hasPixels) {
+    if (hasPixels16) {
+        img.data     = s_clipboardPixels16;
+        img.width    = s_clipboardW;
+        img.height   = s_clipboardH;
+        img.format   = PIXELFORMAT_UNCOMPRESSED_R16G16B16A16;
+        img.mipmaps  = 1;
+        s_clipboardPixels16 = NULL;
+        pastedAs16 = true;
+    } else if (hasPixels8) {
         img.data     = s_clipboardPixels;
         img.width    = s_clipboardW;
         img.height   = s_clipboardH;
@@ -104,8 +116,11 @@ static void OnPasteResult(DialogResult r) {
     }
 
     if (img.data) {
-        if (img.format != PIXELFORMAT_UNCOMPRESSED_R16G16B16A16)
+        if (img.format == PIXELFORMAT_UNCOMPRESSED_R16G16B16A16) {
+            // Already 16-bit — no conversion needed
+        } else if (img.format != PIXELFORMAT_UNCOMPRESSED_R16G16B16A16) {
             ImageFormat(&img, PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
+        }
 
         int w = img.width, h = img.height;
 
@@ -128,6 +143,7 @@ static void OnPasteResult(DialogResult r) {
                                                s_state ? DocOutPxH(&s_state->doc) : h);
         }
         layersDirty = true;
+        DisplayInfoText(pastedAs16 ? "Pasted as 16-bit" : "Pasted as 8-bit");
     } else {
         UnloadImage(img);
     }
@@ -136,10 +152,27 @@ static void OnPasteResult(DialogResult r) {
 static void ClipboardImageHandler(int w, int h, const unsigned char* rgba) {
     if (Dialog_IsActive()) return;
 
-    free(s_clipboardPixels);
+    free(s_clipboardPixels); s_clipboardPixels = NULL;
+    free(s_clipboardPixels16); s_clipboardPixels16 = NULL;
     s_clipboardPixels = (unsigned char*)malloc(w * h * 4);
     if (!s_clipboardPixels) return;
     memcpy(s_clipboardPixels, rgba, w * h * 4);
+    s_clipboardW = w;
+    s_clipboardH = h;
+
+    DialogButtonChoice_Init("Pick your option",
+        "Paste image content",
+        OnPasteResult, "New Doc", "Add Layer", "Cancel", NULL);
+}
+
+static void ClipboardImage16Handler(int w, int h, const uint16_t* rgba16) {
+    if (Dialog_IsActive()) return;
+
+    free(s_clipboardPixels); s_clipboardPixels = NULL;
+    free(s_clipboardPixels16); s_clipboardPixels16 = NULL;
+    s_clipboardPixels16 = (uint16_t*)malloc((size_t)w * h * 4 * sizeof(uint16_t));
+    if (!s_clipboardPixels16) return;
+    memcpy(s_clipboardPixels16, rgba16, (size_t)w * h * 4 * sizeof(uint16_t));
     s_clipboardW = w;
     s_clipboardH = h;
 
@@ -164,8 +197,10 @@ void UserContent_Init(void) {
     s_pendingPath[0] = '\0';
     s_state = NULL;
     s_clipboardPixels = NULL;
+    s_clipboardPixels16 = NULL;
 
     Clipboard_SetImageCallback(ClipboardImageHandler);
+    Clipboard_SetImage16Callback(ClipboardImage16Handler);
     Clipboard_SetFileCallback(ClipboardFileHandler);
 }
 
