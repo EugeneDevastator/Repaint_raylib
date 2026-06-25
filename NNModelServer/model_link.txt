@@ -1,0 +1,1 @@
+https://huggingface.co/Xenova/vitmatte-small-distinctions-646/blob/main/onnx/model.onnx

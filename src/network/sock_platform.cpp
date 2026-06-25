@@ -19,6 +19,8 @@
 
 /* ── helpers to convert opaque handle ──────────────────────────────────── */
 
+#define SOCK_BACKLOG 16
+
 #ifdef _WIN32
   static SOCKET to_native(sock_t s) { return (SOCKET)s; }
   static sock_t from_native(SOCKET s) { return (sock_t)s; }
@@ -99,6 +101,36 @@ sock_t sock_connect(const char* addr, int port) {
     return from_native(s);
 }
 
+sock_t sock_listen(int port) {
+    SOCKET s = socket(AF_INET, SOCK_STREAM, 0);
+    if (s == INVALID_SOCKET) return SOCK_INVALID;
+
+    int opt = 1;
+    setsockopt(s, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, (const char*)&opt, sizeof(opt));
+
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family      = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr.sin_port        = htons((uint16_t)port);
+
+    if (bind(s, (struct sockaddr*)&addr, sizeof(addr)) == SOCKET_ERROR) {
+        closesocket(s); return SOCK_INVALID;
+    }
+    if (listen(s, SOCK_BACKLOG) == SOCKET_ERROR) {
+        closesocket(s); return SOCK_INVALID;
+    }
+    return from_native(s);
+}
+
+sock_t sock_accept(sock_t listener) {
+    struct sockaddr_in cli;
+    int cli_len = sizeof(cli);
+    SOCKET s = accept(to_native(listener), (struct sockaddr*)&cli, &cli_len);
+    if (s == INVALID_SOCKET) return SOCK_INVALID;
+    return from_native(s);
+}
+
 /* ── POSIX ──────────────────────────────────────────────────────────────── */
 
 #else
@@ -157,6 +189,36 @@ sock_t sock_connect(const char* addr, int port) {
     if (connect(s, (struct sockaddr*)&srv, sizeof(srv)) < 0) {
         close(s); return SOCK_INVALID;
     }
+    return from_native(s);
+}
+
+sock_t sock_listen(int port) {
+    int s = socket(AF_INET, SOCK_STREAM, 0);
+    if (s < 0) return SOCK_INVALID;
+
+    int opt = 1;
+    setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family      = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr.sin_port        = htons((uint16_t)port);
+
+    if (bind(s, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        close(s); return SOCK_INVALID;
+    }
+    if (listen(s, SOCK_BACKLOG) < 0) {
+        close(s); return SOCK_INVALID;
+    }
+    return from_native(s);
+}
+
+sock_t sock_accept(sock_t listener) {
+    struct sockaddr_in cli;
+    socklen_t cli_len = sizeof(cli);
+    int s = accept(to_native(listener), (struct sockaddr*)&cli, &cli_len);
+    if (s < 0) return SOCK_INVALID;
     return from_native(s);
 }
 

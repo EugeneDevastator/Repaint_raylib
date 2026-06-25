@@ -16,6 +16,8 @@ int    sock_init(void);
 void   sock_shutdown(void);
 
 sock_t sock_connect(const char* addr, int port);
+sock_t sock_listen(int port);
+sock_t sock_accept(sock_t listener);
 void   sock_close(sock_t s);
 void   sock_disconnect(sock_t s);
 
