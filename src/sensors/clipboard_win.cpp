@@ -202,46 +202,74 @@ bool ClipboardPlatform_SetImageWithCustom(int w, int h, const void* rgba8,
 {
     int bpp = 32;
     int stride = ((w * bpp + 31) / 32) * 4;
-    DWORD headerSize = sizeof(BITMAPINFOHEADER);
     DWORD pixelBytes = h * stride;
-    DWORD dibSize = headerSize + pixelBytes;
 
-    // Allocate DIB
-    HANDLE hDib = GlobalAlloc(GMEM_MOVEABLE, dibSize);
-    if (!hDib) return false;
-    BYTE* dst = (BYTE*)GlobalLock(hDib);
-    if (!dst) { GlobalFree(hDib); return false; }
-
-    BITMAPINFOHEADER* bi = (BITMAPINFOHEADER*)dst;
-    bi->biSize          = headerSize;
-    bi->biWidth         = w;
-    bi->biHeight        = h;
-    bi->biPlanes        = 1;
-    bi->biBitCount      = (WORD)bpp;
-    bi->biCompression   = BI_RGB;
-    bi->biSizeImage     = pixelBytes;
-    bi->biXPelsPerMeter = 0;
-    bi->biYPelsPerMeter = 0;
-    bi->biClrUsed       = 0;
-    bi->biClrImportant  = 0;
-
-    BYTE* pixels = dst + headerSize;
+    // ── Fill one pixel buffer, share it between DIB and DIBV5 ──
+    // (BGRA bottom-up bytes)
+    BYTE* pixBuf = (BYTE*)malloc(pixelBytes);
+    if (!pixBuf) return false;
     const BYTE* src = (const BYTE*)rgba8;
     int rowBytes = w * 4;
     for (int y = 0; y < h; y++) {
         int dstY = h - 1 - y;
-        BYTE* dRow = pixels + dstY * stride;
+        BYTE* dRow = pixBuf + dstY * stride;
         const BYTE* sRow = src + y * rowBytes;
         for (int x = 0; x < w; x++) {
-            dRow[x * 4 + 0] = sRow[x * 4 + 2];
-            dRow[x * 4 + 1] = sRow[x * 4 + 1];
-            dRow[x * 4 + 2] = sRow[x * 4 + 0];
-            dRow[x * 4 + 3] = sRow[x * 4 + 3];
+            dRow[x * 4 + 0] = sRow[x * 4 + 2];  // B
+            dRow[x * 4 + 1] = sRow[x * 4 + 1];  // G
+            dRow[x * 4 + 2] = sRow[x * 4 + 0];  // R
+            dRow[x * 4 + 3] = sRow[x * 4 + 3];  // A
         }
     }
-    GlobalUnlock(hDib);
 
-    // Allocate custom format data
+    // ── CF_DIB (backward compat, no explicit alpha) ──
+    DWORD dibHdrSize = sizeof(BITMAPINFOHEADER);
+    HANDLE hDib = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, dibHdrSize + pixelBytes);
+    if (!hDib) { free(pixBuf); return false; }
+    {
+        BYTE* d = (BYTE*)GlobalLock(hDib);
+        if (!d) { GlobalFree(hDib); free(pixBuf); return false; }
+        BITMAPINFOHEADER* bi = (BITMAPINFOHEADER*)d;
+        bi->biSize        = dibHdrSize;
+        bi->biWidth       = w;
+        bi->biHeight      = h;
+        bi->biPlanes      = 1;
+        bi->biBitCount    = (WORD)bpp;
+        bi->biCompression = BI_RGB;
+        bi->biSizeImage   = pixelBytes;
+        memcpy(d + dibHdrSize, pixBuf, pixelBytes);
+        GlobalUnlock(hDib);
+    }
+
+    // ── CF_DIBV5 (alpha channel mask) ──
+    // Using BI_RGB with explicit alpha mask — this is the most compatible
+    // way to signal alpha on the clipboard.  Many apps ignore CF_DIBV5
+    // with BI_BITFIELDS but honour BI_RGB + bV5AlphaMask.
+    DWORD v5HdrSize = sizeof(BITMAPV5HEADER);
+    HANDLE hDibV5 = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, v5HdrSize + pixelBytes);
+    if (hDibV5) {
+        BYTE* d = (BYTE*)GlobalLock(hDibV5);
+        if (d) {
+            BITMAPV5HEADER* v5 = (BITMAPV5HEADER*)d;
+            v5->bV5Size          = v5HdrSize;
+            v5->bV5Width         = w;
+            v5->bV5Height        = h;
+            v5->bV5Planes        = 1;
+            v5->bV5BitCount      = 32;
+            v5->bV5Compression   = BI_RGB;
+            v5->bV5SizeImage     = pixelBytes;
+            v5->bV5AlphaMask     = 0xFF000000;
+            memcpy(d + v5HdrSize, pixBuf, pixelBytes);
+            GlobalUnlock(hDibV5);
+        } else {
+            GlobalFree(hDibV5);
+            hDibV5 = NULL;
+        }
+    }
+
+    free(pixBuf);
+
+    // ── Custom format data ──
     HANDLE hCustom = NULL;
     UINT customFmt = 0;
     if (customName && customData && customSize > 0) {
@@ -258,10 +286,12 @@ bool ClipboardPlatform_SetImageWithCustom(int w, int h, const void* rgba8,
 
     if (!OpenClipboard(NULL)) {
         GlobalFree(hDib);
+        if (hDibV5) GlobalFree(hDibV5);
         if (hCustom) GlobalFree(hCustom);
         return false;
     }
     EmptyClipboard();
+    if (hDibV5) SetClipboardData(CF_DIBV5, hDibV5);
     SetClipboardData(CF_DIB, hDib);
     if (hCustom && customFmt) SetClipboardData(customFmt, hCustom);
     CloseClipboard();
@@ -271,55 +301,91 @@ bool ClipboardPlatform_SetImageWithCustom(int w, int h, const void* rgba8,
 // ── Image copy (8-bit only — used when no 16-bit data) ────────────────
 bool ClipboardPlatform_SetImage(int w, int h, const void* rgba) {
     int bpp = 32;
-    int stride = ((w * bpp + 31) / 32) * 4;   // padded byte width per row
-    DWORD headerSize = sizeof(BITMAPINFOHEADER);
+    int stride = ((w * bpp + 31) / 32) * 4;
     DWORD pixelBytes = h * stride;
-    DWORD totalSize = headerSize + pixelBytes;
-
-    HANDLE hGlobal = GlobalAlloc(GMEM_MOVEABLE, totalSize);
-    if (!hGlobal) return false;
-
-    BYTE* dst = (BYTE*)GlobalLock(hGlobal);
-    if (!dst) { GlobalFree(hGlobal); return false; }
-
-    // BITMAPINFOHEADER (bottom-up: positive height)
-    BITMAPINFOHEADER* bi = (BITMAPINFOHEADER*)dst;
-    bi->biSize          = headerSize;
-    bi->biWidth         = w;
-    bi->biHeight        = h;   // positive = bottom-up
-    bi->biPlanes        = 1;
-    bi->biBitCount      = (WORD)bpp;
-    bi->biCompression   = BI_RGB;
-    bi->biSizeImage     = pixelBytes;
-    bi->biXPelsPerMeter = 0;
-    bi->biYPelsPerMeter = 0;
-    bi->biClrUsed       = 0;
-    bi->biClrImportant  = 0;
-
-    // Convert RGBA top-down → BGRA bottom-up
-    BYTE* pixels = dst + headerSize;
     const BYTE* src = (const BYTE*)rgba;
     int rowBytes = w * 4;
 
+    // ── Build BGRA bottom-up pixel buffer ──
+    BYTE* pixBuf = (BYTE*)malloc(pixelBytes);
+    if (!pixBuf) return false;
     for (int y = 0; y < h; y++) {
-        int dstY = h - 1 - y;   // bottom-up
-        BYTE* dRow = pixels + dstY * stride;
+        int dstY = h - 1 - y;
+        BYTE* dRow = pixBuf + dstY * stride;
         const BYTE* sRow = src + y * rowBytes;
         for (int x = 0; x < w; x++) {
-            dRow[x * 4 + 0] = sRow[x * 4 + 2];  // B
-            dRow[x * 4 + 1] = sRow[x * 4 + 1];  // G
-            dRow[x * 4 + 2] = sRow[x * 4 + 0];  // R
-            dRow[x * 4 + 3] = sRow[x * 4 + 3];  // A
+            dRow[x * 4 + 0] = sRow[x * 4 + 2];
+            dRow[x * 4 + 1] = sRow[x * 4 + 1];
+            dRow[x * 4 + 2] = sRow[x * 4 + 0];
+            dRow[x * 4 + 3] = sRow[x * 4 + 3];
         }
     }
 
-    GlobalUnlock(hGlobal);
+    // ── CF_DIB ──
+    DWORD dibHdrSize = sizeof(BITMAPINFOHEADER);
+    HANDLE hDib = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, dibHdrSize + pixelBytes);
+    if (!hDib) { free(pixBuf); return false; }
+    {
+        BYTE* d = (BYTE*)GlobalLock(hDib);
+        if (!d) { GlobalFree(hDib); free(pixBuf); return false; }
+        BITMAPINFOHEADER* bi = (BITMAPINFOHEADER*)d;
+        bi->biSize        = dibHdrSize;
+        bi->biWidth       = w;
+        bi->biHeight      = h;
+        bi->biPlanes      = 1;
+        bi->biBitCount    = (WORD)bpp;
+        bi->biCompression = BI_RGB;
+        bi->biSizeImage   = pixelBytes;
+        memcpy(d + dibHdrSize, pixBuf, pixelBytes);
+        GlobalUnlock(hDib);
+    }
 
-    if (!OpenClipboard(NULL)) { GlobalFree(hGlobal); return false; }
+    // ── CF_DIBV5 (alpha channel mask) ──
+    DWORD v5HdrSize = sizeof(BITMAPV5HEADER);
+    HANDLE hDibV5 = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, v5HdrSize + pixelBytes);
+    if (hDibV5) {
+        BYTE* d = (BYTE*)GlobalLock(hDibV5);
+        if (d) {
+            BITMAPV5HEADER* v5 = (BITMAPV5HEADER*)d;
+            v5->bV5Size          = v5HdrSize;
+            v5->bV5Width         = w;
+            v5->bV5Height        = h;
+            v5->bV5Planes        = 1;
+            v5->bV5BitCount      = 32;
+            v5->bV5Compression   = BI_RGB;
+            v5->bV5SizeImage     = pixelBytes;
+            v5->bV5AlphaMask     = 0xFF000000;
+            memcpy(d + v5HdrSize, pixBuf, pixelBytes);
+            GlobalUnlock(hDibV5);
+        } else {
+            GlobalFree(hDibV5);
+            hDibV5 = NULL;
+        }
+    }
+
+    free(pixBuf);
+
+    if (!OpenClipboard(NULL)) { GlobalFree(hDib); if (hDibV5) GlobalFree(hDibV5); return false; }
     EmptyClipboard();
-    HANDLE result = SetClipboardData(CF_DIB, hGlobal);
+    if (hDibV5) SetClipboardData(CF_DIBV5, hDibV5);
+    SetClipboardData(CF_DIB, hDib);
     CloseClipboard();
-
-    if (!result) { GlobalFree(hGlobal); return false; }
     return true;
+}
+
+// ── PNG clipboard format (raw PNG data, for apps that prefer it) ──────
+void ClipboardPlatform_SetPNG(const void* data, size_t size) {
+    HANDLE h = GlobalAlloc(GMEM_MOVEABLE, (DWORD)size);
+    if (!h) return;
+    void* dst = GlobalLock(h);
+    if (dst) { memcpy(dst, data, size); GlobalUnlock(h); }
+    else { GlobalFree(h); return; }
+
+    UINT fmt = RegisterClipboardFormatA("PNG");
+    if (fmt && OpenClipboard(NULL)) {
+        SetClipboardData(fmt, h);
+        CloseClipboard();
+    } else {
+        GlobalFree(h);
+    }
 }

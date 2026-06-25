@@ -14,6 +14,15 @@ bool ClipboardPlatform_SetFilePath(const char* path);
 bool ClipboardPlatform_SetImageWithCustom(int w, int h, const void* rgba8,
     const char* customName, const void* customData, size_t customSize);
 bool ClipboardPlatform_GetCustomData(const char* name, void** data, size_t* size);
+void ClipboardPlatform_SetPNG(const void* data, size_t size);
+
+// ── Helper: encode 8-bit RGBA as PNG and set on clipboard ─────────────
+static void SetClipboardPNG(int w, int h, const void* rgba8) {
+    Image img = { (void*)rgba8, w, h, 1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 };
+    int sz = 0;
+    unsigned char* png = ExportImageToMemory(img, ".png", &sz);
+    if (png && sz > 0) { ClipboardPlatform_SetPNG(png, (size_t)sz); MemFree(png); }
+}
 
 // ── Static state ──
 static ClipboardImageCallback  s_imageCb = NULL;
@@ -146,6 +155,9 @@ void Clipboard_CopyRT16(RenderTexture2D rt) {
         }
     }
 
+    // Set PNG format for apps that prefer it (preserves alpha)
+    SetClipboardPNG(w, h, is16 ? dibImg.data : img.data);
+
     free(upscaleBuf);
     if (dibImg.data) UnloadImage(dibImg);
     UnloadImage(img);
@@ -157,6 +169,7 @@ void Clipboard_CopyTexture(Texture2D tex) {
     if (img.data) {
         ImageFlipVertical(&img);
         ClipboardPlatform_SetImage(img.width, img.height, img.data);
+        SetClipboardPNG(img.width, img.height, img.data);
         UnloadImage(img);
     }
 }
