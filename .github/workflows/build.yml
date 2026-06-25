@@ -254,7 +254,7 @@ jobs:
         run: |
           mkdir -p _out/repaint-windows _tmp/aw
           unzip _dl/repaint-windows.zip -d _tmp/aw
-          cp -r _tmp/aw/dist/repaint-windows/* _out/repaint-windows/
+          cp -r _tmp/aw/repaint-windows/* _out/repaint-windows/
           mkdir -p _tmp/wnn
           unzip _dl/nnserver-windows.zip -d _tmp/wnn
           mkdir -p _out/repaint-windows/NNServer
