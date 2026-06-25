@@ -19,6 +19,7 @@
 #include "undo.h"
 #include "replay_recorder.h"
 #include "user_content_receiver.h"
+#include "platform_clipboard.h"
 #include "StrokeEmitter.h"
 #include "StrokeThrottle.h"
 #include "external/glad.h"
@@ -192,8 +193,8 @@ void UpdateUI(AppState* state) {
         if (IsKeyPressed(KEY_FOUR)) state->mode = eDistort;
         if (IsKeyPressed(KEY_FIVE)) state->mode = eContrast;
 
-        // Toggle framing mode (C key — "crop" framing)
-        if (IsKeyPressed(KEY_C)) {
+        // Toggle framing mode (C key — "crop" framing, not with Ctrl)
+        if (!IsKeyDown(KEY_LEFT_CONTROL) && IsKeyPressed(KEY_C)) {
             bool enteringCrop = (state->framingMode == FRAME_DEFAULT);
             if (enteringCrop) {
                 HudSetActive(state, HUD_CANVAS_XFORM);
@@ -225,6 +226,77 @@ void UpdateUI(AppState* state) {
         // Replay confirmation popup
         if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyDown(KEY_LEFT_SHIFT) && IsKeyPressed(KEY_R)) {
             if (g_recorder) g_replayPopupActive = true;
+        }
+
+        // ── Clipboard copy ──────────────────────────────────────────
+        {
+            static double g_lastCopyCPress = 0.0;
+            double now = GetTime();
+
+            if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyPressed(KEY_C)) {
+                if (g_lastCopyCPress > 0.0 && now - g_lastCopyCPress < 0.35) {
+                    // Ctrl+C,C — copy merged (composited) image
+                    int cw = DocOutPxW(&state->doc), ch = DocOutPxH(&state->doc);
+                    if (cw > 0 && ch > 0) {
+                        RenderTexture2D rt = Load16BitRT(cw, ch);
+                        if (rt.id > 0) {
+                            BeginTextureMode(rt); ClearBackground(BLANK); EndTextureMode();
+                            const float* cv = LayerStack_GetCanvasView();
+                            RectXform viewXform;
+                            memcpy(viewXform.mat, cv, sizeof(float) * 6);
+                            viewXform.w = 0; viewXform.h = 0;
+                            int cnt = LayerStack_Count();
+                            for (int i = 0; i < cnt; i++) {
+                                sLayerProps* p = LayerStack_GetProps(i);
+                                if (!p || !p->visible) continue;
+                                RenderTexture2D lrt = LayerStack_GetRT(i);
+                                if (lrt.id == 0) continue;
+                                CompositorBlendParams bp;
+                                bp.opacity = p->op; bp.blendMode = p->blendmode;
+                                bp.threshold = p->threshold; bp.feather = p->feather;
+                                bp.seamless = p->seamless;
+                                Compositor_BlitLayerOnto(lrt.texture, &p->xform, &bp, &viewXform,
+                                    rt, Rectangle{0, 0, (float)cw, (float)ch});
+                            }
+                            rlSetBlendMode(RL_BLEND_ALPHA);
+                            Clipboard_CopyTexture(rt.texture);
+                            UnloadRenderTexture(rt);
+                            DisplayInfoText("Copied merged");
+                        }
+                    }
+                    g_lastCopyCPress = 0.0;
+                } else {
+                    // Ctrl+C — copy active layer
+                    RenderTexture2D rt = LayerStack_GetRT(state->activeLayer);
+                    if (rt.id > 0) {
+                        Clipboard_CopyTexture(rt.texture);
+                        g_lastCopyCPress = now;
+                        DisplayInfoText("Copied layer");
+                    }
+                }
+            }
+
+            if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyPressed(KEY_F) &&
+                g_lastCopyCPress > 0.0 && now - g_lastCopyCPress < 0.35) {
+                // Ctrl+C,F — save snapshot + copy file reference
+                time_t tn = time(NULL);
+                struct tm* tm_local = localtime(&tn);
+                const char* appDir = GetApplicationDirectory();
+                char path[1024];
+                snprintf(path, sizeof(path), "%sSnaps/snap_%04d%02d%02d_%02d%02d%02d.png",
+                         appDir,
+                         tm_local->tm_year + 1900, tm_local->tm_mon + 1, tm_local->tm_mday,
+                         tm_local->tm_hour, tm_local->tm_min, tm_local->tm_sec);
+                Image flat = ViewportManager_CompositeWithDither();
+                if (flat.data) {
+                    if (ExportImage(flat, path)) {
+                        Clipboard_CopyFile(path);
+                        DisplayInfoText("Snap copied as file");
+                    }
+                    UnloadImage(flat);
+                }
+                g_lastCopyCPress = 0.0;
+            }
         }
 
         // Toggle texture editing mode with T key

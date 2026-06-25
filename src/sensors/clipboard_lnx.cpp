@@ -40,3 +40,8 @@ bool ClipboardPlatform_SetImage(int w, int h, const void* rgba) {
     (void)w; (void)h; (void)rgba;
     return false;
 }
+
+bool ClipboardPlatform_SetFilePath(const char* path) {
+    (void)path;
+    return false;
+}

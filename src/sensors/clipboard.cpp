@@ -8,6 +8,7 @@ bool ClipboardPlatform_GetImage(int* w, int* h, void** rgba);
 bool ClipboardPlatform_GetFilePath(char* path, int maxLen);
 bool ClipboardPlatform_GetText(char* text, int maxLen);
 bool ClipboardPlatform_SetImage(int w, int h, const void* rgba);
+bool ClipboardPlatform_SetFilePath(const char* path);
 
 // ── Static state ──
 static ClipboardImageCallback s_imageCb = NULL;
@@ -46,4 +47,8 @@ void Clipboard_CopyTexture(Texture2D tex) {
         ClipboardPlatform_SetImage(img.width, img.height, img.data);
         UnloadImage(img);
     }
+}
+
+void Clipboard_CopyFile(const char* path) {
+    ClipboardPlatform_SetFilePath(path);
 }

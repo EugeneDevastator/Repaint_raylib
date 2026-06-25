@@ -4,6 +4,14 @@
 #include <cstdlib>
 #include <cstring>
 
+// DROPFILES is missing in some MinGW builds — define it manually
+typedef struct {
+    DWORD pFiles;
+    POINT pt;
+    BOOL  fNC;
+    BOOL  fWide;
+} _DROPFILES;
+
 // ── Image paste ───────────────────────────────────────────────────────
 bool ClipboardPlatform_GetImage(int* outW, int* outH, void** outRGBA) {
     if (!OpenClipboard(NULL)) return false;
@@ -127,6 +135,42 @@ bool ClipboardPlatform_GetText(char* text, int maxLen) {
 
     CloseClipboard();
     return ok;
+}
+
+// ── File path copy (CF_HDROP) ──────────────────────────────────────────
+bool ClipboardPlatform_SetFilePath(const char* path) {
+    int wlen = MultiByteToWideChar(CP_UTF8, 0, path, -1, NULL, 0);
+    if (wlen <= 0) return false;
+
+    DWORD headerSize = sizeof(_DROPFILES);
+    DWORD pathBytes = wlen * sizeof(WCHAR);
+    DWORD totalSize = headerSize + pathBytes + sizeof(WCHAR); // extra null for double-null terminator
+
+    HANDLE hGlobal = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, totalSize);
+    if (!hGlobal) return false;
+
+    BYTE* dst = (BYTE*)GlobalLock(hGlobal);
+    if (!dst) { GlobalFree(hGlobal); return false; }
+
+    _DROPFILES* df = (_DROPFILES*)dst;
+    df->pFiles = headerSize;
+    df->pt.x = 0;
+    df->pt.y = 0;
+    df->fNC = FALSE;
+    df->fWide = TRUE;
+
+    MultiByteToWideChar(CP_UTF8, 0, path, -1, (LPWSTR)(dst + headerSize), wlen);
+    // dst + headerSize + pathBytes already zeroed by ZEROINIT → double null
+
+    GlobalUnlock(hGlobal);
+
+    if (!OpenClipboard(NULL)) { GlobalFree(hGlobal); return false; }
+    EmptyClipboard();
+    HANDLE result = SetClipboardData(CF_HDROP, hGlobal);
+    CloseClipboard();
+
+    if (!result) { GlobalFree(hGlobal); return false; }
+    return true;
 }
 
 // ── Image copy ────────────────────────────────────────────────────────

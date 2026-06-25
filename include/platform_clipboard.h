@@ -13,6 +13,7 @@ void Clipboard_SetImageCallback(ClipboardImageCallback cb);
 void Clipboard_SetFileCallback(ClipboardFileCallback cb);
 void Clipboard_Update(void);
 void Clipboard_CopyTexture(Texture2D tex);
+void Clipboard_CopyFile(const char* path);
 
 #ifdef __cplusplus
 }
