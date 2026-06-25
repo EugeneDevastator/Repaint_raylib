@@ -13,8 +13,10 @@ bool LayerXformModule::HandleInput(InputState& input, const DrawRect& rect) {
         } else {
             HudSetActive(state, HUD_LAYER_XFORM);
             if (state->activeLayer >= 0) {
-                g_pivotCursorX = state->doc.window.mat[2];
-                g_pivotCursorY = state->doc.window.mat[5];
+                sLayerProps* lp = LayerStack_GetProps(state->activeLayer);
+                float* m = lp->xform.mat;
+                g_pivotCursorX = m[2] + m[0]*lp->layerW*0.5f + m[1]*lp->layerH*0.5f;
+                g_pivotCursorY = m[5] + m[3]*lp->layerW*0.5f + m[4]*lp->layerH*0.5f;
             }
         }
         return true;
