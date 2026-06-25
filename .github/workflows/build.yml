@@ -242,10 +242,10 @@ jobs:
       - name: Bundle linux
         run: |
           mkdir -p _out/repaint-linux _tmp/al
-          unzip _dl/repaint-linux.zip -d _tmp/al
+          unzip -o _dl/repaint-linux.zip -d _tmp/al || true
           cp -r _tmp/al/dist/repaint-linux/* _out/repaint-linux/
           mkdir -p _tmp/lnn
-          unzip _dl/nnserver-linux.zip -d _tmp/lnn
+          unzip -o _dl/nnserver-linux.zip -d _tmp/lnn || true
           mkdir -p _out/repaint-linux/NNServer
           cp -r _tmp/lnn/dist-server/* _out/repaint-linux/NNServer/
           cd _out && zip -r ../repaint-linux-full.zip repaint-linux
@@ -253,10 +253,10 @@ jobs:
       - name: Bundle windows
         run: |
           mkdir -p _out/repaint-windows _tmp/aw
-          unzip _dl/repaint-windows.zip -d _tmp/aw
+          unzip -o _dl/repaint-windows.zip -d _tmp/aw || true
           cp -r _tmp/aw/repaint-windows/* _out/repaint-windows/
           mkdir -p _tmp/wnn
-          unzip _dl/nnserver-windows.zip -d _tmp/wnn
+          unzip -o _dl/nnserver-windows.zip -d _tmp/wnn || true
           mkdir -p _out/repaint-windows/NNServer
           cp -r _tmp/wnn/dist-server/* _out/repaint-windows/NNServer/
           cd _out && zip -r ../repaint-windows-full.zip repaint-windows
@@ -264,7 +264,7 @@ jobs:
       - name: Bundle mac
         run: |
           mkdir -p _out/repaint-mac _tmp/mnn
-          unzip _dl/nnserver-mac.zip -d _tmp/mnn
+          unzip -o _dl/nnserver-mac.zip -d _tmp/mnn || true
           mkdir -p _out/repaint-mac/NNServer
           cp -r _tmp/mnn/dist-server/* _out/repaint-mac/NNServer/
           cd _out && zip -r ../repaint-mac-full.zip repaint-mac
