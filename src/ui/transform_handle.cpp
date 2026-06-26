@@ -85,20 +85,26 @@ bool TransformHandle_Input(RectXform* xform,
 
     Vector2 cursorSc = GetWorldToScreen2D(*cursor, *camera);
 
-    // Compute screen-space center
-    Vector2 centerSc = {0, 0};
-    for (int i = 0; i < 4; i++) {
-        centerSc.x += sc[i].x;
-        centerSc.y += sc[i].y;
-    }
-    centerSc.x /= 4.0f;
-    centerSc.y /= 4.0f;
+    // ── World-space axes from matrix (for handle geometry) ────────
+    float* m = xform->mat;
+    float ux = m[0], uy = m[3];
+    float vx = m[1], vy = m[4];
+    float tx = m[2], ty = m[5];
+    float w_ = xform->w, h_ = xform->h;
+    float uLen = sqrtf(ux*ux + uy*uy);
+    float vLen = sqrtf(vx*vx + vy*vy);
+    float uNx = (uLen > 0.0001f) ? ux/uLen : 1.0f;
+    float uNy = (uLen > 0.0001f) ? uy/uLen : 0.0f;
+    float vNx = (vLen > 0.0001f) ? vx/vLen : 0.0f;
+    float vNy = (vLen > 0.0001f) ? vy/vLen : 1.0f;
 
     static const float HS  = 10.0f;   // corner handle half-size
     static const float EO  = 14.0f;   // edge handle offset outward
     static const float CM  = 4.0f;    // capture margin
 
     // ── Precompute edge normals ─────────────────────────────────────
+    Vector2 centerSc = {(sc[0].x+sc[1].x+sc[2].x+sc[3].x)*0.25f,
+                        (sc[0].y+sc[1].y+sc[2].y+sc[3].y)*0.25f};
     int edgeVert[4][2] = {{0,1},{1,2},{2,3},{3,0}};
     float edgeNx[4], edgeNy[4], edgeLen[4];
     for (int e = 0; e < 4; e++) {
@@ -111,16 +117,24 @@ bool TransformHandle_Input(RectXform* xform,
         edgeNx[e] = nx; edgeNy[e] = ny;
     }
 
-    // ── Hit-test: corner squares (distance to handle center) ──────
-    float HS_SQRT2 = HS * 1.41421356f;
+    // ── Hit-test: corner handles (same geometry as drawing) ─────────
+    float pixScale = 1.0f / camera->zoom;
+    float hw = HS * pixScale;
+    int su[4] = {-1, 1, 1, -1};
+    int sv[4] = {-1, -1, 1, 1};
+    Vector2 wc[4] = {
+        Vector2{tx,          ty},
+        Vector2{tx+ux*w_,    ty+uy*w_},
+        Vector2{tx+ux*w_+vx*h_, ty+uy*w_+vy*h_},
+        Vector2{tx+vx*h_,    ty+vy*h_}
+    };
     Vector2 ch[4];
     for (int i = 0; i < 4; i++) {
-        float dx = sc[i].x - sc[(i+2)%4].x;
-        float dy = sc[i].y - sc[(i+2)%4].y;
-        float len = sqrtf(dx*dx + dy*dy);
-        if (len < 0.0001f) { ch[i] = sc[i]; continue; }
-        ch[i].x = sc[i].x + (dx/len) * HS_SQRT2;
-        ch[i].y = sc[i].y + (dy/len) * HS_SQRT2;
+        Vector2 hwPt = {
+            wc[i].x + (su[i]*uNx + sv[i]*vNx) * hw,
+            wc[i].y + (su[i]*uNy + sv[i]*vNy) * hw
+        };
+        ch[i] = GetWorldToScreen2D(hwPt, *camera);
     }
     int nearCorner = -1;
     int nearEdge   = -1;
@@ -425,8 +439,27 @@ void TransformHandle_Draw(const RectXform* xform,
         return GetWorldToScreen2D(wp, *camera);
     };
 
-    Vector2 corners[4];
-    Corners(xform->mat, xform->w, xform->h, corners);
+    // ── World-space axes from matrix ─────────────────────────────────
+    const float* m = xform->mat;
+    float ux = m[0], uy = m[3];    // U basis (full scale, not unit)
+    float vx = m[1], vy = m[4];    // V basis (full scale, not unit)
+    float tx = m[2], ty = m[5];
+    float w_ = xform->w, h_ = xform->h;
+
+    // World-space four corners (local → world through matrix)
+    Vector2 wc[4];
+    wc[0] = Vector2{tx,            ty};
+    wc[1] = Vector2{tx+ux*w_,      ty+uy*w_};
+    wc[2] = Vector2{tx+ux*w_+vx*h_, ty+uy*w_+vy*h_};
+    wc[3] = Vector2{tx+vx*h_,      ty+vy*h_};
+
+    // Unit U, V axes in world (direction only, for handle offsets)
+    float uLen = sqrtf(ux*ux + uy*uy);
+    float vLen = sqrtf(vx*vx + vy*vy);
+    float uNx = (uLen > 0.0001f) ? ux/uLen : 1.0f;
+    float uNy = (uLen > 0.0001f) ? uy/uLen : 0.0f;
+    float vNx = (vLen > 0.0001f) ? vx/vLen : 0.0f;
+    float vNy = (vLen > 0.0001f) ? vy/vLen : 1.0f;
 
     rlDrawRenderBatchActive();
     glEnable(GL_COLOR_LOGIC_OP);
@@ -442,63 +475,65 @@ void TransformHandle_Draw(const RectXform* xform,
     // Rectangle outline
     Vector2 scrn[5];
     for (int i = 0; i < 4; i++)
-        scrn[i] = ws(corners[i]);
+        scrn[i] = ws(wc[i]);
     scrn[4] = scrn[0];
     DrawLineStrip(scrn, 5, WHITE);
 
-    // Compute screen-space center
-    Vector2 centerSc = {0, 0};
-    for (int i = 0; i < 4; i++) {
-        centerSc.x += scrn[i].x;
-        centerSc.y += scrn[i].y;
-    }
-    centerSc.x /= 4.0f;
-    centerSc.y /= 4.0f;
+    // ── Handle geometry in identity (local) space, transformed ──────
+    static const float HS = 10.0f;   // corner handle half-size (pixels)
+    static const float EO = 14.0f;   // edge handle offset (pixels)
 
-    static const float HS = 10.0f;   // corner handle half-size
-    static const float EO = 14.0f;   // edge handle offset outward
+    // Pixel handle parameters → world units at camera zoom
+    float pixScale = 1.0f / camera->zoom;
+    float hw = HS * pixScale;   // corner half-size in world
+    float eo = EO * pixScale;   // edge offset in world
 
-    // Corner handles — outward from opposite corner, aligned with rect edges
-    float HS_SQRT2 = HS * 1.41421356f;
+    // Outward-direction signs for each corner in local space
+    int su[4] = {-1, 1, 1, -1};
+    int sv[4] = {-1, -1, 1, 1};
+
+    // Corner handle squares — defined with geometry derived from matrix axes
     Vector2 sq[5];
     for (int i = 0; i < 4; i++) {
-        float dx = scrn[i].x - scrn[(i+2)%4].x;
-        float dy = scrn[i].y - scrn[(i+2)%4].y;
-        float len = sqrtf(dx*dx + dy*dy);
-        if (len < 0.0001f) continue;
-        float odx = dx/len, ody = dy/len;
-        float hx = scrn[i].x + odx * HS_SQRT2;
-        float hy = scrn[i].y + ody * HS_SQRT2;
-        int ni = (i+1)%4, pi = (i+3)%4;
-        float ux = scrn[ni].x - scrn[i].x, uy = scrn[ni].y - scrn[i].y;
-        float vx = scrn[pi].x - scrn[i].x, vy = scrn[pi].y - scrn[i].y;
-        float ulen = sqrtf(ux*ux + uy*uy);
-        float vlen = sqrtf(vx*vx + vy*vy);
-        if (ulen < 0.0001f || vlen < 0.0001f) continue;
-        ux /= ulen; uy /= ulen; vx /= vlen; vy /= vlen;
-        sq[0] = Vector2{hx - ux*HS - vx*HS, hy - uy*HS - vy*HS};
-        sq[1] = Vector2{hx + ux*HS - vx*HS, hy + uy*HS - vy*HS};
-        sq[2] = Vector2{hx + ux*HS + vx*HS, hy + uy*HS + vy*HS};
-        sq[3] = Vector2{hx - ux*HS + vx*HS, hy - uy*HS + vy*HS};
+        // Handle center in world: corner + outward_unit * hw
+        // outward_unit = su[i]*uN + sv[i]*vN  (|outward| = √2 for orthogonal axes)
+        Vector2 hwPt = {
+            wc[i].x + (su[i]*uNx + sv[i]*vNx) * hw,
+            wc[i].y + (su[i]*uNy + sv[i]*vNy) * hw
+        };
+        Vector2 h = ws(hwPt);
+
+        // Screen-space U, V unit directions at this corner
+        Vector2 sU_ = ws(Vector2{wc[i].x + uNx, wc[i].y + uNy});
+        Vector2 sV_ = ws(Vector2{wc[i].x + vNx, wc[i].y + vNy});
+        float sUx_ = sU_.x - scrn[i].x, sUy_ = sU_.y - scrn[i].y;
+        float sVx_ = sV_.x - scrn[i].x, sVy_ = sV_.y - scrn[i].y;
+        float sUlen = sqrtf(sUx_*sUx_ + sUy_*sUy_);
+        float sVlen = sqrtf(sVx_*sVx_ + sVy_*sVy_);
+        if (sUlen < 0.0001f || sVlen < 0.0001f) continue;
+        float sUx = sUx_ / sUlen, sUy = sUy_ / sUlen;
+        float sVx = sVx_ / sVlen, sVy = sVy_ / sVlen;
+
+        sq[0] = Vector2{h.x - sUx*HS - sVx*HS, h.y - sUy*HS - sVy*HS};
+        sq[1] = Vector2{h.x + sUx*HS - sVx*HS, h.y + sUy*HS - sVy*HS};
+        sq[2] = Vector2{h.x + sUx*HS + sVx*HS, h.y + sUy*HS + sVy*HS};
+        sq[3] = Vector2{h.x - sUx*HS + sVx*HS, h.y - sUy*HS + sVy*HS};
         sq[4] = sq[0];
         DrawLineStrip(sq, 5, WHITE);
     }
 
-    // Edge handles — offset outward along edge normal
+    // Edge handles — outward normals from matrix axes
+    // Top: -vN, Right: +uN, Bottom: +vN, Left: -uN
+    float enx[4] = {-vNx, uNx, vNx, -uNx};
+    float eny[4] = {-vNy, uNy, vNy, -uNy};
     int edgeVert[4][2] = {{0,1},{1,2},{2,3},{3,0}};
     Vector2 el[2];
     for (int e = 0; e < 4; e++) {
         int i0 = edgeVert[e][0], i1 = edgeVert[e][1];
-        float ex = scrn[i1].x - scrn[i0].x, ey = scrn[i1].y - scrn[i0].y;
-        float elen = sqrtf(ex*ex + ey*ey);
-        if (elen < 0.0001f) continue;
-        float ndx = -ey / elen, ndy =  ex / elen;
-        if (ndx*(scrn[i0].x - centerSc.x) + ndy*(scrn[i0].y - centerSc.y) < 0) {
-            ndx = -ndx; ndy = -ndy;
-        }
-        float ox = ndx * EO, oy = ndy * EO;
-        el[0] = Vector2{scrn[i0].x + ox, scrn[i0].y + oy};
-        el[1] = Vector2{scrn[i1].x + ox, scrn[i1].y + oy};
+        Vector2 w0 = {wc[i0].x + enx[e]*eo, wc[i0].y + eny[e]*eo};
+        Vector2 w1 = {wc[i1].x + enx[e]*eo, wc[i1].y + eny[e]*eo};
+        el[0] = ws(w0);
+        el[1] = ws(w1);
         DrawLineStrip(el, 2, WHITE);
     }
 
