@@ -1,6 +1,6 @@
 #include "sock_platform.h"
 #ifdef __MINGW32__
-# define _Return_type_success_(x)  /* SAL annotation, not needed for GCC */
+# define _Return_type_success_(x)
 #endif
 #include "onnxruntime_c_api.h"
 
@@ -19,11 +19,23 @@
 
 #ifdef _WIN32
 # include <windows.h>
+# include <winhttp.h>
+# include <conio.h>
+#else
+# include <curl/curl.h>
+# include <unistd.h>
+# include <termios.h>
 #endif
 
 #ifdef _MSC_VER
 # define strdup _strdup
 #endif
+
+/* ── model constants ──────────────────────────────────────────────────────── */
+
+#define MODEL_FILENAME       "model.onnx"
+#define DEFAULT_MODEL_SIZE   99100000ULL
+#define MODEL_EXPECTED_SIZE  103885865ULL
 
 /* ── protocol helpers (big-endian length prefixes) ──────────────────────────── */
 
@@ -59,6 +71,337 @@ static bool send_msg(sock_t s, uint8_t type, const void* data, uint32_t len) {
     return true;
 }
 
+/* ── filesystem helpers ───────────────────────────────────────────────────── */
+
+static bool file_exists(const char* path) {
+    FILE* f = fopen(path, "rb");
+    if (f) { fclose(f); return true; }
+    return false;
+}
+
+static bool mkdir_recursive(const char* path) {
+#ifdef _WIN32
+    int len = (int)strlen(path);
+    char tmp[1024];
+    for (int i = 0; i <= len; i++) {
+        if (i == len || path[i] == '\\' || path[i] == '/') {
+            if (i == 0) continue;
+            memcpy(tmp, path, i); tmp[i] = '\0';
+            CreateDirectoryA(tmp, NULL);
+        }
+    }
+    return true;
+#else
+    char cmd[1024];
+    snprintf(cmd, sizeof(cmd), "mkdir -p \"%s\"", path);
+    return system(cmd) == 0;
+#endif
+}
+
+static bool file_size(const char* path, long long* out) {
+    FILE* f = fopen(path, "rb");
+    if (!f) return false;
+    fseek(f, 0, SEEK_END);
+    *out = (long long)ftell(f);
+    fclose(f);
+    return true;
+}
+
+/* ── model URL / cache path resolution ────────────────────────────────────── */
+
+static void get_exe_dir(char* buf, size_t size) {
+#ifdef _WIN32
+    GetModuleFileNameA(NULL, buf, (DWORD)size);
+    char* last = strrchr(buf, '\\');
+    if (last) *last = '\0';
+#else
+    ssize_t n = readlink("/proc/self/exe", buf, size - 1);
+    if (n > 0) {
+        buf[n] = '\0';
+        char* last = strrchr(buf, '/');
+        if (last) *last = '\0';
+    } else {
+        strcpy(buf, ".");
+    }
+#endif
+}
+
+static std::string get_cache_dir() {
+    char exe_dir[1024];
+    get_exe_dir(exe_dir, sizeof(exe_dir));
+#ifdef _WIN32
+    return std::string(exe_dir) + "\\nnmodels";
+#else
+    return std::string(exe_dir) + "/nnmodels";
+#endif
+}
+
+static bool read_url_file(const char* path, std::string& url) {
+    FILE* f = fopen(path, "rb");
+    if (!f) return false;
+    char buf[2048];
+    if (fgets(buf, sizeof(buf), f)) {
+        size_t len = strlen(buf);
+        while (len > 0 && (buf[len-1] == '\n' || buf[len-1] == '\r')) buf[--len] = '\0';
+        if (len > 0) url = buf;
+    }
+    fclose(f);
+    return !url.empty();
+}
+
+/* ── "press any key" helper ──────────────────────────────────────────────── */
+
+static bool g_no_prompt = false;
+
+static bool prompt_continue() {
+    if (g_no_prompt) return true;
+    fprintf(stderr, "  [nnserver] Press any key to start download, ESC to cancel\n");
+#ifdef _WIN32
+    int c = _getch();
+    return c != 27;
+#else
+    struct termios old, newt;
+    tcgetattr(STDIN_FILENO, &old);
+    newt = old;
+    newt.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+    int c = getchar();
+    tcsetattr(STDIN_FILENO, TCSANOW, &old);
+    return c != 27;
+#endif
+}
+
+/* ── cross-platform download (WinHTTP / libcurl) ──────────────────────────── */
+
+#ifdef _WIN32
+
+static bool download_file(const char* url, const char* dest_path, long long expected_size) {
+    int wlen = MultiByteToWideChar(CP_UTF8, 0, url, -1, nullptr, 0);
+    std::wstring wurl((size_t)wlen, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, url, -1, &wurl[0], wlen);
+
+    URL_COMPONENTSW comp = {sizeof(comp)};
+    comp.dwSchemeLength    = (DWORD)-1;
+    comp.dwHostNameLength  = (DWORD)-1;
+    comp.dwUrlPathLength   = (DWORD)-1;
+    comp.dwExtraInfoLength = (DWORD)-1;
+
+    if (!WinHttpCrackUrl(wurl.c_str(), (DWORD)wurl.size(), 0, &comp))
+        return false;
+
+    std::wstring host(comp.lpszHostName, comp.dwHostNameLength);
+    std::wstring path(comp.lpszUrlPath, comp.dwUrlPathLength);
+    if (comp.dwExtraInfoLength > 0)
+        path += std::wstring(comp.lpszExtraInfo, comp.dwExtraInfoLength);
+    bool secure = comp.nScheme == INTERNET_SCHEME_HTTPS;
+    INTERNET_PORT port = comp.nPort;
+
+    HINTERNET hSession = WinHttpOpen(L"nnserver/1.0",
+        WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, NULL, NULL, 0);
+    if (!hSession) return false;
+
+    HINTERNET hConnect = WinHttpConnect(hSession, host.c_str(), port, 0);
+    if (!hConnect) { WinHttpCloseHandle(hSession); return false; }
+
+    DWORD flags = secure ? WINHTTP_FLAG_SECURE : 0;
+    HINTERNET hRequest = WinHttpOpenRequest(hConnect, L"GET", path.c_str(),
+        NULL, NULL, NULL, flags);
+    if (!hRequest) { WinHttpCloseHandle(hConnect); WinHttpCloseHandle(hSession); return false; }
+
+    DWORD secFlags = SECURITY_FLAG_IGNORE_UNKNOWN_CA |
+                     SECURITY_FLAG_IGNORE_CERT_WRONG_USAGE;
+    WinHttpSetOption(hRequest, WINHTTP_OPTION_SECURITY_FLAGS, &secFlags, sizeof(secFlags));
+
+    bool ok = false;
+    FILE* fp = nullptr;
+    long long received = 0;
+
+    do {
+        if (!WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0, NULL, 0, 0, 0))
+            break;
+        if (!WinHttpReceiveResponse(hRequest, NULL))
+            break;
+
+        WCHAR clenStr[32] = {0};
+        DWORD clenSize = sizeof(clenStr);
+        long long totalSize = 0;
+        if (WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_CONTENT_LENGTH,
+                NULL, clenStr, &clenSize, WINHTTP_NO_HEADER_INDEX))
+            totalSize = _wtoi64(clenStr);
+        if (totalSize == 0) totalSize = expected_size;
+
+        fp = fopen(dest_path, "wb");
+        if (!fp) break;
+
+        fprintf(stderr, "  [download] %s\n", url);
+
+        char buf[65536];
+        int last_pct = -1;
+
+        while (true) {
+            DWORD available = 0;
+            if (!WinHttpQueryDataAvailable(hRequest, &available)) break;
+            if (available == 0) break;
+
+            DWORD read = 0;
+            DWORD to_read = available < sizeof(buf) ? available : (DWORD)sizeof(buf);
+            if (!WinHttpReadData(hRequest, buf, to_read, &read)) break;
+            if (read == 0) break;
+
+            fwrite(buf, 1, read, fp);
+            received += read;
+
+            if (totalSize > 0) {
+                int pct = (int)(received * 100 / totalSize);
+                if (pct != last_pct) {
+                    last_pct = pct;
+                    fprintf(stderr, "\r  [download] %lld / %lld MB (%d%%)",
+                            (long long)(received / 1048576),
+                            (long long)(totalSize / 1048576), pct);
+                }
+            }
+        }
+        ok = true;
+    } while (false);
+
+    if (fp) fclose(fp);
+    WinHttpCloseHandle(hRequest);
+    WinHttpCloseHandle(hConnect);
+    WinHttpCloseHandle(hSession);
+    fprintf(stderr, "\n");
+
+    return ok;
+}
+
+#else /* POSIX — libcurl */
+
+struct WriteBuf {
+    FILE* fp;
+    long long received;
+    long long total;
+    int last_pct;
+};
+
+static size_t write_cb(void* ptr, size_t size, size_t nmemb, void* userdata) {
+    WriteBuf* buf = (WriteBuf*)userdata;
+    size_t n = fwrite(ptr, size, nmemb, buf->fp);
+    buf->received += (long long)n;
+    return n;
+}
+
+static int progress_cb(void* clientp, curl_off_t dltotal, curl_off_t dlnow,
+                        curl_off_t ultotal, curl_off_t ulnow) {
+    (void)ultotal; (void)ulnow;
+    WriteBuf* buf = (WriteBuf*)clientp;
+    if (dltotal > 0) {
+        buf->total = (long long)dltotal;
+        int pct = (int)(dlnow * 100 / dltotal);
+        if (pct != buf->last_pct) {
+            buf->last_pct = pct;
+            fprintf(stderr, "\r  [download] %lld / %lld MB (%d%%)",
+                    (long long)(dlnow / 1048576),
+                    (long long)(dltotal / 1048576), pct);
+        }
+    }
+    return 0;
+}
+
+static bool download_file(const char* url, const char* dest_path, long long expected_size) {
+    CURL* curl = curl_easy_init();
+    if (!curl) return false;
+
+    FILE* fp = fopen(dest_path, "wb");
+    if (!fp) { curl_easy_cleanup(curl); return false; }
+
+    WriteBuf buf = {fp, 0, expected_size, -1};
+
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_cb);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &buf);
+    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+    curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, progress_cb);
+    curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &buf);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 30L);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "nnserver/1.0");
+
+    fprintf(stderr, "  [download] %s\n", url);
+    CURLcode res = curl_easy_perform(curl);
+    fclose(fp);
+    curl_easy_cleanup(curl);
+    fprintf(stderr, "\n");
+
+    if (res != CURLE_OK) {
+        fprintf(stderr, "  [nnserver] download failed: %s\n", curl_easy_strerror(res));
+        remove(dest_path);
+        return false;
+    }
+
+    return true;
+}
+#endif
+
+/* ── model discovery (cache → download → load) ────────────────────────────── */
+
+static std::string resolve_model(const char* model_arg, const char* url_arg) {
+    /* 1. explicit --model path */
+    if (model_arg) {
+        if (file_exists(model_arg)) {
+            fprintf(stderr, "[nnserver] model: %s\n", model_arg);
+            return model_arg;
+        }
+        fprintf(stderr, "[nnserver] --model path not found: %s\n", model_arg);
+    }
+
+    /* 2. local file in CWD */
+    if (file_exists(MODEL_FILENAME)) {
+        fprintf(stderr, "[nnserver] model: %s\n", MODEL_FILENAME);
+        return MODEL_FILENAME;
+    }
+
+    /* 3. cache dir */
+    std::string cache_dir = get_cache_dir();
+    std::string cache_path = cache_dir + "/" + MODEL_FILENAME;
+    if (file_exists(cache_path.c_str())) {
+        fprintf(stderr, "[nnserver] model: %s\n", cache_path.c_str());
+        return cache_path;
+    }
+
+    /* 4. not found — resolve URL and download */
+    std::string url;
+    if (url_arg) {
+        url = url_arg;
+    } else {
+        char exe_dir[1024];
+        get_exe_dir(exe_dir, sizeof(exe_dir));
+        std::string url_path = std::string(exe_dir) + "/model_url.txt";
+        if (!read_url_file(url_path.c_str(), url)) {
+            url = "https://media.githubusercontent.com/media/EugeneDevastator/repaint_models/main/matte/vitmatte_model_vitsmall_dist646.onnx";
+        }
+    }
+
+    fprintf(stderr, "[nnserver] model not found in cache\n");
+    fprintf(stderr, "[nnserver] one-time download required (%lld MB)\n",
+            (long long)(MODEL_EXPECTED_SIZE / 1048576));
+
+    if (!prompt_continue()) {
+        fprintf(stderr, "[nnserver] download cancelled\n");
+        return "";
+    }
+
+    mkdir_recursive(cache_dir.c_str());
+
+    fprintf(stderr, "[nnserver] downloading...\n");
+    if (!download_file(url.c_str(), cache_path.c_str(), MODEL_EXPECTED_SIZE)) {
+        fprintf(stderr, "[nnserver] download failed!\n");
+        return "";
+    }
+
+    fprintf(stderr, "[nnserver] download complete\n");
+    fprintf(stderr, "[nnserver] model: %s\n", cache_path.c_str());
+    return cache_path;
+}
+
 /* ── ONNX Runtime (C API) globals ──────────────────────────────────────────── */
 
 static const OrtApi*   g_api     = nullptr;
@@ -72,14 +415,13 @@ static size_t          g_nout    = 0;
 
 static bool ort_load(const char* path) {
     g_api = OrtGetApiBase()->GetApi(ORT_API_VERSION);
-    if (!g_api) { fprintf(stderr, "ORT GetApi failed\n"); return false; }
+    if (!g_api) { fprintf(stderr, "[nnserver] ORT GetApi failed\n"); return false; }
 
     OrtStatus* st = nullptr;
 
     st = g_api->CreateEnv(ORT_LOGGING_LEVEL_WARNING, "nnserver", &g_env);
-    if (st) { fprintf(stderr, "ORT env: %s\n", g_api->GetErrorMessage(st)); g_api->ReleaseStatus(st); return false; }
+    if (st) { fprintf(stderr, "[nnserver] ORT env: %s\n", g_api->GetErrorMessage(st)); g_api->ReleaseStatus(st); return false; }
 
-    /* load model — on Windows ORTCHAR_T is wchar_t, convert path */
 #ifdef _WIN32
     int wlen = MultiByteToWideChar(CP_UTF8, 0, path, -1, nullptr, 0);
     std::wstring wpath((size_t)wlen, L'\0');
@@ -90,19 +432,19 @@ static bool ort_load(const char* path) {
 
     OrtSessionOptions* opts = nullptr;
     st = g_api->CreateSessionOptions(&opts);
-    if (st) { fprintf(stderr, "ORT opts: %s\n", g_api->GetErrorMessage(st)); g_api->ReleaseStatus(st); return false; }
+    if (st) { fprintf(stderr, "[nnserver] ORT opts: %s\n", g_api->GetErrorMessage(st)); g_api->ReleaseStatus(st); return false; }
     g_api->SetSessionGraphOptimizationLevel(opts, ORT_ENABLE_BASIC);
 
     st = g_api->CreateSession(g_env, wpath.c_str(), opts, &g_sess);
     g_api->ReleaseSessionOptions(opts);
-    if (st) { fprintf(stderr, "ORT sess: %s\n", g_api->GetErrorMessage(st)); g_api->ReleaseStatus(st); return false; }
+    if (st) { fprintf(stderr, "[nnserver] ORT sess: %s\n", g_api->GetErrorMessage(st)); g_api->ReleaseStatus(st); return false; }
 
     st = g_api->CreateMemoryInfo("Cpu", OrtDeviceAllocator, -1, OrtMemTypeDefault, &g_mem);
-    if (st) { fprintf(stderr, "ORT mem: %s\n", g_api->GetErrorMessage(st)); g_api->ReleaseStatus(st); return false; }
+    if (st) { fprintf(stderr, "[nnserver] ORT mem: %s\n", g_api->GetErrorMessage(st)); g_api->ReleaseStatus(st); return false; }
 
     OrtAllocator* alloc = nullptr;
     st = g_api->GetAllocatorWithDefaultOptions(&alloc);
-    if (st) { fprintf(stderr, "ORT alloc: %s\n", g_api->GetErrorMessage(st)); g_api->ReleaseStatus(st); return false; }
+    if (st) { fprintf(stderr, "[nnserver] ORT alloc: %s\n", g_api->GetErrorMessage(st)); g_api->ReleaseStatus(st); return false; }
 
     g_api->SessionGetInputCount(g_sess, &g_nin);
     g_api->SessionGetOutputCount(g_sess, &g_nout);
@@ -113,7 +455,7 @@ static bool ort_load(const char* path) {
     for (size_t i = 0; i < g_nin; i++) {
         char* n; g_api->SessionGetInputName(g_sess, i, alloc, &n);
         g_inames[i] = strdup(n);
-        /* print input shape info */
+
         OrtTypeInfo* ti = nullptr;
         g_api->SessionGetInputTypeInfo(g_sess, i, &ti);
         const OrtTensorTypeAndShapeInfo* tsi = nullptr;
@@ -130,6 +472,7 @@ static bool ort_load(const char* path) {
     for (size_t i = 0; i < g_nout; i++) {
         char* n; g_api->SessionGetOutputName(g_sess, i, alloc, &n);
         g_onames[i] = strdup(n);
+
         OrtTypeInfo* ti = nullptr;
         g_api->SessionGetOutputTypeInfo(g_sess, i, &ti);
         const OrtTensorTypeAndShapeInfo* tsi = nullptr;
@@ -219,7 +562,6 @@ static const float STD[3]  = {0.229f, 0.224f, 0.225f};
 /* ── connection handler (runs entire pipeline for one client) ───────────────── */
 
 static void handle_client(sock_t client) {
-    /* all scoped variables declared upfront so goto never crosses initialisation */
     std::vector<uint8_t> rgb_blob, tri_blob, rgb_rgba, tri_rgba;
     std::vector<uint8_t> trimap, rsz_rgb, rsz_tri;
     std::vector<float> pixels;
@@ -236,7 +578,6 @@ static void handle_client(sock_t client) {
     bool ok = false;
     int64_t img_shape[4] = {0}, out_shape[4] = {0};
 
-    /* 1. receive both blobs */
     if (!recv_blob(client, rgb_blob) || !recv_blob(client, tri_blob)) {
         fprintf(stderr, "[handler] recv failed\n"); return;
     }
@@ -248,7 +589,6 @@ static void handle_client(sock_t client) {
         send_msg(client, 'P', msg, (uint32_t)strlen(msg));
     };
 
-    /* 2. decode PNGs */
     progress("Step 1/4: Decoding images...");
     if (!decode_png(rgb_blob, rgb_w, rgb_h, rgb_rgba) ||
         !decode_png(tri_blob, tri_w, tri_h, tri_rgba)) {
@@ -257,7 +597,6 @@ static void handle_client(sock_t client) {
     orig_w = rgb_w; orig_h = rgb_h;
     fprintf(stderr, "  image size: %dx%d\n", orig_w, orig_h);
 
-    /* 3. posterize trimap (R channel → 0/128/255) */
     progress("Step 2/4: Posterizing trimap...");
     trimap.assign((size_t)tri_w * tri_h, 0);
     for (int i = 0; i < tri_w * tri_h; i++) {
@@ -265,7 +604,6 @@ static void handle_client(sock_t client) {
         trimap[i] = (v >= 192) ? 255 : (v >= 64) ? 128 : 0;
     }
 
-    /* 4. resize to multiple-of-32 */
     mw = (orig_w / 32) * 32; if (mw < 32) mw = 32;
     mh = (orig_h / 32) * 32; if (mh < 32) mh = 32;
 
@@ -275,7 +613,6 @@ static void handle_client(sock_t client) {
     resize_gray(trimap.data(), tri_w, tri_h, rsz_tri.data(), mw, mh);
     fprintf(stderr, "  resized to: %dx%d\n", mw, mh);
 
-    /* 5. build 4-channel float input (RGB normalized + trimap) */
     progress("Step 3/4: Running model inference...");
     np = (size_t)mw * mh;
     pixels.assign(np * 4, 0);
@@ -290,7 +627,6 @@ static void handle_client(sock_t client) {
         pixels[np*3+i]     = rsz_tri[i] / 255.0f;
     }
 
-    /* 6. run ONNX session */
     img_shape[0] = 1; img_shape[1] = 4; img_shape[2] = mh; img_shape[3] = mw;
 
     {   OrtStatus* st;
@@ -313,7 +649,6 @@ static void handle_client(sock_t client) {
         out = ort_out[0];
     }
 
-    /* 7. read output tensor */
     {   OrtStatus* st;
         if ((st = g_api->GetTensorMutableData(out, (void**)&out_data))) {
             fprintf(stderr, "ORT: GetTensorMutableData: %s\n", g_api->GetErrorMessage(st));
@@ -327,7 +662,6 @@ static void handle_client(sock_t client) {
     g_api->ReleaseTensorTypeAndShapeInfo(info); info = nullptr;
     oh = (size_t)out_shape[2]; ow = (size_t)out_shape[3];
 
-    /* 8. extract alpha, rescale to original size */
     progress("Step 4/4: Encoding result...");
     alpha.assign((size_t)ow * oh, 0);
     for (size_t i = 0; i < (size_t)ow * oh; i++) {
@@ -340,7 +674,6 @@ static void handle_client(sock_t client) {
     final_alpha.assign((size_t)orig_w * orig_h, 0);
     resize_gray(alpha.data(), (int)ow, (int)oh, final_alpha.data(), orig_w, orig_h);
 
-    /* 9. encode result PNG and send */
     png = stbi_write_png_to_mem(final_alpha.data(), orig_w, orig_w, orig_h, 1, &png_len);
     if (!png) { fprintf(stderr, "[handler] PNG encode failed\n"); goto cleanup; }
 
@@ -360,37 +693,29 @@ int main(int argc, char** argv) {
     setvbuf(stderr, nullptr, _IONBF, 0);
     fprintf(stderr, "[nnserver] starting...\n");
 
-    const char* model_path = nullptr;
-    int         port       = 8000;
+    const char* model_path  = nullptr;
+    const char* model_url   = nullptr;
+    int         port        = 8000;
 
     for (int i = 1; i < argc; i++) {
         if      (strcmp(argv[i], "--port")  == 0 && i+1 < argc) port = atoi(argv[++i]);
         else if (strcmp(argv[i], "--model") == 0 && i+1 < argc) model_path = argv[++i];
+        else if (strcmp(argv[i], "--model-url") == 0 && i+1 < argc) model_url = argv[++i];
+        else if (strcmp(argv[i], "--no-prompt") == 0) g_no_prompt = true;
         else if (strcmp(argv[i], "--help")  == 0) {
-            fprintf(stderr, "Usage: nnserver [--port PORT] [--model PATH]\n"); return 0;
+            fprintf(stderr, "Usage: nnserver [--port PORT] [--model PATH] [--model-url URL] [--no-prompt]\n");
+            return 0;
         }
     }
 
-    if (!model_path) {
-        const char* try_paths[] = {
-            "NNModelServer/models/vitmatte_model_vitsmall_dist646.onnx",
-            "../NNModelServer/models/vitmatte_model_vitsmall_dist646.onnx",
-            "vitmatte_model_vitsmall_dist646.onnx",
-            "models/vitmatte_model_vitsmall_dist646.onnx",
-        };
-        for (auto c : try_paths) {
-            FILE* f = fopen(c, "rb");
-            if (f) { fclose(f); model_path = c; break; }
-        }
-        if (!model_path) {
-            fprintf(stderr, "[nnserver] model not found, use --model PATH\n");
-            return 1;
-        }
+    std::string resolved = resolve_model(model_path, model_url);
+    if (resolved.empty()) {
+        fprintf(stderr, "[nnserver] no model available, bailing out\n");
+        return 1;
     }
-    fprintf(stderr, "[nnserver] model: %s\n", model_path);
 
     if (!sock_init()) { fprintf(stderr, "sock_init: %s\n", sock_last_error()); return 1; }
-    if (!ort_load(model_path)) { sock_shutdown(); return 1; }
+    if (!ort_load(resolved.c_str())) { sock_shutdown(); return 1; }
 
     sock_t listener = sock_listen(port);
     if (listener == SOCK_INVALID) {
@@ -405,6 +730,4 @@ int main(int argc, char** argv) {
         handle_client(client);
         sock_close(client);
     }
-
-    /* unreachable */
 }

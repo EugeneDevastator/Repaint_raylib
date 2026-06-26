@@ -257,7 +257,7 @@ target_include_directories(nnserver PRIVATE
 if(WIN32)
     target_include_directories(nnserver PRIVATE "${ORT_INCLUDE_DIR}")
     target_link_directories(nnserver PRIVATE "${ORT_LIB_DIR}")
-    target_link_libraries(nnserver PRIVATE onnxruntime ws2_32)
+    target_link_libraries(nnserver PRIVATE onnxruntime ws2_32 winhttp)
 
     # Copy ONNX Runtime DLL to output
     add_custom_command(TARGET nnserver POST_BUILD
@@ -266,16 +266,14 @@ if(WIN32)
             "$<TARGET_FILE_DIR:nnserver>/"
         COMMENT "Copying onnxruntime.dll")
 
-    # Copy model to output (only if missing, to save time)
-    if(EXISTS "${CMAKE_SOURCE_DIR}/NNModelServer/models/vitmatte_model_vitsmall_dist646.onnx")
-        add_custom_command(TARGET nnserver POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${CMAKE_SOURCE_DIR}/NNModelServer/models/vitmatte_model_vitsmall_dist646.onnx"
-                "$<TARGET_FILE_DIR:nnserver>/vitmatte_model_vitsmall_dist646.onnx"
-            COMMENT "Copying model to output")
-    endif()
+    # Copy model URL file alongside the exe
+    add_custom_command(TARGET nnserver POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/NNModelServer/model_url.txt"
+            "$<TARGET_FILE_DIR:nnserver>/model_url.txt"
+        COMMENT "Copying model_url.txt")
 else()
-    target_link_libraries(nnserver PRIVATE pthread dl)
+    target_link_libraries(nnserver PRIVATE pthread dl curl)
 endif()
 
 # ── platform linking ──────────────────────────────────────────────────────────
