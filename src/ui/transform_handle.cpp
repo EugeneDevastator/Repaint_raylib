@@ -112,16 +112,15 @@ bool TransformHandle_Input(RectXform* xform,
     }
 
     // ── Hit-test: corner squares (distance to handle center) ──────
-    float rotC = atan2f(sc[1].y - sc[0].y, sc[1].x - sc[0].x);
-    float rcC = cosf(rotC), rsC = sinf(rotC);
-    float clx[4] = {-HS, HS, HS, -HS};
-    float cly[4] = {-HS, -HS, HS, HS};
-    int innerIdx[4] = {2, 3, 0, 1};
+    float HS_SQRT2 = HS * 1.41421356f;
     Vector2 ch[4];
     for (int i = 0; i < 4; i++) {
-        int ii = innerIdx[i];
-        ch[i].x = sc[i].x - (clx[ii]*rcC - cly[ii]*rsC);
-        ch[i].y = sc[i].y - (cly[ii]*rcC + clx[ii]*rsC);
+        float dx = sc[i].x - sc[(i+2)%4].x;
+        float dy = sc[i].y - sc[(i+2)%4].y;
+        float len = sqrtf(dx*dx + dy*dy);
+        if (len < 0.0001f) { ch[i] = sc[i]; continue; }
+        ch[i].x = sc[i].x + (dx/len) * HS_SQRT2;
+        ch[i].y = sc[i].y + (dy/len) * HS_SQRT2;
     }
     int nearCorner = -1;
     int nearEdge   = -1;
@@ -382,11 +381,15 @@ bool TransformHandle_Input(RectXform* xform,
                 if (fabsf(sy_f)<0.01f) sy_f = (sy_f<0) ? -0.01f : 0.01f;
                 float oldSx = sqrtf(as*as + cs*cs);
                 float oldSy = sqrtf(bs*bs + ds*ds);
-                float cosR = (oldSx>0.0001f) ? as/oldSx : 1.0f;
-                float sinR = (oldSx>0.0001f) ? cs/oldSx : 0.0f;
+                float ux = (oldSx>0.0001f) ? as/oldSx : 1.0f;
+                float uy = (oldSx>0.0001f) ? cs/oldSx : 0.0f;
                 float newSx = oldSx*sx_f, newSy = oldSy*sy_f;
-                float m0 = cosR*newSx, m1 = -sinR*newSy;
-                float m3_ = sinR*newSx, m4 = cosR*newSy;
+                // V-axis: 90° rotation of U-axis, direction depends on handedness
+                float vx, vy;
+                if (det < 0) { vx =  uy; vy = -ux; }  // CW (flipped)
+                else         { vx = -uy; vy =  ux; }  // CCW (normal)
+                float m0 = ux*newSx, m1 = vx*newSy;
+                float m3_ = uy*newSx, m4 = vy*newSy;
                 xform->mat[0] = m0; xform->mat[1] = m1;
                 xform->mat[2] = cx - (m0*pcx + m1*pcy);
                 xform->mat[3] = m3_; xform->mat[4] = m4;
@@ -455,23 +458,28 @@ void TransformHandle_Draw(const RectXform* xform,
     static const float HS = 10.0f;   // corner handle half-size
     static const float EO = 14.0f;   // edge handle offset outward
 
-    // Rotation angle of the rect (from screen-space top edge)
-    float rot = atan2f(scrn[1].y - scrn[0].y, scrn[1].x - scrn[0].x);
-    float rc = cosf(rot), rs = sinf(rot);
-
-    // Corner handles — rotated to align with rect axes, outside the rect
-    float lx[4] = {-HS, HS, HS, -HS};
-    float ly[4] = {-HS, -HS, HS, HS};
-    int innerIdx[4] = {2, 3, 0, 1};
+    // Corner handles — outward from opposite corner, aligned with rect edges
+    float HS_SQRT2 = HS * 1.41421356f;
     Vector2 sq[5];
     for (int i = 0; i < 4; i++) {
-        int ii = innerIdx[i];
-        float hx = scrn[i].x - (lx[ii]*rc - ly[ii]*rs);
-        float hy = scrn[i].y - (lx[ii]*rs + ly[ii]*rc);
-        for (int j = 0; j < 4; j++) {
-            sq[j].x = hx + lx[j]*rc - ly[j]*rs;
-            sq[j].y = hy + lx[j]*rs + ly[j]*rc;
-        }
+        float dx = scrn[i].x - scrn[(i+2)%4].x;
+        float dy = scrn[i].y - scrn[(i+2)%4].y;
+        float len = sqrtf(dx*dx + dy*dy);
+        if (len < 0.0001f) continue;
+        float odx = dx/len, ody = dy/len;
+        float hx = scrn[i].x + odx * HS_SQRT2;
+        float hy = scrn[i].y + ody * HS_SQRT2;
+        int ni = (i+1)%4, pi = (i+3)%4;
+        float ux = scrn[ni].x - scrn[i].x, uy = scrn[ni].y - scrn[i].y;
+        float vx = scrn[pi].x - scrn[i].x, vy = scrn[pi].y - scrn[i].y;
+        float ulen = sqrtf(ux*ux + uy*uy);
+        float vlen = sqrtf(vx*vx + vy*vy);
+        if (ulen < 0.0001f || vlen < 0.0001f) continue;
+        ux /= ulen; uy /= ulen; vx /= vlen; vy /= vlen;
+        sq[0] = Vector2{hx - ux*HS - vx*HS, hy - uy*HS - vy*HS};
+        sq[1] = Vector2{hx + ux*HS - vx*HS, hy + uy*HS - vy*HS};
+        sq[2] = Vector2{hx + ux*HS + vx*HS, hy + uy*HS + vy*HS};
+        sq[3] = Vector2{hx - ux*HS + vx*HS, hy - uy*HS + vy*HS};
         sq[4] = sq[0];
         DrawLineStrip(sq, 5, WHITE);
     }

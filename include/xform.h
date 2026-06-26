@@ -15,6 +15,9 @@ void Xform_SetTrans(float out[6], float tx, float ty);
 void Xform_SetRot  (float out[6], float angle);  // CCW radians
 void Xform_SetScale(float out[6], float sx, float sy);
 
+// unsigned_float — documents a float that must always be ≥ 0
+typedef float unsigned_float;
+
 // ── RectXform — oriented rectangle in world-space ────────────────
 // mat maps from local space (pivot at origin) to world space.
 // w,h are the extent in world units — purely metadata, the matrix
@@ -22,7 +25,7 @@ void Xform_SetScale(float out[6], float sx, float sy);
 // the rectangle covers (cx,cy) .. (cx+w, cy+h).
 typedef struct {
     float mat[6];
-    float w, h;
+    unsigned_float w, h;
 } RectXform;
 
 // Build mat = translate(cx,cy) · rotate(rot).  (cx,cy) is the
