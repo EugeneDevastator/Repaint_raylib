@@ -247,15 +247,14 @@ if(WIN32)
     endif()
 endif()
 
-add_executable(nnserver ${NNSERVER_SOURCES})
-
-target_include_directories(nnserver PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-    "${STB_DIR}"
-)
-
 if(WIN32)
-    target_include_directories(nnserver PRIVATE "${ORT_INCLUDE_DIR}")
+    add_executable(nnserver ${NNSERVER_SOURCES})
+
+    target_include_directories(nnserver PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        "${STB_DIR}"
+        "${ORT_INCLUDE_DIR}")
+
     target_link_directories(nnserver PRIVATE "${ORT_LIB_DIR}")
     target_link_libraries(nnserver PRIVATE onnxruntime ws2_32 winhttp)
 
@@ -272,8 +271,6 @@ if(WIN32)
             "${CMAKE_SOURCE_DIR}/NNModelServer/model_url.txt"
             "$<TARGET_FILE_DIR:nnserver>/model_url.txt"
         COMMENT "Copying model_url.txt")
-else()
-    target_link_libraries(nnserver PRIVATE pthread dl curl)
 endif()
 
 # ── platform linking ──────────────────────────────────────────────────────────
