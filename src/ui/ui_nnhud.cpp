@@ -273,11 +273,13 @@ void NNHudModule::DrawGL(const DrawRect& rect) {
                 Vector2{0,0}, 0.0f, WHITE);
         }
         // Label below
-        int fontSize = 18;
+        float fontSize = 27.0f;
+        float spacing = 2.0f;
         const char* txt = pre[i].label;
-        int tw2 = MeasureText(txt, fontSize);
-        DrawText(txt, (int)(px + (previewSz - tw2) * 0.5f),
-                 (int)(startY + previewSz + 4), fontSize, WHITE);
+        float tw2 = MeasureTextEx(g_dialogFont, txt, fontSize, spacing).x;
+        Vector2 labelPos = {px + (previewSz - tw2) * 0.5f, startY + previewSz + 4};
+        DrawTextEx(g_dialogFont, txt, {labelPos.x + 2, labelPos.y + 2}, fontSize, spacing, {0,0,0,160});
+        DrawTextEx(g_dialogFont, txt, labelPos, fontSize, spacing, WHITE);
     }
 }
 

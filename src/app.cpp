@@ -164,7 +164,7 @@ static int g_presetW[] = { 800, 1024, 1280, 1920, 2560, 3840 };
 static int g_presetH[] = { 600, 768,  720,  1080, 1440, 2160 };
 static const char* g_presets[] = { "800x600", "1024x768", "1280x720", "1920x1080", "2560x1440", "3840x2160" };
 static char g_currentFilePath[1024] = "";
-static Font g_dialogFont = {0};
+Font g_dialogFont = {0};
 
 void UpdateUI(AppState* state) {
     Vector2 mousePos = GetMousePosition();

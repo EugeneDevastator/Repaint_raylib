@@ -17,6 +17,7 @@
 #define RIGHT_PANEL_WIDTH 200
 #define RIGHT_PANEL_X (SCREEN_WIDTH - RIGHT_PANEL_WIDTH)
 
+extern Font g_dialogFont;
 extern int uiPanelWidth;
 extern bool panelResizing;
 extern bool g_panelsVisible;
