@@ -42,7 +42,7 @@ void XORgizmo_DrawVisual(AppState* state) {
     }
 
     // Brush size ring — now arc only in RADOUT sector
-    float drawRadOut = baseSz * state->camera.zoom;
+    float drawRadOut = baseSz * WORLD_UNIT_PX * state->camera.zoom;
     if (drawRadOut > 2.0f)
         DrawRing(ctr, drawRadOut - 1.5f, drawRadOut + 1.5f,
                  -GIZMO_RADOUT_START, -GIZMO_RADOUT_START - GIZMO_RADOUT_ANG_SPAN, 0, WHITE);
@@ -165,7 +165,7 @@ void XORgizmo_HandleInput(AppState* state) {
         if (quickPanelMouseMode == 1) {
             float rel = fminf(state->currentBrush.Realb.radInRatio, 1.0f);
             if (curMode != 1) rad = roundf(rad / 10.0f) * 10.0f;
-            float newRad = fmaxf(1.0f, rad);
+            float newRad = fmaxf(1.0f, rad) / WORLD_UNIT_PX;
             state->currentBrush.Realb.rad_out = newRad;
             state->currentBrush.Realb.radInRatio = rel;
             BParam_SetValue(&bpSize, newRad);

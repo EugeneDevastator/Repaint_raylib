@@ -21,7 +21,7 @@ struct InputEntry {
     TexSlotID targetSlot;
     uint8_t userTexBucket;  // TM_BUCKET_USER typically, 0xFF = none
     uint8_t userTexSlot;    // slot within bucket, 0xFF = none
-    float layerScale;
+    float worldToTexPx;
 };
 
 class InputQueue {

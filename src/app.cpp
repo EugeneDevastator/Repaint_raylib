@@ -334,7 +334,7 @@ void UpdateUI(AppState* state) {
         // Global scale: 1 UV = 256 canvas px (stamp diameter / 256 = base texScale)
         float s = GetModVal(&bpTexScale);
         float r = state->currentBrush.Realb.rad_out;
-        state->currentBrush.Realb.texScale = s * r / 128.0f;
+        state->currentBrush.Realb.texScale = s * r * (WORLD_UNIT_PX / 128.0f);
     } else {
         state->currentBrush.Realb.texScale = GetModVal(&bpTexScale);
     }
@@ -661,7 +661,7 @@ void App_Init(AppState* state) {
     state->initialAngle = 0.0f;
 
     state->currentBrush.Realb.radInRatio = 1.0f;
-    state->currentBrush.Realb.rad_out = 20.0f;
+    state->currentBrush.Realb.rad_out = 20.0f / WORLD_UNIT_PX;
     state->currentBrush.Realb.opacity = 1.0f;
     state->currentBrush.Realb.resangle = 0.0f;
     state->currentBrush.Realb.crv = 0.0f;

@@ -72,7 +72,7 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex, bool us
                               const d_RealBrush* baseBrush, int toolMode,
                               float initialAngle, float cx, float cy) {
     float spacingVal = BParam_GetValue(&bpSpacing);
-    float radOut = baseBrush->rad_out;
+    float radOut = baseBrush->rad_out * WORLD_UNIT_PX;
     float segLen = radOut * 3.0f;
     if (segLen < 2.0f) segLen = 2.0f;
 
@@ -109,6 +109,7 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex, bool us
 
     // Same modulation as the real stroke (emitSegment line 67-77)
     d_RealBrush modulated = ModulateBrushParams(*baseBrush, initialAngle, toolMode);
+    modulated.rad_out *= WORLD_UNIT_PX;
     CollapsedBrush cbFull = CollapseBrushParams(modulated, initialAngle, toolMode);
     // Zero jitter ranges for deterministic preview
     cbFull.jitRadOut = cbFull.jitRadIn = cbFull.jitOpacity = cbFull.jitCrv = cbFull.jitX2y = 0;

@@ -130,18 +130,15 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         adjustedAngle -= layerRot;
     }
 
-    // Compute average layer scale for brush radius adjustment.
-    // The brush radius is in canvas pixels.  When the layer is scaled, the stamp
-    // is applied to the layer RT which has the layer's native resolution, so the
-    // stamp radius must be divided by the layer scale to appear at the correct
-    // visual size on screen.
-    float layerScale = 1.0f;
+    // Compute world-to-texture-pixel conversion for brush radius.
+    // rad_out is in world units; multiply by worldToTexPx to get texture pixels.
+    float worldToTexPx = WORLD_UNIT_PX;
     if (!state->editTexMode && active >= 0 && active < LayerStack_Count()) {
         sLayerProps* lp = LayerStack_GetProps(active);
         float sx = sqrtf(lp->xform.mat[0] * lp->xform.mat[0] + lp->xform.mat[3] * lp->xform.mat[3]);
         float sy = sqrtf(lp->xform.mat[1] * lp->xform.mat[1] + lp->xform.mat[4] * lp->xform.mat[4]);
         float avg = (sx + sy) * 0.5f;
-        if (avg > 0.001f) layerScale = 1.0f / avg;
+        if (avg > 0.001f) worldToTexPx = WORLD_UNIT_PX / avg;
     }
 
     // Record raw input positions for debug (during active stroke)
@@ -180,7 +177,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                         be.userTexBucket = 0xFF;
                         be.userTexSlot = 0xFF;
                     }
-                    be.layerScale = 1.0f;
+                    be.worldToTexPx = WORLD_UNIT_PX;
                     be.timestamp = GetTime();
                     g_inputQueue.AddEntry(be);
 
@@ -217,7 +214,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     if (state->undo) state->undo->Snapshot(state, LayerStack_GetSlotID(active));
 
                     float origRad = state->currentBrush.Realb.rad_out;
-                    state->currentBrush.Realb.rad_out *= layerScale;
+                    state->currentBrush.Realb.rad_out *= worldToTexPx;
                     TabletPlatform_ClearMousePos();
 
                     InputEntry be;
@@ -234,7 +231,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                         be.userTexBucket = 0xFF;
                         be.userTexSlot = 0xFF;
                     }
-                    be.layerScale = layerScale;
+                    be.worldToTexPx = worldToTexPx;
                     be.timestamp = GetTime();
                     g_inputQueue.AddEntry(be);
 
@@ -244,7 +241,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                         vp->strokePts[vp->strokeLen++] = paintPos;
                 } else {
                     float origRad = state->currentBrush.Realb.rad_out;
-                    state->currentBrush.Realb.rad_out *= layerScale;
+                    state->currentBrush.Realb.rad_out *= worldToTexPx;
 
                     float mouseBuf[1024];
                     int n = TabletPlatform_DrainMousePos(mouseBuf, 512);
@@ -269,7 +266,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             } else {
                 // Distort / Contrast
                 float sv = BParam_GetValue(&bpSpacing);
-                float scaledRad = state->currentBrush.Realb.rad_out * layerScale;
+                float scaledRad = state->currentBrush.Realb.rad_out * worldToTexPx;
                 float spacing = scaledRad * 2.0f * sv;
                 if (spacing < 2.0f) spacing = 2.0f;
                 if (!vp->wasMouseDown) {
@@ -302,7 +299,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         }
         if (vp->wasMouseDown) {
             float origRad = state->currentBrush.Realb.rad_out;
-            state->currentBrush.Realb.rad_out *= layerScale;
+            state->currentBrush.Realb.rad_out *= worldToTexPx;
             InputEntry ee; ee.type = InputEntry::End;
             g_inputQueue.AddEntry(ee);
             state->currentBrush.Realb.rad_out = origRad;
@@ -323,7 +320,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             vp->lineLastDabPos = paintPos;
             vp->wasMouseDown = true;
         } else {
-            float spacing = fmaxf(state->currentBrush.Realb.rad_out * 2.0f * BParam_GetValue(&bpSpacing), 2.0f);
+            float spacing = fmaxf(state->currentBrush.Realb.rad_out * worldToTexPx * 2.0f * BParam_GetValue(&bpSpacing), 2.0f);
             if (Dist2D(vp->lineLastDabPos, paintPos) > spacing) {
                 float segLen = Dist2D(vp->lineLastDabPos, paintPos);
                 int steps = (int)(segLen / spacing) + 1;
