@@ -270,8 +270,13 @@ void Compositor_ApplyLayerToLayer(
     if(bw<1||bh<1) return;
 
     // Compute relative transform: top-local → bottom-local
+    // relMat = inv(bottomXform) * topXform  (topXform applied first,
+    // then inv(bottomXform) converts world → bottom-local)
     float relMat[6];
-    Xform_MulInv(relMat, topXform->mat, bottomXform->mat);
+    float invBottom[6];
+    float idMat[6] = {1,0,0,0,1,0};
+    Xform_MulInv(invBottom, idMat, bottomXform->mat);  // invBottom = inv(bottomXform)
+    Xform_Mul(relMat, invBottom, topXform->mat);         // relMat = invBottom * topXform
 
     // Build viewXform from relMat
     RectXform viewXf;
