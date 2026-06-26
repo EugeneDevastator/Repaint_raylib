@@ -26,7 +26,7 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
     m_targetSlot = e.targetSlot;
     m_userTexBucket = e.userTexBucket;
     m_userTexSlot = e.userTexSlot;
-    m_layerScale = e.layerScale;
+    m_worldToTexPx = e.worldToTexPx;
 
     Vector2 start = {e.x, e.y};
     m_lastDabPos = start;
@@ -92,8 +92,7 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
     m_prevSegLen = segLen;
 
     d_RealBrush target = ModulateBrushParams(brush, initAngle, toolMode);
-    if (m_layerScale > 0.001f && fabsf(m_layerScale - 1.0f) > 0.0001f)
-        target.rad_out *= m_layerScale;
+    target.rad_out *= m_worldToTexPx;
 
     CollapsedBrush cbFrom = CollapseBrushParams(m_brushFrom, initAngle, toolMode);
     CollapsedBrush cbTo   = CollapseBrushParams(target, initAngle, toolMode);
@@ -187,8 +186,7 @@ void StrokeEmitter::handlePoint(const InputEntry& e) {
     } else if (g_strokeThrottle <= 0.0f) {
         float sizeMul = 0.5;
         threshold = GetModVal(&bpSize) * sizeMul;
-        if (m_layerScale > 0.001f && fabsf(m_layerScale - 1.0f) > 0.0001f)
-            threshold *= m_layerScale;
+        threshold *= m_worldToTexPx;
         if (threshold < 0.5f) threshold = 0.5f;
     } else {
         threshold = fmaxf(g_strokeThrottle, 0.5f);

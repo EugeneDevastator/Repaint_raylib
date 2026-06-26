@@ -59,6 +59,9 @@ jobs:
         run: |
           mkdir -p dist/repaint-windows
           cp build/win64-release/bin/repaint.exe dist/repaint-windows/
+          cp build/win64-release/bin/nnserver.exe dist/repaint-windows/
+          cp build/win64-release/bin/onnxruntime.dll dist/repaint-windows/
+          cp build/win64-release/bin/model_url.txt dist/repaint-windows/
           cp "$MINGW_PREFIX/bin/libwinpthread-1.dll"  dist/repaint-windows/
           cp "$MINGW_PREFIX/bin/libgcc_s_seh-1.dll"   dist/repaint-windows/
           cp "$MINGW_PREFIX/bin/libstdc++-6.dll"       dist/repaint-windows/
@@ -70,165 +73,10 @@ jobs:
         with:
           name: app-windows
           path: repaint-windows.zip
-
-  nnserver-linux:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Build
-        run: |
-          set -ex
-          pip install numpy Pillow torch transformers
-          pip freeze | grep -iv '^pip=\|^setuptools=\|^wheel=\|^-e ' > NNModelServer/requirements.txt
-
-          curl -sL "https://github.com/astral-sh/python-build-standalone/releases/download/20250115/cpython-3.11.11+20250115-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz" -o python.tar.gz
-          mkdir -p pyextract
-          tar -xzf python.tar.gz -C pyextract
-          cd pyextract
-          topdir="$(ls -A | head -1)"
-          if [ "$topdir" != "python" ]; then mv "$topdir" python; fi
-          python/bin/python3 -m ensurepip --upgrade 2>/dev/null || true
-          zip -r ../python.zip python
-          cd ..
-          rm -rf pyextract python.tar.gz
-
-          pip install pyinstaller
-          pyinstaller --onefile NNModelServer/nnserver_bootstrap.py --name nnserver \
-            --add-data python.zip:. \
-            --add-data NNModelServer/requirements.txt:. \
-            --exclude-module numpy --exclude-module PIL --exclude-module torch \
-            --exclude-module transformers --exclude-module huggingface_hub \
-            --exclude-module matplotlib --exclude-module scipy --exclude-module sympy \
-            --exclude-module pandas --exclude-module tkinter
-          rm -rf python.zip
-
-          mkdir -p dist-server
-          cp dist/nnserver dist-server/
-          cp NNModelServer/nnserver_core.py dist-server/
-
-      - name: Package
-        run: zip -r nnserver-linux.zip dist-server
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: nnserver-linux
-          path: nnserver-linux.zip
-
-  nnserver-windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Build
-        shell: bash
-        run: |
-          set -ex
-          pip install numpy Pillow torch transformers
-          pip freeze | grep -iv '^pip=\|^setuptools=\|^wheel=\|^-e ' > NNModelServer/requirements.txt
-
-          curl -sL "https://github.com/astral-sh/python-build-standalone/releases/download/20250115/cpython-3.11.11+20250115-x86_64-pc-windows-msvc-shared-install_only_stripped.tar.gz" -o python.tar.gz
-          mkdir -p pyextract
-          tar -xzf python.tar.gz -C pyextract
-          cd pyextract
-          topdir="$(ls -A | head -1)"
-          if [ "$topdir" != "python" ]; then mv "$topdir" python; fi
-          python/python.exe -m ensurepip --upgrade 2>/dev/null || true
-          python -c "import shutil; shutil.make_archive('../python', 'zip', 'python')"
-          cd ..
-          rm -rf pyextract python.tar.gz
-
-          pip install pyinstaller
-          pyinstaller --onefile NNModelServer/nnserver_bootstrap.py --name nnserver \
-            --add-data python.zip:. \
-            --add-data NNModelServer/requirements.txt:. \
-            --exclude-module numpy --exclude-module PIL --exclude-module torch \
-            --exclude-module transformers --exclude-module huggingface_hub \
-            --exclude-module matplotlib --exclude-module scipy --exclude-module sympy \
-            --exclude-module pandas --exclude-module tkinter
-          rm -rf python.zip
-
-          mkdir -p dist-server
-          cp dist/nnserver.exe dist-server/
-          cp NNModelServer/nnserver_core.py dist-server/
-
-      - name: Package
-        shell: powershell
-        run: |
-          Compress-Archive -Path dist-server -DestinationPath nnserver-windows.zip
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: nnserver-windows
-          path: nnserver-windows.zip
-
-  nnserver-mac:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Build
-        run: |
-          set -ex
-          pip install numpy Pillow torch transformers
-          pip freeze | grep -iv '^pip=\|^setuptools=\|^wheel=\|^-e ' > NNModelServer/requirements.txt
-
-          ARCH=$(uname -m)
-          if [ "$ARCH" = "arm64" ]; then
-            TRIPLE="aarch64-apple-darwin"
-          else
-            TRIPLE="x86_64-apple-darwin"
-          fi
-
-          curl -sL "https://github.com/astral-sh/python-build-standalone/releases/download/20250115/cpython-3.11.11+20250115-${TRIPLE}-install_only_stripped.tar.gz" -o python.tar.gz
-          mkdir -p pyextract
-          tar -xzf python.tar.gz -C pyextract
-          cd pyextract
-          topdir="$(ls -A | head -1)"
-          if [ "$topdir" != "python" ]; then mv "$topdir" python; fi
-          python/bin/python3 -m ensurepip --upgrade 2>/dev/null || true
-          zip -r ../python.zip python
-          cd ..
-          rm -rf pyextract python.tar.gz
-
-          pip install pyinstaller
-          pyinstaller --onefile NNModelServer/nnserver_bootstrap.py --name nnserver \
-            --add-data python.zip:. \
-            --add-data NNModelServer/requirements.txt:. \
-            --exclude-module numpy --exclude-module PIL --exclude-module torch \
-            --exclude-module transformers --exclude-module huggingface_hub \
-            --exclude-module matplotlib --exclude-module scipy --exclude-module sympy \
-            --exclude-module pandas --exclude-module tkinter
-          rm -rf python.zip
-
-          mkdir -p dist-server
-          cp dist/nnserver dist-server/
-          cp NNModelServer/nnserver_core.py dist-server/
-
-      - name: Package
-        run: zip -r nnserver-mac.zip dist-server
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: nnserver-mac
-          path: nnserver-mac.zip
-
-  bundle:
+  release:
     needs:
       - app-linux
       - app-windows
-      - nnserver-linux
-      - nnserver-windows
-      - nnserver-mac
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
@@ -236,38 +84,10 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          path: _dl
-          merge-multiple: true
-
-      - name: Bundle linux
-        run: |
-          mkdir -p _out/repaint-linux _tmp/al
-          unzip -o _dl/repaint-linux.zip -d _tmp/al || true
-          cp -r _tmp/al/dist/repaint-linux/* _out/repaint-linux/
-          mkdir -p _tmp/lnn
-          unzip -o _dl/nnserver-linux.zip -d _tmp/lnn || true
-          mkdir -p _out/repaint-linux/NNServer
-          cp -r _tmp/lnn/dist-server/* _out/repaint-linux/NNServer/
-          cd _out && zip -r ../repaint-linux-full.zip repaint-linux
-
-      - name: Bundle windows
-        run: |
-          mkdir -p _out/repaint-windows _tmp/aw
-          unzip -o _dl/repaint-windows.zip -d _tmp/aw || true
-          cp -r _tmp/aw/repaint-windows/* _out/repaint-windows/
-          mkdir -p _tmp/wnn
-          unzip -o _dl/nnserver-windows.zip -d _tmp/wnn || true
-          mkdir -p _out/repaint-windows/NNServer
-          cp -r _tmp/wnn/dist-server/* _out/repaint-windows/NNServer/
-          cd _out && zip -r ../repaint-windows-full.zip repaint-windows
-
-      - name: Bundle mac
-        run: |
-          mkdir -p _out/repaint-mac _tmp/mnn
-          unzip -o _dl/nnserver-mac.zip -d _tmp/mnn || true
-          mkdir -p _out/repaint-mac/NNServer
-          cp -r _tmp/mnn/dist-server/* _out/repaint-mac/NNServer/
-          cd _out && zip -r ../repaint-mac-full.zip repaint-mac
+          name: app-linux
+      - uses: actions/download-artifact@v4
+        with:
+          name: app-windows
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
@@ -276,6 +96,5 @@ jobs:
           name: Latest Build
           prerelease: true
           files: |
-            repaint-linux-full.zip
-            repaint-windows-full.zip
-            repaint-mac-full.zip
+            repaint-linux.zip
+            repaint-windows.zip

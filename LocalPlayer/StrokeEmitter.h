@@ -35,7 +35,7 @@ private:
     uint8_t m_userTexSlot;
     float m_initAngle;
     int   m_toolMode;
-    float m_layerScale;
+    float m_worldToTexPx;
 
     Vector2 m_prevSegPos, m_prevSegDir;
     float m_prevSegLen;

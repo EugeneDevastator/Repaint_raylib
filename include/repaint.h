@@ -17,10 +17,12 @@
 #define RIGHT_PANEL_WIDTH 200
 #define RIGHT_PANEL_X (SCREEN_WIDTH - RIGHT_PANEL_WIDTH)
 
+extern Font g_dialogFont;
 extern int uiPanelWidth;
 extern bool panelResizing;
 extern bool g_panelsVisible;
 #define LAYER_ENTRY_H 56
+#define WORLD_UNIT_PX 256.0f
 #define MAX_STROKE_PTS 65536
 #define PEN_MODE_COUNT 13
 
