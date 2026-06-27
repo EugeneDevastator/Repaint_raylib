@@ -197,6 +197,8 @@ target_link_libraries(tablet-calibrator PRIVATE raylib)
 set(NNSERVER_VERSION  "1.21.0" CACHE STRING "ONNX Runtime version")
 set(NNSERVER_SOURCES
     NNModelServer/nnserver.cpp
+    NNModelServer/nn_onnx.cpp
+    NNModelServer/matte_module.cpp
     src/network/sock_platform.cpp
 )
 
@@ -249,6 +251,7 @@ endif()
 
 if(WIN32)
     add_executable(nnserver ${NNSERVER_SOURCES})
+    target_sources(nnserver PRIVATE src/network/nn_download_win.cpp)
 
     target_include_directories(nnserver PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
