@@ -23,7 +23,7 @@ static struct {
     int locApplyDither;
 } CS;
 
-static Rectangle FullRect(int w, int h) { return Rectangle{0,0,(float)w,(float)-h}; }
+static Rectangle FullRect(float w, float h) { return Rectangle{0,0,w,-h}; }
 
 // ── Shader loading ────────────────────────────────────────────────────
 static bool LoadBlendShader(void) {
@@ -202,7 +202,7 @@ void Compositor_BlitLayerOnto(
         // Copy result back to dst at dstRegion
         BeginTextureMode(dst);
         rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE,RL_ZERO,RL_FUNC_ADD);
-        DrawTextureRec(bufA.texture,FullRect((int)dstRegion.width,(int)dstRegion.height),
+        DrawTextureRec(bufA.texture,FullRect(dstRegion.width,dstRegion.height),
             Vector2{dstRegion.x,dstRegion.y},WHITE);
         rlSetBlendMode(RL_BLEND_ALPHA);
         EndTextureMode();
@@ -221,7 +221,7 @@ void Compositor_BlitLayerOnto(
     float r = fminf(aabb.x + aabb.width, dstRegion.x + dstRegion.width);
     float b = fminf(aabb.y + aabb.height, dstRegion.y + dstRegion.height);
     if(l>=r||t>=b) return;
-    int clipW=(int)(r-l), clipH=(int)(b-t);
+    int clipW=(int)ceilf(r-l), clipH=(int)ceilf(b-t);
     if(clipW<1||clipH<1) return;
 
     // Offset combined transform by the clip offset
@@ -242,7 +242,7 @@ void Compositor_BlitLayerOnto(
     rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE,RL_ZERO,RL_FUNC_ADD);
     ClearBackground(BLANK);
     int dstH = dst.texture.height;
-    DrawTextureRec(dst.texture, Rectangle{l, (float)(dstH - (int)t - clipH), (float)clipW, (float)-clipH}, Vector2{0,0}, WHITE);
+    DrawTextureRec(dst.texture, Rectangle{l, dstH - t - (float)clipH, (float)clipW, (float)-clipH}, Vector2{0,0}, WHITE);
     rlSetBlendMode(RL_BLEND_ALPHA);
     EndTextureMode();
     // Blend layer onto baseBuf, result into blendBuf
