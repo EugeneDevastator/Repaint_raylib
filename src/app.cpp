@@ -23,6 +23,7 @@
 #include "StrokeEmitter.h"
 #include "StrokeThrottle.h"
 #include "external/glad.h"
+#include <stdio.h>
 #include <time.h>
 
 int uiPanelWidth = 250;
@@ -611,6 +612,25 @@ void App_Init(AppState* state) {
     LayerStack_Init();
     app_new_document(1024, 768, WHITE);
 
+    // Restore last session if app_closed.re.png exists
+    char closePath[1024];
+    snprintf(closePath, sizeof(closePath), "%sSnaps/app_closed.re.png", GetApplicationDirectory());
+    FILE* f = fopen(closePath, "rb");
+    if (f) {
+        fclose(f);
+        Compositor_Shutdown(); Compositor_Init(); LayerStack_Shutdown(); LayerStack_Init();
+        if (LoadRePaint(closePath, &state->doc, state)) {
+            state->activeLayer = 0;
+            SyncCanvasFromDoc(&state->doc, NULL, NULL);
+            state->camera.target = Vector2{0, 0};
+            layersDirty = true;
+        } else {
+            // fallback: re-create default
+            Compositor_Shutdown(); Compositor_Init(); LayerStack_Shutdown(); LayerStack_Init();
+            app_new_document(1024, 768, WHITE);
+        }
+    }
+
     Rectangle viewportBounds = {
         (float)uiPanelWidth, 0,
         (float)(SCREEN_WIDTH - uiPanelWidth - RIGHT_PANEL_WIDTH),
@@ -961,6 +981,32 @@ void App_Draw(AppState* state) {
 /* ── App_Close ─────────────────────────────────────────────────────────── */
 
 void App_Close(AppState* state) {
+    // Auto-save last state to Snaps/app_closed.re.png
+    const char* ad = GetApplicationDirectory();
+    char closeTmp[1024], closePath[1024];
+    snprintf(closeTmp, sizeof(closeTmp), "%sSnaps/app_closed.tmp.re.png", ad);
+    snprintf(closePath, sizeof(closePath), "%sSnaps/app_closed.re.png", ad);
+    if (SaveRePaint(closeTmp, &state->doc, state)) {
+        // Archive previous session file if it exists
+        FILE* f = fopen(closePath, "rb");
+        if (f) {
+            fclose(f);
+            time_t now = time(NULL);
+            struct tm* t = localtime(&now);
+            char archivePath[1024];
+            snprintf(archivePath, sizeof(archivePath), "%sSnaps/app_closed_%04d%02d%02d_%02d%02d%02d.re.png",
+                     ad, t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
+                     t->tm_hour, t->tm_min, t->tm_sec);
+            rename(closePath, archivePath);
+        }
+        rename(closeTmp, closePath);
+    }
+    if (g_recorder) {
+        char rpPath[1024];
+        snprintf(rpPath, sizeof(rpPath), "%sSnaps/app_closed.re.play", ad);
+        g_recorder->Save(rpPath);
+    }
+
     networkBroker.SaveConfig();
     networkBroker.Disconnect();
     ViewportManager_Shutdown();
