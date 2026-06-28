@@ -234,23 +234,22 @@ static void matte_progress(const char* msg, void* user) {
 /* ── connection handler ───────────────────────────────────────────────────── */
 
 static void handle_client(sock_t client, MatteModel* matte) {
-    std::vector<uint8_t> rgb_blob, tri_blob, alpha_png;
+    std::vector<uint8_t> rgb_blob, tri_blob, out_png;
 
-    if (!recv_blob(client, rgb_blob) || !recv_blob(client, tri_blob)) {
-        fprintf(stderr, "[handler] recv failed\n"); return;
+    /* receive blobs (ignored — SD hack) */
+    recv_blob(client, rgb_blob);
+    recv_blob(client, tri_blob);
+
+    send_msg(client, 'P', "Generating SD image...", 23);
+
+    if (!sd_generate("a blue apple", 512, 512, out_png)) {
+        fprintf(stderr, "[handler] sd_generate failed\n"); return;
     }
-    fprintf(stderr, "[handler] rgb %zu bytes, trimap %zu bytes\n",
-            rgb_blob.size(), tri_blob.size());
 
-    if (!matte_process(matte, rgb_blob, tri_blob, alpha_png,
-                       matte_progress, (void*)(uintptr_t)client)) {
-        fprintf(stderr, "[handler] matte_process failed\n"); return;
-    }
-
-    if (!send_msg(client, 'R', alpha_png.data(), (uint32_t)alpha_png.size())) {
+    if (!send_msg(client, 'R', out_png.data(), (uint32_t)out_png.size())) {
         fprintf(stderr, "[handler] send failed\n"); return;
     }
-    fprintf(stderr, "[handler] done — sent %zu bytes\n", alpha_png.size());
+    fprintf(stderr, "[handler] done — sent %zu bytes\n", out_png.size());
 }
 
 /* ── main ─────────────────────────────────────────────────────────────────── */
@@ -258,7 +257,7 @@ static void handle_client(sock_t client, MatteModel* matte) {
 int main(int argc, char** argv) {
     setvbuf(stderr, nullptr, _IONBF, 0);
     fprintf(stderr, "[nnserver] starting...\n");
-    sd_try_load();
+    sd_init("dreamshaper_8LCM.safetensors");
 
     const char* model_path  = nullptr;
     const char* model_url   = nullptr;
