@@ -64,7 +64,6 @@ d_RealBrush ModulateBrushParams(const d_RealBrush& brush, float initAngle, int t
     target.x2y        = GetModVal(&bpScaleRel);
     target.col        = HSLToRGB(GetModVal(&bpQuickHue), GetModVal(&bpQuickSat), GetModVal(&bpQuickLit));
     target.cop        = (toolMode == eSmudge) ? GetModVal(&bpCloneOpacity) : 0.0f;
-    target.rad_out   *= sizeMul;
     return target;
 }
 
