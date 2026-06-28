@@ -231,25 +231,86 @@ static void matte_progress(const char* msg, void* user) {
     send_msg(client, 'P', msg, (uint32_t)strlen(msg));
 }
 
-/* ── connection handler ───────────────────────────────────────────────────── */
+/* ── matte handler ────────────────────────────────────────────────────────── */
 
-static void handle_client(sock_t client, MatteModel* matte) {
-    std::vector<uint8_t> rgb_blob, tri_blob, out_png;
+static void handle_matte(sock_t client, MatteModel* matte, uint8_t first_len_byte) {
+    std::vector<uint8_t> rgb_blob, tri_blob, alpha_png;
 
-    /* receive blobs (ignored — SD hack) */
-    recv_blob(client, rgb_blob);
-    recv_blob(client, tri_blob);
+    /* reconstruct first 4 bytes of length prefix (1 byte consumed for mode) */
+    uint8_t len_hdr[4] = {first_len_byte, 0, 0, 0};
+    if (!sock_recv_all(client, &len_hdr[1], 3)) return;
+    uint32_t rgb_len = read32be(len_hdr);
+    rgb_blob.resize(rgb_len);
+    if (rgb_len > 0 && !sock_recv_all(client, &rgb_blob[0], rgb_len)) return;
 
-    send_msg(client, 'P', "Generating SD image...", 23);
+    if (!recv_blob(client, tri_blob)) {
+        fprintf(stderr, "[handler] recv trimap failed\n"); return;
+    }
+    fprintf(stderr, "[handler] rgb %zu bytes, trimap %zu bytes\n",
+            rgb_blob.size(), tri_blob.size());
 
-    if (!sd_generate("a blue apple", 512, 512, out_png)) {
-        fprintf(stderr, "[handler] sd_generate failed\n"); return;
+    if (!matte_process(matte, rgb_blob, tri_blob, alpha_png,
+                       matte_progress, (void*)(uintptr_t)client)) {
+        fprintf(stderr, "[handler] matte_process failed\n"); return;
+    }
+
+    if (!send_msg(client, 'R', alpha_png.data(), (uint32_t)alpha_png.size())) {
+        fprintf(stderr, "[handler] send failed\n"); return;
+    }
+    fprintf(stderr, "[handler] done — sent %zu bytes\n", alpha_png.size());
+}
+
+/* ── SD handler (text protocol) ───────────────────────────────────────────── */
+
+static bool read_line(sock_t s, std::string& line) {
+    line.clear();
+    char c;
+    while (sock_recv_all(s, (uint8_t*)&c, 1)) {
+        if (c == '\n') return true;
+        line += c;
+    }
+    return !line.empty();
+}
+
+static void handle_sd(sock_t client) {
+    /* read header lines until empty line */
+    std::string prompt;
+    std::string sparam;
+    int    steps    = 4;
+    float  cfg      = 2.0f;
+    float  strength = 1.0f;
+    int    w        = 512, h = 512;
+
+    while (read_line(client, sparam)) {
+        if (sparam.empty()) break;  /* empty line = end of header */
+        if (sparam.find("prompt=") == 0)    prompt   = sparam.substr(7);
+        if (sparam.find("steps=") == 0)     steps    = atoi(sparam.c_str() + 6);
+        if (sparam.find("cfg=") == 0)       cfg      = (float)atof(sparam.c_str() + 4);
+        if (sparam.find("strength=") == 0)  strength = (float)atof(sparam.c_str() + 9);
+        if (sparam.find("width=") == 0)     w        = atoi(sparam.c_str() + 6);
+        if (sparam.find("height=") == 0)    h        = atoi(sparam.c_str() + 7);
+    }
+
+    /* optional source image (img2img) */
+    std::vector<uint8_t> source_png;
+    recv_blob(client, source_png);
+
+    fprintf(stderr, "[SD] \"%s\" %dx%d steps=%d cfg=%.1f strength=%.1f src=%zuB\n",
+            prompt.c_str(), w, h, steps, cfg, strength, source_png.size());
+
+    send_msg(client, 'P', "Generating...", 13);
+
+    std::vector<uint8_t> out_png;
+    if (!sd_generate(prompt, source_png, strength, cfg, steps, w, h, out_png)) {
+        fprintf(stderr, "[SD] generation failed\n");
+        send_msg(client, 'P', "Generation failed", 17);
+        return;
     }
 
     if (!send_msg(client, 'R', out_png.data(), (uint32_t)out_png.size())) {
-        fprintf(stderr, "[handler] send failed\n"); return;
+        fprintf(stderr, "[SD] send failed\n"); return;
     }
-    fprintf(stderr, "[handler] done — sent %zu bytes\n", out_png.size());
+    fprintf(stderr, "[SD] done — sent %zu bytes\n", out_png.size());
 }
 
 /* ── main ─────────────────────────────────────────────────────────────────── */
@@ -257,28 +318,28 @@ static void handle_client(sock_t client, MatteModel* matte) {
 int main(int argc, char** argv) {
     setvbuf(stderr, nullptr, _IONBF, 0);
     fprintf(stderr, "[nnserver] starting...\n");
-    sd_init("dreamshaper_8LCM.safetensors");
 
     const char* model_path  = nullptr;
     const char* model_url   = nullptr;
+    const char* sd_model    = nullptr;
     int         port        = 8000;
 
     for (int i = 1; i < argc; i++) {
         if      (strcmp(argv[i], "--port")      == 0 && i+1 < argc) port = atoi(argv[++i]);
         else if (strcmp(argv[i], "--model")     == 0 && i+1 < argc) model_path = argv[++i];
         else if (strcmp(argv[i], "--model-url") == 0 && i+1 < argc) model_url = argv[++i];
+        else if (strcmp(argv[i], "--sd-model")  == 0 && i+1 < argc) sd_model = argv[++i];
         else if (strcmp(argv[i], "--no-prompt") == 0) g_no_prompt = true;
         else if (strcmp(argv[i], "--help")      == 0) {
-            fprintf(stderr, "Usage: nnserver [--port PORT] [--model PATH] [--model-url URL] [--no-prompt]\n");
+            fprintf(stderr, "Usage: nnserver [--port PORT] [--model PATH] [--model-url URL] [--sd-model PATH] [--no-prompt]\n");
             return 0;
         }
     }
 
+    if (sd_model) sd_init(sd_model);
+
     std::string resolved = resolve_model(model_path, model_url);
-    if (resolved.empty()) {
-        fprintf(stderr, "[nnserver] no model available\n");
-        return 1;
-    }
+    if (resolved.empty()) { fprintf(stderr, "[nnserver] no model available\n"); return 1; }
 
     OnnxModel* onnx = onnx_load(resolved.c_str());
     if (!onnx) { fprintf(stderr, "[nnserver] failed to load model\n"); return 1; }
@@ -298,7 +359,15 @@ int main(int argc, char** argv) {
     while (true) {
         sock_t client = sock_accept(listener);
         if (client == SOCK_INVALID) { fprintf(stderr, "accept: %s\n", sock_last_error()); continue; }
-        handle_client(client, &matte);
+
+        uint8_t mode_byte;
+        if (!sock_recv_all(client, &mode_byte, 1)) { sock_close(client); continue; }
+
+        if (mode_byte == 'G' && sd_model)
+            handle_sd(client);
+        else
+            handle_matte(client, &matte, mode_byte);
+
         sock_close(client);
     }
 }
