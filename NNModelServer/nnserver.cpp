@@ -2,6 +2,7 @@
 #include "nn_download.h"
 #include "nn_onnx.h"
 #include "matte_module.h"
+#include "sd_module.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -257,6 +258,7 @@ static void handle_client(sock_t client, MatteModel* matte) {
 int main(int argc, char** argv) {
     setvbuf(stderr, nullptr, _IONBF, 0);
     fprintf(stderr, "[nnserver] starting...\n");
+    sd_try_load();
 
     const char* model_path  = nullptr;
     const char* model_url   = nullptr;

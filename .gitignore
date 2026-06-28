@@ -28,3 +28,7 @@ __pycache__/*
 /nnserver_err.log
 /nnserver_test.log
 /NNModelServer/nnserverbin.zip
+/NNModelServer/sd-build/lib/libggml.a
+/NNModelServer/sd-build/lib/libggml-base.a
+/NNModelServer/sd-build/lib/libggml-cpu.a
+/NNModelServer/sd-build/lib/libstable-diffusion.a

@@ -4,6 +4,7 @@ set(NNSERVER_SOURCES
     nnserver.cpp
     nn_onnx.cpp
     matte_module.cpp
+    sd_module.cpp
     ${CMAKE_SOURCE_DIR}/src/network/sock_platform.cpp
 )
 
@@ -74,4 +75,28 @@ if(WIN32)
             "${CMAKE_CURRENT_SOURCE_DIR}/model_url.txt"
             "$<TARGET_FILE_DIR:nnserver>/model_url.txt"
         COMMENT "Copying model_url.txt")
+
+    # ── stable-diffusion.cpp (prebuilt static library) ─────────────────
+    # Build once: run tools/build_sd.sh
+    # Artifacts land in ${CMAKE_CURRENT_SOURCE_DIR}/sd-build/
+    set(SD_BUILD_DIR "${CMAKE_CURRENT_SOURCE_DIR}/sd-build")
+    set(SD_INCLUDE_DIR "${SD_BUILD_DIR}/include")
+    set(SD_LIB_DIR     "${SD_BUILD_DIR}/lib")
+
+    if(EXISTS "${SD_LIB_DIR}/libstable-diffusion.a")
+        message(STATUS "sd: using prebuilt static library")
+        target_include_directories(nnserver PRIVATE "${SD_INCLUDE_DIR}")
+        target_link_directories(nnserver PRIVATE "${SD_LIB_DIR}")
+        target_link_libraries(nnserver PRIVATE
+            -Wl,--start-group
+            stable-diffusion ggml ggml-base ggml-cpu
+            -Wl,--end-group)
+        find_package(OpenMP)
+        if(OpenMP_CXX_FOUND)
+            target_link_libraries(nnserver PRIVATE OpenMP::OpenMP_CXX)
+        endif()
+    else()
+        message(WARNING "sd: prebuilt lib not found at ${SD_LIB_DIR}"
+                        " — run tools/build_sd.sh to enable SD")
+    endif()
 endif()
