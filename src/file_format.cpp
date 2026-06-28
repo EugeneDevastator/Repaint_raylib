@@ -7,7 +7,7 @@
 
 #define MAGIC      "REPAINT"
 #define MAGIC_LEN  8
-#define FILE_VER   6
+#define FILE_VER   7
 
 /* ── Write helpers ─────────────────────────────────────────────────────── */
 
@@ -144,7 +144,8 @@ bool SaveRePaint(const char* path, Document* doc, AppState* state) {
 
     // 4. Write final buffer
     size_t hdrSz = MAGIC_LEN + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4 + 4; // +ppu,reserved,5×cw
-    size_t totalSz = compSize + hdrSz + totalExtra + texTotalSz + 4;
+    size_t brushStateSz = 4 + 20 * (4+4+4+4+4+4) + 4; // count + 20 BParams(6 fields each) + toolMode
+    size_t totalSz = compSize + hdrSz + totalExtra + texTotalSz + brushStateSz + 4;
     uint8_t* buf = (uint8_t*)malloc(totalSz);
     if (!buf) {
         for (int i = 0; i < lc; i++) free(blobs[i].propsData);
@@ -194,6 +195,22 @@ bool SaveRePaint(const char* path, Document* doc, AppState* state) {
         _wu32(&p, (uint32_t)texBlobs[i].pngSz);
         if (texBlobs[i].pngSz > 0) _wcpy(&p, texBlobs[i].png, texBlobs[i].pngSz);
     }
+
+    /* Brush state section (v7+) */
+    BParam* allBPs[] = {&bpOpacity, &bpSize, &bpHardness, &bpSpacing, &bpCurvature, &bpScatter,
+        &bpCloneOpacity, &bpQuickHue, &bpQuickSat, &bpQuickLit,
+        &bpTexScale, &bpTexFeather, &bpTexThresh, &bpTexBlendVal,
+        &bpAngle, &bpScaleRel, &bpSizeMul, &bpPower, &bpPerspective, &bpFocalOffset};
+    _wu32(&p, (uint32_t)(sizeof(allBPs)/sizeof(allBPs[0])));
+    for (size_t i = 0; i < sizeof(allBPs)/sizeof(allBPs[0]); i++) {
+        _wu32(&p, (uint32_t)allBPs[i]->id);
+        _wcpy(&p, &allBPs[i]->user.clipminF, 4);
+        _wcpy(&p, &allBPs[i]->user.clipmaxF, 4);
+        _wcpy(&p, &allBPs[i]->user.jitter, 4);
+        _wu32(&p, (uint32_t)allBPs[i]->penMode);
+        _wcpy(&p, &allBPs[i]->power, 4);
+    }
+    _wu32(&p, (uint32_t)state->mode);
 
     bool ok = SaveFileData(path, buf, (int)totalSz);
 
@@ -392,6 +409,37 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
                 p += tsz;
             }
         }
+    }
+
+    /* Brush state section (v7+) */
+    if (ver >= 7) {
+        BParam* allBPs[] = {&bpOpacity, &bpSize, &bpHardness, &bpSpacing, &bpCurvature, &bpScatter,
+            &bpCloneOpacity, &bpQuickHue, &bpQuickSat, &bpQuickLit,
+            &bpTexScale, &bpTexFeather, &bpTexThresh, &bpTexBlendVal,
+            &bpAngle, &bpScaleRel, &bpSizeMul, &bpPower, &bpPerspective, &bpFocalOffset};
+        uint32_t bpCount = _ru32(&p);
+        if (bpCount > 64) { UnloadFileData(fileData); return false; }
+        for (uint32_t i = 0; i < bpCount; i++) {
+            uint32_t id = _ru32(&p);
+            float clipminF, clipmaxF, jitter, power;
+            memcpy(&clipminF, p, 4); p += 4;
+            memcpy(&clipmaxF, p, 4); p += 4;
+            memcpy(&jitter, p, 4);   p += 4;
+            uint32_t penMode = _ru32(&p);
+            memcpy(&power, p, 4);    p += 4;
+            for (size_t j = 0; j < sizeof(allBPs)/sizeof(allBPs[0]); j++) {
+                if (allBPs[j]->id == (int)id) {
+                    allBPs[j]->user.clipminF = clipminF;
+                    allBPs[j]->user.clipmaxF = clipmaxF;
+                    allBPs[j]->user.jitter = jitter;
+                    allBPs[j]->penMode = (int)penMode;
+                    allBPs[j]->power = power;
+                    break;
+                }
+            }
+        }
+        // Force tool to eBrush so preview can display correctly
+        state->mode = eBrush;
     }
 
     UnloadFileData(fileData);

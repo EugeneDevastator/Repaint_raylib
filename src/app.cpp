@@ -612,25 +612,6 @@ void App_Init(AppState* state) {
     LayerStack_Init();
     app_new_document(1024, 768, WHITE);
 
-    // Restore last session if app_closed.re.png exists
-    char closePath[1024];
-    snprintf(closePath, sizeof(closePath), "%sSnaps/app_closed.re.png", GetApplicationDirectory());
-    FILE* f = fopen(closePath, "rb");
-    if (f) {
-        fclose(f);
-        Compositor_Shutdown(); Compositor_Init(); LayerStack_Shutdown(); LayerStack_Init();
-        if (LoadRePaint(closePath, &state->doc, state)) {
-            state->activeLayer = 0;
-            SyncCanvasFromDoc(&state->doc, NULL, NULL);
-            state->camera.target = Vector2{0, 0};
-            layersDirty = true;
-        } else {
-            // fallback: re-create default
-            Compositor_Shutdown(); Compositor_Init(); LayerStack_Shutdown(); LayerStack_Init();
-            app_new_document(1024, 768, WHITE);
-        }
-    }
-
     Rectangle viewportBounds = {
         (float)uiPanelWidth, 0,
         (float)(SCREEN_WIDTH - uiPanelWidth - RIGHT_PANEL_WIDTH),
@@ -730,6 +711,25 @@ void App_Init(AppState* state) {
 
     /* Load default brush preset */
     Preset_ApplyDefault(state);
+
+    // Restore last session if app_closed.re.png exists (runs after defaults so BParams persist)
+    char closePath[1024];
+    snprintf(closePath, sizeof(closePath), "%sSnaps/app_closed.re.png", GetApplicationDirectory());
+    FILE* f = fopen(closePath, "rb");
+    if (f) {
+        fclose(f);
+        Compositor_Shutdown(); Compositor_Init(); LayerStack_Shutdown(); LayerStack_Init();
+        if (LoadRePaint(closePath, &state->doc, state)) {
+            state->activeLayer = 0;
+            SyncCanvasFromDoc(&state->doc, NULL, NULL);
+            state->camera.target = Vector2{0, 0};
+            if (g_recorder) g_recorder->Reset(DocOutPxW(&state->doc), DocOutPxH(&state->doc));
+            layersDirty = true;
+        } else {
+            Compositor_Shutdown(); Compositor_Init(); LayerStack_Shutdown(); LayerStack_Init();
+            app_new_document(1024, 768, WHITE);
+        }
+    }
 }
 
 /* ── App_Draw ──────────────────────────────────────────────────────────── */
