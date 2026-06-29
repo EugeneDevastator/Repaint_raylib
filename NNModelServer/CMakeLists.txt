@@ -71,6 +71,21 @@ if(WIN32)
             "$<TARGET_FILE_DIR:nnserver>/"
         COMMENT "Copying onnxruntime.dll")
 
+    # Copy MinGW runtime DLLs (needed on machines without MSYS2)
+    foreach(_dll libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll)
+        find_file(_${_dll}_path ${_dll}
+            PATHS "C:/msys64/mingw64/bin"
+                  "$ENV{MINGW_PREFIX}/bin"
+                  "$ENV{MINGW_PREFIX}/../bin")
+        if(_${_dll}_path)
+            add_custom_command(TARGET nnserver POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${_${_dll}_path}"
+                    "$<TARGET_FILE_DIR:nnserver>/"
+                COMMENT "Copying ${_dll}")
+        endif()
+    endforeach()
+
     # ── stable-diffusion (prebuilt static libs, Windows only) ──────────────
     set(SD_BUILD_DIR "${CMAKE_CURRENT_SOURCE_DIR}/sd-build")
     set(SD_INCLUDE_DIR "${SD_BUILD_DIR}/include")
