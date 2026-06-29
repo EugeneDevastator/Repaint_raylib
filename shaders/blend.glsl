@@ -107,6 +107,8 @@ vec4 applyBlend(int mode, vec4 dst, vec3 srcRGB, float srcA) {
     } else if (mode == MODE_ERASECLR) {
         vec3 keyLab = rgbToOklab(srcRGB);
         float kc = length(keyLab.yz);
+        // Saturation-to-0..1 factor (max chroma in OKLab ≈ 0.3)
+        float satFactor = clamp(kc * 4.0, 0.0, 1.0);
 
         // Desaturated brush → paint alpha from brush lightness
         if (kc < 0.02) {
@@ -117,13 +119,18 @@ vec4 applyBlend(int mode, vec4 dst, vec3 srcRGB, float srcA) {
         }
 
         // Colored brush → chroma key erase
+        // High saturation → strict (narrow hue + tight lightness),
+        // low saturation → broad (wide hue + loose lightness).
+        float hueWidth = mix(0.5, 8.0, satFactor);
+        float lightPow = mix(1.0, 8.0, satFactor);
+
         vec2 kd = keyLab.yz / kc;
         vec3 pLab = rgbToOklab(dst.rgb);
         float pc = length(pLab.yz);
         float proj = max(dot(pLab.yz, kd), 0.0);
 
-        float hueMatch = pow(proj / max(pc, 0.001), CHROMA_KEY_HUE_WIDTH);
-        float lightWeight = 1.0 - pow(abs(pLab.x - keyLab.x), CHROMA_KEY_LIGHTNESS_POW);
+        float hueMatch = pow(proj / max(pc, 0.001), hueWidth);
+        float lightWeight = 1.0 - pow(abs(pLab.x - keyLab.x), lightPow);
         lightWeight = clamp(lightWeight, 0.0, 1.0);
 
         float erase = hueMatch * lightWeight * srcA;

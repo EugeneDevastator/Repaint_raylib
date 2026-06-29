@@ -57,6 +57,7 @@ void ToolBox_Draw(AppState* state, Rectangle vp) {
         ImTextureID tid = hasIcon ? (ImTextureID)(intptr_t)toolIconTex[ii].id : 0;
 
         auto handleClick = [&]() {
+            if (i == 0) DisplayInfoText("Painting");
             if (i == 3) {
                 state->mode = eBrush;
                 if (state->eraseMode == eEraseNone) {

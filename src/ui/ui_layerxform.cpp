@@ -12,6 +12,7 @@ bool LayerXformModule::HandleInput(InputState& input, const DrawRect& rect) {
             HudSetActive(state, HUD_NONE);
         } else {
             HudSetActive(state, HUD_LAYER_XFORM);
+            DisplayInfoText("Transform");
             if (state->activeLayer >= 0) {
                 sLayerProps* lp = LayerStack_GetProps(state->activeLayer);
                 float* m = lp->xform.mat;

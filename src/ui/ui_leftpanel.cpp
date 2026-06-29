@@ -64,10 +64,14 @@ void LeftPanel_Draw(AppState* state) {
         uint8_t curBm = state->currentBrush.Realb.bmidx;
         for (int i = 0; i < n; i++)
             if (map[i] == (int)curBm) { sel = i; break; }
-        if (DrawSelector("Blend Mode", &sel, names, n, 2))
+        bool changed = DrawSelector("Blend Mode", &sel, names, n, 2);
+        if (changed)
             state->currentBrush.Realb.bmidx = (uint8_t)map[sel];
         else
             state->currentBrush.Realb.bmidx = (uint8_t)map[sel];
+
+        if (changed && map[sel] == 4)
+            DisplayInfoText("Color erase: colored = chroma key, gray = alpha paint");
     }
 
     ImGui::Spacing();
