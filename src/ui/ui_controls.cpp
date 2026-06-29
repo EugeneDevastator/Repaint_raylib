@@ -130,14 +130,16 @@ void BParam_SnapRunState(BParam* bp) {
     bp->run.clipmaxF = bp->user.clipmaxF;
 }
 
-bool DrawSelector(const char* label, int* current, const char* names[], int count, float height) {
+bool DrawSelector(const char* label, int* current, const char* names[], int count, int columns, float height) {
     if (label) ImGui::Text("%s", label);
     int prev = *current;
     if (count < 1) return false;
     if (*current < 0 || *current >= count) *current = 0;
 
+    if (columns < 1) columns = 1;
+    int rows = (count + columns - 1) / columns;
     float padTopBot  = 1.0f;
-    float listH = count * ImGui::GetFontSize();
+    float listH = rows * ImGui::GetFontSize();
 
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(1, 1, 1, 1));
     ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(0.50f, 0.70f, 0.95f, 1.0f));
@@ -150,12 +152,20 @@ bool DrawSelector(const char* label, int* current, const char* names[], int coun
     ImGui::BeginChild("##sel", ImVec2(0, listH),
         ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     bool mouseDown = ImGui::IsMouseDown(0);
-    for (int i = 0; i < count; i++) {
-        ImGui::PushID(i);
-        ImGui::Selectable(names[i], *current == i);
-        if (mouseDown && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem))
-            *current = i;
-        ImGui::PopID();
+    float itemW = ImGui::GetContentRegionAvail().x / columns;
+    for (int row = 0; row < rows; row++) {
+        for (int col = 0; col < columns; col++) {
+            int i = row * columns + col;
+            if (i >= count) break;
+            if (col > 0) ImGui::SameLine(0, 0);
+            ImGui::PushID(i);
+            ImGui::PushItemWidth(itemW);
+            ImGui::Selectable(names[i], *current == i, 0, ImVec2(itemW, 0));
+            if (mouseDown && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem))
+                *current = i;
+            ImGui::PopItemWidth();
+            ImGui::PopID();
+        }
     }
     ImGui::EndChild();
     ImGui::PopStyleVar(4);

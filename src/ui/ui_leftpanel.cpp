@@ -54,7 +54,7 @@ void LeftPanel_Draw(AppState* state) {
     // Blend mode (selectable list, immediate highlight on mouse down)
     {
         int blend = (int)state->currentBrush.Realb.bmidx;
-        if (DrawSelector("Blend Mode", &blend, g_blendModeNames, g_blendModeCount))
+        if (DrawSelector("Blend Mode", &blend, g_blendModeNames, g_blendModeCount, 2))
             state->currentBrush.Realb.bmidx = (uint8_t)blend;
         else
             state->currentBrush.Realb.bmidx = (uint8_t)blend;
