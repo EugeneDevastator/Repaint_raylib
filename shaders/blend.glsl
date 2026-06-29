@@ -19,6 +19,10 @@
 #define MODE_LIN_DODGE  15
 #define MODE_LIN_LIGHT  16
 
+// ── Chroma key erase coefficients ─────────────────────────────────────
+#define CHROMA_KEY_HUE_WIDTH      2.0   // higher = narrower hue range
+#define CHROMA_KEY_LIGHTNESS_POW  2.0   // lightness mismatch falloff
+
 // constants
 // correction for simple color blend
 vec3 blendWeightCorr = vec3(1.000);          // is roughly square of the next..
@@ -101,9 +105,27 @@ vec4 applyBlend(int mode, vec4 dst, vec3 srcRGB, float srcA) {
         outA = clamp( dst.a*(1.0 -srcA),0,1);
         return vec4(outRGB, outA);
     } else if (mode == MODE_ERASECLR) {
-        float eraseMask = dst.a*srcA;
-        outRGB = mix(dst.rgb, srcRGB, eraseMask);
-        outA   = dst.a*(1.0-srcA);
+        vec3 keyLab = rgbToOklab(srcRGB);
+        float kc = length(keyLab.yz);
+        if (kc < 0.01) { outRGB = dst.rgb; outA = dst.a; return vec4(outRGB, outA); }
+        vec2 kd = keyLab.yz / kc;
+
+        vec3 pLab = rgbToOklab(dst.rgb);
+        float pc = length(pLab.yz);
+        float proj = max(dot(pLab.yz, kd), 0.0);
+
+        float hueMatch = pow(proj / max(pc, 0.001), CHROMA_KEY_HUE_WIDTH);
+        float lightWeight = 1.0 - pow(abs(pLab.x - keyLab.x), CHROMA_KEY_LIGHTNESS_POW);
+        lightWeight = clamp(lightWeight, 0.0, 1.0);
+
+        float erase = hueMatch * lightWeight * srcA;
+
+        pLab.y -= proj * srcA * kd.x;
+        pLab.z -= proj * srcA * kd.y;
+
+        outRGB = oklabToRgb(pLab);
+        outA   = dst.a * (1.0 - clamp(erase, 0.0, 1.0));
+        outA   = min(outA, dst.a);
         return vec4(outRGB, outA);
     }
 
