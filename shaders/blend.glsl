@@ -107,9 +107,17 @@ vec4 applyBlend(int mode, vec4 dst, vec3 srcRGB, float srcA) {
     } else if (mode == MODE_ERASECLR) {
         vec3 keyLab = rgbToOklab(srcRGB);
         float kc = length(keyLab.yz);
-        if (kc < 0.01) { outRGB = dst.rgb; outA = dst.a; return vec4(outRGB, outA); }
-        vec2 kd = keyLab.yz / kc;
 
+        // Desaturated brush → paint alpha from brush lightness
+        if (kc < 0.02) {
+            outRGB = dst.rgb;
+            float targetA = keyLab.x;
+            outA = mix(dst.a, targetA, srcA);
+            return vec4(outRGB, outA);
+        }
+
+        // Colored brush → chroma key erase
+        vec2 kd = keyLab.yz / kc;
         vec3 pLab = rgbToOklab(dst.rgb);
         float pc = length(pLab.yz);
         float proj = max(dot(pLab.yz, kd), 0.0);
