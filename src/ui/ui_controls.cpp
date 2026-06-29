@@ -1,5 +1,6 @@
 #include "repaint.h"
 #include "imgui.h"
+#include "imgui_internal.h"
 
 // ── Shared blend mode names ──────────────────────────────────────────
 const char* g_blendModeNames[] = {
@@ -136,7 +137,7 @@ bool DrawSelector(const char* label, int* current, const char* names[], int coun
     if (*current < 0 || *current >= count) *current = 0;
 
     float padTopBot  = 1.0f;
-    float listH = height > 0 ? height : count * (ImGui::GetFontSize() + padTopBot * 2.0f);
+    float listH = count * ImGui::GetFontSize();
 
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(1, 1, 1, 1));
     ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(0.50f, 0.70f, 0.95f, 1.0f));
