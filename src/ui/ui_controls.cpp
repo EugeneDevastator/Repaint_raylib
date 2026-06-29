@@ -129,6 +129,33 @@ void BParam_SnapRunState(BParam* bp) {
     bp->run.clipmaxF = bp->user.clipmaxF;
 }
 
+bool DrawSelector(const char* label, int* current, const char* names[], int count, float height) {
+    if (label) ImGui::Text("%s", label);
+    int prev = *current;
+    if (count < 1) return false;
+    if (*current < 0 || *current >= count) *current = 0;
+    float listH = height > 0 ? height : count * ImGui::GetTextLineHeight();
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(1, 1, 1, 1));
+    ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, ImVec2(0.5f, 0.5f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+    ImGui::BeginChild("##sel", ImVec2(0, listH),
+        ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    bool mouseDown = ImGui::IsMouseDown(0);
+    for (int i = 0; i < count; i++) {
+        ImGui::PushID(i);
+        ImGui::Selectable(names[i], *current == i);
+        if (mouseDown && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem))
+            *current = i;
+        ImGui::PopID();
+    }
+    ImGui::EndChild();
+    ImGui::PopStyleVar(4);
+    ImGui::PopStyleColor();
+    return *current != prev;
+}
+
 void DrawRadioGroup(const char* label, int* current, const char* items[], int itemCount) {
     if (label) ImGui::Text("%s", label);
 

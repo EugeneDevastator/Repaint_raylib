@@ -121,7 +121,7 @@ void TexPanelModule::DrawGUI(const DrawRect& rect) {
     float thirdW = rect.w / 3.0f;
     float yPos = (float)g_texPanelAreaY;
 
-    // ── Left 1/3: radio groups ──
+    // ── Left 1/3: selectors ──
     int mm = state->currentBrush.Realb.useTexLumAsAlpha ? 0 : 1;
     int tnm = state->currentBrush.Realb.texNoisemode;
     int cm = state->currentBrush.Realb.texColorMode;
@@ -138,30 +138,30 @@ void TexPanelModule::DrawGUI(const DrawRect& rect) {
         static const char* items0[] = {"lum is alpha", "tex.a is alpha"};
         static const char* items2[] = {"Stencil", "Random", "Const"};
         static const char* items3[] = {"brush RGB", "texture RGB", "mul brush*tex", "lum-color"};
+        static const char* items4[] = {"Brush", "Global"};
 
         // Row 1: Mask Mode | Color | Sample Mode
         ImGui::SetCursorPos(ImVec2(x, 10));
         ImGui::BeginChild("##rg0", ImVec2(colW, 0), false);
-        { int v = mm; DrawRadioGroup("Mask Mode", &v, items0, 2); mm = v; }
+        DrawSelector("Mask Mode", &mm, items0, 2);
         ImGui::EndChild();
         x += colW + 2.0f;
 
         ImGui::SetCursorPos(ImVec2(x, 10));
         ImGui::BeginChild("##rg3", ImVec2(colW, 0), false);
-        { int v = cm; DrawRadioGroup("Color", &v, items3, 4); cm = v; }
+        DrawSelector("Color", &cm, items3, 4);
         ImGui::EndChild();
         x += colW + 2.0f;
 
         ImGui::SetCursorPos(ImVec2(x, 10));
         ImGui::BeginChild("##rg2", ImVec2(colW, 0), false);
-        { int v = tnm; DrawRadioGroup("Sample Mode", &v, items2, 3); tnm = v; }
+        DrawSelector("Sample Mode", &tnm, items2, 3);
         ImGui::EndChild();
 
         // Row 2: Tex Scale
         ImGui::SetCursorPos(ImVec2(10, 120));
         ImGui::BeginChild("##rg4", ImVec2(colW, 0), false);
-        { static const char* items4[] = {"Brush", "Global"};
-          int v = g_texScaleMode; DrawRadioGroup("Tex Scale", &v, items4, 2); g_texScaleMode = v; }
+        DrawSelector("Tex Scale", &g_texScaleMode, items4, 2);
         ImGui::EndChild();
     }
     ImGui::EndChild();

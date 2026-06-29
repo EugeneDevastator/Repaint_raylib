@@ -283,6 +283,7 @@ void Changelog_Init(void); void Changelog_Toggle(void); void Changelog_Draw(void
 struct ImDrawList; struct ImVec2;
 void DrawSlider(BParam* bp, int orient, float thick=0, float len=0);
 void DrawRadioGroup(const char* label, int* current, const char* items[], int itemCount);
+bool DrawSelector(const char* label, int* current, const char* names[], int count, float height=0);
 extern const char* g_blendModeNames[];
 extern const int   g_blendModeCount;
 
