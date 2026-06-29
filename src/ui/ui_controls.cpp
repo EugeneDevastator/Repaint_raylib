@@ -134,14 +134,25 @@ bool DrawSelector(const char* label, int* current, const char* names[], int coun
     int prev = *current;
     if (count < 1) return false;
     if (*current < 0 || *current >= count) *current = 0;
-    float listH = height > 0 ? height : count * ImGui::GetTextLineHeight();
+
+    float fontSz     = ImGui::GetFontSize() *1.3f;  // current font size (px)
+    float padTopBot  = 1.0f;                   // padding per side (px)
+    float itemHeight = fontSz + padTopBot * 2.0f;  // entry height
+
+    float listH = height > 0 ? height : count * itemHeight;
+    float fontScale = fontSz / ImGui::GetFontSize();
+
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(1, 1, 1, 1));
+    ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(0.50f, 0.70f, 0.95f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.88f, 0.93f, 0.98f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0.80f, 0.90f, 0.98f, 1.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, ImVec2(0.5f, 0.5f));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, padTopBot));
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
     ImGui::BeginChild("##sel", ImVec2(0, listH),
         ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    ImGui::SetWindowFontScale(fontScale);
     bool mouseDown = ImGui::IsMouseDown(0);
     for (int i = 0; i < count; i++) {
         ImGui::PushID(i);
@@ -150,9 +161,10 @@ bool DrawSelector(const char* label, int* current, const char* names[], int coun
             *current = i;
         ImGui::PopID();
     }
+    ImGui::SetWindowFontScale(1.0f);
     ImGui::EndChild();
     ImGui::PopStyleVar(4);
-    ImGui::PopStyleColor();
+    ImGui::PopStyleColor(4);
     return *current != prev;
 }
 
