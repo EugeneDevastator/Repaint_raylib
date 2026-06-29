@@ -53,11 +53,21 @@ void LeftPanel_Draw(AppState* state) {
 
     // Blend mode (selectable list, immediate highlight on mouse down)
     {
-        int blend = (int)state->currentBrush.Realb.bmidx;
-        if (DrawSelector("Blend Mode", &blend, g_blendModeNames, g_blendModeCount, 2))
-            state->currentBrush.Realb.bmidx = (uint8_t)blend;
+        static const char* names[] = {
+            "N-Gamma","N-OKLab","N-Linear","Overlay","EraseA","EraseColor",
+            "Darken","Lighten","Multiply","Screen","Burn","Color Dodge",
+            "Luminosity","Color","LinLight","Saturation","LinDodge"
+        };
+        static const int map[] = {0,2,1,11,3,4,8,7,10,5,9,6,13,12,16,14,15};
+        int n = sizeof(map) / sizeof(map[0]);
+        int sel = 0;
+        uint8_t curBm = state->currentBrush.Realb.bmidx;
+        for (int i = 0; i < n; i++)
+            if (map[i] == (int)curBm) { sel = i; break; }
+        if (DrawSelector("Blend Mode", &sel, names, n, 2))
+            state->currentBrush.Realb.bmidx = (uint8_t)map[sel];
         else
-            state->currentBrush.Realb.bmidx = (uint8_t)blend;
+            state->currentBrush.Realb.bmidx = (uint8_t)map[sel];
     }
 
     ImGui::Spacing();
