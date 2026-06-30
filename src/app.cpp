@@ -34,51 +34,9 @@ Viewport viewport;
 
 ModuleStack g_moduleStack;
 
-// ── Notification state (info text with auto-dismiss) ──────────────────
-static struct {
-    char text[256];
-    double endTime;
-} g_notif = {};
+#include "info_text.h"
 
-static int _wordCount(const char* s) {
-    int n = 0, in = 0;
-    for (; *s; s++) { if (*s > ' ') { if (!in) { n++; in = 1; } } else { in = 0; } }
-    return n > 0 ? n : 1;
-}
-
-void ShowNotification(const char* text, float duration) {
-    snprintf(g_notif.text, sizeof(g_notif.text), "%s", text ? text : "");
-    g_notif.endTime = GetTime() + duration;
-}
-
-void DisplayInfoText(const char* text) {
-    float dur = fmaxf((float)_wordCount(text) / 5.0f, 1.5f);
-    ShowNotification(text, dur);
-}
-
-static void DrawNotification(void) {
-    if (g_notif.text[0] == '\0') return;
-    double now = GetTime();
-    double remaining = g_notif.endTime - now;
-    if (remaining <= 0) { g_notif.text[0] = '\0'; return; }
-
-    float textScale = 1.3f;
-    float sz = g_dialogFont.baseSize * textScale;
-    float spacing = 2.0f;
-    float tw = MeasureTextEx(g_dialogFont, g_notif.text, sz, spacing).x;
-    int sw = GetScreenWidth();
-    float tx = (sw - tw) * 0.5f;
-    float ty = 16.0f;
-
-    // Fade alpha over the last 0.5s
-    float alpha = remaining > 0.5f ? 1.0f : (float)(remaining / 0.5f);
-    alpha = fmaxf(alpha, 0.0f);
-    Color shadowCol = ColorAlpha(BLACK, alpha * 0.6f);
-    Color textCol   = ColorAlpha(WHITE, alpha);
-
-    DrawTextEx(g_dialogFont, g_notif.text, Vector2{tx + 1, ty + 1}, sz, spacing, shadowCol);
-    DrawTextEx(g_dialogFont, g_notif.text, Vector2{tx, ty}, sz, spacing, textCol);
-}
+void DisplayInfoText(const char* text) { InfoText_Show(text); }
 
 void SyncImGuiInput(void) {
     ImGuiIO& io = ImGui::GetIO();
@@ -1011,7 +969,7 @@ void App_Draw(AppState* state) {
         }
     }
 
-    DrawNotification();
+    InfoText_Draw();
 
     EndDrawing();
 

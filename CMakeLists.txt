@@ -91,6 +91,7 @@ set(SOURCES
     src/usertextures.cpp
     # ── ui ───────────────────────────────────────────────────────────
     src/ui/ui_controls.cpp
+    src/ui/info_text.cpp
     src/ui/ui_color.cpp
     src/ui/ui_quickpanel.cpp
     src/ui/ui_brushgizmo.cpp
@@ -159,6 +160,7 @@ endif()
 
 target_include_directories(repaint PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ui
     ${CMAKE_CURRENT_SOURCE_DIR}/src/http
     ${CMAKE_CURRENT_SOURCE_DIR}/dialog
     ${CMAKE_CURRENT_SOURCE_DIR}/raylib_utils

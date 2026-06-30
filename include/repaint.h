@@ -247,6 +247,7 @@ extern int g_texPanelAreaY; // y-coordinate for the texture panel in the Quick H
 #define HUD_CANVAS_XFORM 3
 #define HUD_NN 4
 extern int g_activeHud;
+#include "info_text.h"
 
 #define QP_SLIDER_W 28
 #define QP_SLIDER_H 256

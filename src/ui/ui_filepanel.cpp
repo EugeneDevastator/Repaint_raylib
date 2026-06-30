@@ -29,7 +29,7 @@ void FilePanel_Shutdown(void) {
 }
 
 void FilePanel_Draw(AppState* state, Rectangle vp) {
-    ImGui::SetNextWindowPos(ImVec2(vp.x + 8, vp.y + 8));
+    ImGui::SetNextWindowPos(ImVec2(vp.x + 8, vp.y + 53));
     ImGui::SetNextWindowSize(ImVec2(FILE_BTN_N * 48 + (FILE_BTN_N - 1) * 4 + 16, 52));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));

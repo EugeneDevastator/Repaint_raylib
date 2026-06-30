@@ -38,7 +38,7 @@ void ToolBox_Draw(AppState* state, Rectangle vp) {
     int winW = cols * btnSz + (cols - 1) * gap + 12;
     int winH = rows * btnSz + (rows - 1) * gap + 12;
 
-    ImGui::SetNextWindowPos(ImVec2(vp.x + vp.width / 2 - winW / 2, vp.y + 8));
+    ImGui::SetNextWindowPos(ImVec2(vp.x + vp.width / 2 - winW / 2, vp.y + 53));
     ImGui::SetNextWindowSize(ImVec2(winW, winH));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
