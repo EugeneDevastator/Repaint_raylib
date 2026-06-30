@@ -110,11 +110,19 @@ vec4 applyBlend(int mode, vec4 dst, vec3 srcRGB, float srcA) {
         // Saturation-to-0..1 factor (max chroma in OKLab ≈ 0.3)
         float satFactor = clamp(kc * 4.0, 0.0, 1.0);
 
-        // Desaturated brush → paint alpha from brush lightness
+        // Desaturated brush → lightness key: erase pixels near brush lightness,
+        // preserving chroma and making remaining color more saturated
         if (kc < 0.02) {
-            outRGB = dst.rgb;
-            float targetA = keyLab.x;
-            outA = mix(dst.a, targetA, srcA);
+            vec3 pLab = rgbToOklab(dst.rgb);
+            float lumDiff = abs(pLab.x - keyLab.x);
+            float erase = clamp(lumDiff * 2.0, 0.0, 1.0) * clamp(srcA, 0.0, 1.0);
+            // Pull canvas lightness away from key lightness toward neutral
+            pLab.x = mix(pLab.x, 0.5 + (pLab.x - keyLab.x) * 0.5, erase);
+            // Boost chroma (saturation) as lightness is removed
+            pLab.yz *= 1.0 + (1.0 - erase) * 0.5;
+            outRGB = oklabToRgb(pLab);
+            outA   = dst.a * (1.0 - clamp(erase, 0.0, 1.0));
+            outA   = min(outA, dst.a);
             return vec4(outRGB, outA);
         }
 

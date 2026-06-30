@@ -114,7 +114,10 @@ void main() {
 
     // ── Eraser toolbar modes ─────────────────────────────────────────
     if (eraseMode == 1) {
-        finalColor = vec4(canvas.rgb, canvas.a * (1.0 - finalAlpha));
+        // Alpha erase: brush luminance paints alpha (dark→transparent, light→opaque)
+        float brushLum = dot(brushFinal, vec3(0.299, 0.587, 0.114));
+        float newA = mix(canvas.a, brushLum, finalAlpha);
+        finalColor = vec4(canvas.rgb, newA);
         return;
     } else if (eraseMode == 2) {
         finalColor = applyBlend(MODE_ERASECLR, canvas, brushFinal, finalAlpha);
