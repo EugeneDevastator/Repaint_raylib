@@ -198,4 +198,24 @@ void DrawRadioGroup(const char* label, int* current, const char* items[], int it
     }
 }
 
+void DrawSingleSlider(const char* label, float* val, float vmin, float vmax, const char* display_fmt) {
+    char buf[64];
+    snprintf(buf, sizeof(buf), "##%s", label ? label : "sl");
+    ImGui::SetNextItemWidth(-1);
+    if (label)
+        ImGui::SliderFloat(buf, val, vmin, vmax, display_fmt);
+    else
+        ImGui::SliderFloat(buf, val, vmin, vmax, display_fmt);
+}
+
+void DrawSingleSliderInt(const char* label, int* val, int vmin, int vmax, const char* display_fmt) {
+    char buf[64];
+    snprintf(buf, sizeof(buf), "##%s", label ? label : "sl");
+    ImGui::SetNextItemWidth(-1);
+    if (label)
+        ImGui::SliderInt(buf, val, vmin, vmax, display_fmt);
+    else
+        ImGui::SliderInt(buf, val, vmin, vmax, display_fmt);
+}
+
 

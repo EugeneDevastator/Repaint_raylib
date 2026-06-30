@@ -236,6 +236,7 @@ extern Color g_colorPickGrid[25];
 extern int g_colorPickScreenX, g_colorPickScreenY;
 extern Rectangle g_colorPickVpBounds;
 extern float g_pivotCursorX, g_pivotCursorY;
+extern bool g_lockAspect;
 extern bool g_seamlessPaint;
 extern bool g_seamlessPreview;
 extern bool g_pixelPerfect;
@@ -246,6 +247,7 @@ extern int g_texPanelAreaY; // y-coordinate for the texture panel in the Quick H
 #define HUD_LAYER_XFORM 2
 #define HUD_CANVAS_XFORM 3
 #define HUD_NN 4
+#define HUD_SD 5
 extern int g_activeHud;
 #include "info_text.h"
 
@@ -285,6 +287,8 @@ struct ImDrawList; struct ImVec2;
 void DrawSlider(BParam* bp, int orient, float thick=0, float len=0);
 void DrawRadioGroup(const char* label, int* current, const char* items[], int itemCount);
 bool DrawSelector(const char* label, int* current, const char* names[], int count, int columns=1, float height=0);
+void DrawSingleSlider(const char* label, float* val, float vmin, float vmax, const char* display_fmt);
+void DrawSingleSliderInt(const char* label, int* val, int vmin, int vmax, const char* display_fmt);
 extern const char* g_blendModeNames[];
 extern const int   g_blendModeCount;
 
@@ -403,6 +407,15 @@ struct NNHudModule : IModule {
     void DrawGL(const DrawRect& rect) override;
     void DrawGUI(const DrawRect& rect) override;
     void OnExit() override;
+};
+
+struct SDHudModule : IModule {
+    AppState* state;
+    explicit SDHudModule(AppState* s) : state(s) {}
+    const char* Name() const override { return "SDHud"; }
+    bool HandleInput(InputState& input, const DrawRect& rect) override;
+    void DrawGL(const DrawRect& rect) override;
+    void DrawGUI(const DrawRect& rect) override;
 };
 
 void NNHud_Shutdown(void);

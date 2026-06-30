@@ -4,6 +4,7 @@
 #include "imgui.h"
 
 extern bool layersDirty;
+bool g_lockAspect = false;
 
 bool LayerXformModule::HandleInput(InputState& input, const DrawRect& rect) {
     // Toggle mode on KEY_ONE — block while editing ImGui text widgets
@@ -50,6 +51,7 @@ bool LayerXformModule::HandleInput(InputState& input, const DrawRect& rect) {
     Vector2 cursor = {g_pivotCursorX, g_pivotCursorY};
     bool changed = TransformHandle_Input(&lp->xform, &cursor,
         true,  // scaleProportionalToCursor=true → cursor-centered (layer)
+        g_lockAspect,
         &state->camera, input.MousePos(),
         input.MouseDown(MOUSE_LEFT_BUTTON),
         input.MousePressed(MOUSE_LEFT_BUTTON),
@@ -96,6 +98,7 @@ void LayerXformModule::DrawGUI(const DrawRect& rect) {
     if (ImGui::Button("Apply Union", ImVec2(-1, 0))) {}
     if (ImGui::Button("Set Res", ImVec2(-1, 0))) {}
     if (ImGui::Button("Reset Xform", ImVec2(-1, 0))) {}
+    ImGui::Checkbox("Lock Aspect", &g_lockAspect);
 
     ImGui::End();
 }

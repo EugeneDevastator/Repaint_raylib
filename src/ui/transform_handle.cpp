@@ -21,6 +21,8 @@ static void ResetState() {
     memset(&s_savedXform, 0, sizeof(s_savedXform));
 }
 
+void TransformHandle_ResetState(void) { ResetState(); }
+
 // ── Helpers ─────────────────────────────────────────────────────────
 static void Corners(const float mat[6], float w, float h,
                     Vector2 out[4]) {
@@ -62,6 +64,7 @@ static void GetLocalUV(const float mat[6], Vector2 worldPt, float* u, float* v) 
 bool TransformHandle_Input(RectXform* xform,
                            Vector2* cursor,
                            bool scaleProportionalToCursor,
+                           bool lockAspect,
                            const Camera2D* camera,
                            Vector2 mousePos,
                            bool leftDown,
@@ -318,6 +321,13 @@ bool TransformHandle_Input(RectXform* xform,
             }
             if (fabsf(xform->w) < 1.0f) xform->w = (xform->w < 0) ? -1.0f : 1.0f;
             if (fabsf(xform->h) < 1.0f) xform->h = (xform->h < 0) ? -1.0f : 1.0f;
+            if (lockAspect) {
+                float ratio = sw / sh;
+                if (s_dragEdge == 0 || s_dragEdge == 2)
+                    xform->w = xform->h * ratio;
+                else
+                    xform->h = xform->w / ratio;
+            }
         }
         return true;
     }
@@ -367,6 +377,13 @@ bool TransformHandle_Input(RectXform* xform,
             xform->h = nh;
             if (fabsf(xform->w) < 1.0f) xform->w = (xform->w < 0) ? -1.0f : 1.0f;
             if (fabsf(xform->h) < 1.0f) xform->h = (xform->h < 0) ? -1.0f : 1.0f;
+            if (lockAspect) {
+                float ratio = sw / sh;
+                if (fabsf(nw - sw) > fabsf(nh - sh))
+                    xform->h = xform->w / ratio;
+                else
+                    xform->w = xform->h * ratio;
+            }
         } else {
             // Scale proportional to cursor (layer): scale matrix around cursor
             float as = s_savedXform.mat[0], bs = s_savedXform.mat[1];

@@ -103,6 +103,7 @@ set(SOURCES
     src/ui/ui_changelog.cpp
     src/ui/ui_quickhud.cpp
     src/ui/ui_nnhud.cpp
+    src/ui/ui_sdhud.cpp
     src/ui/ui_layerxform.cpp
     src/ui/ui_canvasxform.cpp
     src/ui/transform_handle.cpp
@@ -113,6 +114,7 @@ set(SOURCES
     src/user_content_receiver.cpp
     # ── http ─────────────────────────────────────────────────────────
     src/http/matte_client.cpp
+    src/http/sd_client.cpp
     # ── sensors ───────────────────────────────────────────────────────
     src/sensors/tablet.cpp
     src/sensors/input_filter.cpp

@@ -77,6 +77,7 @@ void HudSetActive(AppState* state, int newHud) {
         case HUD_LAYER_XFORM:  name = "LayerXform";  break;
         case HUD_QUICK:        name = "QuickHud";    break;
         case HUD_NN:           name = "NNHud";       break;
+        case HUD_SD:           name = "SDHud";       break;
     }
     if (name) {
         IModule* mod = g_moduleStack.Find(name);
@@ -166,7 +167,6 @@ void UpdateUI(AppState* state) {
 
         if (IsKeyPressed(KEY_TWO)) state->mode = eSmudge;
         if (IsKeyPressed(KEY_SIX)) state->mode = ePolyStripe;
-        if (IsKeyPressed(KEY_FOUR)) state->mode = eDistort;
         if (IsKeyPressed(KEY_FIVE)) state->mode = eContrast;
 
         // Toggle framing mode (C key — "crop" framing, not with Ctrl)
@@ -648,6 +648,7 @@ void App_Init(AppState* state) {
     g_moduleStack.Add(std::unique_ptr<IModule>(new LayerXformModule(state)), vpRect);
     g_moduleStack.Add(std::unique_ptr<IModule>(new CanvasXformModule(state)), vpRect);
     g_moduleStack.Add(std::unique_ptr<IModule>(new NNHudModule(state)), vpRect);
+    g_moduleStack.Add(std::unique_ptr<IModule>(new SDHudModule(state)), vpRect);
     g_moduleStack.Add(std::unique_ptr<IModule>(new RightPanelModule(state)),
         DrawRect{(float)(sw - RIGHT_PANEL_WIDTH), 0, (float)RIGHT_PANEL_WIDTH, (float)sh});
     g_moduleStack.Add(std::unique_ptr<IModule>(new LeftPanelModule(state)),
@@ -754,6 +755,7 @@ void App_Draw(AppState* state) {
     g_moduleStack.SetRect("LayerXform",  vpRect);
     g_moduleStack.SetRect("CanvasXform", vpRect);
     g_moduleStack.SetRect("NNHud",       vpRect);
+    g_moduleStack.SetRect("SDHud",       vpRect);
     g_moduleStack.SetRect("RightPanel",  rightRect);
 
     BeginDrawing();

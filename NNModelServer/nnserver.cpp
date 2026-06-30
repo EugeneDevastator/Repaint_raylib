@@ -291,13 +291,14 @@ static void handle_sd(sock_t client) {
         if (sparam.find("height=") == 0)    h        = atoi(sparam.c_str() + 7);
     }
 
-    /* optional source image (img2img) */
+    fprintf(stderr, "[SD] request: \"%s\" target=%dx%d steps=%d cfg=%.1f strength=%.1f\n",
+            prompt.c_str(), w, h, steps, cfg, strength);
+
+    /* optional source image (txt2img — none expected) */
     std::vector<uint8_t> source_png;
     recv_blob(client, source_png);
 
-    fprintf(stderr, "[SD] \"%s\" %dx%d steps=%d cfg=%.1f strength=%.1f src=%zuB\n",
-            prompt.c_str(), w, h, steps, cfg, strength, source_png.size());
-
+    fprintf(stderr, "[SD] starting generation...\n");
     send_msg(client, 'P', "Generating...", 13);
 
     std::vector<uint8_t> out_png;
@@ -312,6 +313,10 @@ static void handle_sd(sock_t client) {
     }
     fprintf(stderr, "[SD] done — sent %zu bytes\n", out_png.size());
 }
+
+/* ── globals ────────────────────────────────────────────────────────── */
+
+static bool g_sd_available = false;
 
 /* ── main ─────────────────────────────────────────────────────────────────── */
 
@@ -336,7 +341,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    if (sd_model) sd_init(sd_model);
+    if (sd_model) g_sd_available = sd_init(sd_model);
 
     std::string resolved = resolve_model(model_path, model_url);
     if (resolved.empty()) { fprintf(stderr, "[nnserver] no model available\n"); return 1; }
@@ -360,13 +365,37 @@ int main(int argc, char** argv) {
         sock_t client = sock_accept(listener);
         if (client == SOCK_INVALID) { fprintf(stderr, "accept: %s\n", sock_last_error()); continue; }
 
+        fprintf(stderr, "[accept] new connection\n");
+
         uint8_t mode_byte;
         if (!sock_recv_all(client, &mode_byte, 1)) { sock_close(client); continue; }
 
-        if (mode_byte == 'G' && sd_model)
-            handle_sd(client);
-        else
+        if (mode_byte == 'G') {
+            if (!g_sd_available) {
+                fprintf(stderr, "[accept] SD request — loading model...\n");
+                static const char* sd_paths[] = {
+                    "dreamshaper_8LCM.safetensors",
+                    "../NNModelServer/onnx/dreamshaper_8LCM.safetensors",
+                    nullptr
+                };
+                for (int i = 0; sd_paths[i]; i++) {
+                    if (file_exists(sd_paths[i])) {
+                        g_sd_available = sd_init(sd_paths[i]);
+                        if (g_sd_available) break;
+                    }
+                }
+                if (!g_sd_available)
+                    fprintf(stderr, "[accept] SD model not found (tried dreamshaper_8LCM.safetensors)\n");
+            }
+            if (g_sd_available) {
+                fprintf(stderr, "[accept] SD request\n");
+                handle_sd(client);
+            } else {
+                handle_matte(client, &matte, mode_byte);
+            }
+        } else {
             handle_matte(client, &matte, mode_byte);
+        }
 
         sock_close(client);
     }
