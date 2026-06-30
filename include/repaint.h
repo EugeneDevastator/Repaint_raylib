@@ -325,7 +325,7 @@ extern Texture2D g_activeBrushTex, g_defaultBrushTex;
 void UserTexture_Init(void); void UserTexture_Shutdown(void); void UserTexture_Update(AppState* state);
 
 void App_FileNew(void); void App_FileOpen(void); void App_FileSave(void);
-void App_FileSaveAs(void); void App_FileReload(void); void App_FileSnap(void);
+void App_FileSaveAs(void); void App_FileReload(void); void App_FileSnap(void); void App_FileExportPNG(void);
 
 RenderTexture2D Load16BitRT(int width, int height);
 

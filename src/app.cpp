@@ -583,6 +583,30 @@ void App_FileSnap(void) {
     }
 }
 
+void App_FileExportPNG(void) {
+    /* GPU composite + dither → 8-bit PNG, fire-and-forget (no path change) */
+    Image flat = ViewportManager_CompositeWithDither();
+    char path[1024];
+    if (g_currentFilePath[0]) {
+        // Save alongside current file with .png extension
+        const char* dir = GetDirectoryPath(g_currentFilePath);
+        const char* base = GetFileNameWithoutExt(g_currentFilePath);
+        snprintf(path, sizeof(path), "%s/%s.png", dir, base);
+    } else {
+        // Fallback: timestamped export in Snaps/
+        time_t now = time(NULL);
+        struct tm* t = localtime(&now);
+        const char* appDir = GetApplicationDirectory();
+        snprintf(path, sizeof(path), "%sSnaps/export_%04d%02d%02d_%02d%02d%02d.png",
+                 appDir,
+                 t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
+                 t->tm_hour, t->tm_min, t->tm_sec);
+    }
+    ExportImage(flat, path);
+    UnloadImage(flat);
+    DisplayInfoText(path);
+}
+
 /* ── App_Init ──────────────────────────────────────────────────────────── */
 
 void App_Init(AppState* state) {
