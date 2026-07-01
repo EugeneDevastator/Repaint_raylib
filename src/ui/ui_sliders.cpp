@@ -9,7 +9,7 @@ static const ImU32 SLIDER_BG_FILL     = IM_COL32(230, 230, 230, 255);
 static const ImU32 SLIDER_JITTER_COL  = IM_COL32(80,  120, 240, 180);
 static const ImU32 SLIDER_TEXT_COL    = IM_COL32(0,   0,   0,   255);
 static const ImU32 SLIDER_TICK_LIGHT  = IM_COL32(255, 255, 255, 220);
-static const ImU32 SLIDER_TICK_DARK   = IM_COL32(0,  0,  0,  220);
+static const ImU32 SLIDER_TICK_DARK   = IM_COL32(40,  40,  40,  220);
 static const Color SLIDER_GRAD_FROM   = {180, 180, 180, 255};
 static const Color SLIDER_GRAD_TO     = {235, 235, 235, 255};
 static const float SLIDER_ROUNDING    = 3.0f;
@@ -36,6 +36,7 @@ static void DrawSliderCore(ImDrawList* dl, int x, int y, int length, int thickne
     dl->AddRectFilled(oMin, oMax, SLIDER_BG_FILL, SLIDER_ROUNDING);
 
     // ── Gradient background (fills full outer area) ───────────────────
+    dl->PushClipRect(oMin, oMax, true);
     if (colorMode >= 0) {
         int iterLen = (int)((orient == 0) ? (oMax.x - oMin.x) : (oMax.y - oMin.y));
         for (int k = 0; k < iterLen; k++) {
@@ -59,6 +60,7 @@ static void DrawSliderCore(ImDrawList* dl, int x, int y, int length, int thickne
         else
             dl->AddRectFilledMultiColor(oMin, oMax, ge, ge, gs, gs);
     }
+    dl->PopClipRect();
 
     // 2px dark border (two 1px strokes, outer expanded to avoid tick overlap)
     ImVec2 bMin(oMin.x - 1, oMin.y - 1);
@@ -128,14 +130,21 @@ static void DrawSliderCore(ImDrawList* dl, int x, int y, int length, int thickne
             gw = thickness - 2;
             gh = sliderrad * 2;
         }
+        // Kill gradient bleed: opaque background fill first
+        // dl->AddRectFilled(ImVec2(gx, gy), ImVec2(gx + gw, gy + gh), SLIDER_BG_FILL);
+        // Then draw rounded grabber on top
         int fa = (colorMode >= 0) ? 140 : (int)((fill >> 24) & 0xFF);
-        float rnd = gw > 10 ? 3.0f : 2.0f;
+        float rnd = fminf(fminf(gw, gh) * 0.5f, 3.0f);
+        dl->Flags &= ~ImDrawListFlags_AntiAliasedFill;
         dl->AddRectFilled(ImVec2(gx, gy), ImVec2(gx + gw, gy + gh),
-            fill & 0x00FFFFFF | (fa << 24), rnd, ImDrawFlags_RoundCornersAll);
+            fill, 3, ImDrawFlags_RoundCornersAll);
+        dl->Flags |= ImDrawListFlags_AntiAliasedFill;
     };
 
+    dl->PushClipRect(oMin, oMax, true);
     drawGrabber(clipminF, SLIDER_TICK_DARK, 0, 0);
     drawGrabber(clipmaxF, SLIDER_TICK_LIGHT, 0, 0);
+    dl->PopClipRect();
 }
 
 /* ── PenMode popup helper (shared by both orientations) ────────────────── */
