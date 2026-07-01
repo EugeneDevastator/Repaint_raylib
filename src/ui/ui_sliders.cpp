@@ -14,6 +14,7 @@ static const Color SLIDER_BG_COL      = {210, 210, 210, 255};
 static const Color SLIDER_GRAD_FROM   = {180, 180, 180, 255};
 static const Color SLIDER_GRAD_TO     = {230, 230, 230, 255};
 static const float SLIDER_ROUNDING    = 3.0f;
+static const bool SLIDER_IS_ALT_PRECISE_MODE = true;  // toggle for 10% snap + extended rect
 
 /* ── Core slider renderer (procedural — works for both H and V) ──────
  *   length  = size along the slide axis (width for H, height for V)
@@ -205,11 +206,39 @@ static void SliderInteraction(const ImRect& bb, int orient, BParam* bp) {
     ImGui::InvisibleButton("##sb", bb.GetSize(),
         ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle);
     if (ImGui::IsItemActive()) {
+        ImVec2 mp = ImGui::GetMousePos();
         float v;
-        if (orient == 0)
-            v = (ImGui::GetMousePos().x - bb.Min.x) / (bb.Max.x - bb.Min.x);
-        else
-            v = 1.0f - (ImGui::GetMousePos().y - bb.Min.y) / (bb.Max.y - bb.Min.y);
+        if (orient == 0) {
+            float bw = bb.Max.x - bb.Min.x;
+            if (SLIDER_IS_ALT_PRECISE_MODE) {
+                bool inside2d = (mp.x >= bb.Min.x && mp.x <= bb.Max.x &&
+                                 mp.y >= bb.Min.y && mp.y <= bb.Max.y);
+                if (inside2d)
+                    v = roundf((mp.x - bb.Min.x) / bw * 10.0f) / 10.0f;
+                else {
+                    float extL = bb.Min.x - bw * 0.5f;
+                    float extR = bb.Max.x + bw * 0.5f;
+                    v = (mp.x - extL) / (extR - extL);
+                }
+            } else {
+                v = (mp.x - bb.Min.x) / bw;
+            }
+        } else {
+            float bh = bb.Max.y - bb.Min.y;
+            if (SLIDER_IS_ALT_PRECISE_MODE) {
+                bool inside2d = (mp.y >= bb.Min.y && mp.y <= bb.Max.y &&
+                                 mp.x >= bb.Min.x && mp.x <= bb.Max.x);
+                if (inside2d)
+                    v = 1.0f - roundf((mp.y - bb.Min.y) / bh * 10.0f) / 10.0f;
+                else {
+                    float extT = bb.Min.y - bh * 0.5f;
+                    float extB = bb.Max.y + bh * 0.5f;
+                    v = 1.0f - (mp.y - extT) / (extB - extT);
+                }
+            } else {
+                v = 1.0f - (mp.y - bb.Min.y) / bh;
+            }
+        }
         v = fminf(fmaxf(v, 0.0f), 1.0f);
         if (ImGui::IsMouseDown(0))
             bp->user.clipmaxF = v;
