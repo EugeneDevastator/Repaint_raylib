@@ -408,6 +408,10 @@ bool TransformHandle_Input(RectXform* xform,
                 float initDy = grabLy - pcy;
                 float sx_f = (fabsf(initDx)>0.001f) ? lx/initDx : 1.0f;
                 float sy_f = (fabsf(initDy)>0.001f) ? ly/initDy : 1.0f;
+                if (lockAspect) {
+                    float avg = (sx_f + sy_f) * 0.5f;
+                    sx_f = sy_f = avg;
+                }
                 if (fabsf(sx_f)<0.01f) sx_f = (sx_f<0) ? -0.01f : 0.01f;
                 if (fabsf(sy_f)<0.01f) sy_f = (sy_f<0) ? -0.01f : 0.01f;
                 float oldSx = sqrtf(as*as + cs*cs);

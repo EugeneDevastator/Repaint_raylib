@@ -418,6 +418,14 @@ struct SDHudModule : IModule {
     void DrawGUI(const DrawRect& rect) override;
 };
 
+struct PaintHudModule : IModule {
+    AppState* state;
+    explicit PaintHudModule(AppState* s) : state(s) {}
+    const char* Name() const override { return "PaintHud"; }
+    bool HandleInput(InputState& input, const DrawRect& rect) override;
+    void DrawGL(const DrawRect& rect) override;
+};
+
 void NNHud_Shutdown(void);
 
 extern ModuleStack g_moduleStack;

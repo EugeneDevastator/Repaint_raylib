@@ -165,7 +165,11 @@ void UpdateUI(AppState* state) {
             quickPanelMouseMode = 0;
 
 
-        if (IsKeyPressed(KEY_TWO)) state->mode = eSmudge;
+        if (IsKeyPressed(KEY_TWO)) {
+            state->mode = eBrush;
+            HudSetActive(state, HUD_NONE);
+            InfoText_Show("Painting");
+        }
         if (IsKeyPressed(KEY_SIX)) state->mode = ePolyStripe;
         if (IsKeyPressed(KEY_FIVE)) state->mode = eContrast;
 
@@ -649,6 +653,7 @@ void App_Init(AppState* state) {
     g_moduleStack.Add(std::unique_ptr<IModule>(new CanvasXformModule(state)), vpRect);
     g_moduleStack.Add(std::unique_ptr<IModule>(new NNHudModule(state)), vpRect);
     g_moduleStack.Add(std::unique_ptr<IModule>(new SDHudModule(state)), vpRect);
+    g_moduleStack.Add(std::unique_ptr<IModule>(new PaintHudModule(state)), vpRect);
     g_moduleStack.Add(std::unique_ptr<IModule>(new RightPanelModule(state)),
         DrawRect{(float)(sw - RIGHT_PANEL_WIDTH), 0, (float)RIGHT_PANEL_WIDTH, (float)sh});
     g_moduleStack.Add(std::unique_ptr<IModule>(new LeftPanelModule(state)),
