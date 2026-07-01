@@ -102,7 +102,9 @@ vec4 applyBlend(int mode, vec4 dst, vec3 srcRGB, float srcA) {
     // erasers
     if (mode == MODE_ERASEA) {
         outRGB = dst.rgb;
-        outA = clamp( dst.a*(1.0 -srcA),0,1);
+        vec3 keyLab = rgbToOklab(srcRGB);
+        //outA = clamp( dst.a*(1.0 -srcA),0,1);
+        outA = mix(keyLab.x, dst.a, 1.0-srcA);
         return vec4(outRGB, outA);
     } else if (mode == MODE_ERASECLR) {
         vec3 keyLab = rgbToOklab(srcRGB);
@@ -110,19 +112,28 @@ vec4 applyBlend(int mode, vec4 dst, vec3 srcRGB, float srcA) {
         // Saturation-to-0..1 factor (max chroma in OKLab ≈ 0.3)
         float satFactor = clamp(kc * 4.0, 0.0, 1.0);
 
-        // Desaturated brush → lightness key: erase pixels near brush lightness,
-        // preserving chroma and making remaining color more saturated
+        // Desaturated brush → chroma-boost key.
+        // If the pixel's chroma-based alpha would be lower than current alpha, apply it
+        // and boost saturation. If current alpha is already lower, leave pixel unchanged.
         if (kc < 0.02) {
-            vec3 pLab = rgbToOklab(dst.rgb);
-            float lumDiff = abs(pLab.x - keyLab.x);
-            float erase = clamp(lumDiff * 2.0, 0.0, 1.0) * clamp(srcA, 0.0, 1.0);
-            // Pull canvas lightness away from key lightness toward neutral
-            pLab.x = mix(pLab.x, 0.5 + (pLab.x - keyLab.x) * 0.5, erase);
-            // Boost chroma (saturation) as lightness is removed
-            pLab.yz *= 1.0 + (1.0 - erase) * 0.5;
-            outRGB = oklabToRgb(pLab);
-            outA   = dst.a * (1.0 - clamp(erase, 0.0, 1.0));
-            outA   = min(outA, dst.a);
+            float keyLum    = keyLab.x;
+            vec3  pLab      = rgbToOklab(dst.rgb);
+            float pc        = length(pLab.yz);         // canvas chroma
+            float lumDiff   = abs(pLab.x - keyLum);
+            float diff     = clamp(lumDiff * 2.0, 0.0, 1.0);
+
+            if (diff < dst.a) {
+                float targetA   = mix(diff,dst.a,1.0-srcA);
+                // Apply erasure and boost saturation
+                float boost = 1+abs(targetA-dst.a);
+                if (pc > 0.001)
+                pLab.yz *= boost;
+                outRGB = oklabToRgb(pLab);
+                outA = targetA;
+            } else {
+                outRGB = dst.rgb;
+                outA   = dst.a;
+            }
             return vec4(outRGB, outA);
         }
 
