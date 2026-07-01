@@ -4,14 +4,15 @@
 #include <math.h>
 
 // ── Visual constants ─────────────────────────────────────────────────
-static const ImU32 SLIDER_BORDER_COL  = IM_COL32(100, 100, 100, 200);
+static const ImU32 SLIDER_BORDER_COL  = IM_COL32(150, 150, 150, 200);
 static const ImU32 SLIDER_BG_FILL     = IM_COL32(230, 230, 230, 255);
 static const ImU32 SLIDER_JITTER_COL  = IM_COL32(80,  120, 240, 180);
 static const ImU32 SLIDER_TEXT_COL    = IM_COL32(0,   0,   0,   255);
-static const ImU32 SLIDER_TICK_LIGHT  = IM_COL32(255, 255, 255, 220);
-static const ImU32 SLIDER_TICK_DARK   = IM_COL32(40,  40,  40,  220);
+static const ImU32 SLIDER_TICK_LIGHT  = IM_COL32(255, 255, 255, 190);
+static const ImU32 SLIDER_TICK_DARK   = IM_COL32(120,  120,  120,  190);
+
 static const Color SLIDER_GRAD_FROM   = {180, 180, 180, 255};
-static const Color SLIDER_GRAD_TO     = {235, 235, 235, 255};
+static const Color SLIDER_GRAD_TO     = {210, 210, 210, 255};
 static const float SLIDER_ROUNDING    = 3.0f;
 
 /* ── Core slider renderer (procedural — works for both H and V) ──────
@@ -100,7 +101,7 @@ static void DrawSliderCore(ImDrawList* dl, int x, int y, int length, int thickne
             float remap = disp / 128.0f - 1.0f;
             snprintf(txt, sizeof(txt), "%.2f", remap);
         } else if (bp->outMax - bp->outMin >= 1.0f)
-            snprintf(txt, sizeof(txt), "%.1f", disp);
+            snprintf(txt, sizeof(txt), "%.2f", disp);
         else
             snprintf(txt, sizeof(txt), "%.2f", disp);
         ImVec2 sz = ImGui::CalcTextSize(txt);
