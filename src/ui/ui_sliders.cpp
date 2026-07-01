@@ -14,7 +14,7 @@ static const Color SLIDER_BG_COL      = {210, 210, 210, 255};
 static const Color SLIDER_GRAD_FROM   = {180, 180, 180, 255};
 static const Color SLIDER_GRAD_TO     = {230, 230, 230, 255};
 static const float SLIDER_ROUNDING    = 3.0f;
-static const bool SLIDER_IS_ALT_PRECISE_MODE = true;  // toggle for 10% snap + extended rect
+static const bool SLIDER_IS_ALT_PRECISE_MODE = false;  // toggle for 10% snap + extended rect
 
 /* ── Core slider renderer (procedural — works for both H and V) ──────
  *   length  = size along the slide axis (width for H, height for V)
@@ -264,7 +264,7 @@ void DrawSlider(BParam* bp, int orient, float thick, float len) {
     ImGui::PushID(bp->id);
 
     if (orient == 0) {
-        float ctrlH = 27.0f, spacing = 6.0f;
+        float ctrlH = 35.0f, spacing = 6.0f;
 
         if (bp->iconLoaded)
             ImGui::Image((ImTextureID)(intptr_t)bp->iconTex.id, ImVec2(ctrlH, ctrlH));
