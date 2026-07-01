@@ -5,14 +5,14 @@
 
 // ── Visual constants ─────────────────────────────────────────────────
 static const ImU32 SLIDER_BORDER_COL  = IM_COL32(150, 150, 150, 200);
-static const ImU32 SLIDER_BG_FILL     = IM_COL32(230, 230, 230, 255);
 static const ImU32 SLIDER_JITTER_COL  = IM_COL32(80,  120, 240, 180);
 static const ImU32 SLIDER_TEXT_COL    = IM_COL32(0,   0,   0,   255);
 static const ImU32 SLIDER_TICK_LIGHT  = IM_COL32(255, 255, 255, 190);
 static const ImU32 SLIDER_TICK_DARK   = IM_COL32(120,  120,  120,  190);
 
+static const Color SLIDER_BG_COL      = {210, 210, 210, 255};
 static const Color SLIDER_GRAD_FROM   = {180, 180, 180, 255};
-static const Color SLIDER_GRAD_TO     = {210, 210, 210, 255};
+static const Color SLIDER_GRAD_TO     = {230, 230, 230, 255};
 static const float SLIDER_ROUNDING    = 3.0f;
 
 /* ── Core slider renderer (procedural — works for both H and V) ──────
@@ -34,7 +34,7 @@ static void DrawSliderCore(ImDrawList* dl, int x, int y, int length, int thickne
     float height = (orient == 0) ? (float)thickness : (float)length;
     ImVec2 oMin(x - padX, y - padY);
     ImVec2 oMax(x + width + padX, y + height + padY);
-    dl->AddRectFilled(oMin, oMax, SLIDER_BG_FILL, SLIDER_ROUNDING);
+    dl->AddRectFilled(oMin, oMax, IM_COL32(SLIDER_BG_COL.r, SLIDER_BG_COL.g, SLIDER_BG_COL.b, SLIDER_BG_COL.a), SLIDER_ROUNDING);
 
     // ── Gradient background (fills full outer area) ───────────────────
     dl->PushClipRect(oMin, oMax, true);
@@ -56,10 +56,22 @@ static void DrawSliderCore(ImDrawList* dl, int x, int y, int length, int thickne
     } else {
         ImU32 gs = IM_COL32(SLIDER_GRAD_FROM.r, SLIDER_GRAD_FROM.g, SLIDER_GRAD_FROM.b, 255);
         ImU32 ge = IM_COL32(SLIDER_GRAD_TO.r,   SLIDER_GRAD_TO.g,   SLIDER_GRAD_TO.b,   255);
-        if (orient == 0)
-            dl->AddRectFilledMultiColor(oMin, oMax, gs, ge, ge, gs);
-        else
-            dl->AddRectFilledMultiColor(oMin, oMax, ge, ge, gs, gs);
+        // Gradient between the two tick positions — follows clipminF/clipmaxF order
+        if (orient == 0) {
+            int x0 = x + (int)(length * clipminF);
+            int x1 = x + (int)(length * clipmaxF);
+            if (x1 > x0)
+                dl->AddRectFilledMultiColor(ImVec2(x0, y), ImVec2(x1, y + thickness), gs, ge, ge, gs);
+            else if (x0 > x1)
+                dl->AddRectFilledMultiColor(ImVec2(x1, y), ImVec2(x0, y + thickness), ge, gs, gs, ge);
+        } else {
+            int y0 = y + (int)(length * (1.0f - clipmaxF));
+            int y1 = y + (int)(length * (1.0f - clipminF));
+            if (y1 > y0)
+                dl->AddRectFilledMultiColor(ImVec2(x, y0), ImVec2(x + thickness, y1), ge, ge, gs, gs);
+            else if (y0 > y1)
+                dl->AddRectFilledMultiColor(ImVec2(x, y1), ImVec2(x + thickness, y0), gs, gs, ge, ge);
+        }
     }
     dl->PopClipRect();
 
