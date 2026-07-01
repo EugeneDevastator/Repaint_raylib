@@ -148,10 +148,27 @@ set(SOURCES
     ${rlimgui_SOURCE_DIR}/rlImGui.cpp
 )
 
+# Generate icon.ico from icon.png at configure time
+set(PNG_SRC "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon.png")
+set(ICO_DST "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon.ico")
+if(EXISTS ${PNG_SRC} AND NOT EXISTS ${ICO_DST})
+    find_program(PYTHON python3)
+    if(NOT PYTHON)
+        find_program(PYTHON python)
+    endif()
+    if(PYTHON)
+        execute_process(COMMAND ${PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/tools/png2ico.py" ${PNG_SRC} ${ICO_DST}
+            OUTPUT_QUIET ERROR_QUIET)
+    endif()
+endif()
+
 add_executable(repaint ${SOURCES})
 
 if(WIN32)
-    target_sources(repaint PRIVATE resources/icon.rc src/sensors/tablet_win.cpp src/sensors/platform_utils_win.cpp src/sensors/clipboard_win.cpp)
+    if(EXISTS ${ICO_DST})
+        target_sources(repaint PRIVATE resources/icon.rc)
+    endif()
+    target_sources(repaint PRIVATE src/sensors/tablet_win.cpp src/sensors/platform_utils_win.cpp src/sensors/clipboard_win.cpp)
     target_compile_definitions(repaint PRIVATE WINVER=0x0602 _WIN32_WINNT=0x0602)
     target_link_libraries(repaint PRIVATE opengl32 gdi32 winmm user32)
     if(MINGW)
