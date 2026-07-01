@@ -30,7 +30,7 @@ void DualSlider_Init(DualSlider* slider) {
     slider->Soff = 2;
     slider->sliderrad = 2;
     slider->colorMode = -1;
-    slider->gradStart = Color{0, 0, 0, 255};
+    slider->gradStart = Color{200, 200, 200, 255};
     slider->gradEnd = Color{255, 255, 255, 255};
     slider->shade = Color{144, 144, 144, 255};
     slider->hlite = Color{250, 250, 250, 255};

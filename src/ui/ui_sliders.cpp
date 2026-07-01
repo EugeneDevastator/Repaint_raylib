@@ -3,6 +3,17 @@
 #include "imgui_internal.h"
 #include <math.h>
 
+// ── Visual constants ─────────────────────────────────────────────────
+static const ImU32 SLIDER_BORDER_COL  = IM_COL32(100, 100, 100, 200);
+static const ImU32 SLIDER_BG_FILL     = IM_COL32(230, 230, 230, 255);
+static const ImU32 SLIDER_JITTER_COL  = IM_COL32(80,  120, 240, 180);
+static const ImU32 SLIDER_TEXT_COL    = IM_COL32(0,   0,   0,   255);
+static const ImU32 SLIDER_TICK_LIGHT  = IM_COL32(255, 255, 255, 220);
+static const ImU32 SLIDER_TICK_DARK   = IM_COL32(0,  0,  0,  220);
+static const Color SLIDER_GRAD_FROM   = {180, 180, 180, 255};
+static const Color SLIDER_GRAD_TO     = {235, 235, 235, 255};
+static const float SLIDER_ROUNDING    = 3.0f;
+
 /* ── Core slider renderer (procedural — works for both H and V) ──────
  *   length  = size along the slide axis (width for H, height for V)
  *   thickness = size perpendicular to the slide axis (height for H, width for V)
@@ -12,40 +23,52 @@ static void DrawSliderCore(ImDrawList* dl, int x, int y, int length, int thickne
     int orient, float clipminF, float clipmaxF, float jitter,
     Color gradStart, Color gradEnd, int colorMode, BParam* bp)
 {
-    // ── Gradient background (fills entire thickness) ──────────────────
+    int sliderrad = (int)(thickness * 0.125f);
+    if (sliderrad < 2) sliderrad = 2;
+
+    // ── Outer rounded rect with light fill and 2px dark border ─────────
+    int padX = (orient == 0) ? sliderrad + 1 : 1;
+    int padY = (orient == 0) ? 1 : sliderrad + 1;
+    float width  = (orient == 0) ? (float)length : (float)thickness;
+    float height = (orient == 0) ? (float)thickness : (float)length;
+    ImVec2 oMin(x - padX, y - padY);
+    ImVec2 oMax(x + width + padX, y + height + padY);
+    dl->AddRectFilled(oMin, oMax, SLIDER_BG_FILL, SLIDER_ROUNDING);
+
+    // ── Gradient background (fills full outer area) ───────────────────
     if (colorMode >= 0) {
-        for (int k = 0; k < length; k++) {
-            float t = (orient == 0) ? (float)k / fmaxf(length-1,1)
-                                    : (float)(length-1-k) / fmaxf(length-1,1);
+        int iterLen = (int)((orient == 0) ? (oMax.x - oMin.x) : (oMax.y - oMin.y));
+        for (int k = 0; k < iterLen; k++) {
+            float t = (orient == 0) ? (float)k / fmaxf(iterLen-1,1)
+                                    : (float)(iterLen-1-k) / fmaxf(iterLen-1,1);
             Color c;
             if (colorMode == 0) c = HSLToRGB(t, colorSat, colorLit);
             else if (colorMode == 1) c = HSLToRGB(colorHue, t, colorLit);
             else c = HSLToRGB(colorHue, colorSat, t);
             uint32_t col = IM_COL32(c.r, c.g, c.b, 255);
             if (orient == 0)
-                dl->AddRectFilled(ImVec2(x + k, y), ImVec2(x + k + 1, y + thickness), col);
+                dl->AddRectFilled(ImVec2(oMin.x + k, oMin.y), ImVec2(oMin.x + k + 1, oMax.y), col);
             else
-                dl->AddRectFilled(ImVec2(x, y + k), ImVec2(x + thickness, y + k + 1), col);
+                dl->AddRectFilled(ImVec2(oMin.x, oMin.y + k), ImVec2(oMax.x, oMin.y + k + 1), col);
         }
     } else {
-        if (orient == 0) {
-            dl->AddRectFilledMultiColor(ImVec2(x, y), ImVec2(x + length, y + thickness),
-                IM_COL32(gradStart.r, gradStart.g, gradStart.b, 255),
-                IM_COL32(gradEnd.r, gradEnd.g, gradEnd.b, 255),
-                IM_COL32(gradEnd.r, gradEnd.g, gradEnd.b, 255),
-                IM_COL32(gradStart.r, gradStart.g, gradStart.b, 255));
-        } else {
-            dl->AddRectFilledMultiColor(ImVec2(x, y), ImVec2(x + thickness, y + length),
-                IM_COL32(gradEnd.r, gradEnd.g, gradEnd.b, 255),
-                IM_COL32(gradEnd.r, gradEnd.g, gradEnd.b, 255),
-                IM_COL32(gradStart.r, gradStart.g, gradStart.b, 255),
-                IM_COL32(gradStart.r, gradStart.g, gradStart.b, 255));
-        }
+        ImU32 gs = IM_COL32(SLIDER_GRAD_FROM.r, SLIDER_GRAD_FROM.g, SLIDER_GRAD_FROM.b, 255);
+        ImU32 ge = IM_COL32(SLIDER_GRAD_TO.r,   SLIDER_GRAD_TO.g,   SLIDER_GRAD_TO.b,   255);
+        if (orient == 0)
+            dl->AddRectFilledMultiColor(oMin, oMax, gs, ge, ge, gs);
+        else
+            dl->AddRectFilledMultiColor(oMin, oMax, ge, ge, gs, gs);
     }
+
+    // 2px dark border (two 1px strokes, outer expanded to avoid tick overlap)
+    ImVec2 bMin(oMin.x - 1, oMin.y - 1);
+    ImVec2 bMax(oMax.x + 1, oMax.y + 1);
+    dl->AddRect(bMin, bMax, SLIDER_BORDER_COL, SLIDER_ROUNDING + 1.0f, ImDrawFlags_RoundCornersAll, 1.0f);
+    dl->AddRect(oMin, oMax, SLIDER_BORDER_COL, SLIDER_ROUNDING, ImDrawFlags_RoundCornersAll, 1.0f);
 
     // ── Jitter bar (blue at top/left when jitter > 0) ────────────────
     if (jitter > 0.001f) {
-        uint32_t jCol = IM_COL32(80, 120, 240, 180);
+        uint32_t jCol = SLIDER_JITTER_COL;
         if (orient == 0)
             dl->AddRectFilled(ImVec2(x, y), ImVec2(x + (int)(length * jitter), y + 7), jCol);
         else
@@ -87,37 +110,32 @@ static void DrawSliderCore(ImDrawList* dl, int x, int y, int length, int thickne
             tx = x + (thickness - (int)sz.x) / 2;
             ty = y + (length - (int)sz.y) / 2;
         }
-        dl->AddText(ImVec2(tx, ty), IM_COL32(255, 255, 255, 255), txt);
+        dl->AddText(ImVec2(tx, ty), SLIDER_TEXT_COL, txt);
     }
 
-    // ── Grabber "tick marks" (thin bar matching Qt, with 3D frame) ──
-    int sliderrad = (int)(thickness * 0.125f);
-    if (sliderrad < 2) sliderrad = 2;
 
     auto drawGrabber = [&](float clipPos, uint32_t fill, uint32_t shade, uint32_t hlite) {
         float pos = orient == 0 ? clipPos : (1.0f - clipPos);
         int gx, gy, gw, gh;
         if (orient == 0) {
             gx = x + (int)(length * pos) - sliderrad;
-            gy = y + 1;
+            gy = y;
             gw = sliderrad * 2;
-            gh = thickness - 2;
+            gh = thickness;
         } else {
             gx = x + 1;
             gy = y + (int)(length * pos) - sliderrad;
             gw = thickness - 2;
             gh = sliderrad * 2;
         }
-        int fa = (colorMode >= 0) ? 140 : 255;
-        dl->AddRectFilled(ImVec2(gx, gy), ImVec2(gx + gw, gy + gh), fill & 0x00FFFFFF | (fa << 24));
-        dl->AddRectFilled(ImVec2(gx, gy), ImVec2(gx + gw, gy + 1), shade);
-        dl->AddRectFilled(ImVec2(gx, gy), ImVec2(gx + 1, gy + gh), shade);
-        dl->AddRectFilled(ImVec2(gx + gw - 1, gy + 1), ImVec2(gx + gw, gy + gh), hlite);
-        dl->AddRectFilled(ImVec2(gx + 1, gy + gh - 1), ImVec2(gx + gw, gy + gh), hlite);
+        int fa = (colorMode >= 0) ? 140 : (int)((fill >> 24) & 0xFF);
+        float rnd = gw > 10 ? 3.0f : 2.0f;
+        dl->AddRectFilled(ImVec2(gx, gy), ImVec2(gx + gw, gy + gh),
+            fill & 0x00FFFFFF | (fa << 24), rnd, ImDrawFlags_RoundCornersAll);
     };
 
-    drawGrabber(clipminF, IM_COL32(60, 60, 60, 255), IM_COL32(40, 40, 40, 255), IM_COL32(130, 130, 130, 255));
-    drawGrabber(clipmaxF, IM_COL32(255, 255, 255, 255), IM_COL32(200, 200, 200, 255), IM_COL32(80, 80, 80, 255));
+    drawGrabber(clipminF, SLIDER_TICK_DARK, 0, 0);
+    drawGrabber(clipmaxF, SLIDER_TICK_LIGHT, 0, 0);
 }
 
 /* ── PenMode popup helper (shared by both orientations) ────────────────── */
@@ -195,7 +213,7 @@ void DrawSlider(BParam* bp, int orient, float thick, float len) {
     ImGui::PushID(bp->id);
 
     if (orient == 0) {
-        float ctrlH = 29.0f, spacing = 4.0f;
+        float ctrlH = 27.0f, spacing = 6.0f;
 
         if (bp->iconLoaded)
             ImGui::Image((ImTextureID)(intptr_t)bp->iconTex.id, ImVec2(ctrlH, ctrlH));
@@ -204,7 +222,7 @@ void DrawSlider(BParam* bp, int orient, float thick, float len) {
         ImGui::SameLine(0, spacing);
 
         float avail = ImGui::GetContentRegionAvail().x;
-        float btnW = ctrlH;
+        float btnW = ctrlH + 2.0f;
         float sliderW = avail > btnW + spacing + 10.0f ? avail - btnW - spacing : 10.0f;
 
         ImVec2 sPos = ImGui::GetCursorScreenPos();
@@ -216,8 +234,9 @@ void DrawSlider(BParam* bp, int orient, float thick, float len) {
         SliderInteraction(sBB, 0, bp);
 
         ImGui::SameLine(0, spacing);
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 1.0f);
         char pname[32]; snprintf(pname, sizeof(pname), "hpen_%d", bp->id);
-        PenModeButton(bp, btnW, ctrlH, pname);
+        PenModeButton(bp, btnW, ctrlH + 2.0f, pname);
         PenModePopup(bp, pname);
 
     } else {
