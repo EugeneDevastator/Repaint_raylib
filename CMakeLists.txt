@@ -78,6 +78,7 @@ FetchContent_MakeAvailable(rlimgui)
 set(SOURCES
     src/main.cpp
     src/app.cpp
+    src/gpu_preference.cpp
     src/modulators.cpp
     src/brush_preset.cpp
     src/compositor.cpp

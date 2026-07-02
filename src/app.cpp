@@ -1,4 +1,5 @@
 #include "repaint.h"
+#include "gpu_preference.h"
 #include "brush_blend.h"
 #include "brush_preset.h"
 #include "rlgl.h"
@@ -578,6 +579,7 @@ void App_Init(AppState* state) {
     SetTraceLogLevel(LOG_WARNING);
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "RePaint");
     MaximizeWindow();
+    GPU_Init();
     DrawSplash("Initializing...");
 
     if (FileExists("resources/icon.png")) {
