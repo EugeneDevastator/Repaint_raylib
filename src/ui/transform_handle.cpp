@@ -13,6 +13,7 @@ static Vector2  s_startUV    = {0, 0};  // local UV at edge-drag start
 static RectXform s_savedXform = {};
 static Vector2  s_savedCursor = {0, 0};
 static Vector2  s_savedLocalCursor = {0, 0}; // pivot local UV at drag start
+static float    s_repeatMat[6] = {1,0,0,0,1,0}; // last applied relative transform
 
 static void ResetState() {
     s_dragAction = 0;
@@ -456,6 +457,12 @@ bool TransformHandle_Input(RectXform* xform,
                 cursor->y = m[3]*lu + m[4]*lv + m[5];
             }
         }
+        // Store relative transform for repeat
+        if (s_dragAction == 1 || s_dragAction == 3 || s_dragAction == 2 || s_dragAction == 5) {
+            float inv[6], idMat[6] = {1,0,0,0,1,0};
+            Xform_MulInv(inv, idMat, s_savedXform.mat);
+            Xform_Mul(s_repeatMat, xform->mat, inv);
+        }
         // Normalize flips: transfer negative w/h to matrix rows
         if (xform->w < 0) { xform->mat[0] = -xform->mat[0]; xform->mat[1] = -xform->mat[1]; xform->w = -xform->w; }
         if (xform->h < 0) { xform->mat[3] = -xform->mat[3]; xform->mat[4] = -xform->mat[4]; xform->h = -xform->h; }
@@ -463,6 +470,13 @@ bool TransformHandle_Input(RectXform* xform,
     }
 
     return false;
+}
+
+// ── Repeat last transform ────────────────────────────────────────────
+void TransformHandle_RepeatLast(RectXform* xform) {
+    float newMat[6];
+    Xform_Mul(newMat, s_repeatMat, xform->mat);
+    memcpy(xform->mat, newMat, sizeof(newMat));
 }
 
 // ── Draw ─────────────────────────────────────────────────────────────

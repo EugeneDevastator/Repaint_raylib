@@ -42,4 +42,7 @@ void TransformHandle_Draw(const RectXform* xform,
 // ── Reset internal drag state ───────────────────────────────────────
 void TransformHandle_ResetState(void);
 
+// ── Repeat last applied transform ───────────────────────────────────
+void TransformHandle_RepeatLast(RectXform* xform);
+
 #endif

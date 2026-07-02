@@ -64,6 +64,13 @@ bool LayerXformModule::HandleInput(InputState& input, const DrawRect& rect) {
 
     if (changed) layersDirty = true;
 
+    // Repeat last transform on 'R'
+    if (!ImGui::IsAnyItemActive() && input.KeyPressed(KEY_R)) {
+        TransformHandle_RepeatLast(&lp->xform);
+        layersDirty = true;
+        DisplayInfoText("Repeated transform");
+    }
+
     // Always consume while active
     return true;
 }
