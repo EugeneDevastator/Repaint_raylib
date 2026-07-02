@@ -80,20 +80,33 @@ bool sd_generate(const std::string& prompt,
 
     fprintf(stderr, "[sd] txt2img \"%s\" %dx%d steps=%d cfg=%.1f\n",
             prompt.c_str(), w, h, steps, cfg);
-    sd_image_t* result = generate_image(g_ctx, &p);
+
+    sd_image_t* images = nullptr;
+    int num_images = 0;
+    bool ok = false;
+#ifdef _WIN32
+    /* prebuilt library — old API */
+    images = generate_image(g_ctx, &p);
+    ok = (images != nullptr);
+    num_images = ok ? 1 : 0;
+#else
+    /* FetchContent — new API */
+    ok = generate_image(g_ctx, &p, &images, &num_images);
+#endif
     if (src_img.data) stbi_image_free(src_img.data);
 
-    if (!result) {
+    if (!ok) {
         fprintf(stderr, "[sd] generation failed\n");
         return false;
     }
+    sd_image_t* result = &images[0];
     fprintf(stderr, "[sd] result %dx%d %dch\n",
             result->width, result->height, result->channel);
 
     stbi_write_png_to_func(write_png_cb, &out_png,
                            (int)result->width, (int)result->height,
                            result->channel, result->data, 0);
-    free_sd_images(result, 1);
+    free_sd_images(images, num_images);
 
     if (out_png.empty()) {
         fprintf(stderr, "[sd] PNG encode failed\n");

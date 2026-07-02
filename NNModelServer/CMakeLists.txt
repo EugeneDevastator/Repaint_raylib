@@ -4,7 +4,6 @@ set(NNSERVER_SOURCES
     nnserver.cpp
     nn_onnx.cpp
     matte_module.cpp
-    sd_module.cpp
     nn_downloader.cpp
     ${CMAKE_SOURCE_DIR}/src/network/sock_platform.cpp
 )
@@ -88,7 +87,7 @@ if(WIN32)
         endif()
     endforeach()
 
-    # ── stable-diffusion (prebuilt static libs, Windows only) ──────────────
+    # ── stable-diffusion ─────────────────────────────────────────────
     set(SD_BUILD_DIR "${CMAKE_CURRENT_SOURCE_DIR}/sd-build")
     set(SD_INCLUDE_DIR "${SD_BUILD_DIR}/include")
     set(SD_LIB_DIR     "${SD_BUILD_DIR}/lib")
@@ -116,7 +115,21 @@ if(WIN32)
                 COMMENT "Copying libgomp-1.dll")
         endif()
     else()
-        message(STATUS "sd: prebuilt lib not found — SD disabled")
+        message(STATUS "sd: prebuilt lib not found, building from source (FetchContent)")
+        include(FetchContent)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fexceptions")
+        FetchContent_Declare(stable-diffusion-cpp
+            GIT_REPOSITORY https://github.com/leejet/stable-diffusion.cpp.git
+            GIT_TAG        master
+            GIT_SHALLOW    TRUE
+            GIT_SUBMODULES "ggml")
+        FetchContent_MakeAvailable(stable-diffusion-cpp)
+
+        target_compile_options(stable-diffusion PRIVATE -frtti)
+        target_compile_options(ggml PRIVATE -frtti)
+
+        target_sources(nnserver PRIVATE sd_module.cpp)
+        target_link_libraries(nnserver PRIVATE stable-diffusion)
     endif()
 
 else()  # ── Linux ──────────────────────────────────────────────────────────
