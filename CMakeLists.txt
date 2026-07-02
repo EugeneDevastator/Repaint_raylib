@@ -116,6 +116,7 @@ set(SOURCES
     # ── http ─────────────────────────────────────────────────────────
     src/http/matte_client.cpp
     src/http/sd_client.cpp
+    src/http/upscale_client.cpp
     # ── sensors ───────────────────────────────────────────────────────
     src/sensors/tablet.cpp
     src/sensors/input_filter.cpp

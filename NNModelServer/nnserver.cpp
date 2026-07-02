@@ -8,8 +8,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <math.h>
 #include <vector>
 #include <string>
+
+#include "stb_image.h"
+#include "stb_image_write.h"
 
 /* ── protocol helpers ──────────────────────────────────────────────────────── */
 
@@ -133,6 +137,74 @@ static void handle_sd(sock_t client) {
     fprintf(stderr, "[SD] done — sent %zu bytes\n", out_png.size());
 }
 
+/* ── upscaler handler ─────────────────────────────────────────────────── */
+
+static void upscale_write_cb(void* context, void* data, int size) {
+    auto* out = (std::vector<uint8_t>*)context;
+    out->insert(out->end(), (uint8_t*)data, (uint8_t*)data + size);
+}
+
+static void handle_upscale(sock_t client, OnnxModel* upscaler) {
+    std::vector<uint8_t> src_png;
+    if (!recv_blob(client, src_png)) {
+        fprintf(stderr, "[upscale] recv failed\n"); return;
+    }
+    fprintf(stderr, "[upscale] source PNG %zu bytes\n", src_png.size());
+
+    /* Decode PNG → RGBA → float RGB NCHW */
+    int w = 0, h = 0, ch = 0;
+    unsigned char* rgba = stbi_load_from_memory(
+        src_png.data(), (int)src_png.size(), &w, &h, &ch, 4);
+    if (!rgba) { fprintf(stderr, "[upscale] decode failed\n"); return; }
+
+    size_t np = (size_t)w * h;
+    std::vector<float> input(np * 3);
+    for (size_t i = 0; i < np; i++) {
+        input[i]        = rgba[i*4]   / 255.0f;
+        input[np+i]     = rgba[i*4+1] / 255.0f;
+        input[np*2+i]   = rgba[i*4+2] / 255.0f;
+    }
+    stbi_image_free(rgba);
+
+    int64_t in_shape[4] = {1, 3, h, w};
+    const float* in_data[1] = {input.data()};
+    const char* in_names[1] = {"input"};
+
+    float* out_data[1] = {nullptr};
+    int64_t out_shape[4] = {0};
+    const char* out_names[1] = {"output"};
+
+    send_msg(client, 'P', "Upscaling...", 12);
+    fprintf(stderr, "[upscale] starting %dx%d → %dx%d\n", w, h, w*4, h*4);
+
+    if (!onnx_run(upscaler, in_names, in_data, in_shape, 1,
+                  out_names, out_data, out_shape, 1)) {
+        fprintf(stderr, "[upscale] inference failed\n"); return;
+    }
+
+    int ow = (int)out_shape[3], oh = (int)out_shape[2];
+    fprintf(stderr, "[upscale] result %dx%d\n", ow, oh);
+
+    /* Convert float output to RGBA PNG */
+    std::vector<uint8_t> rgb((size_t)ow * oh * 3);
+    for (int i = 0; i < ow * oh; i++) {
+        rgb[i*3]   = (uint8_t)(fmaxf(0.0f, fminf(1.0f, out_data[0][i])) * 255.0f + 0.5f);
+        rgb[i*3+1] = (uint8_t)(fmaxf(0.0f, fminf(1.0f, out_data[0][ow*oh + i])) * 255.0f + 0.5f);
+        rgb[i*3+2] = (uint8_t)(fmaxf(0.0f, fminf(1.0f, out_data[0][ow*oh*2 + i])) * 255.0f + 0.5f);
+    }
+    free(out_data[0]);
+
+    int png_len = 0;
+    std::vector<uint8_t> png_buf;
+    stbi_write_png_to_func(upscale_write_cb, &png_buf, ow, oh, 3, rgb.data(), ow * 3);
+    if (png_buf.empty()) { fprintf(stderr, "[upscale] PNG encode failed\n"); return; }
+
+    if (!send_msg(client, 'R', png_buf.data(), (uint32_t)png_buf.size()))
+        fprintf(stderr, "[upscale] send failed\n");
+    else
+        fprintf(stderr, "[upscale] done — sent %zu bytes\n", png_buf.size());
+}
+
 /* ── globals ────────────────────────────────────────────────────────── */
 
 static bool g_sd_available = false;
@@ -173,8 +245,11 @@ int main(int argc, char** argv) {
         g_sd_available = sd_init(sd_path.c_str());
 
     std::string upscale_path = dl_resolve_optional(DL_UPSCALER_MODEL);
+    OnnxModel* upscaler = nullptr;
     if (!upscale_path.empty())
-        fprintf(stderr, "[nnserver] upscaler ready at %s\n", upscale_path.c_str());
+        upscaler = onnx_load(upscale_path.c_str());
+    if (upscaler)
+        fprintf(stderr, "[nnserver] upscaler ready\n");
     else
         fprintf(stderr, "[nnserver] upscaler not available\n");
 
@@ -198,7 +273,10 @@ int main(int argc, char** argv) {
         uint8_t mode_byte;
         if (!sock_recv_all(client, &mode_byte, 1)) { sock_close(client); continue; }
 
-        if (mode_byte == 'G') {
+        if (mode_byte == 'U' && upscaler) {
+            fprintf(stderr, "[accept] upscale request\n");
+            handle_upscale(client, upscaler);
+        } else if (mode_byte == 'G') {
             if (!g_sd_available && dl_file_exists(sd_path.c_str()))
                 g_sd_available = sd_init(sd_path.c_str());
 

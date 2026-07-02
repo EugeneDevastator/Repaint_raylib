@@ -55,23 +55,37 @@ static void DrawSliderCore(ImDrawList* dl, int x, int y, int length, int thickne
                 dl->AddRectFilled(ImVec2(oMin.x, oMin.y + k), ImVec2(oMax.x, oMin.y + k + 1), col);
         }
     } else {
+        bool noMod = (bp && bp->penMode == csNone);
         ImU32 gs = IM_COL32(SLIDER_GRAD_FROM.r, SLIDER_GRAD_FROM.g, SLIDER_GRAD_FROM.b, 255);
         ImU32 ge = IM_COL32(SLIDER_GRAD_TO.r,   SLIDER_GRAD_TO.g,   SLIDER_GRAD_TO.b,   255);
-        // Gradient between the two tick positions — follows clipminF/clipmaxF order
-        if (orient == 0) {
-            int x0 = x + (int)(length * clipminF);
-            int x1 = x + (int)(length * clipmaxF);
-            if (x1 > x0)
-                dl->AddRectFilledMultiColor(ImVec2(x0, y), ImVec2(x1, y + thickness), gs, ge, ge, gs);
-            else if (x0 > x1)
-                dl->AddRectFilledMultiColor(ImVec2(x1, y), ImVec2(x0, y + thickness), ge, gs, gs, ge);
+        if (noMod) {
+            // No modulation: gradient from 0 to clipmaxF (white tick), no clipminF tick
+            if (orient == 0) {
+                int x1 = x + (int)(length * clipmaxF);
+                if (x1 > x)
+                    dl->AddRectFilledMultiColor(ImVec2(x, y), ImVec2(x1, y + thickness), gs, ge, ge, gs);
+            } else {
+                int y1 = y + (int)(length * (1.0f - clipmaxF));
+                if (y1 < y + length)
+                    dl->AddRectFilledMultiColor(ImVec2(x, y1), ImVec2(x + thickness, y + length), ge, ge, gs, gs);
+            }
         } else {
-            int y0 = y + (int)(length * (1.0f - clipmaxF));
-            int y1 = y + (int)(length * (1.0f - clipminF));
-            if (y1 > y0)
-                dl->AddRectFilledMultiColor(ImVec2(x, y0), ImVec2(x + thickness, y1), ge, ge, gs, gs);
-            else if (y0 > y1)
-                dl->AddRectFilledMultiColor(ImVec2(x, y1), ImVec2(x + thickness, y0), gs, gs, ge, ge);
+            // Modulation: gradient between the two tick positions
+            if (orient == 0) {
+                int x0 = x + (int)(length * clipminF);
+                int x1 = x + (int)(length * clipmaxF);
+                if (x1 > x0)
+                    dl->AddRectFilledMultiColor(ImVec2(x0, y), ImVec2(x1, y + thickness), gs, ge, ge, gs);
+                else if (x0 > x1)
+                    dl->AddRectFilledMultiColor(ImVec2(x1, y), ImVec2(x0, y + thickness), ge, gs, gs, ge);
+            } else {
+                int y0 = y + (int)(length * (1.0f - clipmaxF));
+                int y1 = y + (int)(length * (1.0f - clipminF));
+                if (y1 > y0)
+                    dl->AddRectFilledMultiColor(ImVec2(x, y0), ImVec2(x + thickness, y1), ge, ge, gs, gs);
+                else if (y0 > y1)
+                    dl->AddRectFilledMultiColor(ImVec2(x, y1), ImVec2(x + thickness, y0), gs, gs, ge, ge);
+            }
         }
     }
     dl->PopClipRect();
@@ -156,7 +170,8 @@ static void DrawSliderCore(ImDrawList* dl, int x, int y, int length, int thickne
     };
 
     dl->PushClipRect(oMin, oMax, true);
-    drawGrabber(clipminF, SLIDER_TICK_DARK, 0, 0);
+    if (!(bp && bp->penMode == csNone))
+        drawGrabber(clipminF, SLIDER_TICK_DARK, 0, 0);
     drawGrabber(clipmaxF, SLIDER_TICK_LIGHT, 0, 0);
     dl->PopClipRect();
 }
