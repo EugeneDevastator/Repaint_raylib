@@ -2,6 +2,7 @@
 #include "ui_rect.h"
 #include "xform.h"
 #include "transform_handle.h"
+#include "viewport_manager.h"
 #include "sd_client.h"
 #include "upscale_client.h"
 #include "layerstack.h"
@@ -227,33 +228,9 @@ void SDHudModule::DrawGUI(const DrawRect& rect) {
             if (pw < 16) pw = 16;
             if (ph < 16) ph = 16;
 
-            /* Set up 2D camera to map xform world rect to the temp RT */
-            Rectangle wb = GetWorldAABB(&g_sdXform);
-            Camera2D cam;
-            cam.target = {wb.x + wb.width * 0.5f, wb.y + wb.height * 0.5f};
-            cam.offset = {(float)pw * 0.5f, (float)ph * 0.5f};
-            cam.rotation = 0;
-            cam.zoom = (float)pw / wb.width;
-
-            RenderTexture2D rt = LoadRenderTexture(pw, ph);
-            BeginTextureMode(rt);
-            ClearBackground(BLANK);
-            BeginMode2D(cam);
-            for (int i = 0; i < LayerStack_Count(); i++) {
-                sLayerProps* lp = LayerStack_GetProps(i);
-                if (!lp->visible) continue;
-                RenderTexture2D lrt = LayerStack_GetRT(i);
-                Rectangle src = {0, 0, (float)lp->layerW, (float)-lp->layerH};
-                float dx = lp->xform.mat[2];
-                float dy = lp->xform.mat[5];
-                DrawTexturePro(lrt.texture, src,
-                    {dx, dy, (float)lp->layerW, (float)lp->layerH}, {0,0}, 0, WHITE);
-            }
-            EndMode2D();
-            EndTextureMode();
+            RenderTexture2D rt = ViewportManager_GetMergedTexture(&g_sdXform, pw, ph);
             Image img = LoadImageFromTexture(rt.texture);
             UnloadRenderTexture(rt);
-            ImageFlipVertical(&img);
 
             if (img.data) {
                 g_running = true;
@@ -295,21 +272,11 @@ void SDHudModule::DrawGUI(const DrawRect& rect) {
         if (g_threadOk && g_resultPng && g_resultSize > 0) {
             Image img = LoadImageFromMemory(".png", g_resultPng, g_resultSize);
             if (img.data) {
-                int n = LayerStack_Count();
-                int newIdx = LayerStack_InsertLayer(n > 0 ? n - 1 : 0);
-                ImageFlipVertical(&img);
-                Texture2D tmp = LoadTextureFromImage(img);
-                UnloadImage(img);
-                BeginTextureMode(LayerStack_GetRT(newIdx));
-                ClearBackground(BLANK);
-                rlSetBlendMode(RL_BLEND_CUSTOM);
-                rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
-                DrawTexture(tmp, 0, 0, WHITE);
-                rlSetBlendMode(RL_BLEND_ALPHA);
-                EndTextureMode();
-                UnloadTexture(tmp);
-                state->activeLayer = newIdx;
-                layersDirty = true;
+                int newIdx = ViewportManager_CreateLayerFromImage(img);
+                if (newIdx >= 0) {
+                    state->activeLayer = newIdx;
+                    layersDirty = true;
+                }
             }
         }
         free(g_resultPng);

@@ -29,4 +29,13 @@ void ViewportManager_BlitLayerToLayer(int idx); // composite only, no delete
 // Takes ownership of matteImage (unloads on success).
 int ViewportManager_AcceptMatte(int srcIdx, Image matteImage);
 
+// Render all visible layers within the xform bounds to a new RenderTexture2D.
+// Caller must UnloadRenderTexture the result.
+RenderTexture2D ViewportManager_GetMergedTexture(const RectXform* xform, int w, int h);
+
+// Create a new layer from an Image at the top of the stack.
+// Sets the layer's xform w/h to match the image dimensions.
+// Returns new layer index, or -1 on failure.
+int ViewportManager_CreateLayerFromImage(Image img);
+
 #endif

@@ -217,3 +217,33 @@ int ViewportManager_AcceptMatte(int srcIdx, Image matteImage) {
     ViewportManager_SetDirty();
     return newIdx;
 }
+
+RenderTexture2D ViewportManager_GetMergedTexture(const RectXform* xform, int w, int h) {
+    RenderTexture2D rt = LoadRenderTexture(w, h);
+    ViewportManager_CompositeViewInto(rt, xform, w, h);
+    return rt;
+}
+
+int ViewportManager_CreateLayerFromImage(Image img) {
+    if (!img.data) return -1;
+    int n = LayerStack_Count();
+    int newIdx = LayerStack_InsertLayer(n > 0 ? n - 1 : 0);
+    sLayerProps* lp = LayerStack_GetProps(newIdx);
+    /* Set layer pixel size to match image */
+    lp->layerW = img.width;
+    lp->layerH = img.height;
+    lp->xform = RectXform_Pivot(0, 0, (float)img.width, (float)img.height, 0);
+    /* Upload image to layer's render texture */
+    Texture2D tmp = LoadTextureFromImage(img);
+    UnloadImage(img);
+    BeginTextureMode(LayerStack_GetRT(newIdx));
+    ClearBackground(BLANK);
+    rlSetBlendMode(RL_BLEND_CUSTOM);
+    rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+    DrawTexture(tmp, 0, 0, WHITE);
+    rlSetBlendMode(RL_BLEND_ALPHA);
+    EndTextureMode();
+    UnloadTexture(tmp);
+    ViewportManager_SetDirty();
+    return newIdx;
+}
