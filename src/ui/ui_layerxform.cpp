@@ -66,7 +66,7 @@ bool LayerXformModule::HandleInput(InputState& input, const DrawRect& rect) {
 
     // Repeat last transform on 'R'
     if (!ImGui::IsAnyItemActive() && input.KeyPressed(KEY_R)) {
-        TransformHandle_RepeatLast(&lp->xform);
+        TransformHandle_RepeatLast(&lp->xform, Vector2{g_pivotCursorX, g_pivotCursorY});
         layersDirty = true;
         DisplayInfoText("Repeated transform");
     }
@@ -91,20 +91,67 @@ void LayerXformModule::DrawGUI(const DrawRect& rect) {
 
     float bx = rect.x + 6;
     float by = rect.y + 6;
-    float bw = 120;
+    float bw = 180;
     ImGui::SetNextWindowPos(ImVec2(bx, by), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(bw, 0), ImGuiCond_Always);
     ImGui::Begin("##layerOps", NULL,
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar);
 
-    if (ImGui::Button("Add layer", ImVec2(-1, 0))) {}
-    if (ImGui::Button("Crop canvas", ImVec2(-1, 0))) {}
-    if (ImGui::Button("CropWrap", ImVec2(-1, 0))) {}
-    if (ImGui::Button("Drop Union", ImVec2(-1, 0))) {}
-    if (ImGui::Button("Apply Union", ImVec2(-1, 0))) {}
-    if (ImGui::Button("Set Res", ImVec2(-1, 0))) {}
-    if (ImGui::Button("Reset Xform", ImVec2(-1, 0))) {}
+    // ── Stored transform editor ──
+    float store[6];
+    TransformHandle_GetStore(store);
+
+    // Decompose (translation is user-entered, not from stored matrix)
+    static float s_editTx = 0.0f, s_editTy = 0.0f;
+    float tx = s_editTx, ty = s_editTy;
+    float sx = sqrtf(store[0]*store[0] + store[3]*store[3]);
+    float sy = sqrtf(store[1]*store[1] + store[4]*store[4]);
+    float rotDeg = atan2f(store[3], store[0]) * (180.0f / (float)M_PI);
+
+    ImGui::Text("Transform");
+    ImGui::Separator();
+
+    bool changed = false;
+    ImGui::SetNextItemWidth(-1);
+    changed |= ImGui::InputFloat("X", &tx, 0, 0, "%.1f");
+    changed |= ImGui::InputFloat("Y", &ty, 0, 0, "%.1f");
+    changed |= ImGui::InputFloat("SX", &sx, 0, 0, "%.3f");
+    changed |= ImGui::InputFloat("SY", &sy, 0, 0, "%.3f");
+
+    float rotClamped = rotDeg;
+    changed |= ImGui::InputFloat("Deg", &rotClamped, 0, 0, "%.1f");
+
+    float ratioN = (fabsf(rotClamped) > 0.01f) ? 360.0f / rotClamped : 0.0f;
+    float newN = ratioN;
+    if (ImGui::InputFloat("1/N", &newN, 0, 0, "%.2f")) {
+        if (fabsf(newN) > 0.01f) {
+            rotClamped = 360.0f / newN;
+            changed = true;
+        }
+    }
+
+    if (changed) {
+        s_editTx = tx; s_editTy = ty;
+        // Rebuild matrix: translate * rotate * scale
+        float rotRad = rotClamped * ((float)M_PI / 180.0f);
+        float mRot[6], mScl[6], mTmp[6];
+        Xform_SetRot(mRot, rotRad);
+        Xform_SetScale(mScl, sx, sy);
+        Xform_Mul(mTmp, mRot, mScl);
+        float mTrs[6];
+        Xform_SetTrans(mTrs, tx, ty);
+        float result[6];
+        Xform_Mul(result, mTrs, mTmp);
+        TransformHandle_SetStore(result);
+    }
+
+    ImGui::Separator();
+    if (ImGui::Button("Apply", ImVec2(-1, 0)) && state->activeLayer >= 0) {
+        sLayerProps* lp = LayerStack_GetProps(state->activeLayer);
+        TransformHandle_RepeatLast(&lp->xform, Vector2{g_pivotCursorX, g_pivotCursorY});
+        layersDirty = true;
+    }
     ImGui::Checkbox("Lock Aspect", &g_lockAspect);
 
     ImGui::End();

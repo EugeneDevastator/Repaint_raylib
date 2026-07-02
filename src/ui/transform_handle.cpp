@@ -472,11 +472,26 @@ bool TransformHandle_Input(RectXform* xform,
     return false;
 }
 
-// ── Repeat last transform ────────────────────────────────────────────
-void TransformHandle_RepeatLast(RectXform* xform) {
+// ── Repeat last transform around a world-space pivot ────────────────
+void TransformHandle_RepeatLast(RectXform* xform, Vector2 pivot) {
+    // Build pivot-relative transform: T(pivot) * relMat * T(-pivot)
+    float toPivot[6], fromPivot[6], tmp[6], pivotRel[6];
+    Xform_SetTrans(toPivot,   pivot.x, pivot.y);
+    Xform_SetTrans(fromPivot, -pivot.x, -pivot.y);
+    Xform_Mul(tmp, s_repeatMat, fromPivot);
+    Xform_Mul(pivotRel, toPivot, tmp);
+    // Apply: new_xform = pivotRel * xform
     float newMat[6];
-    Xform_Mul(newMat, s_repeatMat, xform->mat);
+    Xform_Mul(newMat, pivotRel, xform->mat);
     memcpy(xform->mat, newMat, sizeof(newMat));
+}
+
+void TransformHandle_GetStore(float mat[6]) {
+    memcpy(mat, s_repeatMat, 6 * sizeof(float));
+}
+
+void TransformHandle_SetStore(const float mat[6]) {
+    memcpy(s_repeatMat, mat, 6 * sizeof(float));
 }
 
 // ── Draw ─────────────────────────────────────────────────────────────

@@ -42,7 +42,11 @@ void TransformHandle_Draw(const RectXform* xform,
 // ── Reset internal drag state ───────────────────────────────────────
 void TransformHandle_ResetState(void);
 
-// ── Repeat last applied transform ───────────────────────────────────
-void TransformHandle_RepeatLast(RectXform* xform);
+// ── Repeat last applied transform around a world-space pivot ───────
+void TransformHandle_RepeatLast(RectXform* xform, Vector2 pivot);
+
+// ── Get / set the stored transform matrix (last repeat) ────────────
+void  TransformHandle_GetStore(float mat[6]);
+void  TransformHandle_SetStore(const float mat[6]);
 
 #endif
