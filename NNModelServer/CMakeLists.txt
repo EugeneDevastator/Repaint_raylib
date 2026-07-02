@@ -96,6 +96,7 @@ if(WIN32)
         message(STATUS "sd: using prebuilt static library")
         target_sources(nnserver PRIVATE sd_module.cpp)
         target_include_directories(nnserver PRIVATE "${SD_INCLUDE_DIR}")
+        target_compile_definitions(nnserver PRIVATE SD_PREBUILT=1)
         target_link_directories(nnserver PRIVATE "${SD_LIB_DIR}")
         target_link_libraries(nnserver PRIVATE
             -Wl,--start-group

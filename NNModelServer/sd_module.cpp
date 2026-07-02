@@ -84,7 +84,7 @@ bool sd_generate(const std::string& prompt,
     sd_image_t* images = nullptr;
     int num_images = 0;
     bool ok = false;
-#ifdef _WIN32
+#if SD_PREBUILT
     /* prebuilt library — old API */
     images = generate_image(g_ctx, &p);
     ok = (images != nullptr);
