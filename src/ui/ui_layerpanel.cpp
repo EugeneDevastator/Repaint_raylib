@@ -137,9 +137,10 @@ void LayerPanel_Draw(AppState* state) {
         CommitLayerOp(state, &lact);
     }
     ImGui::SameLine();
-    if (ImGui::Button("Inst", ImVec2(bw, 36)) && LayerStack_Count() < 64 && state->activeLayer >= 0) {
-        LayerStack_DuplicateAsInstance(state->activeLayer);
-    }
+if (ImGui::Button("Inst", ImVec2(bw, 36)) && LayerStack_Count() < 64 && state->activeLayer >= 0) {
+    LayerStack_DuplicateAsInstance(state->activeLayer);
+    state->activeLayer = state->activeLayer + 1;
+}
     ImGui::SameLine();
     if (ImGui::Button("Drop", ImVec2(bw, 36)) && state->activeLayer > 0) {
         sLayerProps* lp = LayerStack_GetProps(state->activeLayer);

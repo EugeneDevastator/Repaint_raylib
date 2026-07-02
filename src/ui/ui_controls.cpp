@@ -10,7 +10,7 @@ const char* g_blendModeNames[] = {
 };
 extern const int g_blendModeCount = 17;
 
-static Texture2D penModeTex[PEN_MODE_COUNT];
+Texture2D penModeTex[PEN_MODE_COUNT];
 static const char* PenIconNames[PEN_MODE_COUNT] = {
     "tct_none", "tct_pressure", "tct_vel", "tct_dir", "tct_rot", "tct_tilt",
     "tct_relang", "tct_htilt", "tct_vtilt", "tct_lenpx", "tct_acc",
@@ -130,7 +130,7 @@ void BParam_SnapRunState(BParam* bp) {
     bp->run.clipmaxF = bp->user.clipmaxF;
 }
 
-bool DrawSelector(const char* label, int* current, const char* names[], int count, int columns, float height) {
+bool DrawSelector(const char* label, int* current, const char* names[], int count, int columns, float height, const Texture2D* icons) {
     if (label) ImGui::Text("%s", label);
     int prev = *current;
     if (count < 1) return false;
@@ -160,6 +160,10 @@ bool DrawSelector(const char* label, int* current, const char* names[], int coun
             if (col > 0) ImGui::SameLine(0, 0);
             ImGui::PushID(i);
             ImGui::PushItemWidth(itemW);
+            if (icons && icons[i].id > 0) {
+                ImGui::Image((ImTextureID)(intptr_t)icons[i].id, ImVec2(16, 16));
+                ImGui::SameLine();
+            }
             ImGui::Selectable(names[i], *current == i, 0, ImVec2(itemW, 0));
             if (mouseDown && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem))
                 *current = i;

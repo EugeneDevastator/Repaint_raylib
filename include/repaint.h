@@ -221,6 +221,7 @@ void BParam_Init(BParam* bp, int id, const char* name, float outMin, float outMa
 void BParam_SetIcon(BParam* bp, const char* filename);
 void LoadPenIcons(void); void UnloadPenIcons(void);
 Texture2D GetPenModeIcon(int mode);
+extern Texture2D penModeTex[PEN_MODE_COUNT];
 float BParam_GetValue(BParam* bp);
 void BParam_SetValue(BParam* bp, float val);
 void BParam_SnapRunState(BParam* bp);
@@ -286,7 +287,7 @@ void Changelog_Init(void); void Changelog_Toggle(void); void Changelog_Draw(void
 struct ImDrawList; struct ImVec2;
 void DrawSlider(BParam* bp, int orient, float thick=0, float len=0);
 void DrawRadioGroup(const char* label, int* current, const char* items[], int itemCount);
-bool DrawSelector(const char* label, int* current, const char* names[], int count, int columns=1, float height=0);
+bool DrawSelector(const char* label, int* current, const char* names[], int count, int columns=1, float height=0, const Texture2D* icons=nullptr);
 void DrawSingleSlider(const char* label, float* val, float vmin, float vmax, const char* display_fmt);
 void DrawSingleSliderInt(const char* label, int* val, int vmin, int vmax, const char* display_fmt);
 extern const char* g_blendModeNames[];

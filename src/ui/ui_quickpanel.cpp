@@ -55,9 +55,11 @@ void QuickPanel_DrawUI(AppState* state) {
         int panelX = sliderLeftX - dGap - panelW;
         ImGui::SetCursorScreenPos(ImVec2(panelX, penBtnY - 14));
         ImGui::BeginChild("##sliders", ImVec2((float)panelW, (float)totalColH), true, ImGuiWindowFlags_NoScrollbar);
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6, 5));
         BParam* hbps[] = {&bpSize, &bpSizeMul, &bpHardness, &bpCurvature, &bpAngle, &bpScaleRel, &bpCloneOpacity, &bpPower, &bpPerspective, &bpFocalOffset};
         for (int i = 0; i < 10; i++)
             DrawSlider(hbps[i], 0);
+        ImGui::PopStyleVar();
         ImGui::EndChild();
     }
 
@@ -86,28 +88,41 @@ void QuickPanel_DrawUI(AppState* state) {
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.80f, 0.80f, 0.80f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.72f, 0.72f, 0.72f, 1.0f));
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
-        if (penTid) {
-            if (ImGui::ImageButton("##pb", penTid, ImVec2(dCtrl, dCtrl)))
-                ImGui::OpenPopup(pname);
-        } else {
-            if (ImGui::Button("...", ImVec2(dCtrl, dCtrl)))
-                ImGui::OpenPopup(pname);
-        }
+        if (penTid)
+            ImGui::ImageButton("##pb", penTid, ImVec2(dCtrl, dCtrl));
+        else
+            ImGui::Button("...", ImVec2(dCtrl, dCtrl));
         ImGui::PopStyleColor(3);
         ImGui::PopStyleVar();
-
-        rlSetBlendMode(RL_BLEND_ALPHA);
-        if (ImGui::BeginPopup(pname, ImGuiWindowFlags_NoScrollbar)) {
+        static int vActivePenId = -1;
+        if (ImGui::IsItemHovered() && ImGui::IsMouseDown(0))
+            vActivePenId = i;
+        if (vActivePenId == i) {
+            ImVec2 btnMin = ImGui::GetItemRectMin();
+            float ow = 170.0f;
+            ImGui::SetNextWindowPos(ImVec2(btnMin.x, btnMin.y + dCtrl + 2));
+            ImGui::SetNextWindowSize(ImVec2(ow, 0));
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(1, 1, 1, 1));
+            ImGui::Begin("##vPenOverlay", NULL,
+                ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
+                ImGuiWindowFlags_NoSavedSettings);
+            bool mouseDown = ImGui::IsMouseDown(0);
             for (int p = 0; p < PEN_MODE_COUNT; p++) {
-                Texture2D itex = GetPenModeIcon(p);
-                if (itex.id > 0) {
-                    ImGui::Image((ImTextureID)(intptr_t)itex.id, ImVec2(16, 16));
+                ImGui::PushID(p);
+                if (penModeTex[p].id > 0) {
+                    ImGui::Image((ImTextureID)(intptr_t)penModeTex[p].id, ImVec2(16, 16));
                     ImGui::SameLine();
                 }
-                if (ImGui::Selectable(PenModeNames[p], bp->penMode == p))
+                ImGui::Selectable(PenModeNames[p], bp->penMode == p);
+                if (mouseDown && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem))
                     bp->penMode = p;
+                ImGui::PopID();
             }
-            ImGui::EndPopup();
+            ImGui::End();
+            ImGui::PopStyleColor();
+            if (!ImGui::IsMouseDown(0))
+                vActivePenId = -1;
         }
         ImGui::PopID();
 

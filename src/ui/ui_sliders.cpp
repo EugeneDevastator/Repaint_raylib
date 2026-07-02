@@ -264,7 +264,7 @@ void DrawSlider(BParam* bp, int orient, float thick, float len) {
     ImGui::PushID(bp->id);
 
     if (orient == 0) {
-        float ctrlH = 35.0f, spacing = 6.0f;
+        float ctrlH = 37.0f, spacing = 6.0f;
 
         if (bp->iconLoaded)
             ImGui::Image((ImTextureID)(intptr_t)bp->iconTex.id, ImVec2(ctrlH, ctrlH));
@@ -286,9 +286,51 @@ void DrawSlider(BParam* bp, int orient, float thick, float len) {
 
         ImGui::SameLine(0, spacing);
         ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 1.0f);
-        char pname[32]; snprintf(pname, sizeof(pname), "hpen_%d", bp->id);
-        PenModeButton(bp, btnW, ctrlH + 2.0f, pname);
-        PenModePopup(bp, pname);
+        {
+            Texture2D pt = GetPenModeIcon(bp->penMode);
+            ImTextureID penTid = (pt.id > 0) ? (ImTextureID)(intptr_t)pt.id : 0;
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.85f, 0.85f, 0.85f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.75f, 0.75f, 0.75f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.65f, 0.65f, 0.65f, 1.0f));
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+            char bname[32]; snprintf(bname, sizeof(bname), "hpm_%d", bp->id);
+            if (penTid)
+                ImGui::ImageButton(bname, penTid, ImVec2(btnW, ctrlH + 2.0f));
+            else
+                ImGui::Button("...", ImVec2(btnW, ctrlH + 2.0f));
+            ImGui::PopStyleColor(3);
+            ImGui::PopStyleVar();
+            static int activePenId = -1;
+            if (ImGui::IsItemHovered() && ImGui::IsMouseDown(0))
+                activePenId = bp->id;
+            if (activePenId == bp->id) {
+                ImVec2 btnMin = ImGui::GetItemRectMin();
+                float ow = 170.0f;
+                ImGui::SetNextWindowPos(ImVec2(btnMin.x, btnMin.y + btnW + 2));
+                ImGui::SetNextWindowSize(ImVec2(ow, 0));
+                ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(1, 1, 1, 1));
+                ImGui::Begin("##penOverlay", NULL,
+                    ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                    ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
+                    ImGuiWindowFlags_NoSavedSettings);
+                bool mouseDown = ImGui::IsMouseDown(0);
+                for (int p = 0; p < PEN_MODE_COUNT; p++) {
+                    ImGui::PushID(p);
+                    if (penModeTex[p].id > 0) {
+                        ImGui::Image((ImTextureID)(intptr_t)penModeTex[p].id, ImVec2(16, 16));
+                        ImGui::SameLine();
+                    }
+                    ImGui::Selectable(PenModeNames[p], bp->penMode == p);
+                    if (mouseDown && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem))
+                        bp->penMode = p;
+                    ImGui::PopID();
+                }
+                ImGui::End();
+                ImGui::PopStyleColor();
+                if (!ImGui::IsMouseDown(0))
+                    activePenId = -1;
+            }
+        }
 
     } else {
         // orient=1 — slider bar only, caller positions cursor
