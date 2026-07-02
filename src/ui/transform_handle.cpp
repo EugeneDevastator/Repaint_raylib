@@ -218,6 +218,10 @@ bool TransformHandle_Input(RectXform* xform,
         float mdy = canvasPos.y - s_dragStart.y;
         xform->mat[2] = s_savedXform.mat[2] + mdx;
         xform->mat[5] = s_savedXform.mat[5] + mdy;
+        // Update cursor visual to track the layer
+        float* m = xform->mat;
+        cursor->x = m[0]*s_savedLocalCursor.x + m[1]*s_savedLocalCursor.y + m[2];
+        cursor->y = m[3]*s_savedLocalCursor.x + m[4]*s_savedLocalCursor.y + m[5];
         return true;
     }
 

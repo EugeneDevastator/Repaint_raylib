@@ -121,49 +121,6 @@ void LayerPanel_Draw(AppState* state) {
         ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
 
-    float aw = ImGui::GetContentRegionAvail().x;
-    float bw = (aw - 12.0f) / 5.0f;
-    if (ImGui::Button("+Add", ImVec2(bw, 36))) {
-        d_LAction lact = {};
-        lact.ActID = laAdd;
-        lact.layer = (int16_t)(state->activeLayer + 1);
-        CommitLayerOp(state, &lact);
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Dup", ImVec2(bw, 36)) && LayerStack_Count() < 64) {
-        d_LAction lact = {};
-        lact.ActID = laDup;
-        lact.layer = (int16_t)state->activeLayer;
-        CommitLayerOp(state, &lact);
-    }
-    ImGui::SameLine();
-if (ImGui::Button("Inst", ImVec2(bw, 36)) && LayerStack_Count() < 64 && state->activeLayer >= 0) {
-    LayerStack_DuplicateAsInstance(state->activeLayer);
-    state->activeLayer = state->activeLayer + 1;
-}
-    ImGui::SameLine();
-    if (ImGui::Button("Drop", ImVec2(bw, 36)) && state->activeLayer > 0) {
-        sLayerProps* lp = LayerStack_GetProps(state->activeLayer);
-        if (lp->seamless) {
-            ViewportManager_MergeDownSeamless(state->activeLayer);
-            if (state->activeLayer >= LayerStack_Count())
-                state->activeLayer = LayerStack_Count() - 1;
-            layersDirty = true;
-        } else {
-            d_LAction lact = {};
-            lact.ActID = laDrop;
-            lact.layer = (int16_t)state->activeLayer;
-            CommitLayerOp(state, &lact);
-        }
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Del", ImVec2(bw, 36)) && LayerStack_Count() > 1) {
-        d_LAction lact = {};
-        lact.ActID = laDel;
-        lact.layer = (int16_t)state->activeLayer;
-        CommitLayerOp(state, &lact);
-    }
-
     ImGui::Spacing();
 
     {
@@ -353,64 +310,71 @@ if (ImGui::Button("Inst", ImVec2(bw, 36)) && LayerStack_Count() < 64 && state->a
         ImGui::EndChild();
     }
 
+    // ── Layer action buttons (two rows after the list) ──
+    float btnAw = ImGui::GetContentRegionAvail().x;
+    float btnW2 = (btnAw - 8.0f) / 3.0f;
+    // Row 1: Add, Dup, Inst
+    if (ImGui::Button("+Add", ImVec2(btnW2, 30))) {
+        d_LAction lact = {};
+        lact.ActID = laAdd;
+        lact.layer = (int16_t)(state->activeLayer + 1);
+        CommitLayerOp(state, &lact);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Dup", ImVec2(btnW2, 30)) && LayerStack_Count() < 64) {
+        d_LAction lact = {};
+        lact.ActID = laDup;
+        lact.layer = (int16_t)state->activeLayer;
+        CommitLayerOp(state, &lact);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Inst", ImVec2(btnW2, 30)) && LayerStack_Count() < 64 && state->activeLayer >= 0) {
+        LayerStack_DuplicateAsInstance(state->activeLayer);
+        state->activeLayer = state->activeLayer + 1;
+    }
+    // Row 2: Apply, Drop, Del
+    if (ImGui::Button("Apply", ImVec2(btnW2, 30)) && state->activeLayer > 0) {
+        int top = state->activeLayer;
+        int bot = top - 1;
+        sLayerProps* tp = LayerStack_GetProps(top);
+        sLayerProps* bp = LayerStack_GetProps(bot);
+        CompositorBlendParams cb;
+        cb.opacity = tp->op; cb.blendMode = tp->blendmode;
+        cb.threshold = tp->threshold; cb.feather = tp->feather;
+        cb.seamless = false;
+        Compositor_ApplyLayerToLayer(LayerStack_GetRT(top).texture, &tp->xform,
+            &cb, LayerStack_GetRT(bot), &bp->xform);
+        layersDirty = true;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Drop", ImVec2(btnW2, 30)) && state->activeLayer > 0) {
+        sLayerProps* lp = LayerStack_GetProps(state->activeLayer);
+        if (lp->seamless) {
+            ViewportManager_MergeDownSeamless(state->activeLayer);
+            if (state->activeLayer >= LayerStack_Count())
+                state->activeLayer = LayerStack_Count() - 1;
+            layersDirty = true;
+        } else {
+            d_LAction lact = {};
+            lact.ActID = laDrop;
+            lact.layer = (int16_t)state->activeLayer;
+            CommitLayerOp(state, &lact);
+        }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Del", ImVec2(btnW2, 30)) && LayerStack_Count() > 1) {
+        d_LAction lact = {};
+        lact.ActID = laDel;
+        lact.layer = (int16_t)state->activeLayer;
+        CommitLayerOp(state, &lact);
+    }
+
     // ── User texture section ──
     ImGui::Separator();
 
     ImGui::PushID("tex");
     {
-        float aw = ImGui::GetContentRegionAvail().x;
-        float btnW = (aw - ImGui::GetStyle().ItemSpacing.x * 2) / 3.0f;
-        if (btnW < 30.0f) btnW = 30.0f;
-
-        if (ImGui::Button("+Tex", ImVec2(btnW, 24))) {
-            char name[64];
-            snprintf(name, sizeof(name), "Texture %d", TM_Count(TM_BUCKET_USER) + 1);
-            TexSlotID id = BrushTex_Add(state, name, 512, 512);
-            if (TM_IsValid(id)) {
-                g_layerTexSelected = id.slot;
-                state->editTexMode = 1;
-                state->editTexSlot = id;
-            }
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Dup", ImVec2(btnW, 24))) {
-            if (g_layerTexSelected >= 0) {
-                TexSlotID srcId = {TM_BUCKET_USER, (uint8_t)g_layerTexSelected};
-                TexSlot* srcTs = TM_Get(srcId);
-                if (srcTs && TM_IsValid(srcId)) {
-                    TexSlotID di = BrushTex_Add(state, srcTs->name, srcTs->w, srcTs->h);
-                    if (TM_IsValid(di)) {
-                        TexSlot* dstTs = TM_Get(di);
-                        if (dstTs) {
-                            BeginTextureMode(dstTs->rt);
-                            ClearBackground(BLANK);
-                            rlSetBlendMode(RL_BLEND_CUSTOM);
-                            rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
-                            DrawTextureRec(srcTs->rt.texture,
-                                Rectangle{0, 0, (float)srcTs->w, (float)-srcTs->h},
-                                Vector2{0, 0}, WHITE);
-                            rlSetBlendMode(RL_BLEND_ALPHA);
-                            EndTextureMode();
-                            g_layerTexSelected = di.slot;
-                            state->editTexMode = 1;
-                            state->editTexSlot = di;
-                        }
-                    }
-                }
-            }
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Del", ImVec2(btnW, 24))) {
-            if (g_layerTexSelected >= 0) {
-                TexSlotID id = {TM_BUCKET_USER, (uint8_t)g_layerTexSelected};
-                TexSlot* ts = TM_Get(id);
-                if (ts && !ts->builtIn) {
-                    BrushTex_Delete(state, id);
-                    g_layerTexSelected = -1;
-                }
-            }
-        }
-
+        // Texture list first
         float texAvail = ImGui::GetContentRegionAvail().y;
         float texListH = texAvail * 0.65f;
         if (texListH < 10.0f) texListH = 10.0f;
@@ -449,6 +413,59 @@ if (ImGui::Button("Inst", ImVec2(bw, 36)) && LayerStack_Count() < 64 && state->a
             }
         }
         ImGui::EndChild();
+
+        // Texture action buttons after the list
+        float texAw = ImGui::GetContentRegionAvail().x;
+        float texBtnW = (texAw - ImGui::GetStyle().ItemSpacing.x * 2) / 3.0f;
+        if (texBtnW < 30.0f) texBtnW = 30.0f;
+        if (ImGui::Button("+Tex", ImVec2(texBtnW, 24))) {
+            char name[64];
+            snprintf(name, sizeof(name), "Texture %d", TM_Count(TM_BUCKET_USER) + 1);
+            TexSlotID id = BrushTex_Add(state, name, 512, 512);
+            if (TM_IsValid(id)) {
+                g_layerTexSelected = id.slot;
+                state->editTexMode = 1;
+                state->editTexSlot = id;
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Dup", ImVec2(texBtnW, 24))) {
+            if (g_layerTexSelected >= 0) {
+                TexSlotID srcId = {TM_BUCKET_USER, (uint8_t)g_layerTexSelected};
+                TexSlot* srcTs = TM_Get(srcId);
+                if (srcTs && TM_IsValid(srcId)) {
+                    TexSlotID di = BrushTex_Add(state, srcTs->name, srcTs->w, srcTs->h);
+                    if (TM_IsValid(di)) {
+                        TexSlot* dstTs = TM_Get(di);
+                        if (dstTs) {
+                            BeginTextureMode(dstTs->rt);
+                            ClearBackground(BLANK);
+                            rlSetBlendMode(RL_BLEND_CUSTOM);
+                            rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+                            DrawTextureRec(srcTs->rt.texture,
+                                Rectangle{0, 0, (float)srcTs->w, (float)-srcTs->h},
+                                Vector2{0, 0}, WHITE);
+                            rlSetBlendMode(RL_BLEND_ALPHA);
+                            EndTextureMode();
+                            g_layerTexSelected = di.slot;
+                            state->editTexMode = 1;
+                            state->editTexSlot = di;
+                        }
+                    }
+                }
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Del", ImVec2(texBtnW, 24))) {
+            if (g_layerTexSelected >= 0) {
+                TexSlotID id = {TM_BUCKET_USER, (uint8_t)g_layerTexSelected};
+                TexSlot* ts = TM_Get(id);
+                if (ts && !ts->builtIn) {
+                    BrushTex_Delete(state, id);
+                    g_layerTexSelected = -1;
+                }
+            }
+        }
     }
     ImGui::PopID();
 
