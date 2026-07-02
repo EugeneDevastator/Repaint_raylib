@@ -334,16 +334,7 @@ void LayerPanel_Draw(AppState* state) {
     }
     // Row 2: Apply, Drop, Del
     if (ImGui::Button("Apply", ImVec2(btnW2, 30)) && state->activeLayer > 0) {
-        int top = state->activeLayer;
-        int bot = top - 1;
-        sLayerProps* tp = LayerStack_GetProps(top);
-        sLayerProps* bp = LayerStack_GetProps(bot);
-        CompositorBlendParams cb;
-        cb.opacity = tp->op; cb.blendMode = tp->blendmode;
-        cb.threshold = tp->threshold; cb.feather = tp->feather;
-        cb.seamless = false;
-        Compositor_ApplyLayerToLayer(LayerStack_GetRT(top).texture, &tp->xform,
-            &cb, LayerStack_GetRT(bot), &bp->xform);
+        ViewportManager_BlitLayerToLayer(state->activeLayer);
         layersDirty = true;
     }
     ImGui::SameLine();

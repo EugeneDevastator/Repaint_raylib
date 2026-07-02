@@ -22,6 +22,7 @@ void ViewportManager_SetDirty(void);
 // Merge-down: blends top into bottom RT, handles RT replacement + layer delete + undo
 void ViewportManager_MergeDown(int idx);
 void ViewportManager_MergeDownSeamless(int idx);
+void ViewportManager_BlitLayerToLayer(int idx); // composite only, no delete
 
 // Accept matte NN result: duplicate srcIdx layer, upload composited matte
 // image (R16G16B16A16), return new layer index, or -1 on failure.
