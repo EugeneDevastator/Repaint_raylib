@@ -1,4 +1,5 @@
 #include "repaint.h"
+#include "gpu_preference.h"
 #include "brush_blend.h"
 #include "brush_preset.h"
 #include "rlgl.h"
@@ -23,6 +24,7 @@
 #include "StrokeEmitter.h"
 #include "StrokeThrottle.h"
 #include "external/glad.h"
+#include <stdio.h>
 #include <time.h>
 
 int uiPanelWidth = 250;
@@ -33,36 +35,9 @@ Viewport viewport;
 
 ModuleStack g_moduleStack;
 
-// ── Notification state ─────────────────────────────────────────────────
-static struct {
-    char text[256];
-    double endTime;
-} g_notif = {};
+#include "info_text.h"
 
-void ShowNotification(const char* text, float duration) {
-    snprintf(g_notif.text, sizeof(g_notif.text), "%s", text ? text : "");
-    g_notif.endTime = GetTime() + duration;
-}
-
-void DisplayInfoText(const char* text) {
-    ShowNotification(text, 2.0f);
-}
-
-static void DrawNotification(void) {
-    if (g_notif.text[0] == '\0' || GetTime() >= g_notif.endTime) {
-        g_notif.text[0] = '\0';
-        return;
-    }
-    int sw = GetScreenWidth();
-    Font f = GetFontDefault();
-    int sz = 24;
-    float tw = MeasureTextEx(f, g_notif.text, (float)sz, 2).x;
-    float tx = (sw - tw) * 0.5f;
-    float ty = 16.0f;
-    // Shadow (offset by 1px)
-    DrawTextEx(f, g_notif.text, Vector2{tx + 1, ty + 1}, (float)sz, 2, BLACK);
-    DrawTextEx(f, g_notif.text, Vector2{tx, ty}, (float)sz, 2, WHITE);
-}
+void DisplayInfoText(const char* text) { InfoText_Show(text); }
 
 void SyncImGuiInput(void) {
     ImGuiIO& io = ImGui::GetIO();
@@ -103,6 +78,7 @@ void HudSetActive(AppState* state, int newHud) {
         case HUD_LAYER_XFORM:  name = "LayerXform";  break;
         case HUD_QUICK:        name = "QuickHud";    break;
         case HUD_NN:           name = "NNHud";       break;
+        case HUD_SD:           name = "SDHud";       break;
     }
     if (name) {
         IModule* mod = g_moduleStack.Find(name);
@@ -180,17 +156,22 @@ void UpdateUI(AppState* state) {
         if (!IsKeyDown(KEY_LEFT_CONTROL) && (IsKeyPressed(KEY_LEFT_SHIFT) || IsKeyPressed(KEY_RIGHT_SHIFT))) {
             if (g_activeHud == HUD_QUICK)
                 g_activeHud = HUD_NONE;
-            else
+            else {
                 g_activeHud = HUD_QUICK;
+                DisplayInfoText("Brush Setup");
+            }
         }
 
         if (g_activeHud != HUD_QUICK)
             quickPanelMouseMode = 0;
 
 
-        if (IsKeyPressed(KEY_TWO)) state->mode = eSmudge;
+        if (IsKeyPressed(KEY_TWO)) {
+            state->mode = eBrush;
+            HudSetActive(state, HUD_NONE);
+            InfoText_Show("Painting");
+        }
         if (IsKeyPressed(KEY_SIX)) state->mode = ePolyStripe;
-        if (IsKeyPressed(KEY_FOUR)) state->mode = eDistort;
         if (IsKeyPressed(KEY_FIVE)) state->mode = eContrast;
 
         // Toggle framing mode (C key — "crop" framing, not with Ctrl)
@@ -565,6 +546,30 @@ void App_FileSnap(void) {
     }
 }
 
+void App_FileExportPNG(void) {
+    /* GPU composite + dither → 8-bit PNG, fire-and-forget (no path change) */
+    Image flat = ViewportManager_CompositeWithDither();
+    char path[1024];
+    if (g_currentFilePath[0]) {
+        // Save alongside current file with .png extension
+        const char* dir = GetDirectoryPath(g_currentFilePath);
+        const char* base = GetFileNameWithoutExt(g_currentFilePath);
+        snprintf(path, sizeof(path), "%s/%s.png", dir, base);
+    } else {
+        // Fallback: timestamped export in Snaps/
+        time_t now = time(NULL);
+        struct tm* t = localtime(&now);
+        const char* appDir = GetApplicationDirectory();
+        snprintf(path, sizeof(path), "%sSnaps/export_%04d%02d%02d_%02d%02d%02d.png",
+                 appDir,
+                 t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
+                 t->tm_hour, t->tm_min, t->tm_sec);
+    }
+    ExportImage(flat, path);
+    UnloadImage(flat);
+    DisplayInfoText(path);
+}
+
 /* ── App_Init ──────────────────────────────────────────────────────────── */
 
 void App_Init(AppState* state) {
@@ -574,6 +579,7 @@ void App_Init(AppState* state) {
     SetTraceLogLevel(LOG_WARNING);
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "RePaint");
     MaximizeWindow();
+    GPU_Init();
     DrawSplash("Initializing...");
 
     if (FileExists("resources/icon.png")) {
@@ -648,6 +654,8 @@ void App_Init(AppState* state) {
     g_moduleStack.Add(std::unique_ptr<IModule>(new LayerXformModule(state)), vpRect);
     g_moduleStack.Add(std::unique_ptr<IModule>(new CanvasXformModule(state)), vpRect);
     g_moduleStack.Add(std::unique_ptr<IModule>(new NNHudModule(state)), vpRect);
+    g_moduleStack.Add(std::unique_ptr<IModule>(new SDHudModule(state)), vpRect);
+    g_moduleStack.Add(std::unique_ptr<IModule>(new PaintHudModule(state)), vpRect);
     g_moduleStack.Add(std::unique_ptr<IModule>(new RightPanelModule(state)),
         DrawRect{(float)(sw - RIGHT_PANEL_WIDTH), 0, (float)RIGHT_PANEL_WIDTH, (float)sh});
     g_moduleStack.Add(std::unique_ptr<IModule>(new LeftPanelModule(state)),
@@ -710,6 +718,25 @@ void App_Init(AppState* state) {
 
     /* Load default brush preset */
     Preset_ApplyDefault(state);
+
+    // Restore last session if app_closed.re.png exists (runs after defaults so BParams persist)
+    char closePath[1024];
+    snprintf(closePath, sizeof(closePath), "%sSnaps/app_closed.re.png", GetApplicationDirectory());
+    FILE* f = fopen(closePath, "rb");
+    if (f) {
+        fclose(f);
+        Compositor_Shutdown(); Compositor_Init(); LayerStack_Shutdown(); LayerStack_Init();
+        if (LoadRePaint(closePath, &state->doc, state)) {
+            state->activeLayer = 0;
+            SyncCanvasFromDoc(&state->doc, NULL, NULL);
+            state->camera.target = Vector2{0, 0};
+            if (g_recorder) g_recorder->Reset(DocOutPxW(&state->doc), DocOutPxH(&state->doc));
+            layersDirty = true;
+        } else {
+            Compositor_Shutdown(); Compositor_Init(); LayerStack_Shutdown(); LayerStack_Init();
+            app_new_document(1024, 768, WHITE);
+        }
+    }
 }
 
 /* ── App_Draw ──────────────────────────────────────────────────────────── */
@@ -735,6 +762,7 @@ void App_Draw(AppState* state) {
     g_moduleStack.SetRect("LayerXform",  vpRect);
     g_moduleStack.SetRect("CanvasXform", vpRect);
     g_moduleStack.SetRect("NNHud",       vpRect);
+    g_moduleStack.SetRect("SDHud",       vpRect);
     g_moduleStack.SetRect("RightPanel",  rightRect);
 
     BeginDrawing();
@@ -950,7 +978,7 @@ void App_Draw(AppState* state) {
         }
     }
 
-    DrawNotification();
+    InfoText_Draw();
 
     EndDrawing();
 
@@ -961,6 +989,32 @@ void App_Draw(AppState* state) {
 /* ── App_Close ─────────────────────────────────────────────────────────── */
 
 void App_Close(AppState* state) {
+    // Auto-save last state to Snaps/app_closed.re.png
+    const char* ad = GetApplicationDirectory();
+    char closeTmp[1024], closePath[1024];
+    snprintf(closeTmp, sizeof(closeTmp), "%sSnaps/app_closed.tmp.re.png", ad);
+    snprintf(closePath, sizeof(closePath), "%sSnaps/app_closed.re.png", ad);
+    if (SaveRePaint(closeTmp, &state->doc, state)) {
+        // Archive previous session file if it exists
+        FILE* f = fopen(closePath, "rb");
+        if (f) {
+            fclose(f);
+            time_t now = time(NULL);
+            struct tm* t = localtime(&now);
+            char archivePath[1024];
+            snprintf(archivePath, sizeof(archivePath), "%sSnaps/app_closed_%04d%02d%02d_%02d%02d%02d.re.png",
+                     ad, t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
+                     t->tm_hour, t->tm_min, t->tm_sec);
+            rename(closePath, archivePath);
+        }
+        rename(closeTmp, closePath);
+    }
+    if (g_recorder) {
+        char rpPath[1024];
+        snprintf(rpPath, sizeof(rpPath), "%sSnaps/app_closed.re.play", ad);
+        g_recorder->Save(rpPath);
+    }
+
     networkBroker.SaveConfig();
     networkBroker.Disconnect();
     ViewportManager_Shutdown();

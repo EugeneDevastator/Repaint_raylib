@@ -84,6 +84,7 @@ bool CanvasXformModule::HandleInput(InputState& input, const DrawRect& rect) {
 
     bool changed = TransformHandle_Input(&state->doc.window, &g_cropCursor,
         false,  // scaleProportionalToCursor=false → corner-extent (crop)
+        false,  // lockAspect=false
         &state->camera, input.MousePos(),
         input.MouseDown(MOUSE_LEFT_BUTTON),
         input.MousePressed(MOUSE_LEFT_BUTTON),

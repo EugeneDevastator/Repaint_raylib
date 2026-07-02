@@ -11,7 +11,6 @@
 static int g_texPanelDragMode = 0;
 
 void TexPanelModule::DrawGL(const DrawRect& rect) {
-    (void)rect;
     if (g_activeHud != HUD_QUICK) return;
     if (g_texPanelAreaY <= 0) return;
 
@@ -19,13 +18,19 @@ void TexPanelModule::DrawGL(const DrawRect& rect) {
     TexSlotID activeId = state->brushTexSlot;
     TexSlot* activeTs = TM_Get(activeId);
 
-    Rectangle vp = viewport.bounds;
-    float thirdW = vp.width / 3.0f;
-    float pvSz = 192.0f;
-    float pvX = vp.x + thirdW + (thirdW - pvSz) * 0.5f;
-    float pvY = (float)g_texPanelAreaY + 110.0f;
+    float gap = 4.0f;
+    float pW = (rect.w - gap * 2.0f) / 3.0f;
+    float bgY = (float)g_texPanelAreaY;
+    float bgH = rect.y + rect.h - bgY;
 
-    // ── Draw the full texture scaled to fit the preview ─────────────
+    // ── Background rect for selectors + sliders + preview area ──
+    DrawRectangleRec(Rectangle{rect.x, bgY, pW * 2.0f, bgH}, Color{245, 245, 245, 255});
+
+    // ── Texture preview (1.2× bigger) ──
+    float pvSz = 230.0f;
+    float pvX = rect.x + pW + gap + (pW - pvSz) * 0.5f;
+    float pvY = bgY + 110.0f;
+
     if (activeTs && activeTs->rt.id > 0) {
         float texW = (float)activeTs->w, texH = (float)activeTs->h;
         float scale = fminf(pvSz / texW, pvSz / texH);
@@ -121,82 +126,75 @@ void TexPanelModule::DrawGUI(const DrawRect& rect) {
     float thirdW = rect.w / 3.0f;
     float yPos = (float)g_texPanelAreaY;
 
-    // ── Left 1/3: radio groups ──
+    // ── Three-column layout with light gray backgrounds (matching layer panel) ──
     int mm = state->currentBrush.Realb.useTexLumAsAlpha ? 0 : 1;
     int tnm = state->currentBrush.Realb.texNoisemode;
     int cm = state->currentBrush.Realb.texColorMode;
 
-    float colW = (float)uiPanelWidth * 0.6f;
+    static const char* items0[] = {"lum is alpha", "tex.a is alpha"};
+    static const char* items2[] = {"Stencil", "Random", "Const"};
+    static const char* items3[] = {"brush RGB", "texture RGB", "mul brush*tex", "lum-color"};
+    static const char* items4[] = {"Brush", "Global"};
+
+    float gap = 4.0f;
+    float pW = (rect.w - gap * 2.0f) / 3.0f;
+    ImVec4 bg(0.96f, 0.96f, 0.96f, 1.0f);
 
     rlSetBlendMode(RL_BLEND_ALPHA);
-    ImGui::SetCursorScreenPos(ImVec2(rect.x, yPos));
-    ImGui::BeginChild("##texLeft", ImVec2(thirdW, 0), false);
+
+    // ── Left area: selectors in a transparent child (constrained to 1/3) ──
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0, 0, 0, 0));
+    ImGui::SetCursorScreenPos(ImVec2(rect.x + 6, yPos + 6));
+    ImGui::BeginChild("##texLeft", ImVec2(pW - 12.0f, 0), false);
     {
-        ImGui::SetCursorPos(ImVec2(10, 10));
-        float x = 10;
+        float sw = (ImGui::GetContentRegionAvail().x - 4.0f) / 3.0f;
 
-        static const char* items0[] = {"lum is alpha", "tex.a is alpha"};
-        static const char* items2[] = {"Stencil", "Random", "Const"};
-        static const char* items3[] = {"brush RGB", "texture RGB", "mul brush*tex", "lum-color"};
-
-        // Row 1: Mask Mode | Color | Sample Mode
-        ImGui::SetCursorPos(ImVec2(x, 10));
-        ImGui::BeginChild("##rg0", ImVec2(colW, 0), false);
-        { int v = mm; DrawRadioGroup("Mask Mode", &v, items0, 2); mm = v; }
+        ImGui::BeginChild("##h0", ImVec2(sw, 0), false);
+        DrawSelector("Mask Mode", &mm, items0, 2);
         ImGui::EndChild();
-        x += colW + 2.0f;
+        ImGui::SameLine(0, 2);
 
-        ImGui::SetCursorPos(ImVec2(x, 10));
-        ImGui::BeginChild("##rg3", ImVec2(colW, 0), false);
-        { int v = cm; DrawRadioGroup("Color", &v, items3, 4); cm = v; }
+        ImGui::BeginChild("##h1", ImVec2(sw, 0), false);
+        DrawSelector("Color", &cm, items3, 4);
         ImGui::EndChild();
-        x += colW + 2.0f;
+        ImGui::SameLine(0, 2);
 
-        ImGui::SetCursorPos(ImVec2(x, 10));
-        ImGui::BeginChild("##rg2", ImVec2(colW, 0), false);
-        { int v = tnm; DrawRadioGroup("Sample Mode", &v, items2, 3); tnm = v; }
+        ImGui::BeginChild("##h2", ImVec2(sw, 0), false);
+        DrawSelector("Sample Mode", &tnm, items2, 3);
         ImGui::EndChild();
 
-        // Row 2: Tex Scale
-        ImGui::SetCursorPos(ImVec2(10, 120));
-        ImGui::BeginChild("##rg4", ImVec2(colW, 0), false);
-        { static const char* items4[] = {"Brush", "Global"};
-          int v = g_texScaleMode; DrawRadioGroup("Tex Scale", &v, items4, 2); g_texScaleMode = v; }
-        ImGui::EndChild();
+        ImGui::SetCursorPos(ImVec2(0, 150));
+        DrawSelector("Tex Scale", &g_texScaleMode, items4, 2);
     }
     ImGui::EndChild();
+    ImGui::PopStyleColor();
 
-    state->currentBrush.Realb.useTexLumAsAlpha = (mm == 0);
-    state->currentBrush.Realb.texNoisemode = tnm;
-    state->currentBrush.Realb.texColorMode = cm;
-
-    // ── Middle 1/3: texture sliders ──
-    rlSetBlendMode(RL_BLEND_ALPHA);
-    ImGui::SetCursorScreenPos(ImVec2(rect.x + thirdW, yPos));
-    ImGui::BeginChild("##texMiddle", ImVec2(thirdW, 0), false);
-    ImGui::SetCursorPos(ImVec2(10, 10));
-    DrawSlider(&bpTexScale, 0);
-    rlSetBlendMode(RL_BLEND_ALPHA);
-    DrawSlider(&bpTexFeather, 0);
-    rlSetBlendMode(RL_BLEND_ALPHA);
-    DrawSlider(&bpTexThresh, 0);
-
+    // ── Center area: texture sliders above preview, transparent child ──
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0, 0, 0, 0));
+    ImGui::SetCursorScreenPos(ImVec2(rect.x + pW + gap + 6, yPos + 6));
+    ImGui::BeginChild("##texCtr", ImVec2(pW - 12.0f, 0), false);
+    {
+        DrawSlider(&bpTexScale, 0);
+        rlSetBlendMode(RL_BLEND_ALPHA);
+        DrawSlider(&bpTexFeather, 0);
+        rlSetBlendMode(RL_BLEND_ALPHA);
+        DrawSlider(&bpTexThresh, 0);
+        rlSetBlendMode(RL_BLEND_ALPHA);
+    }
     ImGui::EndChild();
+    ImGui::PopStyleColor();
 
-    // ── Right 1/3: texture panel (selection only, no buttons) ──
-    rlSetBlendMode(RL_BLEND_ALPHA);
-    ImGui::SetCursorScreenPos(ImVec2(rect.x + 2.0f * thirdW, yPos));
-    ImGui::BeginChild("##texPanel", ImVec2(thirdW, 0), false);
-
-    float listH = ImGui::GetContentRegionAvail().y;
-    if (listH < 20) listH = 20;
+    // ── Right panel: texture grid (1/3 width) ──
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, bg);
+    ImGui::SetCursorScreenPos(ImVec2(rect.x + (pW + gap) * 2.0f, yPos));
+    ImGui::BeginChild("##texGridPanel", ImVec2(pW, 0), ImGuiChildFlags_Borders);
+    float gridH = ImGui::GetContentRegionAvail().y;
+    if (gridH < 20) gridH = 20;
     int texSz = 72, texGap = 1;
     int texCols = (int)(ImGui::GetContentRegionAvail().x) / (texSz + texGap);
     if (texCols < 2) texCols = 2;
-
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(1, 1, 1, 1));
-    ImGui::BeginChild("##texGrid", ImVec2(0, listH), ImGuiChildFlags_Borders);
-
+    ImGui::BeginChild("##texGrid", ImVec2(0, gridH), ImGuiChildFlags_Borders);
+    {
     // "No Tex" button
     ImGui::PushID("texNone");
     bool isNoTex = !TM_IsValid(state->brushTexSlot);
@@ -226,8 +224,13 @@ void TexPanelModule::DrawGUI(const DrawRect& rect) {
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", ts->name);
         ImGui::PopID();
     }
-
+    }
     ImGui::EndChild();
+
+    state->currentBrush.Realb.useTexLumAsAlpha = (mm == 0);
+    state->currentBrush.Realb.texNoisemode = tnm;
+    state->currentBrush.Realb.texColorMode = cm;
+
     ImGui::PopStyleColor();
     ImGui::EndChild();
 }

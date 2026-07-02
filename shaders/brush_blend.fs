@@ -112,15 +112,18 @@ void main() {
     finalAlpha *= opacity;
     if (finalAlpha < 0.000000001) { finalColor = canvas; return; }
 
-    //if (eraseMode == 1) {
-    //    finalColor = vec4(canvas.rgb, canvas.a * (1.0 - finalAlpha));
-    //    return;
-    //} else if (eraseMode == 2) {
-    //    float mask = canvas.a * finalAlpha;
-    //    vec3 erasedRGB = mix(canvas.rgb, brushFinal, mask);
-    //    finalColor = vec4(erasedRGB, canvas.a * (1.0 - finalAlpha * 0.5));
-    //    return;
-    //}
+    // ── Eraser toolbar modes ─────────────────────────────────────────
+    if (eraseMode == 1) {
+        // Alpha erase: brush luminance directly paints alpha
+        float brushLum = dot(brushFinal, vec3(0.299, 0.587, 0.114));
+        float newA = mix(canvas.a, brushLum, finalAlpha);
+        finalColor = vec4(canvas.rgb, newA);
+        return;
+    } else if (eraseMode == 2) {
+        finalColor = applyBlend(MODE_ERASECLR, canvas, brushFinal, finalAlpha);
+        if (preserveop > 0.5) finalColor.a = canvas.a;
+        return;
+    }
 
     float cloneOpacity = smudgeStrength;
     if (cloneOpacity > 0.000001) {

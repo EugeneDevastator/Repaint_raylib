@@ -2,12 +2,12 @@
 #include "imgui.h"
 #include <stdio.h>
 
-#define FILE_BTN_N 7
-static const char* fileBtnLabels[FILE_BTN_N] = {"New","Open","SaveAs","Save","Reload","Snap","Pin"};
+#define FILE_BTN_N 8
+static const char* fileBtnLabels[FILE_BTN_N] = {"New","Open","SaveAs","Save","Reload","Snap","Export","Pin"};
 static Texture2D fileBtnTex[FILE_BTN_N];
 
 void FilePanel_Init(void) {
-    const char* names[FILE_BTN_N] = {"btnnew","btnopen","btnsaveas","btnsave","btnreload","btnsnap","btnpin"};
+    const char* names[FILE_BTN_N] = {"btnnew","btnopen","btnsaveas","btnsave","btnreload","btnsnap","btnexport","btnpin"};
     for (int i = 0; i < FILE_BTN_N; i++) {
         char path[128];
         sprintf(path, "resources/%s.png", names[i]);
@@ -29,7 +29,7 @@ void FilePanel_Shutdown(void) {
 }
 
 void FilePanel_Draw(AppState* state, Rectangle vp) {
-    ImGui::SetNextWindowPos(ImVec2(vp.x + 8, vp.y + 8));
+    ImGui::SetNextWindowPos(ImVec2(vp.x + 8, vp.y + 53));
     ImGui::SetNextWindowSize(ImVec2(FILE_BTN_N * 48 + (FILE_BTN_N - 1) * 4 + 16, 52));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
@@ -51,6 +51,7 @@ void FilePanel_Draw(AppState* state, Rectangle vp) {
                 else if (i == 3) App_FileSave();
                 else if (i == 4) App_FileReload();
                 else if (i == 5) App_FileSnap();
+                else if (i == 6) App_FileExportPNG();
             }
         } else {
             if (ImGui::Button(fileBtnLabels[i], ImVec2(50, 40))) {
@@ -60,6 +61,7 @@ void FilePanel_Draw(AppState* state, Rectangle vp) {
                 else if (i == 3) App_FileSave();
                 else if (i == 4) App_FileReload();
                 else if (i == 5) App_FileSnap();
+                else if (i == 6) App_FileExportPNG();
             }
         }
 

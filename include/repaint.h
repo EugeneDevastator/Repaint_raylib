@@ -221,6 +221,7 @@ void BParam_Init(BParam* bp, int id, const char* name, float outMin, float outMa
 void BParam_SetIcon(BParam* bp, const char* filename);
 void LoadPenIcons(void); void UnloadPenIcons(void);
 Texture2D GetPenModeIcon(int mode);
+extern Texture2D penModeTex[PEN_MODE_COUNT];
 float BParam_GetValue(BParam* bp);
 void BParam_SetValue(BParam* bp, float val);
 void BParam_SnapRunState(BParam* bp);
@@ -236,6 +237,7 @@ extern Color g_colorPickGrid[25];
 extern int g_colorPickScreenX, g_colorPickScreenY;
 extern Rectangle g_colorPickVpBounds;
 extern float g_pivotCursorX, g_pivotCursorY;
+extern bool g_lockAspect;
 extern bool g_seamlessPaint;
 extern bool g_seamlessPreview;
 extern bool g_pixelPerfect;
@@ -246,7 +248,9 @@ extern int g_texPanelAreaY; // y-coordinate for the texture panel in the Quick H
 #define HUD_LAYER_XFORM 2
 #define HUD_CANVAS_XFORM 3
 #define HUD_NN 4
+#define HUD_SD 5
 extern int g_activeHud;
+#include "info_text.h"
 
 #define QP_SLIDER_W 28
 #define QP_SLIDER_H 256
@@ -283,6 +287,9 @@ void Changelog_Init(void); void Changelog_Toggle(void); void Changelog_Draw(void
 struct ImDrawList; struct ImVec2;
 void DrawSlider(BParam* bp, int orient, float thick=0, float len=0);
 void DrawRadioGroup(const char* label, int* current, const char* items[], int itemCount);
+bool DrawSelector(const char* label, int* current, const char* names[], int count, int columns=1, float height=0, const Texture2D* icons=nullptr);
+void DrawSingleSlider(const char* label, float* val, float vmin, float vmax, const char* display_fmt);
+void DrawSingleSliderInt(const char* label, int* val, int vmin, int vmax, const char* display_fmt);
 extern const char* g_blendModeNames[];
 extern const int   g_blendModeCount;
 
@@ -324,7 +331,7 @@ extern Texture2D g_activeBrushTex, g_defaultBrushTex;
 void UserTexture_Init(void); void UserTexture_Shutdown(void); void UserTexture_Update(AppState* state);
 
 void App_FileNew(void); void App_FileOpen(void); void App_FileSave(void);
-void App_FileSaveAs(void); void App_FileReload(void); void App_FileSnap(void);
+void App_FileSaveAs(void); void App_FileReload(void); void App_FileSnap(void); void App_FileExportPNG(void);
 
 RenderTexture2D Load16BitRT(int width, int height);
 
@@ -401,6 +408,23 @@ struct NNHudModule : IModule {
     void DrawGL(const DrawRect& rect) override;
     void DrawGUI(const DrawRect& rect) override;
     void OnExit() override;
+};
+
+struct SDHudModule : IModule {
+    AppState* state;
+    explicit SDHudModule(AppState* s) : state(s) {}
+    const char* Name() const override { return "SDHud"; }
+    bool HandleInput(InputState& input, const DrawRect& rect) override;
+    void DrawGL(const DrawRect& rect) override;
+    void DrawGUI(const DrawRect& rect) override;
+};
+
+struct PaintHudModule : IModule {
+    AppState* state;
+    explicit PaintHudModule(AppState* s) : state(s) {}
+    const char* Name() const override { return "PaintHud"; }
+    bool HandleInput(InputState& input, const DrawRect& rect) override;
+    void DrawGL(const DrawRect& rect) override;
 };
 
 void NNHud_Shutdown(void);

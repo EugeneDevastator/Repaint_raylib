@@ -78,6 +78,7 @@ FetchContent_MakeAvailable(rlimgui)
 set(SOURCES
     src/main.cpp
     src/app.cpp
+    src/gpu_preference.cpp
     src/modulators.cpp
     src/brush_preset.cpp
     src/compositor.cpp
@@ -91,6 +92,7 @@ set(SOURCES
     src/usertextures.cpp
     # ── ui ───────────────────────────────────────────────────────────
     src/ui/ui_controls.cpp
+    src/ui/info_text.cpp
     src/ui/ui_color.cpp
     src/ui/ui_quickpanel.cpp
     src/ui/ui_brushgizmo.cpp
@@ -102,6 +104,8 @@ set(SOURCES
     src/ui/ui_changelog.cpp
     src/ui/ui_quickhud.cpp
     src/ui/ui_nnhud.cpp
+    src/ui/ui_sdhud.cpp
+    src/ui/ui_painthud.cpp
     src/ui/ui_layerxform.cpp
     src/ui/ui_canvasxform.cpp
     src/ui/transform_handle.cpp
@@ -112,6 +116,8 @@ set(SOURCES
     src/user_content_receiver.cpp
     # ── http ─────────────────────────────────────────────────────────
     src/http/matte_client.cpp
+    src/http/sd_client.cpp
+    src/http/upscale_client.cpp
     # ── sensors ───────────────────────────────────────────────────────
     src/sensors/tablet.cpp
     src/sensors/input_filter.cpp
@@ -144,10 +150,27 @@ set(SOURCES
     ${rlimgui_SOURCE_DIR}/rlImGui.cpp
 )
 
+# Generate icon.ico from icon.png at configure time
+set(PNG_SRC "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon.png")
+set(ICO_DST "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon.ico")
+if(EXISTS ${PNG_SRC} AND NOT EXISTS ${ICO_DST})
+    find_program(PYTHON python3)
+    if(NOT PYTHON)
+        find_program(PYTHON python)
+    endif()
+    if(PYTHON)
+        execute_process(COMMAND ${PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/tools/png2ico.py" ${PNG_SRC} ${ICO_DST}
+            OUTPUT_QUIET ERROR_QUIET)
+    endif()
+endif()
+
 add_executable(repaint ${SOURCES})
 
 if(WIN32)
-    target_sources(repaint PRIVATE resources/icon.rc src/sensors/tablet_win.cpp src/sensors/platform_utils_win.cpp src/sensors/clipboard_win.cpp)
+    if(EXISTS ${ICO_DST})
+        target_sources(repaint PRIVATE resources/icon.rc)
+    endif()
+    target_sources(repaint PRIVATE src/sensors/tablet_win.cpp src/sensors/platform_utils_win.cpp src/sensors/clipboard_win.cpp)
     target_compile_definitions(repaint PRIVATE WINVER=0x0602 _WIN32_WINNT=0x0602)
     target_link_libraries(repaint PRIVATE opengl32 gdi32 winmm user32)
     if(MINGW)
@@ -159,6 +182,7 @@ endif()
 
 target_include_directories(repaint PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ui
     ${CMAKE_CURRENT_SOURCE_DIR}/src/http
     ${CMAKE_CURRENT_SOURCE_DIR}/dialog
     ${CMAKE_CURRENT_SOURCE_DIR}/raylib_utils
@@ -193,85 +217,8 @@ endif()
 
 target_link_libraries(tablet-calibrator PRIVATE raylib)
 
-# ── nnserver (standalone matting inference server) ─────────────────────────────
-set(NNSERVER_VERSION  "1.21.0" CACHE STRING "ONNX Runtime version")
-set(NNSERVER_SOURCES
-    NNModelServer/nnserver.cpp
-    src/network/sock_platform.cpp
-)
-
-# stb_image headers (single-file, public domain) — download only what we need
-set(STB_DIR "${CMAKE_BINARY_DIR}/stb")
-if(NOT EXISTS "${STB_DIR}/stb_image.h")
-    file(DOWNLOAD
-        "https://raw.githubusercontent.com/nothings/stb/master/stb_image.h"
-        "${STB_DIR}/stb_image.h")
-endif()
-if(NOT EXISTS "${STB_DIR}/stb_image_write.h")
-    file(DOWNLOAD
-        "https://raw.githubusercontent.com/nothings/stb/master/stb_image_write.h"
-        "${STB_DIR}/stb_image_write.h")
-endif()
-
-# ONNX Runtime for Windows (prebuilt binaries)
-if(WIN32)
-    set(ORT_ROOT "${CMAKE_BINARY_DIR}/onnxruntime" CACHE PATH "ONNX Runtime directory")
-    set(ORT_INCLUDE_DIR "${ORT_ROOT}/include")
-    set(ORT_LIB_DIR     "${ORT_ROOT}/lib")
-    set(ORT_BIN_DIR     "${ORT_LIB_DIR}")  # DLL lives in lib/ in this release
-
-    if(NOT EXISTS "${ORT_INCLUDE_DIR}/onnxruntime_c_api.h")
-        message(STATUS "Downloading ONNX Runtime ${NNSERVER_VERSION}...")
-        set(_ort_url "https://github.com/microsoft/onnxruntime/releases/download/v${NNSERVER_VERSION}/onnxruntime-win-x64-${NNSERVER_VERSION}.zip")
-        set(_ort_zip "${CMAKE_BINARY_DIR}/onnxruntime.zip")
-        file(DOWNLOAD "${_ort_url}" "${_ort_zip}" SHOW_PROGRESS)
-        file(ARCHIVE_EXTRACT INPUT "${_ort_zip}" DESTINATION "${ORT_ROOT}-tmp")
-        file(GLOB _ort_dirs "${ORT_ROOT}-tmp/*")
-        list(LENGTH _ort_dirs _ort_n)
-        if(_ort_n EQUAL 1)
-            file(RENAME "${_ort_dirs}" "${ORT_ROOT}")
-        else()
-            file(RENAME "${ORT_ROOT}-tmp" "${ORT_ROOT}")
-        endif()
-        file(REMOVE "${_ort_zip}")
-        file(REMOVE_RECURSE "${ORT_ROOT}-tmp")
-    endif()
-
-    # Patch ORT header for MinGW compatibility
-    if(MINGW)
-        set(_ort_header "${ORT_INCLUDE_DIR}/onnxruntime_c_api.h")
-        file(READ "${_ort_header}" _ort_hdr)
-        string(REPLACE "#define ORT_API_CALL _stdcall" "#define ORT_API_CALL" _ort_hdr "${_ort_hdr}")
-        string(REPLACE "#define NO_EXCEPTION noexcept" "#define NO_EXCEPTION" _ort_hdr "${_ort_hdr}")
-        file(WRITE "${_ort_header}" "${_ort_hdr}")
-    endif()
-endif()
-
-if(WIN32)
-    add_executable(nnserver ${NNSERVER_SOURCES})
-
-    target_include_directories(nnserver PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-        "${STB_DIR}"
-        "${ORT_INCLUDE_DIR}")
-
-    target_link_directories(nnserver PRIVATE "${ORT_LIB_DIR}")
-    target_link_libraries(nnserver PRIVATE onnxruntime ws2_32 winhttp)
-
-    # Copy ONNX Runtime DLL to output
-    add_custom_command(TARGET nnserver POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${ORT_BIN_DIR}/onnxruntime.dll"
-            "$<TARGET_FILE_DIR:nnserver>/"
-        COMMENT "Copying onnxruntime.dll")
-
-    # Copy model URL file alongside the exe
-    add_custom_command(TARGET nnserver POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${CMAKE_SOURCE_DIR}/NNModelServer/model_url.txt"
-            "$<TARGET_FILE_DIR:nnserver>/model_url.txt"
-        COMMENT "Copying model_url.txt")
-endif()
+# ── nnserver ──────────────────────────────────────────────────────────────────
+add_subdirectory(NNModelServer)
 
 # ── platform linking ──────────────────────────────────────────────────────────
 if(UNIX AND NOT APPLE)

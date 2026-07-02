@@ -1,5 +1,6 @@
 #include "repaint.h"
 #include "imgui.h"
+#include "imgui_internal.h"
 
 // ── Shared blend mode names ──────────────────────────────────────────
 const char* g_blendModeNames[] = {
@@ -9,7 +10,7 @@ const char* g_blendModeNames[] = {
 };
 extern const int g_blendModeCount = 17;
 
-static Texture2D penModeTex[PEN_MODE_COUNT];
+Texture2D penModeTex[PEN_MODE_COUNT];
 static const char* PenIconNames[PEN_MODE_COUNT] = {
     "tct_none", "tct_pressure", "tct_vel", "tct_dir", "tct_rot", "tct_tilt",
     "tct_relang", "tct_htilt", "tct_vtilt", "tct_lenpx", "tct_acc",
@@ -29,7 +30,7 @@ void DualSlider_Init(DualSlider* slider) {
     slider->Soff = 2;
     slider->sliderrad = 2;
     slider->colorMode = -1;
-    slider->gradStart = Color{0, 0, 0, 255};
+    slider->gradStart = Color{200, 200, 200, 255};
     slider->gradEnd = Color{255, 255, 255, 255};
     slider->shade = Color{144, 144, 144, 255};
     slider->hlite = Color{250, 250, 250, 255};
@@ -129,6 +130,53 @@ void BParam_SnapRunState(BParam* bp) {
     bp->run.clipmaxF = bp->user.clipmaxF;
 }
 
+bool DrawSelector(const char* label, int* current, const char* names[], int count, int columns, float height, const Texture2D* icons) {
+    if (label) ImGui::Text("%s", label);
+    int prev = *current;
+    if (count < 1) return false;
+    if (*current < 0 || *current >= count) *current = 0;
+
+    if (columns < 1) columns = 1;
+    int rows = (count + columns - 1) / columns;
+    float padTopBot  = 1.0f;
+    float listH = rows * ImGui::GetFontSize();
+
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(1, 1, 1, 1));
+    ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(0.50f, 0.70f, 0.95f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.88f, 0.93f, 0.98f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0.80f, 0.90f, 0.98f, 1.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, ImVec2(0.5f, 0.5f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, padTopBot));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+    ImGui::BeginChild("##sel", ImVec2(0, listH),
+        ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    bool mouseDown = ImGui::IsMouseDown(0);
+    float itemW = ImGui::GetContentRegionAvail().x / columns;
+    for (int row = 0; row < rows; row++) {
+        for (int col = 0; col < columns; col++) {
+            int i = row * columns + col;
+            if (i >= count) break;
+            if (col > 0) ImGui::SameLine(0, 0);
+            ImGui::PushID(i);
+            ImGui::PushItemWidth(itemW);
+            if (icons && icons[i].id > 0) {
+                ImGui::Image((ImTextureID)(intptr_t)icons[i].id, ImVec2(16, 16));
+                ImGui::SameLine();
+            }
+            ImGui::Selectable(names[i], *current == i, 0, ImVec2(itemW, 0));
+            if (mouseDown && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem))
+                *current = i;
+            ImGui::PopItemWidth();
+            ImGui::PopID();
+        }
+    }
+    ImGui::EndChild();
+    ImGui::PopStyleVar(4);
+    ImGui::PopStyleColor(4);
+    return *current != prev;
+}
+
 void DrawRadioGroup(const char* label, int* current, const char* items[], int itemCount) {
     if (label) ImGui::Text("%s", label);
 
@@ -152,6 +200,26 @@ void DrawRadioGroup(const char* label, int* current, const char* items[], int it
         ImGui::PopStyleColor(3);
         ImGui::PopID();
     }
+}
+
+void DrawSingleSlider(const char* label, float* val, float vmin, float vmax, const char* display_fmt) {
+    char buf[64];
+    snprintf(buf, sizeof(buf), "##%s", label ? label : "sl");
+    ImGui::SetNextItemWidth(-1);
+    if (label)
+        ImGui::SliderFloat(buf, val, vmin, vmax, display_fmt);
+    else
+        ImGui::SliderFloat(buf, val, vmin, vmax, display_fmt);
+}
+
+void DrawSingleSliderInt(const char* label, int* val, int vmin, int vmax, const char* display_fmt) {
+    char buf[64];
+    snprintf(buf, sizeof(buf), "##%s", label ? label : "sl");
+    ImGui::SetNextItemWidth(-1);
+    if (label)
+        ImGui::SliderInt(buf, val, vmin, vmax, display_fmt);
+    else
+        ImGui::SliderInt(buf, val, vmin, vmax, display_fmt);
 }
 
 

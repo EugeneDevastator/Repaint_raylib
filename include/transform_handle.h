@@ -20,10 +20,12 @@
 // cursor      : in/out — world-space rotation center / visual handle.
 // scaleProportionalToCursor : false = corner-extent scale (crop),
 //                              true  = scale proportional to cursor (layer)
+// lockAspect  : if true, locks the width/height ratio during resize
 // Returns true if xform was modified.
 bool TransformHandle_Input(RectXform* xform,
                            Vector2* cursor,
                            bool scaleProportionalToCursor,
+                           bool lockAspect,
                            const Camera2D* camera,
                            Vector2 mousePos,
                            bool leftDown,
@@ -36,5 +38,15 @@ bool TransformHandle_Input(RectXform* xform,
 void TransformHandle_Draw(const RectXform* xform,
                           Vector2 cursor,
                           const Camera2D* camera);
+
+// ── Reset internal drag state ───────────────────────────────────────
+void TransformHandle_ResetState(void);
+
+// ── Repeat last applied transform around a world-space pivot ───────
+void TransformHandle_RepeatLast(RectXform* xform, Vector2 pivot);
+
+// ── Get / set the stored transform matrix (last repeat) ────────────
+void  TransformHandle_GetStore(float mat[6]);
+void  TransformHandle_SetStore(const float mat[6]);
 
 #endif

@@ -170,7 +170,9 @@ static bool IsRTShared(int idx) {
     return false;
 }
 
-void ViewportManager_MergeDown(int idx) {
+// Shared blit: composites top layer onto layer below using top's properties.
+// Does NOT delete the top layer — caller decides.
+void ViewportManager_BlitLayerToLayer(int idx) {
     if(idx<=0||idx>=LayerStack_Count()) return;
     sLayerProps* top = LayerStack_GetProps(idx);
     sLayerProps* bot = LayerStack_GetProps(idx-1);
@@ -181,10 +183,16 @@ void ViewportManager_MergeDown(int idx) {
     CompositorBlendParams bp;
     bp.opacity=top->op; bp.blendMode=top->blendmode;
     bp.threshold=top->threshold; bp.feather=top->feather;
-    bp.seamless=false;
+    bp.seamless=top->seamless;
 
     Compositor_ApplyLayerToLayer(topRT.texture, &top->xform, &bp, botRT, &bot->xform);
+    ViewportManager_SetDirty();
+}
 
+void ViewportManager_MergeDown(int idx) {
+    if(idx<=0||idx>=LayerStack_Count()) return;
+    ViewportManager_BlitLayerToLayer(idx);
+    sLayerProps* top = LayerStack_GetProps(idx);
     TexSlotID sidTop = LayerStack_GetSlotID(idx);
     TexSlotID sidBot = LayerStack_GetSlotID(idx-1);
     LayerStack_DeleteLayer(idx);
@@ -196,28 +204,8 @@ void ViewportManager_MergeDown(int idx) {
 }
 
 void ViewportManager_MergeDownSeamless(int idx) {
-    if(idx<=0||idx>=LayerStack_Count()) return;
-    sLayerProps* top = LayerStack_GetProps(idx);
-    sLayerProps* bot = LayerStack_GetProps(idx-1);
-    RenderTexture2D topRT = LayerStack_GetRT(idx);
-    RenderTexture2D botRT = LayerStack_GetRT(idx-1);
-    if(topRT.id==0||botRT.id==0) return;
-
-    CompositorBlendParams bp;
-    bp.opacity=top->op; bp.blendMode=top->blendmode;
-    bp.threshold=top->threshold; bp.feather=top->feather;
-    bp.seamless=true;
-
-    Compositor_ApplyLayerToLayer(topRT.texture, &top->xform, &bp, botRT, &bot->xform);
-
-    TexSlotID sidTop = LayerStack_GetSlotID(idx);
-    TexSlotID sidBot = LayerStack_GetSlotID(idx-1);
-    LayerStack_DeleteLayer(idx);
-    if (g_undoManager) {
-        g_undoManager->InvalidateSlot(sidTop);
-        g_undoManager->InvalidateSlot(sidBot);
-    }
-    ViewportManager_SetDirty();
+    // seamless is now handled inside BlitLayerToLayer via top->seamless
+    ViewportManager_MergeDown(idx);
 }
 
 int ViewportManager_AcceptMatte(int srcIdx, Image matteImage) {
@@ -226,6 +214,36 @@ int ViewportManager_AcceptMatte(int srcIdx, Image matteImage) {
     LayerStack_DuplicateLayer(srcIdx);
     int newIdx = srcIdx + 1;
     LayerStack_UploadToGPU(newIdx, matteImage);
+    ViewportManager_SetDirty();
+    return newIdx;
+}
+
+RenderTexture2D ViewportManager_GetMergedTexture(const RectXform* xform, int w, int h) {
+    RenderTexture2D rt = LoadRenderTexture(w, h);
+    ViewportManager_CompositeViewInto(rt, xform, w, h);
+    return rt;
+}
+
+int ViewportManager_CreateLayerFromImage(Image img) {
+    if (!img.data) return -1;
+    int n = LayerStack_Count();
+    int newIdx = LayerStack_InsertLayer(n > 0 ? n - 1 : 0);
+    sLayerProps* lp = LayerStack_GetProps(newIdx);
+    /* Set layer pixel size to match image */
+    lp->layerW = img.width;
+    lp->layerH = img.height;
+    lp->xform = RectXform_Pivot(0, 0, (float)img.width, (float)img.height, 0);
+    /* Upload image to layer's render texture */
+    Texture2D tmp = LoadTextureFromImage(img);
+    UnloadImage(img);
+    BeginTextureMode(LayerStack_GetRT(newIdx));
+    ClearBackground(BLANK);
+    rlSetBlendMode(RL_BLEND_CUSTOM);
+    rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+    DrawTexture(tmp, 0, 0, WHITE);
+    rlSetBlendMode(RL_BLEND_ALPHA);
+    EndTextureMode();
+    UnloadTexture(tmp);
     ViewportManager_SetDirty();
     return newIdx;
 }

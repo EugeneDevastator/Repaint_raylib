@@ -19,6 +19,10 @@
 #define MODE_LIN_DODGE  15
 #define MODE_LIN_LIGHT  16
 
+// ── Chroma key erase coefficients ─────────────────────────────────────
+#define CHROMA_KEY_HUE_WIDTH      2.0   // higher = narrower hue range
+#define CHROMA_KEY_LIGHTNESS_POW  2.0   // lightness mismatch falloff
+
 // constants
 // correction for simple color blend
 vec3 blendWeightCorr = vec3(1.000);          // is roughly square of the next..
@@ -98,12 +102,64 @@ vec4 applyBlend(int mode, vec4 dst, vec3 srcRGB, float srcA) {
     // erasers
     if (mode == MODE_ERASEA) {
         outRGB = dst.rgb;
-        outA = clamp( dst.a*(1.0 -srcA),0,1);
+        vec3 keyLab = rgbToOklab(srcRGB);
+        //outA = clamp( dst.a*(1.0 -srcA),0,1);
+        outA = mix(keyLab.x, dst.a, 1.0-srcA);
         return vec4(outRGB, outA);
     } else if (mode == MODE_ERASECLR) {
-        float eraseMask = dst.a*srcA;
-        outRGB = mix(dst.rgb, srcRGB, eraseMask);
-        outA   = dst.a*(1.0-srcA);
+        vec3 keyLab = rgbToOklab(srcRGB);
+        float kc = length(keyLab.yz);
+        // Saturation-to-0..1 factor (max chroma in OKLab ≈ 0.3)
+        float satFactor = clamp(kc * 4.0, 0.0, 1.0);
+
+        // Desaturated brush → chroma-boost key.
+        // If the pixel's chroma-based alpha would be lower than current alpha, apply it
+        // and boost saturation. If current alpha is already lower, leave pixel unchanged.
+        if (kc < 0.02) {
+            float keyLum    = keyLab.x;
+            vec3  pLab      = rgbToOklab(dst.rgb);
+            float pc        = length(pLab.yz);         // canvas chroma
+            float lumDiff   = abs(pLab.x - keyLum);
+            float diff     = clamp(lumDiff * 2.0, 0.0, 1.0);
+
+            if (diff < dst.a) {
+                float targetA   = mix(diff,dst.a,1.0-srcA);
+                // Apply erasure and boost saturation
+                float boost = 1+abs(targetA-dst.a);
+                if (pc > 0.001)
+                pLab.yz *= boost;
+                outRGB = oklabToRgb(pLab);
+                outA = targetA;
+            } else {
+                outRGB = dst.rgb;
+                outA   = dst.a;
+            }
+            return vec4(outRGB, outA);
+        }
+
+        // Colored brush → chroma key erase
+        // High saturation → strict (narrow hue + tight lightness),
+        // low saturation → broad (wide hue + loose lightness).
+        float hueWidth = mix(0.5, 8.0, satFactor);
+        float lightPow = mix(1.0, 8.0, satFactor);
+
+        vec2 kd = keyLab.yz / kc;
+        vec3 pLab = rgbToOklab(dst.rgb);
+        float pc = length(pLab.yz);
+        float proj = max(dot(pLab.yz, kd), 0.0);
+
+        float hueMatch = pow(proj / max(pc, 0.001), hueWidth);
+        float lightWeight = 1.0 - pow(abs(pLab.x - keyLab.x), lightPow);
+        lightWeight = clamp(lightWeight, 0.0, 1.0);
+
+        float erase = hueMatch * lightWeight * srcA;
+
+        pLab.y -= proj * srcA * kd.x;
+        pLab.z -= proj * srcA * kd.y;
+
+        outRGB = oklabToRgb(pLab);
+        outA   = dst.a * (1.0 - clamp(erase, 0.0, 1.0));
+        outA   = min(outA, dst.a);
         return vec4(outRGB, outA);
     }
 

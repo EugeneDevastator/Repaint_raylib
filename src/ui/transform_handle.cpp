@@ -12,6 +12,8 @@ static Vector2  s_dragStart  = {0, 0};
 static Vector2  s_startUV    = {0, 0};  // local UV at edge-drag start
 static RectXform s_savedXform = {};
 static Vector2  s_savedCursor = {0, 0};
+static Vector2  s_savedLocalCursor = {0, 0}; // pivot local UV at drag start
+static float    s_repeatMat[6] = {1,0,0,0,1,0}; // last applied relative transform
 
 static void ResetState() {
     s_dragAction = 0;
@@ -20,6 +22,8 @@ static void ResetState() {
     s_startUV    = {0, 0};
     memset(&s_savedXform, 0, sizeof(s_savedXform));
 }
+
+void TransformHandle_ResetState(void) { ResetState(); }
 
 // ── Helpers ─────────────────────────────────────────────────────────
 static void Corners(const float mat[6], float w, float h,
@@ -62,6 +66,7 @@ static void GetLocalUV(const float mat[6], Vector2 worldPt, float* u, float* v) 
 bool TransformHandle_Input(RectXform* xform,
                            Vector2* cursor,
                            bool scaleProportionalToCursor,
+                           bool lockAspect,
                            const Camera2D* camera,
                            Vector2 mousePos,
                            bool leftDown,
@@ -197,6 +202,7 @@ bool TransformHandle_Input(RectXform* xform,
         s_dragStart = canvasPos;
         s_savedXform = *xform;
         s_savedCursor = *cursor;
+        GetLocalUV(xform->mat, *cursor, &s_savedLocalCursor.x, &s_savedLocalCursor.y);
     }
 
     // ── Start rotate (right button) ─────────────────────────────────
@@ -213,6 +219,10 @@ bool TransformHandle_Input(RectXform* xform,
         float mdy = canvasPos.y - s_dragStart.y;
         xform->mat[2] = s_savedXform.mat[2] + mdx;
         xform->mat[5] = s_savedXform.mat[5] + mdy;
+        // Update cursor visual to track the layer
+        float* m = xform->mat;
+        cursor->x = m[0]*s_savedLocalCursor.x + m[1]*s_savedLocalCursor.y + m[2];
+        cursor->y = m[3]*s_savedLocalCursor.x + m[4]*s_savedLocalCursor.y + m[5];
         return true;
     }
 
@@ -318,6 +328,13 @@ bool TransformHandle_Input(RectXform* xform,
             }
             if (fabsf(xform->w) < 1.0f) xform->w = (xform->w < 0) ? -1.0f : 1.0f;
             if (fabsf(xform->h) < 1.0f) xform->h = (xform->h < 0) ? -1.0f : 1.0f;
+            if (lockAspect) {
+                float ratio = sw / sh;
+                if (s_dragEdge == 0 || s_dragEdge == 2)
+                    xform->w = xform->h * ratio;
+                else
+                    xform->h = xform->w / ratio;
+            }
         }
         return true;
     }
@@ -367,6 +384,13 @@ bool TransformHandle_Input(RectXform* xform,
             xform->h = nh;
             if (fabsf(xform->w) < 1.0f) xform->w = (xform->w < 0) ? -1.0f : 1.0f;
             if (fabsf(xform->h) < 1.0f) xform->h = (xform->h < 0) ? -1.0f : 1.0f;
+            if (lockAspect) {
+                float ratio = sw / sh;
+                if (fabsf(nw - sw) > fabsf(nh - sh))
+                    xform->h = xform->w / ratio;
+                else
+                    xform->w = xform->h * ratio;
+            }
         } else {
             // Scale proportional to cursor (layer): scale matrix around cursor
             float as = s_savedXform.mat[0], bs = s_savedXform.mat[1];
@@ -391,6 +415,10 @@ bool TransformHandle_Input(RectXform* xform,
                 float initDy = grabLy - pcy;
                 float sx_f = (fabsf(initDx)>0.001f) ? lx/initDx : 1.0f;
                 float sy_f = (fabsf(initDy)>0.001f) ? ly/initDy : 1.0f;
+                if (lockAspect) {
+                    float avg = (sx_f + sy_f) * 0.5f;
+                    sx_f = sy_f = avg;
+                }
                 if (fabsf(sx_f)<0.01f) sx_f = (sx_f<0) ? -0.01f : 0.01f;
                 if (fabsf(sy_f)<0.01f) sy_f = (sy_f<0) ? -0.01f : 0.01f;
                 float oldSx = sqrtf(as*as + cs*cs);
@@ -415,11 +443,25 @@ bool TransformHandle_Input(RectXform* xform,
 
     // ── Release (any held button) ────────────────────────────────────
     if (s_dragAction != 0 && !leftDown && !rightDown) {
-        // Snap cursor to world-space mouse position on release
-        // (but not after corner scale, rotation, or edge drag — cursor stays where it is)
         if (s_dragAction != 2 && s_dragAction != 3 && s_dragAction != 5) {
-            cursor->x = canvasPos.x;
-            cursor->y = canvasPos.y;
+            float dragDist = Dist2D(s_dragStart, canvasPos);
+            if (dragDist < 5.0f) {
+                // Single click → reposition pivot to click point
+                cursor->x = canvasPos.x;
+                cursor->y = canvasPos.y;
+            } else {
+                // Actual drag → restore pivot to its original local position
+                float* m = xform->mat;
+                float lu = s_savedLocalCursor.x, lv = s_savedLocalCursor.y;
+                cursor->x = m[0]*lu + m[1]*lv + m[2];
+                cursor->y = m[3]*lu + m[4]*lv + m[5];
+            }
+        }
+        // Store relative transform for repeat
+        if (s_dragAction == 1 || s_dragAction == 3 || s_dragAction == 2 || s_dragAction == 5) {
+            float inv[6], idMat[6] = {1,0,0,0,1,0};
+            Xform_MulInv(inv, idMat, s_savedXform.mat);
+            Xform_Mul(s_repeatMat, xform->mat, inv);
         }
         // Normalize flips: transfer negative w/h to matrix rows
         if (xform->w < 0) { xform->mat[0] = -xform->mat[0]; xform->mat[1] = -xform->mat[1]; xform->w = -xform->w; }
@@ -428,6 +470,28 @@ bool TransformHandle_Input(RectXform* xform,
     }
 
     return false;
+}
+
+// ── Repeat last transform around a world-space pivot ────────────────
+void TransformHandle_RepeatLast(RectXform* xform, Vector2 pivot) {
+    // Build pivot-relative transform: T(pivot) * relMat * T(-pivot)
+    float toPivot[6], fromPivot[6], tmp[6], pivotRel[6];
+    Xform_SetTrans(toPivot,   pivot.x, pivot.y);
+    Xform_SetTrans(fromPivot, -pivot.x, -pivot.y);
+    Xform_Mul(tmp, s_repeatMat, fromPivot);
+    Xform_Mul(pivotRel, toPivot, tmp);
+    // Apply: new_xform = pivotRel * xform
+    float newMat[6];
+    Xform_Mul(newMat, pivotRel, xform->mat);
+    memcpy(xform->mat, newMat, sizeof(newMat));
+}
+
+void TransformHandle_GetStore(float mat[6]) {
+    memcpy(mat, s_repeatMat, 6 * sizeof(float));
+}
+
+void TransformHandle_SetStore(const float mat[6]) {
+    memcpy(s_repeatMat, mat, 6 * sizeof(float));
 }
 
 // ── Draw ─────────────────────────────────────────────────────────────
