@@ -12,6 +12,7 @@ static Vector2  s_dragStart  = {0, 0};
 static Vector2  s_startUV    = {0, 0};  // local UV at edge-drag start
 static RectXform s_savedXform = {};
 static Vector2  s_savedCursor = {0, 0};
+static Vector2  s_savedLocalCursor = {0, 0}; // pivot local UV at drag start
 
 static void ResetState() {
     s_dragAction = 0;
@@ -200,6 +201,7 @@ bool TransformHandle_Input(RectXform* xform,
         s_dragStart = canvasPos;
         s_savedXform = *xform;
         s_savedCursor = *cursor;
+        GetLocalUV(xform->mat, *cursor, &s_savedLocalCursor.x, &s_savedLocalCursor.y);
     }
 
     // ── Start rotate (right button) ─────────────────────────────────
@@ -436,11 +438,19 @@ bool TransformHandle_Input(RectXform* xform,
 
     // ── Release (any held button) ────────────────────────────────────
     if (s_dragAction != 0 && !leftDown && !rightDown) {
-        // Snap cursor to world-space mouse position on release
-        // (but not after corner scale, rotation, or edge drag — cursor stays where it is)
         if (s_dragAction != 2 && s_dragAction != 3 && s_dragAction != 5) {
-            cursor->x = canvasPos.x;
-            cursor->y = canvasPos.y;
+            float dragDist = Dist2D(s_dragStart, canvasPos);
+            if (dragDist < 5.0f) {
+                // Single click → reposition pivot to click point
+                cursor->x = canvasPos.x;
+                cursor->y = canvasPos.y;
+            } else {
+                // Actual drag → restore pivot to its original local position
+                float* m = xform->mat;
+                float lu = s_savedLocalCursor.x, lv = s_savedLocalCursor.y;
+                cursor->x = m[0]*lu + m[1]*lv + m[2];
+                cursor->y = m[3]*lu + m[4]*lv + m[5];
+            }
         }
         // Normalize flips: transfer negative w/h to matrix rows
         if (xform->w < 0) { xform->mat[0] = -xform->mat[0]; xform->mat[1] = -xform->mat[1]; xform->w = -xform->w; }
