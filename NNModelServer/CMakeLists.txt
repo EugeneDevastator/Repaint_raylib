@@ -4,6 +4,8 @@ set(NNSERVER_SOURCES
     nnserver.cpp
     nn_onnx.cpp
     matte_module.cpp
+    sd_module.cpp
+    nn_downloader.cpp
     ${CMAKE_SOURCE_DIR}/src/network/sock_platform.cpp
 )
 

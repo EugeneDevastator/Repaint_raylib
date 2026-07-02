@@ -11,8 +11,8 @@ static const ImU32 SLIDER_TICK_LIGHT  = IM_COL32(255, 255, 255, 190);
 static const ImU32 SLIDER_TICK_DARK   = IM_COL32(120,  120,  120,  190);
 
 static const Color SLIDER_BG_COL      = {210, 210, 210, 255};
-static const Color SLIDER_GRAD_FROM   = {180, 180, 180, 255};
-static const Color SLIDER_GRAD_TO     = {230, 230, 230, 255};
+static const Color SLIDER_GRAD_FROM   = {150, 150, 150, 255};
+static const Color SLIDER_GRAD_TO     = {235, 235, 235, 255};
 static const float SLIDER_ROUNDING    = 3.0f;
 static const bool SLIDER_IS_ALT_PRECISE_MODE = false;  // toggle for 10% snap + extended rect
 
