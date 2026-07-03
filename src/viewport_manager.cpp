@@ -63,7 +63,7 @@ RenderTexture2D* ViewportManager_Composite(void) {
     RectXform viewXform;
     const float* cv = LayerStack_GetCanvasView();
     memcpy(viewXform.mat, cv, 6*sizeof(float));
-    viewXform.w=0; viewXform.h=0;
+    viewXform.ww=0; viewXform.wh=0;
 
     int count = LayerStack_Count();
     for(int i=0;i<count;i++){
@@ -93,7 +93,7 @@ Image ViewportManager_CompositeWithDither(void) {
     RectXform viewXform;
     const float* cv = LayerStack_GetCanvasView();
     memcpy(viewXform.mat, cv, 6*sizeof(float));
-    viewXform.w=0; viewXform.h=0;
+    viewXform.ww=0; viewXform.wh=0;
 
     int count = LayerStack_Count();
     for(int i=0;i<count;i++){
@@ -230,10 +230,6 @@ int ViewportManager_CreateLayerFromImage(Image img) {
     int n = LayerStack_Count();
     int newIdx = LayerStack_InsertLayer(n > 0 ? n - 1 : 0);
     sLayerProps* lp = LayerStack_GetProps(newIdx);
-
-    /* Set pixel dimensions */
-    lp->layerW = img.width;
-    lp->layerH = img.height;
 
     /* xform extent in world units (1 unit = WORLD_UNIT_PX px) */
     lp->xform = RectXform_Pivot(0, 0,

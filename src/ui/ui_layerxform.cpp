@@ -17,8 +17,8 @@ bool LayerXformModule::HandleInput(InputState& input, const DrawRect& rect) {
             if (state->activeLayer >= 0) {
                 sLayerProps* lp = LayerStack_GetProps(state->activeLayer);
                 float* m = lp->xform.mat;
-                g_pivotCursorX = m[2] + m[0]*lp->layerW*0.5f + m[1]*lp->layerH*0.5f;
-                g_pivotCursorY = m[5] + m[3]*lp->layerW*0.5f + m[4]*lp->layerH*0.5f;
+                g_pivotCursorX = m[2] + m[0]*GetLayerWpx(state->activeLayer)*0.5f + m[1]*GetLayerHpx(state->activeLayer)*0.5f;
+                g_pivotCursorY = m[5] + m[3]*GetLayerWpx(state->activeLayer)*0.5f + m[4]*GetLayerHpx(state->activeLayer)*0.5f;
             }
         }
         return true;
@@ -43,10 +43,10 @@ bool LayerXformModule::HandleInput(InputState& input, const DrawRect& rect) {
 
     sLayerProps* lp = LayerStack_GetProps(state->activeLayer);
     // Sync xform extent from pixel dimensions
-    lp->xform.w = (float)lp->layerW;
-    lp->xform.h = (float)lp->layerH;
-    if (lp->xform.w < 1.0f) lp->xform.w = state->doc.window.w;
-    if (lp->xform.h < 1.0f) lp->xform.h = state->doc.window.h;
+    lp->xform.ww = (float)GetLayerWpx(state->activeLayer);
+    lp->xform.wh = (float)GetLayerHpx(state->activeLayer);
+    if (lp->xform.ww < 1.0f) lp->xform.ww = state->doc.window.ww;
+    if (lp->xform.wh < 1.0f) lp->xform.wh = state->doc.window.wh;
 
     Vector2 cursor = {g_pivotCursorX, g_pivotCursorY};
     bool changed = TransformHandle_Input(&lp->xform, &cursor,
@@ -101,8 +101,8 @@ void LayerXformModule::DrawGUI(const DrawRect& rect) {
     // ── Layer info ──
     if (state->activeLayer < LayerStack_Count()) {
         sLayerProps* lp = LayerStack_GetProps(state->activeLayer);
-        ImGui::Text("Tex: %d x %d", lp->layerW, lp->layerH);
-        ImGui::Text("XWH: %.0f x %.0f", lp->xform.w, lp->xform.h);
+        ImGui::Text("Tex: %d x %d", GetLayerWpx(state->activeLayer), GetLayerHpx(state->activeLayer));
+        ImGui::Text("XWH: %.0f x %.0f", lp->xform.ww, lp->xform.wh);
         ImGui::Separator();
     }
 

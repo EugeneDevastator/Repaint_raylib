@@ -51,7 +51,7 @@ void ApplyCanvasWindow(Document* doc) {
     float a = doc->window.mat[0], b = doc->window.mat[1];
     float cx = doc->window.mat[2], cy = doc->window.mat[5];
     float c = doc->window.mat[3], d = doc->window.mat[4];
-    float ww = doc->window.w, wh = doc->window.h;
+    float ww = doc->window.ww, wh = doc->window.wh;
 
     // Full 2×2 inverse of the window matrix (supports rotation).
     // Maps old-world content to new-world origin so that baking into layers
@@ -75,7 +75,7 @@ void ApplyCanvasWindow(Document* doc) {
     doc->window.mat[2] = 0;
     doc->window.mat[3] = 0; doc->window.mat[4] = 1;
     doc->window.mat[5] = 0;
-    doc->window.w = ww; doc->window.h = wh;
+    doc->window.ww = ww; doc->window.wh = wh;
 
     LayerStack_SetRenderWindow((int)(fabsf(ww) + 0.5f), (int)(fabsf(wh) + 0.5f));
 }

@@ -216,7 +216,7 @@ void SDHudModule::DrawGUI(const DrawRect& rect) {
         ImGui::BeginGroup();
         ImGui::Checkbox("512x512", &g_lockSquare);
         int outH = g_lockSquare ? g_resolution
-                  : (int)(g_resolution * (g_sdXform.h / g_sdXform.w) + 0.5f);
+                  : (int)(g_resolution * (g_sdXform.wh / g_sdXform.ww) + 0.5f);
         ImGui::Text("Output: %d x %d", g_resolution, outH);
         ImGui::Separator();
         bool canUpscale = !g_running && state->activeLayer >= 0;
@@ -224,7 +224,7 @@ void SDHudModule::DrawGUI(const DrawRect& rect) {
         if (ImGui::Button("Upscale", ImVec2(-1, 28))) {
             int pw = g_resolution;
             int ph = g_lockSquare ? pw
-                     : (int)(pw * (g_sdXform.h / g_sdXform.w) + 0.5f);
+                     : (int)(pw * (g_sdXform.wh / g_sdXform.ww) + 0.5f);
             if (pw < 16) pw = 16;
             if (ph < 16) ph = 16;
 
@@ -251,7 +251,7 @@ void SDHudModule::DrawGUI(const DrawRect& rect) {
         if (ImGui::Button("Generate", ImVec2(-1, 32))) {
             int pw = g_resolution;
             int ph = g_lockSquare ? pw
-                     : (int)(pw * (g_sdXform.h / g_sdXform.w) + 0.5f);
+                     : (int)(pw * (g_sdXform.wh / g_sdXform.ww) + 0.5f);
             if (ph < 16) ph = 16;
             char* pc = strdup(g_prompt);
             g_running = true;

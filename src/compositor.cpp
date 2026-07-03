@@ -213,7 +213,7 @@ void Compositor_BlitLayerOnto(
     // Non-seamless: compute AABB, clip to dstRegion, rectify, blend
     RectXform rx;
     memcpy(rx.mat, cmb, sizeof(cmb));
-    rx.w = sw; rx.h = sh;
+    rx.ww = sw; rx.wh = sh;
     Rectangle aabb = GetWorldAABB(&rx);
     // Clip aabb to dstRegion
     float l = fmaxf(aabb.x, dstRegion.x);
@@ -281,8 +281,8 @@ void Compositor_ApplyLayerToLayer(
     // Build viewXform from relMat
     RectXform viewXf;
     memcpy(viewXf.mat, relMat, sizeof(relMat));
-    viewXf.w = topXform->w;
-    viewXf.h = topXform->h;
+    viewXf.ww = topXform->ww;
+    viewXf.wh = topXform->wh;
 
     // Identity layer xform — the viewXform already incorporates both
     RectXform identity = {};

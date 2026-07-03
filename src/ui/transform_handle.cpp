@@ -82,7 +82,7 @@ bool TransformHandle_Input(RectXform* xform,
 
     Vector2 canvasPos = GetScreenToWorld2D(mousePos, *camera);
     Vector2 corners[4];
-    Corners(xform->mat, xform->w, xform->h, corners);
+    Corners(xform->mat, xform->ww, xform->wh, corners);
 
     Vector2 sc[4];
     for (int i = 0; i < 4; i++)
@@ -95,7 +95,7 @@ bool TransformHandle_Input(RectXform* xform,
     float ux = m[0], uy = m[3];
     float vx = m[1], vy = m[4];
     float tx = m[2], ty = m[5];
-    float w_ = xform->w, h_ = xform->h;
+    float w_ = xform->ww, h_ = xform->wh;
     float uLen = sqrtf(ux*ux + uy*uy);
     float vLen = sqrtf(vx*vx + vy*vy);
     float uNx = (uLen > 0.0001f) ? ux/uLen : 1.0f;
@@ -195,7 +195,7 @@ bool TransformHandle_Input(RectXform* xform,
                            - (canvasPos.y - xform->mat[5])*b*invDet;
                 float ly = -(canvasPos.x - xform->mat[2])*c*invDet
                            + (canvasPos.y - xform->mat[5])*a*invDet;
-                if (lx >= 0 && lx <= xform->w && ly >= 0 && ly <= xform->h)
+                if (lx >= 0 && lx <= xform->ww && ly >= 0 && ly <= xform->wh)
                     s_dragAction = 1;
             }
         }
@@ -259,7 +259,7 @@ bool TransformHandle_Input(RectXform* xform,
         float sa = s_savedXform.mat[0], sb = s_savedXform.mat[1];
         float sc_ = s_savedXform.mat[3], sd = s_savedXform.mat[4];
         float stx = s_savedXform.mat[2], sty = s_savedXform.mat[5];
-        float sw = s_savedXform.w, sh = s_savedXform.h;
+        float sw = s_savedXform.ww, sh = s_savedXform.wh;
         float curU, curV;
         GetLocalUV(s_savedXform.mat, canvasPos, &curU, &curV);
         float du = curU - s_startUV.x;
@@ -300,40 +300,40 @@ bool TransformHandle_Input(RectXform* xform,
                 break;
             }
             }
-            xform->w = sw;
-            xform->h = sh;
+            xform->ww = sw;
+            xform->wh = sh;
         } else {
             // Crop mode — change w/h directly
             switch (s_dragEdge) {
             case 0: // top (y=0) — drag V, keep bottom (y=h) fixed
-                xform->w = sw;
-                xform->h = sh - dv;
+                xform->ww = sw;
+                xform->wh = sh - dv;
                 xform->mat[2] = stx + sb*dv;
                 xform->mat[5] = sty + sd*dv;
                 break;
             case 1: // right (x=w) — drag U, keep left (x=0) fixed
-                xform->w = sw + du;
-                xform->h = sh;
+                xform->ww = sw + du;
+                xform->wh = sh;
                 break;
             case 2: // bottom (y=h) — drag V, keep top (y=0) fixed
-                xform->w = sw;
-                xform->h = sh + dv;
+                xform->ww = sw;
+                xform->wh = sh + dv;
                 break;
             case 3: // left (x=0) — drag U, keep right (x=w) fixed
-                xform->w = sw - du;
-                xform->h = sh;
+                xform->ww = sw - du;
+                xform->wh = sh;
                 xform->mat[2] = stx + sa*du;
                 xform->mat[5] = sty + sc_*du;
                 break;
             }
-            if (fabsf(xform->w) < 1.0f) xform->w = (xform->w < 0) ? -1.0f : 1.0f;
-            if (fabsf(xform->h) < 1.0f) xform->h = (xform->h < 0) ? -1.0f : 1.0f;
+            if (fabsf(xform->ww) < 1.0f) xform->ww = (xform->ww < 0) ? -1.0f : 1.0f;
+            if (fabsf(xform->wh) < 1.0f) xform->wh = (xform->wh < 0) ? -1.0f : 1.0f;
             if (lockAspect) {
                 float ratio = sw / sh;
                 if (s_dragEdge == 0 || s_dragEdge == 2)
-                    xform->w = xform->h * ratio;
+                    xform->ww = xform->wh * ratio;
                 else
-                    xform->h = xform->w / ratio;
+                    xform->wh = xform->ww / ratio;
             }
         }
         return true;
@@ -347,7 +347,7 @@ bool TransformHandle_Input(RectXform* xform,
             float sa = s_savedXform.mat[0], sb = s_savedXform.mat[1];
             float sc_ = s_savedXform.mat[3], sd = s_savedXform.mat[4];
             float stx = s_savedXform.mat[2], sty = s_savedXform.mat[5];
-            float sw = s_savedXform.w, sh = s_savedXform.h;
+            float sw = s_savedXform.ww, sh = s_savedXform.wh;
             float dx = canvasPos.x - stx;
             float dy = canvasPos.y - sty;
             float det = sa*sd - sb*sc_;
@@ -380,16 +380,16 @@ bool TransformHandle_Input(RectXform* xform,
                 xform->mat[5] = sty + sc_*curLx;
                 break;
             }
-            xform->w = nw;
-            xform->h = nh;
-            if (fabsf(xform->w) < 1.0f) xform->w = (xform->w < 0) ? -1.0f : 1.0f;
-            if (fabsf(xform->h) < 1.0f) xform->h = (xform->h < 0) ? -1.0f : 1.0f;
+            xform->ww = nw;
+            xform->wh = nh;
+            if (fabsf(xform->ww) < 1.0f) xform->ww = (xform->ww < 0) ? -1.0f : 1.0f;
+            if (fabsf(xform->wh) < 1.0f) xform->wh = (xform->wh < 0) ? -1.0f : 1.0f;
             if (lockAspect) {
                 float ratio = sw / sh;
                 if (fabsf(nw - sw) > fabsf(nh - sh))
-                    xform->h = xform->w / ratio;
+                    xform->wh = xform->ww / ratio;
                 else
-                    xform->w = xform->h * ratio;
+                    xform->ww = xform->wh * ratio;
             }
         } else {
             // Scale proportional to cursor (layer): scale matrix around cursor
@@ -409,8 +409,8 @@ bool TransformHandle_Input(RectXform* xform,
                 float lx = dx*ia + dy*ib;
                 float ly = dx*ic + dy*id;
                 int gc = s_dragCorner;
-                float grabLx = (gc==0||gc==3) ? 0.0f : s_savedXform.w;
-                float grabLy = (gc==0||gc==1) ? 0.0f : s_savedXform.h;
+                float grabLx = (gc==0||gc==3) ? 0.0f : s_savedXform.ww;
+                float grabLy = (gc==0||gc==1) ? 0.0f : s_savedXform.wh;
                 float initDx = grabLx - pcx;
                 float initDy = grabLy - pcy;
                 float sx_f = (fabsf(initDx)>0.001f) ? lx/initDx : 1.0f;
@@ -464,8 +464,8 @@ bool TransformHandle_Input(RectXform* xform,
             Xform_Mul(s_repeatMat, xform->mat, inv);
         }
         // Normalize flips: transfer negative w/h to matrix rows
-        if (xform->w < 0) { xform->mat[0] = -xform->mat[0]; xform->mat[1] = -xform->mat[1]; xform->w = -xform->w; }
-        if (xform->h < 0) { xform->mat[3] = -xform->mat[3]; xform->mat[4] = -xform->mat[4]; xform->h = -xform->h; }
+        if (xform->ww < 0) { xform->mat[0] = -xform->mat[0]; xform->mat[1] = -xform->mat[1]; xform->ww = -xform->ww; }
+        if (xform->wh < 0) { xform->mat[3] = -xform->mat[3]; xform->mat[4] = -xform->mat[4]; xform->wh = -xform->wh; }
         ResetState();
     }
 
@@ -508,7 +508,7 @@ void TransformHandle_Draw(const RectXform* xform,
     float ux = m[0], uy = m[3];    // U basis (full scale, not unit)
     float vx = m[1], vy = m[4];    // V basis (full scale, not unit)
     float tx = m[2], ty = m[5];
-    float w_ = xform->w, h_ = xform->h;
+    float w_ = xform->ww, h_ = xform->wh;
 
     // World-space four corners (local → world through matrix)
     Vector2 wc[4];

@@ -50,8 +50,8 @@ static void _writeProps(uint8_t** p, sLayerProps* lp) {
     _wu32(p, nameLen);
     if (nameLen > 0) _wcpy(p, lp->layerName, nameLen);
     _wcpy(p, lp->xform.mat, 6 * sizeof(float));               // v4+
-    _wu32(p, (uint32_t)lp->layerW);                     // v5+: native width
-    _wu32(p, (uint32_t)lp->layerH);                     // v5+: native height
+    _wu32(p, (uint32_t)lp->xform.ww);                     // v5+: native width
+    _wu32(p, (uint32_t)lp->xform.wh);                     // v5+: native height
     _wcpy(p, &lp->threshold, sizeof(float));             // v5+: was missing before
     _wcpy(p, &lp->feather,  sizeof(float));             // v5+: was missing before
 }
@@ -77,11 +77,12 @@ static void _readProps(const uint8_t** p, sLayerProps* lp, uint32_t ver) {
     else { lp->xform.mat[0] = 1; lp->xform.mat[1] = 0; lp->xform.mat[2] = 0; lp->xform.mat[3] = 0; lp->xform.mat[4] = 1; lp->xform.mat[5] = 0; }
     // layerW, layerH — format v5+
     if (ver >= 5) {
-        lp->layerW = (int)_ru32(p); lp->layerH = (int)_ru32(p);
+        int lw = (int)_ru32(p), lh = (int)_ru32(p);
+        lp->xform.ww = (float)lw; lp->xform.wh = (float)lh;
         memcpy(&lp->threshold, *p, sizeof(float)); *p += sizeof(float);
         memcpy(&lp->feather,  *p, sizeof(float)); *p += sizeof(float);
     } else {
-        lp->layerW = lp->layerH = 0;
+        lp->xform.ww = lp->xform.wh = 0;
     }
 }
 
@@ -111,7 +112,7 @@ bool SaveRePaint(const char* path, Document* doc, AppState* state) {
         uint8_t* wp = blobs[i].propsData;
         _writeProps(&wp, p);
 
-        int rawSz = p->layerW * p->layerH * 8;
+        int rawSz = (int)p->xform.ww * (int)p->xform.wh * 8;
         totalExtra += 4 + blobs[i].propsSz + 4 + rawSz;
     }
 
@@ -166,8 +167,8 @@ bool SaveRePaint(const char* path, Document* doc, AppState* state) {
     { float cx=doc->window.mat[2], cy=doc->window.mat[5];
       float rot = RectXform_GetRot(&doc->window);
       _wcpy(&p, &cx, 4); _wcpy(&p, &cy, 4); }
-    _wcpy(&p, &doc->window.w, 4);
-    _wcpy(&p, &doc->window.h, 4);
+    _wcpy(&p, &doc->window.ww, 4);
+    _wcpy(&p, &doc->window.wh, 4);
     { float rot = RectXform_GetRot(&doc->window);
       _wcpy(&p, &rot, 4); }
 
@@ -176,7 +177,7 @@ bool SaveRePaint(const char* path, Document* doc, AppState* state) {
         sLayerProps* props = LayerStack_GetProps(i);
         _wu32(&p, (uint32_t)blobs[i].propsSz);
         _wcpy(&p, blobs[i].propsData, blobs[i].propsSz);
-        int rawSz = props->layerW * props->layerH * 8;
+        int rawSz = (int)props->xform.ww * (int)props->xform.wh * 8;
         _wu32(&p, (uint32_t)rawSz);
         _wcpy(&p, layerImg.data, rawSz);
         UnloadImage(layerImg);
@@ -307,7 +308,7 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
             int idx = LayerStack_Add(w, h);
             sLayerProps* lp = LayerStack_GetProps(idx);
             lp->op = 1; lp->visible = true; lp->blendmode = bmGamma;
-            lp->xform.mat[0] = 1; lp->xform.mat[4] = 1; lp->layerW = w; lp->layerH = h;
+            lp->xform.mat[0] = 1; lp->xform.mat[4] = 1;
             LayerStack_UploadToGPU(idx, preview);
         }
     } else {
@@ -320,8 +321,8 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
             const uint8_t* propStart = p;
             _readProps(&p, &tempProps, ver);
             p = propStart + propSz;
-            int lw = tempProps.layerW > 0 ? tempProps.layerW : oldFileW;
-            int lh = tempProps.layerH > 0 ? tempProps.layerH : oldFileH;
+            int lw = tempProps.xform.ww > 0 ? (int)tempProps.xform.ww : oldFileW;
+            int lh = tempProps.xform.wh > 0 ? (int)tempProps.xform.wh : oldFileH;
 
             uint32_t dataSz = _ru32(&p);
             if ((int)(p - fileData) + (int)dataSz > fileSz) { UnloadFileData(fileData); return false; }
@@ -349,9 +350,8 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
 
             int idx = LayerStack_Add(lw, lh);
             *LayerStack_GetProps(idx) = tempProps;
-            LayerStack_GetProps(idx)->xform.w = (float)lw;
-            LayerStack_GetProps(idx)->xform.h = (float)lh;
-            LayerStack_GetProps(idx)->layerW = lw; LayerStack_GetProps(idx)->layerH = lh;
+            LayerStack_GetProps(idx)->xform.ww = (float)lw;
+            LayerStack_GetProps(idx)->xform.wh = (float)lh;
             LayerStack_UploadToGPU(idx, layerImg);
         }
     }

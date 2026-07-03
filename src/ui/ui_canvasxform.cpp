@@ -18,8 +18,8 @@ static void ExitCropMode(AppState* state, bool accept) {
     if (accept) {
         ApplyCanvasWindow(&state->doc);
         state->camera.target = Vector2{
-            state->doc.window.mat[0]*state->doc.window.w*0.5f + state->doc.window.mat[1]*state->doc.window.h*0.5f + state->doc.window.mat[2],
-            state->doc.window.mat[3]*state->doc.window.w*0.5f + state->doc.window.mat[4]*state->doc.window.h*0.5f + state->doc.window.mat[5]
+            state->doc.window.mat[0]*state->doc.window.ww*0.5f + state->doc.window.mat[1]*state->doc.window.wh*0.5f + state->doc.window.mat[2],
+            state->doc.window.mat[3]*state->doc.window.ww*0.5f + state->doc.window.mat[4]*state->doc.window.wh*0.5f + state->doc.window.mat[5]
         };
     } else {
         state->doc.window = g_entryWindow;
@@ -50,7 +50,7 @@ bool CanvasXformModule::HandleInput(InputState& input, const DrawRect& rect) {
         g_entrySaved = true;
         // Init crop cursor to window center
         float* m = state->doc.window.mat;
-        float w = state->doc.window.w, h = state->doc.window.h;
+        float w = state->doc.window.ww, h = state->doc.window.wh;
         g_cropCursor.x = m[2] + (m[0]*w + m[1]*h) * 0.5f;
         g_cropCursor.y = m[5] + (m[3]*w + m[4]*h) * 0.5f;
     }
@@ -134,8 +134,8 @@ void CanvasXformModule::DrawGUI(const DrawRect& rect) {
     bool hDeact = ImGui::IsItemDeactivatedAfterEdit();
     if (hEdited && g_cropPixelH < 1) g_cropPixelH = 1;
     if (wDeact || hDeact) {
-        state->doc.window.w = (float)g_cropPixelW;
-        state->doc.window.h = (float)g_cropPixelH;
+        state->doc.window.ww = (float)g_cropPixelW;
+        state->doc.window.wh = (float)g_cropPixelH;
     }
 
     ImGui::Text("rot: %.1f", RectXform_GetRot(&state->doc.window) * 180.0f / (float)M_PI);

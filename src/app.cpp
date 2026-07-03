@@ -225,7 +225,7 @@ void UpdateUI(AppState* state) {
                             const float* cv = LayerStack_GetCanvasView();
                             RectXform viewXform;
                             memcpy(viewXform.mat, cv, sizeof(float) * 6);
-                            viewXform.w = 0; viewXform.h = 0;
+                            viewXform.ww = 0; viewXform.wh = 0;
                             int cnt = LayerStack_Count();
                             for (int i = 0; i < cnt; i++) {
                                 sLayerProps* p = LayerStack_GetProps(i);
@@ -640,8 +640,8 @@ void App_Init(AppState* state) {
 
     state->camera = Camera2D{};
     state->camera.target = Vector2{
-        state->doc.window.mat[0]*state->doc.window.w*0.5f + state->doc.window.mat[1]*state->doc.window.h*0.5f + state->doc.window.mat[2],
-        state->doc.window.mat[3]*state->doc.window.w*0.5f + state->doc.window.mat[4]*state->doc.window.h*0.5f + state->doc.window.mat[5]
+        state->doc.window.mat[0]*state->doc.window.ww*0.5f + state->doc.window.mat[1]*state->doc.window.wh*0.5f + state->doc.window.mat[2],
+        state->doc.window.mat[3]*state->doc.window.ww*0.5f + state->doc.window.mat[4]*state->doc.window.wh*0.5f + state->doc.window.mat[5]
     };
     state->camera.offset = Vector2{viewportBounds.x + viewportBounds.width * 0.5f, viewportBounds.y + viewportBounds.height * 0.5f};
 

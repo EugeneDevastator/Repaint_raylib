@@ -104,7 +104,7 @@ void ViewportHUD_Draw(AppState* state) {
                 RectXform vXf;
                 vXf.mat[0]=state->camera.zoom; vXf.mat[1]=0; vXf.mat[2]=-state->camera.target.x*state->camera.zoom+vOffX;
                 vXf.mat[3]=0; vXf.mat[4]=state->camera.zoom; vXf.mat[5]=-state->camera.target.y*state->camera.zoom+vOffY;
-                vXf.w=0; vXf.h=0;
+                vXf.ww=0; vXf.wh=0;
                 // Compute checker rect: crop rect AABB in world-space, transformed to viewport pixels
                 Rectangle checkerRect = {0,0,0,0};
                 {
@@ -132,7 +132,7 @@ void ViewportHUD_Draw(AppState* state) {
             float texH = (float)docBlendTex->texture.height;
             float dstX = -state->camera.target.x * state->camera.zoom + state->camera.offset.x;
             float dstY = -state->camera.target.y * state->camera.zoom + state->camera.offset.y;
-            float ww = state->doc.window.w, wh = state->doc.window.h;
+            float ww = state->doc.window.ww, wh = state->doc.window.wh;
             float dstW = ww * state->camera.zoom;
             float dstH = wh * state->camera.zoom;
             Rectangle srcRect = {0, 0, texW, -texH};
