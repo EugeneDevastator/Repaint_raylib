@@ -29,7 +29,7 @@ void TexPanelModule::DrawGL(const DrawRect& rect) {
     // ── Texture preview (1.2× bigger) ──
     float pvSz = 230.0f;
     float pvX = rect.x + pW + gap + (pW - pvSz) * 0.5f;
-    float pvY = bgY + 110.0f;
+    float pvY = bgY + 135.0f;
 
     if (activeTs && activeTs->rt.id > 0) {
         float texW = (float)activeTs->w, texH = (float)activeTs->h;

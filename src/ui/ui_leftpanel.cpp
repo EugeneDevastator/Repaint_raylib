@@ -188,8 +188,11 @@ void LeftPanel_Draw(AppState* state) {
     }
 
     ImGui::Spacing();
-    ImGui::Checkbox("Seamless", &g_seamlessPaint);
-    ImGui::Checkbox("Seamless Preview", &g_seamlessPreview);
+    bool seamlessMode = g_seamlessPaint || g_seamlessPreview;
+    if (ImGui::Checkbox("Seamless Mode", &seamlessMode)) {
+        g_seamlessPaint = seamlessMode;
+        g_seamlessPreview = seamlessMode;
+    }
 
     ImGui::Spacing();
     int preserve = state->currentBrush.Realb.preserveop;
