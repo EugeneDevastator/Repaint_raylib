@@ -53,10 +53,4 @@ Rectangle GetWorldAABB(const RectXform* rx);
 // Returns true if they intersect, optionally filling the intersection rect.
 bool GetWorldIntersectionAABB(const RectXform* a, const RectXform* b, Rectangle* out);
 
-// Convert world coordinates to pixel coordinates at the world origin.
-// pixel = world * ppu
-static inline Vector2 GetPixelCoord(float worldX, float worldY, float ppu) {
-    return Vector2{worldX * ppu, worldY * ppu};
-}
-
 #endif

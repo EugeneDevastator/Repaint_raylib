@@ -103,7 +103,7 @@ static void SyncCanvasFromDoc(const Document* doc, int* outW, int* outH) {
     int cw = DocOutPxW(doc), ch = DocOutPxH(doc);
     if (outW) *outW = cw; if (outH) *outH = ch;
     float cv[6];
-    ComputeCanvasMatrix(doc->ppu, &doc->window, cw, ch, cv);
+    ComputeCanvasMatrix(&doc->window, cw, ch, cv);
     LayerStack_SetCanvasView(cv);
     LayerStack_SetRenderWindow(cw, ch);
 }

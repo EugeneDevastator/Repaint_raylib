@@ -42,7 +42,7 @@ bool LayerXformModule::HandleInput(InputState& input, const DrawRect& rect) {
     }
 
     sLayerProps* lp = LayerStack_GetProps(state->activeLayer);
-    // Sync xform extent from pixel dimensions (world units = pixels at ppu=1)
+    // Sync xform extent from pixel dimensions
     lp->xform.w = (float)lp->layerW;
     lp->xform.h = (float)lp->layerH;
     if (lp->xform.w < 1.0f) lp->xform.w = state->doc.window.w;
@@ -97,6 +97,14 @@ void LayerXformModule::DrawGUI(const DrawRect& rect) {
     ImGui::Begin("##layerOps", NULL,
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar);
+
+    // ── Layer info ──
+    if (state->activeLayer < LayerStack_Count()) {
+        sLayerProps* lp = LayerStack_GetProps(state->activeLayer);
+        ImGui::Text("Tex: %d x %d", lp->layerW, lp->layerH);
+        ImGui::Text("XWH: %.0f x %.0f", lp->xform.w, lp->xform.h);
+        ImGui::Separator();
+    }
 
     // ── Stored transform editor ──
     float store[6];

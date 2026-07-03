@@ -178,9 +178,9 @@ void ViewportHUD_Draw(AppState* state) {
             ClearBackground(BLANK);
             if (state->framingMode != FRAME_CROP && docBlendTex) {
                 // Position the texture so the pixel under the camera target
-                // lands at the preview center — works regardless of ppu.
-                float texTX = state->camera.target.x * state->doc.ppu;
-                float texTY = state->camera.target.y * state->doc.ppu;
+                // lands at the preview center.
+                float texTX = state->camera.target.x;
+                float texTY = state->camera.target.y;
                 float drawX = PREVIEW_SZ * 0.5f - texTX;
                 float drawY = PREVIEW_SZ * 0.5f - texTY;
                 rlSetBlendMode(RL_BLEND_CUSTOM);

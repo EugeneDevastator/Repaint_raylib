@@ -158,7 +158,7 @@ bool SaveRePaint(const char* path, Document* doc, AppState* state) {
     _wcpy(&p, compPng, compSize);
     _wcpy(&p, MAGIC, MAGIC_LEN);
     _wu32(&p, FILE_VER);
-    _wcpy(&p, &doc->ppu, 4);            // v6: ppu (was width)
+    float ppuOne = 1.0f; _wcpy(&p, &ppuOne, 4); // ppu (always 1, was width in v3-v5)
     { uint32_t _z=0; _wu32(&p,_z); }   // reserved (was height)
     _wu32(&p, (uint32_t)lc);
     _wu32(&p, pixelDepth);
@@ -252,7 +252,6 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
     uint32_t ver = _ru32(&p);
 
     // ── Parse header (version-dependent layout) ─────────────────────
-    float ppuFromFile = 1.0f;
     float loadCx=0, loadCy=0, loadW=0, loadH=0, loadRot=0;
     uint32_t lc = 0;
     uint32_t pixelDepth = 0;
@@ -262,7 +261,6 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
         // v3-v5: w,h are pixel dimensions
         uint32_t w = _ru32(&p), h = _ru32(&p);
         if (w < 1 || w > 32768 || h < 1 || h > 32768) { UnloadFileData(fileData); return false; }
-        ppuFromFile = 1.0f;
         loadCx = w * 0.5f; loadCy = h * 0.5f;
         loadW = (float)w; loadH = (float)h; loadRot = 0.0f;
         oldFileW = (int)w; oldFileH = (int)h;
@@ -270,8 +268,8 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
         if (lc < 1 || lc > 256) { UnloadFileData(fileData); return false; }
         if (ver >= 5) pixelDepth = _ru32(&p);
     } else {
-        // v6+ : ppu (float) + CanvasWindow data
-        memcpy(&ppuFromFile, p, 4); p += 4;
+        // v6+ : ppu (float, ignored) + CanvasWindow data
+        p += 4; // skip ppu
         p += 4; // reserved (was height)
         lc = _ru32(&p);
         if (lc < 1 || lc > 256) { UnloadFileData(fileData); return false; }
@@ -282,7 +280,6 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
         memcpy(&loadH,  p, 4); p += 4;
         memcpy(&loadRot, p, 4); p += 4;
     }
-    doc->ppu = ppuFromFile;
     doc->window = RectXform_Pivot(loadCx, loadCy, loadW, loadH, loadRot);
 
     // ── Load layers ──────────────────────────────────────────────────
