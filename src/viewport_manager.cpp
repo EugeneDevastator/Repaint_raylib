@@ -226,14 +226,21 @@ RenderTexture2D ViewportManager_GetMergedTexture(const RectXform* xform, int w, 
 
 int ViewportManager_CreateLayerFromImage(Image img) {
     if (!img.data) return -1;
+
     int n = LayerStack_Count();
     int newIdx = LayerStack_InsertLayer(n > 0 ? n - 1 : 0);
     sLayerProps* lp = LayerStack_GetProps(newIdx);
-    /* Set layer pixel size to match image */
+
+    /* Set pixel dimensions */
     lp->layerW = img.width;
     lp->layerH = img.height;
-    lp->xform = RectXform_Pivot(0, 0, (float)img.width, (float)img.height, 0);
-    /* Upload image to layer's render texture */
+
+    /* xform extent in world units (1 unit = WORLD_UNIT_PX px) */
+    lp->xform = RectXform_Pivot(0, 0,
+        (float)img.width / WORLD_UNIT_PX,
+        (float)img.height / WORLD_UNIT_PX, 0);
+
+    /* Upload image content */
     Texture2D tmp = LoadTextureFromImage(img);
     UnloadImage(img);
     BeginTextureMode(LayerStack_GetRT(newIdx));
@@ -244,6 +251,7 @@ int ViewportManager_CreateLayerFromImage(Image img) {
     rlSetBlendMode(RL_BLEND_ALPHA);
     EndTextureMode();
     UnloadTexture(tmp);
+
     ViewportManager_SetDirty();
     return newIdx;
 }

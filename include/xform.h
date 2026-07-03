@@ -3,6 +3,10 @@
 
 #include "raylib.h"
 
+// ── World units ───────────────────────────────────────────────────────
+// 1 world unit = 256 pixels (the canvas PPU)
+#define WORLD_UNIT_PX 256.0f
+
 // ── 2×3 affine matrix (row-major: [a, b, tx, c, d, ty]) ─────────
 // Pivot is always at (0,0). Matrix maps from local space to the
 // coordinate space of its parent, independent of any w/h extent.
