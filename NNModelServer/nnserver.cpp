@@ -243,6 +243,7 @@ int main(int argc, char** argv) {
     std::string sd_path = dl_resolve_optional(DL_SD_MODEL);
     if (!sd_path.empty())
         g_sd_available = sd_init(sd_path.c_str());
+    fprintf(stderr, "[nnserver] SD available: %s\n", g_sd_available ? "yes" : "no");
 
     std::string upscale_path = dl_resolve_optional(DL_UPSCALER_MODEL);
     OnnxModel* upscaler = nullptr;

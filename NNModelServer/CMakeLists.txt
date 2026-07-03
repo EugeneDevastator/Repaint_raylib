@@ -90,7 +90,14 @@ if(WIN32)
     # ── stable-diffusion ─────────────────────────────────────────────
     set(SD_BUILD_DIR "${CMAKE_CURRENT_SOURCE_DIR}/sd-build")
     set(SD_INCLUDE_DIR "${SD_BUILD_DIR}/include")
-    set(SD_LIB_DIR     "${SD_BUILD_DIR}/lib")
+    if(WIN32)
+        set(SD_PLATFORM "win64")
+    elseif(APPLE)
+        set(SD_PLATFORM "mac")
+    else()
+        set(SD_PLATFORM "linux")
+    endif()
+    set(SD_LIB_DIR     "${SD_BUILD_DIR}/${SD_PLATFORM}")
 
     if(EXISTS "${SD_LIB_DIR}/libstable-diffusion.a")
         message(STATUS "sd: using prebuilt static library")
@@ -104,6 +111,20 @@ if(WIN32)
             -Wl,--end-group
             -fopenmp)
 
+        # Link Vulkan backend if prebuilt
+        if(EXISTS "${SD_LIB_DIR}/ggml-vulkan.a" OR EXISTS "${SD_LIB_DIR}/libggml-vulkan.a")
+            # Mingw64's libvulkan-1.dll.a (not the MS SDK's .lib)
+            find_library(_vulkan_lib vulkan-1
+                PATHS "C:/msys64/mingw64/lib"
+                      "$ENV{MINGW_PREFIX}/lib")
+            if(_vulkan_lib)
+                target_link_libraries(nnserver PRIVATE ggml-vulkan "${_vulkan_lib}")
+                message(STATUS "vulkan: linking ${_vulkan_lib}")
+            else()
+                target_link_libraries(nnserver PRIVATE ggml-vulkan -lvulkan-1)
+            endif()
+        endif()
+
         find_file(_gomp_dll libgomp-1.dll
             PATHS "C:/msys64/mingw64/bin"
                   "$ENV{MINGW_PREFIX}/bin"
@@ -115,6 +136,20 @@ if(WIN32)
                     "$<TARGET_FILE_DIR:nnserver>/"
                 COMMENT "Copying libgomp-1.dll")
         endif()
+
+        # Copy Vulkan loader DLL alongside the exe
+        find_file(_vulkan_dll vulkan-1.dll
+            PATHS "C:/msys64/mingw64/bin"
+                  "$ENV{MINGW_PREFIX}/bin"
+                  "$ENV{CUDA_PATH}/bin"
+                  "$ENV{VULKAN_SDK}/Bin")
+        if(_vulkan_dll)
+            add_custom_command(TARGET nnserver POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${_vulkan_dll}"
+                    "$<TARGET_FILE_DIR:nnserver>/"
+                COMMENT "Copying vulkan-1.dll")
+        endif()
     else()
         message(STATUS "sd: prebuilt lib not found, building from source (FetchContent)")
         include(FetchContent)
@@ -124,6 +159,8 @@ if(WIN32)
             GIT_TAG        master
             GIT_SHALLOW    TRUE
             GIT_SUBMODULES "ggml")
+        set(SD_VULKAN ON CACHE BOOL "" FORCE)
+        set(GGML_VULKAN ON CACHE BOOL "" FORCE)
         FetchContent_MakeAvailable(stable-diffusion-cpp)
 
         target_compile_options(stable-diffusion PRIVATE -frtti)
@@ -170,6 +207,8 @@ else()  # ── Linux ───────────────────
         GIT_TAG        master
         GIT_SHALLOW    TRUE
         GIT_SUBMODULES "ggml")
+    set(SD_VULKAN ON CACHE BOOL "" FORCE)
+    set(GGML_VULKAN ON CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(stable-diffusion-cpp)
 
     target_compile_options(stable-diffusion PRIVATE -frtti)
