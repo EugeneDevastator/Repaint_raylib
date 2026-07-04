@@ -205,7 +205,7 @@ bool LAction_Deserialize(d_LAction* la, uint8_t* buf, size_t len) {
 size_t LayerProps_Serialize(sLayerProps* lp, uint8_t* buf, size_t cap) {
     size_t off = 0;
     uint32_t nameLen = (uint32_t)strnlen(lp->layerName, sizeof(lp->layerName));
-    if (off + sizeof(float) + sizeof(uint8_t)*3 + sizeof(uint32_t) + nameLen + sizeof(uint8_t)*3 + 6*sizeof(float) > cap)
+    if (off + sizeof(float) + sizeof(uint8_t)*3 + sizeof(uint32_t) + nameLen + sizeof(uint8_t)*3 + 8*sizeof(float) > cap)
         return 0;
 
     memcpy(buf + off, &lp->op, sizeof(float)); off += sizeof(float);
@@ -224,8 +224,10 @@ size_t LayerProps_Serialize(sLayerProps* lp, uint8_t* buf, size_t cap) {
     if (nameLen > 0) {
         memcpy(buf + off, lp->layerName, nameLen); off += nameLen;
     }
-    // mat[6] — affine transform
+    // mat[6] + ww,wh — affine transform + scale
     memcpy(buf + off, lp->xform.mat, 6 * sizeof(float)); off += 6 * sizeof(float);
+    memcpy(buf + off, &lp->xform.ww, sizeof(float)); off += sizeof(float);
+    memcpy(buf + off, &lp->xform.wh, sizeof(float)); off += sizeof(float);
     return off;
 }
 
@@ -253,6 +255,11 @@ bool LayerProps_Deserialize(sLayerProps* lp, uint8_t* buf, size_t len) {
     // mat[6] — affine transform (may be absent in old packets)
     if (off + 6*sizeof(float) <= len) {
         memcpy(lp->xform.mat, buf + off, 6 * sizeof(float)); off += 6 * sizeof(float);
+        // ww, wh — scale extents (present in newer packets)
+        if (off + 2*sizeof(float) <= len) {
+            memcpy(&lp->xform.ww, buf + off, sizeof(float)); off += sizeof(float);
+            memcpy(&lp->xform.wh, buf + off, sizeof(float)); off += sizeof(float);
+        }
     } else {
         lp->xform.mat[0] = 1; lp->xform.mat[1] = 0; lp->xform.mat[2] = 0;
         lp->xform.mat[3] = 0; lp->xform.mat[4] = 1; lp->xform.mat[5] = 0;

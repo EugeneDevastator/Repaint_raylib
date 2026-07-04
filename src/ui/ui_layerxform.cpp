@@ -17,8 +17,8 @@ bool LayerXformModule::HandleInput(InputState& input, const DrawRect& rect) {
             if (state->activeLayer >= 0) {
                 sLayerProps* lp = LayerStack_GetProps(state->activeLayer);
                 float* m = lp->xform.mat;
-                g_pivotCursorX = m[2] + m[0]*GetLayerWpx(state->activeLayer)*0.5f + m[1]*GetLayerHpx(state->activeLayer)*0.5f;
-                g_pivotCursorY = m[5] + m[3]*GetLayerWpx(state->activeLayer)*0.5f + m[4]*GetLayerHpx(state->activeLayer)*0.5f;
+                g_pivotCursorX = m[2] + m[0]*lp->xform.ww*0.5f + m[1]*lp->xform.wh*0.5f;
+                g_pivotCursorY = m[5] + m[3]*lp->xform.ww*0.5f + m[4]*lp->xform.wh*0.5f;
             }
         }
         return true;
@@ -42,9 +42,6 @@ bool LayerXformModule::HandleInput(InputState& input, const DrawRect& rect) {
     }
 
     sLayerProps* lp = LayerStack_GetProps(state->activeLayer);
-    // Sync xform extent from pixel dimensions
-    lp->xform.ww = (float)GetLayerWpx(state->activeLayer);
-    lp->xform.wh = (float)GetLayerHpx(state->activeLayer);
     if (lp->xform.ww < 1.0f) lp->xform.ww = state->doc.window.ww;
     if (lp->xform.wh < 1.0f) lp->xform.wh = state->doc.window.wh;
 
