@@ -19,6 +19,17 @@
 // ── Selection state ───────────────────────────────────────────────────
 static RectXform  g_sdXform = {};
 static Vector2    g_sdCursor = {};
+static bool       g_sdXformInit = false;
+static void EnsureSdXformInit(AppState* state) {
+    if (!g_sdXformInit) {
+        g_sdXform = RectXform_Pivot(
+            state->camera.target.x,
+            state->camera.target.y,
+            100.0f, 100.0f, 0);
+        g_sdCursor = {state->camera.target.x, state->camera.target.y};
+        g_sdXformInit = true;
+    }
+}
 
 // ── UI controls ───────────────────────────────────────────────────────
 static int    g_resolution = 512;
@@ -45,8 +56,8 @@ static bool            g_hoverPreview = false;
 static RectXform BuildCropViewXform(int pw, int ph) {
     RectXform vx = {};
     if (g_sdXform.ww > 0.0f && g_sdXform.wh > 0.0f) {
-        float su = pw / g_sdXform.ww;
-        float sv = ph / g_sdXform.wh;
+            float su = pw / g_sdXform.ww;
+            float sv = ph / g_sdXform.wh;
         float* m = g_sdXform.mat;
         float det = m[0]*m[4] - m[1]*m[3];
         if (fabsf(det) > 0.0001f) {
@@ -104,15 +115,11 @@ static void upscale_worker(Image src_img) {
 // ── SDHudModule ───────────────────────────────────────────────────────
 
 bool SDHudModule::HandleInput(InputState& input, const DrawRect& rect) {
+    EnsureSdXformInit(state);
     if (!ImGui::IsAnyItemActive() && input.KeyPressed(KEY_FOUR)) {
         if (g_activeHud == HUD_SD) {
             HudSetActive(state, HUD_NONE);
         } else {
-            g_sdXform = RectXform_Pivot(
-                state->camera.target.x,
-                state->camera.target.y,
-                2.0f, 2.0f, 0);
-            g_sdCursor = {state->camera.target.x, state->camera.target.y};
             TransformHandle_ResetState();
             HudSetActive(state, HUD_SD);
         }
@@ -150,15 +157,18 @@ void SDHudModule::DrawGL(const DrawRect& rect) {
     if (g_activeHud != HUD_SD) return;
     TransformHandle_Draw(&g_sdXform, g_sdCursor, &state->camera);
 
-    // Hover overlay: show composited input at g_sdXform world rect with point filtering
+    // Hover overlay: show composited input centered 1:1 on screen (point sampling)
     if (g_hoverPreview && g_inputPreview.id) {
-        Rectangle aabb = GetWorldAABB(&g_sdXform);
-        if (aabb.width > 0 && aabb.height > 0) {
+        int tw = g_inputPreview.texture.width, th = g_inputPreview.texture.height;
+        if (tw > 0 && th > 0) {
+            float sx = (float)GetScreenWidth(), sy = (float)GetScreenHeight();
+            float dx = (sx - tw) * 0.5f, dy = (sy - th) * 0.5f;
             SetTextureFilter(g_inputPreview.texture, TEXTURE_FILTER_POINT);
             rlDrawRenderBatchActive();
             DrawTexturePro(g_inputPreview.texture,
-                Rectangle{0,0,(float)g_inputPreview.texture.width,(float)g_inputPreview.texture.height},
-                aabb, Vector2{0,0}, 0, ColorAlpha(WHITE, 0.85f));
+                Rectangle{0,(float)th,(float)tw,(float)-th},
+                Rectangle{dx, dy, (float)tw, (float)th},
+                Vector2{0,0}, 0, ColorAlpha(WHITE, 0.85f));
             SetTextureFilter(g_inputPreview.texture, TEXTURE_FILTER_BILINEAR);
         }
     }
@@ -209,7 +219,8 @@ void SDHudModule::DrawGUI(const DrawRect& rect) {
             if (dw < 1) dw = 1; if (dh < 1) dh = 1;
             SetTextureFilter(g_inputPreview.texture, TEXTURE_FILTER_BILINEAR);
             ImGui::Image((ImTextureID)(intptr_t)g_inputPreview.texture.id,
-                         ImVec2((float)dw, (float)dh));
+                         ImVec2((float)dw, (float)dh),
+                         ImVec2(0,1), ImVec2(1,0));
             g_hoverPreview = ImGui::IsItemHovered();
             ImGui::SameLine();
             ImGui::Text("%d x %d", pw, ph);
@@ -286,9 +297,25 @@ void SDHudModule::DrawGUI(const DrawRect& rect) {
             RectXform viewXf = BuildCropViewXform(pw, ph);
             ViewportManager_CompositeViewInto(rt, &viewXf, pw, ph);
             Image img = LoadImageFromTexture(rt.texture);
+            ImageFlipVertical(&img);
             UnloadRenderTexture(rt);
 
             if (img.data) {
+                g_running = true;
+                g_threadDone = false;
+                g_progressMsg[0] = '\0';
+                std::thread t(upscale_worker, img);
+                t.detach();
+            }
+        }
+        ImGui::EndDisabled();
+        ImGui::Dummy(ImVec2(0, 4));
+        bool canUpLayer = !g_running && state->activeLayer >= 0;
+        ImGui::BeginDisabled(!canUpLayer);
+        if (ImGui::Button("Upscale Active Layer", ImVec2(-1, 28))) {
+            Image img = LayerStack_ReadFromGPU(state->activeLayer);
+            if (img.data) {
+                ImageFormat(&img, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
                 g_running = true;
                 g_threadDone = false;
                 g_progressMsg[0] = '\0';
