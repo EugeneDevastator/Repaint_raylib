@@ -37,7 +37,7 @@ static size_t _propsSize(sLayerProps* lp) {
          + sizeof(float) * 2;  // threshold, feather (v5 — was missing!)
 }
 
-static void _writeProps(uint8_t** p, sLayerProps* lp) {
+static void _writeProps(uint8_t** p, sLayerProps* lp, int texW, int texH) {
     uint32_t nameLen = (uint32_t)strnlen(lp->layerName, sizeof(lp->layerName));
     _wcpy(p, &lp->op, sizeof(float));
     *(*p)++ = lp->visible ? 1 : 0;
@@ -49,11 +49,19 @@ static void _writeProps(uint8_t** p, sLayerProps* lp) {
     *(*p)++ = lp->realidx;
     _wu32(p, nameLen);
     if (nameLen > 0) _wcpy(p, lp->layerName, nameLen);
-    _wcpy(p, lp->xform.mat, 6 * sizeof(float));               // v4+
-    _wu32(p, (uint32_t)lp->xform.ww);                     // v5+: native width
-    _wu32(p, (uint32_t)lp->xform.wh);                     // v5+: native height
-    _wcpy(p, &lp->threshold, sizeof(float));             // v5+: was missing before
-    _wcpy(p, &lp->feather,  sizeof(float));             // v5+: was missing before
+    // Encode scale into matrix columns (scale lives in ww/wh in memory,
+    // but file format stores scale in matrix columns like v4 originally did)
+    float su = (texW > 0) ? lp->xform.ww / texW : 1.0f;
+    float sv = (texH > 0) ? lp->xform.wh / texH : 1.0f;
+    float mat[6];
+    memcpy(mat, lp->xform.mat, sizeof(mat));
+    mat[0] *= su; mat[3] *= su;
+    mat[1] *= sv; mat[4] *= sv;
+    _wcpy(p, mat, 6 * sizeof(float));
+    _wu32(p, (uint32_t)texW);
+    _wu32(p, (uint32_t)texH);
+    _wcpy(p, &lp->threshold, sizeof(float));
+    _wcpy(p, &lp->feather,  sizeof(float));
 }
 
 static uint32_t _ru32(const uint8_t** p); // forward decl
@@ -106,13 +114,15 @@ bool SaveRePaint(const char* path, Document* doc, AppState* state) {
     struct { size_t propsSz; uint8_t* propsData; } blobs[256];
     for (int i = 0; i < lc; i++) {
         sLayerProps* p = LayerStack_GetProps(i);
+        int texW = LayerStack_GetRT(i).texture.width;
+        int texH = LayerStack_GetRT(i).texture.height;
         blobs[i].propsSz = _propsSize(p);
         blobs[i].propsData = (uint8_t*)malloc(blobs[i].propsSz);
         if (!blobs[i].propsData) { for (int j = 0; j < i; j++) free(blobs[j].propsData); MemFree(compPng); return false; }
         uint8_t* wp = blobs[i].propsData;
-        _writeProps(&wp, p);
+        _writeProps(&wp, p, texW, texH);
 
-        int rawSz = (int)p->xform.ww * (int)p->xform.wh * 8;
+        int rawSz = texW * texH * 8;
         totalExtra += 4 + blobs[i].propsSz + 4 + rawSz;
     }
 
@@ -177,7 +187,7 @@ bool SaveRePaint(const char* path, Document* doc, AppState* state) {
         sLayerProps* props = LayerStack_GetProps(i);
         _wu32(&p, (uint32_t)blobs[i].propsSz);
         _wcpy(&p, blobs[i].propsData, blobs[i].propsSz);
-        int rawSz = (int)props->xform.ww * (int)props->xform.wh * 8;
+        int rawSz = layerImg.width * layerImg.height * 8;
         _wu32(&p, (uint32_t)rawSz);
         _wcpy(&p, layerImg.data, rawSz);
         UnloadImage(layerImg);
@@ -321,15 +331,24 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
             const uint8_t* propStart = p;
             _readProps(&p, &tempProps, ver);
             p = propStart + propSz;
-            int lw = tempProps.xform.ww > 0 ? (int)tempProps.xform.ww : oldFileW;
-            int lh = tempProps.xform.wh > 0 ? (int)tempProps.xform.wh : oldFileH;
+            // Decompose scale from matrix columns (file stores scale in columns)
+            int pixelW = (int)tempProps.xform.ww;
+            int pixelH = (int)tempProps.xform.wh;
+            if (pixelW <= 0) pixelW = oldFileW;
+            if (pixelH <= 0) pixelH = oldFileH;
+            float su = sqrtf(tempProps.xform.mat[0]*tempProps.xform.mat[0] + tempProps.xform.mat[3]*tempProps.xform.mat[3]);
+            float sv = sqrtf(tempProps.xform.mat[1]*tempProps.xform.mat[1] + tempProps.xform.mat[4]*tempProps.xform.mat[4]);
+            if (su > 0.0001f) { tempProps.xform.mat[0] /= su; tempProps.xform.mat[3] /= su; }
+            if (sv > 0.0001f) { tempProps.xform.mat[1] /= sv; tempProps.xform.mat[4] /= sv; }
+            tempProps.xform.ww = pixelW * su;
+            tempProps.xform.wh = pixelH * sv;
 
             uint32_t dataSz = _ru32(&p);
             if ((int)(p - fileData) + (int)dataSz > fileSz) { UnloadFileData(fileData); return false; }
 
             Image layerImg; memset(&layerImg, 0, sizeof(layerImg));
             if (pixelDepth == 1) {
-                layerImg.width = lw; layerImg.height = lh;
+                layerImg.width = pixelW; layerImg.height = pixelH;
                 layerImg.format = PIXELFORMAT_UNCOMPRESSED_R16G16B16A16; layerImg.mipmaps = 1;
                 layerImg.data = malloc(dataSz);
                 if (!layerImg.data) { UnloadFileData(fileData); return false; }
@@ -337,8 +356,8 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
             } else {
                 layerImg = LoadImageFromMemory(".png", p, (int)dataSz); p += dataSz;
                 if (layerImg.data == NULL) { UnloadFileData(fileData); return false; }
-                if (layerImg.width != lw || layerImg.height != lh) ImageResize(&layerImg, lw, lh);
-                int pxCount = lw * lh;
+                if (layerImg.width != pixelW || layerImg.height != pixelH) ImageResize(&layerImg, pixelW, pixelH);
+                int pxCount = pixelW * pixelH;
                 uint16_t* d16 = (uint16_t*)malloc(pxCount * 4 * sizeof(uint16_t));
                 uint8_t* s8 = (uint8_t*)layerImg.data;
                 for (int pi = 0; pi < pxCount; pi++) {
@@ -348,10 +367,8 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
                 free(layerImg.data); layerImg.data = d16; layerImg.format = PIXELFORMAT_UNCOMPRESSED_R16G16B16A16;
             }
 
-            int idx = LayerStack_Add(lw, lh);
+            int idx = LayerStack_Add(pixelW, pixelH);
             *LayerStack_GetProps(idx) = tempProps;
-            LayerStack_GetProps(idx)->xform.ww = (float)lw;
-            LayerStack_GetProps(idx)->xform.wh = (float)lh;
             LayerStack_UploadToGPU(idx, layerImg);
         }
     }
