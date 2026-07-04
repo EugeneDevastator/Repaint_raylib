@@ -17,8 +17,8 @@ bool LayerXformModule::HandleInput(InputState& input, const DrawRect& rect) {
             if (state->activeLayer >= 0) {
                 sLayerProps* lp = LayerStack_GetProps(state->activeLayer);
                 float* m = lp->xform.mat;
-                g_pivotCursorX = m[2] + m[0]*lp->layerW*0.5f + m[1]*lp->layerH*0.5f;
-                g_pivotCursorY = m[5] + m[3]*lp->layerW*0.5f + m[4]*lp->layerH*0.5f;
+                g_pivotCursorX = m[2] + m[0]*lp->xform.ww*0.5f + m[1]*lp->xform.wh*0.5f;
+                g_pivotCursorY = m[5] + m[3]*lp->xform.ww*0.5f + m[4]*lp->xform.wh*0.5f;
             }
         }
         return true;
@@ -42,11 +42,8 @@ bool LayerXformModule::HandleInput(InputState& input, const DrawRect& rect) {
     }
 
     sLayerProps* lp = LayerStack_GetProps(state->activeLayer);
-    // Sync xform extent from pixel dimensions (world units = pixels at ppu=1)
-    lp->xform.w = (float)lp->layerW;
-    lp->xform.h = (float)lp->layerH;
-    if (lp->xform.w < 1.0f) lp->xform.w = state->doc.window.w;
-    if (lp->xform.h < 1.0f) lp->xform.h = state->doc.window.h;
+    if (lp->xform.ww < 1.0f) lp->xform.ww = state->doc.window.ww;
+    if (lp->xform.wh < 1.0f) lp->xform.wh = state->doc.window.wh;
 
     Vector2 cursor = {g_pivotCursorX, g_pivotCursorY};
     bool changed = TransformHandle_Input(&lp->xform, &cursor,
@@ -97,6 +94,14 @@ void LayerXformModule::DrawGUI(const DrawRect& rect) {
     ImGui::Begin("##layerOps", NULL,
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar);
+
+    // ── Layer info ──
+    if (state->activeLayer < LayerStack_Count()) {
+        sLayerProps* lp = LayerStack_GetProps(state->activeLayer);
+        ImGui::Text("Tex: %d x %d", GetLayerWpx(state->activeLayer), GetLayerHpx(state->activeLayer));
+        ImGui::Text("XWH: %.0f x %.0f", lp->xform.ww, lp->xform.wh);
+        ImGui::Separator();
+    }
 
     // ── Stored transform editor ──
     float store[6];

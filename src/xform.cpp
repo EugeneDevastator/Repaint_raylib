@@ -46,13 +46,13 @@ void Xform_SetScale(float out[6], float sx, float sy) {
     out[3]=0;  out[4]=sy; out[5]=0;
 }
 
-RectXform RectXform_Pivot(float cx, float cy, float w, float h, float rot) {
+RectXform RectXform_Pivot(float cx, float cy, float ww, float wh, float rot) {
     RectXform rx;
     Xform_SetRot(rx.mat, rot);
     rx.mat[2] = cx;
     rx.mat[5] = cy;
-    rx.w = w;
-    rx.h = h;
+    rx.ww = ww;
+    rx.wh = wh;
     return rx;
 }
 
@@ -63,7 +63,7 @@ float RectXform_GetRot(const RectXform* rx) {
 Rectangle GetWorldAABB(const RectXform* rx) {
     float a = rx->mat[0], b = rx->mat[1], tx = rx->mat[2];
     float c = rx->mat[3], d = rx->mat[4], ty = rx->mat[5];
-    float w = rx->w, h = rx->h;
+    float w = rx->ww, h = rx->wh;
     float x0 = tx,           y0 = ty;
     float x1 = a*w + tx,     y1 = c*w + ty;
     float x2 = b*h + tx,     y2 = d*h + ty;

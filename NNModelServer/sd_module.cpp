@@ -19,18 +19,28 @@ bool sd_init(const char* model_path) {
     fprintf(stderr, "[sd] library: stable-diffusion.cpp commit %s\n", sd_commit());
     fprintf(stderr, "[sd] loading: %s\n", model_path);
 
-    sd_ctx_params_t params;
-    sd_ctx_params_init(&params);
-    params.model_path = model_path;
-    params.n_threads  = 8;
-    params.wtype      = SD_TYPE_F32;
+    const char* backends[] = {"vulkan", "cpu"};
+    g_ctx = nullptr;
 
-    g_ctx = new_sd_ctx(&params);
+    for (int i = 0; i < 2 && !g_ctx; i++) {
+        sd_ctx_params_t params;
+        sd_ctx_params_init(&params);
+        params.model_path = model_path;
+        params.n_threads  = 8;
+        params.wtype      = SD_TYPE_F32;
+        params.backend    = backends[i];
+        params.params_backend = backends[i];
+        g_ctx = new_sd_ctx(&params);
+        if (g_ctx)
+            fprintf(stderr, "[sd] backend: %s\n", backends[i]);
+    }
+
     if (!g_ctx) {
         fprintf(stderr, "[sd] init failed\n");
         return false;
     }
-    fprintf(stderr, "[sd] init OK\n");
+
+    fprintf(stderr, "[sd] system: %s\n", sd_get_system_info());
     return true;
 }
 

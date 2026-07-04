@@ -63,7 +63,7 @@ RenderTexture2D* ViewportManager_Composite(void) {
     RectXform viewXform;
     const float* cv = LayerStack_GetCanvasView();
     memcpy(viewXform.mat, cv, 6*sizeof(float));
-    viewXform.w=0; viewXform.h=0;
+    viewXform.ww=0; viewXform.wh=0;
 
     int count = LayerStack_Count();
     for(int i=0;i<count;i++){
@@ -93,7 +93,7 @@ Image ViewportManager_CompositeWithDither(void) {
     RectXform viewXform;
     const float* cv = LayerStack_GetCanvasView();
     memcpy(viewXform.mat, cv, 6*sizeof(float));
-    viewXform.w=0; viewXform.h=0;
+    viewXform.ww=0; viewXform.wh=0;
 
     int count = LayerStack_Count();
     for(int i=0;i<count;i++){
@@ -226,14 +226,13 @@ RenderTexture2D ViewportManager_GetMergedTexture(const RectXform* xform, int w, 
 
 int ViewportManager_CreateLayerFromImage(Image img) {
     if (!img.data) return -1;
+
     int n = LayerStack_Count();
-    int newIdx = LayerStack_InsertLayer(n > 0 ? n - 1 : 0);
+    // Create at the END with pixel-accurate RT and xform
+    int newIdx = LayerStack_Add(img.width, img.height);
     sLayerProps* lp = LayerStack_GetProps(newIdx);
-    /* Set layer pixel size to match image */
-    lp->layerW = img.width;
-    lp->layerH = img.height;
-    lp->xform = RectXform_Pivot(0, 0, (float)img.width, (float)img.height, 0);
-    /* Upload image to layer's render texture */
+
+    // Upload image content
     Texture2D tmp = LoadTextureFromImage(img);
     UnloadImage(img);
     BeginTextureMode(LayerStack_GetRT(newIdx));
@@ -244,6 +243,10 @@ int ViewportManager_CreateLayerFromImage(Image img) {
     rlSetBlendMode(RL_BLEND_ALPHA);
     EndTextureMode();
     UnloadTexture(tmp);
+
+    // Move above bottommost layer
+    if (n > 1) LayerStack_MoveLayer(newIdx, n - 1);
+
     ViewportManager_SetDirty();
     return newIdx;
 }

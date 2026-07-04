@@ -69,7 +69,6 @@ static void InitLayerSlot(int idx, int w, int h) {
     LS.prop[idx]={}; LS.prop[idx].op=1; LS.prop[idx].visible=true;
     LS.prop[idx].blendmode=bmGamma; LS.prop[idx].xform = RectXform_Pivot(0, 0, (float)w, (float)h, 0);
     LS.prop[idx].threshold=0; LS.prop[idx].feather=1;
-    LS.prop[idx].layerW=w; LS.prop[idx].layerH=h;
     char name[64]; snprintf(name, sizeof(name), "Layer %d", idx);
     LS.slotID[idx]=TM_Register(TM_BUCKET_LAYER, LS.rt[idx], name, false, w, h);
 }
@@ -147,7 +146,7 @@ void LayerStack_DuplicateLayer(int idx) {
     if(idx<0||idx>=LS.count) return;
     int n=LS.count; ReallocArrays(n+1); ShiftLayersUp(n,idx+1);
     int di=idx+1; LS.prop[di]=LS.prop[idx];
-    int lw=LS.prop[idx].layerW, lh=LS.prop[idx].layerH;
+    int lw=GetLayerWpx(idx), lh=GetLayerHpx(idx);
     LS.rt[di]=Load16BitRT(lw,lh);
     BeginTextureMode(LS.rt[di]);
     rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE,RL_ZERO,RL_FUNC_ADD);
@@ -207,7 +206,7 @@ void LayerStack_BakeSingleLayer(int idx, RenderTexture2D dst) {
     if(idx<0||idx>=LS.count||LS.rt[idx].id==0||dst.id==0) return;
     BeginTextureMode(dst); ClearBackground(BLANK);
     rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE,RL_ZERO,RL_FUNC_ADD);
-    DrawTextureRec(LS.rt[idx].texture, Rectangle{0,0,(float)LS.prop[idx].layerW,(float)-LS.prop[idx].layerH}, Vector2{0,0}, WHITE);
+    DrawTextureRec(LS.rt[idx].texture, Rectangle{0,0,(float)GetLayerWpx(idx),(float)-GetLayerHpx(idx)}, Vector2{0,0}, WHITE);
     rlSetBlendMode(RL_BLEND_ALPHA); EndTextureMode();
 }
 

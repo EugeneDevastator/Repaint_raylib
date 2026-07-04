@@ -9,11 +9,7 @@
 #include "external/glad.h"
 
 static Shader brushBlendShader = {0};
-static Shader brushGeoShader   = {0};
 
-static int locUAngle  = -1, locUSquish = -1, locUSize = -1;
-static int locUPerspective = -1;
-static int locURadIn  = -1, locUCurve = -1;
 static int locOpacity = -1, locRadIn   = -1;
 static int locBrushColor = -1, locCurve = -1;
 static int locSol = -1, locSol2op = -1, locSeed = -1;
@@ -36,12 +32,13 @@ static int locPwr = -1;
 static int locEraseMode = -1;
 static int locSeamless = -1;
 static int locPixelPerfect = -1;
+static int locUAngle  = -1, locUSquish = -1, locUSize = -1;
+static int locUPerspective = -1;
+static int locURadIn  = -1, locUCurve = -1;
 static int locFocalOffset = -1;
-static int locGeoTex = -1;
 static bool inited = false;
 
 #define POOL_COUNT 64
-static RenderTexture2D geoPool[POOL_COUNT] = {0};
 static RenderTexture2D intermediatePool[POOL_COUNT] = {0};
 static Texture2D whiteTex = {0};
 
@@ -105,17 +102,6 @@ void BrushBlend_Init(void) {
     const char* ad = GetApplicationDirectory();
     char vs[512], fs[512];
 
-    snprintf(vs, sizeof(vs), "%sshaders/brush_geo.vs", ad);
-    snprintf(fs, sizeof(fs), "%sshaders/brush_geo.fs", ad);
-    brushGeoShader = LoadShaderWithIncludes(vs, fs);
-    locUAngle  = GetShaderLocation(brushGeoShader, "uAngle");
-    locUSquish = GetShaderLocation(brushGeoShader, "uSquish");
-    locUSize   = GetShaderLocation(brushGeoShader, "uSize");
-    locUPerspective = GetShaderLocation(brushGeoShader, "uPerspective");
-    locURadIn  = GetShaderLocation(brushGeoShader, "uRadIn");
-    locUCurve  = GetShaderLocation(brushGeoShader, "uCurve");
-    locFocalOffset = GetShaderLocation(brushGeoShader, "uFocalOffset");
-
     snprintf(vs, sizeof(vs), "%sshaders/brush_blend.vs", ad);
     snprintf(fs, sizeof(fs), "%sshaders/brush_blend.fs", ad);
     brushBlendShader = LoadShaderWithIncludes(vs, fs);
@@ -149,17 +135,20 @@ void BrushBlend_Init(void) {
     locStampCenter    = GetShaderLocation(brushBlendShader, "stampCenter");
     locBlitOrigin     = GetShaderLocation(brushBlendShader, "blitOrigin");
     locBlitSize       = GetShaderLocation(brushBlendShader, "blitSize");
-    locFracShift      = GetShaderLocation(brushBlendShader, "fracShift");
     locPwr            = GetShaderLocation(brushBlendShader, "pwr");
     locEraseMode      = GetShaderLocation(brushBlendShader, "eraseMode");
     locSeamless       = GetShaderLocation(brushBlendShader, "uSeamless");
     locPixelPerfect   = GetShaderLocation(brushBlendShader, "uPixelPerfect");
+    locUAngle         = GetShaderLocation(brushBlendShader, "uAngle");
+    locUSquish        = GetShaderLocation(brushBlendShader, "uSquish");
+    locUSize          = GetShaderLocation(brushBlendShader, "uSize");
+    locUPerspective   = GetShaderLocation(brushBlendShader, "uPerspective");
+    locURadIn         = GetShaderLocation(brushBlendShader, "uRadIn");
+    locUCurve         = GetShaderLocation(brushBlendShader, "uCurve");
+    locFocalOffset    = GetShaderLocation(brushBlendShader, "uFocalOffset");
 
     if (locDstTex   >= 0) { int u = 1; SetShaderValue(brushBlendShader, locDstTex,   &u, SHADER_UNIFORM_INT); }
     if (locBrushTex >= 0) { int u = 2; SetShaderValue(brushBlendShader, locBrushTex, &u, SHADER_UNIFORM_INT); }
-
-    locGeoTex = GetShaderLocation(brushBlendShader, "geoTex");
-    if (locGeoTex >= 0) { int u = 0; SetShaderValue(brushBlendShader, locGeoTex, &u, SHADER_UNIFORM_INT); }
 
     Image img = GenImageColor(4, 4, WHITE);
     whiteTex = LoadTextureFromImage(img);
@@ -170,8 +159,6 @@ void BrushBlend_Init(void) {
 void BrushBlend_Shutdown(void) {
     if (!inited) return;
     UnloadShader(brushBlendShader);
-    UnloadShader(brushGeoShader);
-    FreePool(geoPool);
     FreePool(intermediatePool);
     if (whiteTex.id > 0) UnloadTexture(whiteTex);
     whiteTex = (Texture2D){0};
@@ -226,42 +213,23 @@ void BrushBlend_ApplyStamp(
     float x0 = stampX - stampSizePx * 0.5f;
     float y0 = stampY - stampSizePx * 0.5f;
 
-    // -------- Pass 1: geo UV --------
-    RenderTexture2D* geoRT = AllocPoolRT(geoPool, bucket, true);
+    // -------- Pass 2a: blend to intermediate --------
+    RenderTexture2D* intermediateRT = AllocPoolRT(intermediatePool, bucket, false);
 
     float drawBboxHalf = (float)drawSz * 0.5f;
     float size = radOutForGeo / drawBboxHalf;
 
-    SetShaderValue(brushGeoShader, locUAngle,  &angleRad, SHADER_UNIFORM_FLOAT);
-    SetShaderValue(brushGeoShader, locUSquish, &squish,   SHADER_UNIFORM_FLOAT);
-    SetShaderValue(brushGeoShader, locUSize,   &size,     SHADER_UNIFORM_FLOAT);
+    SetShaderValue(brushBlendShader, locUAngle,  &angleRad, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(brushBlendShader, locUSquish, &squish,   SHADER_UNIFORM_FLOAT);
+    SetShaderValue(brushBlendShader, locUSize,   &size,     SHADER_UNIFORM_FLOAT);
     float persp = brush.perspective;
-    SetShaderValue(brushGeoShader, locUPerspective, &persp, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(brushBlendShader, locUPerspective, &persp, SHADER_UNIFORM_FLOAT);
     float radInRatio = brush.radInRatio;
     float curve      = clampf((float)brush.crv, 0.0f, 1.0f);
-    SetShaderValue(brushGeoShader, locURadIn,  &radInRatio, SHADER_UNIFORM_FLOAT);
-    SetShaderValue(brushGeoShader, locUCurve,  &curve,      SHADER_UNIFORM_FLOAT);
+    SetShaderValue(brushBlendShader, locURadIn,  &radInRatio, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(brushBlendShader, locUCurve,  &curve,      SHADER_UNIFORM_FLOAT);
     float focalOff = brush.focalOffset;
-    if (locFocalOffset >= 0) SetShaderValue(brushGeoShader, locFocalOffset, &focalOff, SHADER_UNIFORM_FLOAT);
-    SetTextureFilter(geoRT->texture, TEXTURE_FILTER_POINT);
-    BeginTextureMode(*geoRT);
-    ClearBackground((Color){0, 0, 0, 0});
-    rlSetBlendMode(RL_BLEND_CUSTOM);
-    rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);  // write rgba as-is
-    BeginShaderMode(brushGeoShader);
-    DrawTexturePro(whiteTex,
-        (Rectangle){0, 0, (float)whiteTex.width, (float)whiteTex.height},
-        (Rectangle){0, 0, (float)drawSz, -(float)drawSz},
-        (Vector2){0, 0}, 0.0f, WHITE);
-    EndShaderMode();
-    rlSetBlendMode(RL_BLEND_ALPHA);  // restore
-    EndTextureMode();
-
-    // Switch geo to bilinear for sub-pixel blend sampling
-    SetTextureFilter(geoRT->texture, TEXTURE_FILTER_BILINEAR);
-
-    // -------- Pass 2a: blend to intermediate --------
-    RenderTexture2D* intermediateRT = AllocPoolRT(intermediatePool, bucket, false);
+    if (locFocalOffset >= 0) SetShaderValue(brushBlendShader, locFocalOffset, &focalOff, SHADER_UNIFORM_FLOAT);
 
     float opacity    = clampf((float)brush.opacity, 0.0f, 1.0f);
     float seed       = (float)brush.baseSeed + (float)rand()/(float)RAND_MAX
@@ -331,11 +299,8 @@ void BrushBlend_ApplyStamp(
     int   isz = (int)floorf(stampSizePx);
     float bo[2] = { (float)ix0, (float)iy0 };
     float bs[2] = { (float)isz, (float)isz };
-    float fs[2] = { x0 - (float)ix0, y0 - (float)iy0 };
-    if (pixelPerfect) { fs[0] = fs[1] = 0.0f; }
     SetShaderValue(brushBlendShader, locBlitOrigin, bo, SHADER_UNIFORM_VEC2);
     SetShaderValue(brushBlendShader, locBlitSize,   bs, SHADER_UNIFORM_VEC2);
-    SetShaderValue(brushBlendShader, locFracShift,  fs, SHADER_UNIFORM_VEC2);
 
     float pwr = brush.pwr;
     SetShaderValue(brushBlendShader, locPwr, &pwr, SHADER_UNIFORM_FLOAT);
@@ -370,8 +335,8 @@ void BrushBlend_ApplyStamp(
     int uPpVal = pixelPerfect ? 1 : 0;
     SetShaderValue(brushBlendShader, locPixelPerfect, &uPpVal, SHADER_UNIFORM_INT);
 
-    DrawTexturePro(geoRT->texture,
-        (Rectangle){0, 0, (float)drawSz, (float)-drawSz},
+    DrawTexturePro(whiteTex,
+        (Rectangle){0, 0, (float)whiteTex.width, (float)whiteTex.height},
         (Rectangle){0, 0, (float)drawSz, (float)drawSz},
         (Vector2){0, 0}, 0.0f, WHITE);
 
@@ -399,14 +364,14 @@ void BrushBlend_ApplyStamp(
                 if (tx >= W || ty >= H) continue;
                 if (tx + isz <= 0 || ty + isz <= 0) continue;
                 DrawTexturePro(intermediateRT->texture,
-                    (Rectangle){0, 0, (float)drawSz, (float)-drawSz},
+                    (Rectangle){0, 0, (float)drawSz, (float)drawSz},
                     (Rectangle){(float)tx, (float)ty, (float)isz, (float)isz},
                     (Vector2){0, 0}, 0.0f, WHITE);
             }
         }
     } else {
         DrawTexturePro(intermediateRT->texture,
-            (Rectangle){0, 0, (float)drawSz, (float)-drawSz},
+            (Rectangle){0, 0, (float)drawSz, (float)drawSz},
             (Rectangle){(float)ix0, (float)iy0, (float)isz, (float)isz},
             (Vector2){0, 0}, 0.0f, WHITE);
     }

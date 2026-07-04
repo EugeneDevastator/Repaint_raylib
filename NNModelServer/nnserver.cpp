@@ -137,14 +137,31 @@ static void handle_sd(sock_t client) {
     fprintf(stderr, "[SD] done — sent %zu bytes\n", out_png.size());
 }
 
-/* ── upscaler handler ─────────────────────────────────────────────────── */
+/* ── upscaler handler (lazy-loaded) ──────────────────────────────────── */
+
+static OnnxModel*    g_upscaler    = nullptr;
+static std::string   g_upscale_model_path;
 
 static void upscale_write_cb(void* context, void* data, int size) {
     auto* out = (std::vector<uint8_t>*)context;
     out->insert(out->end(), (uint8_t*)data, (uint8_t*)data + size);
 }
 
-static void handle_upscale(sock_t client, OnnxModel* upscaler) {
+static void handle_upscale(sock_t client) {
+    /* Lazy-load the upscaler on first request */
+    if (!g_upscaler && !g_upscale_model_path.empty()) {
+        fprintf(stderr, "[upscale] loading model...\n");
+        g_upscaler = onnx_load(g_upscale_model_path.c_str());
+        if (g_upscaler)
+            fprintf(stderr, "[upscale] model ready\n");
+        else
+            fprintf(stderr, "[upscale] model load failed\n");
+    }
+    if (!g_upscaler) {
+        fprintf(stderr, "[upscale] not available\n");
+        send_msg(client, 'P', "Upscaler not available", 22);
+        return;
+    }
     std::vector<uint8_t> src_png;
     if (!recv_blob(client, src_png)) {
         fprintf(stderr, "[upscale] recv failed\n"); return;
@@ -177,7 +194,7 @@ static void handle_upscale(sock_t client, OnnxModel* upscaler) {
     send_msg(client, 'P', "Upscaling...", 12);
     fprintf(stderr, "[upscale] starting %dx%d → %dx%d\n", w, h, w*4, h*4);
 
-    if (!onnx_run(upscaler, in_names, in_data, in_shape, 1,
+    if (!onnx_run(g_upscaler, in_names, in_data, in_shape, 1,
                   out_names, out_data, out_shape, 1)) {
         fprintf(stderr, "[upscale] inference failed\n"); return;
     }
@@ -243,13 +260,12 @@ int main(int argc, char** argv) {
     std::string sd_path = dl_resolve_optional(DL_SD_MODEL);
     if (!sd_path.empty())
         g_sd_available = sd_init(sd_path.c_str());
+    fprintf(stderr, "[nnserver] SD available: %s\n", g_sd_available ? "yes" : "no");
 
     std::string upscale_path = dl_resolve_optional(DL_UPSCALER_MODEL);
-    OnnxModel* upscaler = nullptr;
-    if (!upscale_path.empty())
-        upscaler = onnx_load(upscale_path.c_str());
-    if (upscaler)
-        fprintf(stderr, "[nnserver] upscaler ready\n");
+    g_upscale_model_path = upscale_path;
+    if (!g_upscale_model_path.empty())
+        fprintf(stderr, "[nnserver] upscaler will be loaded on first request\n");
     else
         fprintf(stderr, "[nnserver] upscaler not available\n");
 
@@ -273,9 +289,9 @@ int main(int argc, char** argv) {
         uint8_t mode_byte;
         if (!sock_recv_all(client, &mode_byte, 1)) { sock_close(client); continue; }
 
-        if (mode_byte == 'U' && upscaler) {
+        if (mode_byte == 'U') {
             fprintf(stderr, "[accept] upscale request\n");
-            handle_upscale(client, upscaler);
+            handle_upscale(client);
         } else if (mode_byte == 'G') {
             if (!g_sd_available && dl_file_exists(sd_path.c_str()))
                 g_sd_available = sd_init(sd_path.c_str());

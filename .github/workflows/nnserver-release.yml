@@ -1,0 +1,100 @@
+name: nnserver Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to attach to (default: latest)'
+        required: false
+        default: latest
+
+jobs:
+  nnserver-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-make zip mingw-w64-x86_64-vulkan-headers mingw-w64-x86_64-vulkan-loader
+
+      # Remove prebuilt .a files so FetchContent builds from source (matches CI's GCC version)
+      - name: Prepare (force FetchContent)
+        shell: msys2 {0}
+        run: rm -f NNModelServer/sd-build/win64/*.a
+
+      - name: Configure
+        shell: msys2 {0}
+        run: cmake --preset win64-release -DCMAKE_MAKE_PROGRAM=mingw32-make
+
+      - name: Build nnserver
+        shell: msys2 {0}
+        run: cmake --build build/win64-release --target nnserver --parallel
+
+      - name: Package
+        shell: msys2 {0}
+        run: |
+          mkdir -p dist/nnserver-windows
+          cp build/win64-release/bin/nnserver.exe dist/nnserver-windows/
+          cp build/win64-release/bin/onnxruntime.dll dist/nnserver-windows/
+          cp build/win64-release/bin/model_url.txt dist/nnserver-windows/
+          cp "$MINGW_PREFIX/bin/libgomp-1.dll"        dist/nnserver-windows/ 2>/dev/null || true
+          cp "$MINGW_PREFIX/bin/libwinpthread-1.dll"  dist/nnserver-windows/ 2>/dev/null || true
+          cp "$MINGW_PREFIX/bin/libgcc_s_seh-1.dll"   dist/nnserver-windows/ 2>/dev/null || true
+          cp "$MINGW_PREFIX/bin/libstdc++-6.dll"       dist/nnserver-windows/ 2>/dev/null || true
+          cp "$MINGW_PREFIX/bin/vulkan-1.dll"          dist/nnserver-windows/ 2>/dev/null || true
+          cd dist && zip -r ../nnserver-windows.zip nnserver-windows
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nnserver-windows
+          path: nnserver-windows.zip
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || 'latest' }}
+          name: nnserver ${{ github.event.inputs.tag || 'latest' }}
+          prerelease: true
+          files: nnserver-windows.zip
+          fail_on_unmatched_files: false
+
+  nnserver-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libcurl4-openssl-dev libvulkan-dev shaderc
+
+      - name: Configure
+        run: cmake --preset linux-release
+
+      - name: Build nnserver
+        run: cmake --build build/linux-release --target nnserver --parallel
+
+      - name: Package
+        run: |
+          mkdir -p dist/nnserver-linux
+          cp build/linux-release/bin/nnserver dist/nnserver-linux/ 2>/dev/null || true
+          cp build/linux-release/bin/model_url.txt dist/nnserver-linux/ 2>/dev/null || true
+          cp build/linux-release/onnxruntime/lib/libonnxruntime.so* dist/nnserver-linux/ 2>/dev/null || true
+          cd dist && zip -r ../nnserver-linux.zip nnserver-linux
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nnserver-linux
+          path: nnserver-linux.zip
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || 'latest' }}
+          name: nnserver ${{ github.event.inputs.tag || 'latest' }}
+          prerelease: true
+          files: nnserver-linux.zip
+          fail_on_unmatched_files: false

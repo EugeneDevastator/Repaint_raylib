@@ -22,6 +22,7 @@ static uint32_t read32be(const uint8_t* buf) {
 
 int sd_request(const char* prompt, float strength, float cfg, int steps,
                int w, int h,
+               const uint8_t* src_png, size_t src_size,
                uint8_t** out_png, size_t* out_size,
                SDProgressFn progress_fn) {
     if (!prompt || !*prompt) return -1;
@@ -32,7 +33,6 @@ int sd_request(const char* prompt, float strength, float cfg, int steps,
     int ok = -1;
     char header[2048];
     uint8_t hdr[4];
-    uint8_t zero[4] = {0, 0, 0, 0};
     int n;
 
     // Send 'G' mode byte
@@ -51,8 +51,15 @@ int sd_request(const char* prompt, float strength, float cfg, int steps,
         prompt, steps, cfg, strength, w, h);
     if (!sock_send_all(s, (uint8_t*)header, (size_t)n)) goto cleanup;
 
-    // Send empty source PNG blob (txt2img — no source image)
-    if (!sock_send_all(s, zero, 4)) goto cleanup;
+    // Send optional source PNG blob (img2img) or empty blob (txt2img)
+    if (src_png && src_size > 0) {
+        write32be(hdr, (uint32_t)src_size);
+        if (!sock_send_all(s, hdr, 4)) goto cleanup;
+        if (!sock_send_all(s, src_png, src_size)) goto cleanup;
+    } else {
+        uint8_t zero[4] = {0, 0, 0, 0};
+        if (!sock_send_all(s, zero, 4)) goto cleanup;
+    }
 
     // Receive loop: type byte + 4B length + data
     while (1) {

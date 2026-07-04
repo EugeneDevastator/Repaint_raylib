@@ -14,6 +14,7 @@ static RectXform s_savedXform = {};
 static Vector2  s_savedCursor = {0, 0};
 static Vector2  s_savedLocalCursor = {0, 0}; // pivot local UV at drag start
 static float    s_repeatMat[6] = {1,0,0,0,1,0}; // last applied relative transform
+static float    s_repeatScaleU = 1.0f, s_repeatScaleV = 1.0f; // scale part (degree of ww/wh change)
 
 static void ResetState() {
     s_dragAction = 0;
@@ -82,7 +83,7 @@ bool TransformHandle_Input(RectXform* xform,
 
     Vector2 canvasPos = GetScreenToWorld2D(mousePos, *camera);
     Vector2 corners[4];
-    Corners(xform->mat, xform->w, xform->h, corners);
+    Corners(xform->mat, xform->ww, xform->wh, corners);
 
     Vector2 sc[4];
     for (int i = 0; i < 4; i++)
@@ -95,7 +96,7 @@ bool TransformHandle_Input(RectXform* xform,
     float ux = m[0], uy = m[3];
     float vx = m[1], vy = m[4];
     float tx = m[2], ty = m[5];
-    float w_ = xform->w, h_ = xform->h;
+    float w_ = xform->ww, h_ = xform->wh;
     float uLen = sqrtf(ux*ux + uy*uy);
     float vLen = sqrtf(vx*vx + vy*vy);
     float uNx = (uLen > 0.0001f) ? ux/uLen : 1.0f;
@@ -185,19 +186,8 @@ bool TransformHandle_Input(RectXform* xform,
         } else if (nearCursor) {
             s_dragAction = 4;
         } else {
-            // Inside body → translate
-            float a = xform->mat[0], b = xform->mat[1];
-            float c = xform->mat[3], d = xform->mat[4];
-            float det = a*d - b*c;
-            if (fabsf(det) > 0.0001f) {
-                float invDet = 1.0f/det;
-                float lx = (canvasPos.x - xform->mat[2])*d*invDet
-                           - (canvasPos.y - xform->mat[5])*b*invDet;
-                float ly = -(canvasPos.x - xform->mat[2])*c*invDet
-                           + (canvasPos.y - xform->mat[5])*a*invDet;
-                if (lx >= 0 && lx <= xform->w && ly >= 0 && ly <= xform->h)
-                    s_dragAction = 1;
-            }
+            // Anywhere → translate (also enables pivot placement on click)
+            s_dragAction = 1;
         }
         s_dragStart = canvasPos;
         s_savedXform = *xform;
@@ -259,81 +249,87 @@ bool TransformHandle_Input(RectXform* xform,
         float sa = s_savedXform.mat[0], sb = s_savedXform.mat[1];
         float sc_ = s_savedXform.mat[3], sd = s_savedXform.mat[4];
         float stx = s_savedXform.mat[2], sty = s_savedXform.mat[5];
-        float sw = s_savedXform.w, sh = s_savedXform.h;
+        float sw = s_savedXform.ww, sh = s_savedXform.wh;
         float curU, curV;
         GetLocalUV(s_savedXform.mat, canvasPos, &curU, &curV);
         float du = curU - s_startUV.x;
         float dv = curV - s_startUV.y;
         if (scaleProportionalToCursor) {
-            // Layer mode — w/h are fixed pixel dimensions; scale matrix around opposite edge
-            switch (s_dragEdge) {
-            case 0: // top — scale V around bottom edge
+            // Layer mode — scale maps to ww/wh, matrix columns stay unit.
+            // Compute new extents and handle flips (negative → negate column)
             {
-                float s = (sh - dv) / sh;
-                xform->mat[1] = sb * s;
-                xform->mat[4] = sd * s;
-                xform->mat[2] = stx + sb*dv;
-                xform->mat[5] = sty + sd*dv;
-                break;
+                float nww=sw, nwh=sh;
+                float ttx=stx, tty=sty;
+                switch (s_dragEdge) {
+                case 0: // top — shrink wh, keep bottom fixed
+                    nwh = sh - dv;
+                    ttx = stx + sb*dv; tty = sty + sd*dv;
+                    if (nwh < 0) { sb = -sb; sd = -sd; nwh = -nwh; }
+                    break;
+                case 1: // right — grow ww, keep left fixed
+                    nww = sw + du;
+                    if (nww < 0) { sa = -sa; sc_ = -sc_; nww = -nww; }
+                    break;
+                case 2: // bottom — grow wh, keep top fixed
+                    nwh = sh + dv;
+                    if (nwh < 0) { sb = -sb; sd = -sd; nwh = -nwh; }
+                    break;
+                case 3: // left — shrink ww, keep right fixed
+                    nww = sw - du;
+                    ttx = stx + sa*du; tty = sty + sc_*du;
+                    if (nww < 0) { sa = -sa; sc_ = -sc_; nww = -nww; }
+                    break;
+                }
+                xform->ww = nww; xform->wh = nwh;
+                xform->mat[0] = sa; xform->mat[1] = sb;
+                xform->mat[3] = sc_; xform->mat[4] = sd;
+                xform->mat[2] = ttx; xform->mat[5] = tty;
             }
-            case 1: // right — scale U around left edge
-            {
-                float s = (sw + du) / sw;
-                xform->mat[0] = sa * s;
-                xform->mat[3] = sc_ * s;
-                break;
-            }
-            case 2: // bottom — scale V around top edge
-            {
-                float s = (sh + dv) / sh;
-                xform->mat[1] = sb * s;
-                xform->mat[4] = sd * s;
-                break;
-            }
-            case 3: // left — scale U around right edge
-            {
-                float s = (sw - du) / sw;
-                xform->mat[0] = sa * s;
-                xform->mat[3] = sc_ * s;
-                xform->mat[2] = stx + sa*du;
-                xform->mat[5] = sty + sc_*du;
-                break;
-            }
-            }
-            xform->w = sw;
-            xform->h = sh;
-        } else {
-            // Crop mode — change w/h directly
-            switch (s_dragEdge) {
-            case 0: // top (y=0) — drag V, keep bottom (y=h) fixed
-                xform->w = sw;
-                xform->h = sh - dv;
-                xform->mat[2] = stx + sb*dv;
-                xform->mat[5] = sty + sd*dv;
-                break;
-            case 1: // right (x=w) — drag U, keep left (x=0) fixed
-                xform->w = sw + du;
-                xform->h = sh;
-                break;
-            case 2: // bottom (y=h) — drag V, keep top (y=0) fixed
-                xform->w = sw;
-                xform->h = sh + dv;
-                break;
-            case 3: // left (x=0) — drag U, keep right (x=w) fixed
-                xform->w = sw - du;
-                xform->h = sh;
-                xform->mat[2] = stx + sa*du;
-                xform->mat[5] = sty + sc_*du;
-                break;
-            }
-            if (fabsf(xform->w) < 1.0f) xform->w = (xform->w < 0) ? -1.0f : 1.0f;
-            if (fabsf(xform->h) < 1.0f) xform->h = (xform->h < 0) ? -1.0f : 1.0f;
+            if (fabsf(xform->ww) < 1.0f) xform->ww = (xform->ww < 0) ? -1.0f : 1.0f;
+            if (fabsf(xform->wh) < 1.0f) xform->wh = (xform->wh < 0) ? -1.0f : 1.0f;
             if (lockAspect) {
                 float ratio = sw / sh;
                 if (s_dragEdge == 0 || s_dragEdge == 2)
-                    xform->w = xform->h * ratio;
+                    xform->ww = xform->wh * ratio;
                 else
-                    xform->h = xform->w / ratio;
+                    xform->wh = xform->ww / ratio;
+            }
+        } else {
+            // Crop mode — change w/h directly
+            float nww=sw, nwh=sh;
+            float ttx=stx, tty=sty;
+            switch (s_dragEdge) {
+            case 0: // top (y=0) — drag V, keep bottom (y=h) fixed
+                nwh = sh - dv;
+                ttx = stx + sb*dv; tty = sty + sd*dv;
+                if (nwh < 0) { sb = -sb; sd = -sd; nwh = -nwh; }
+                break;
+            case 1: // right (x=w) — drag U, keep left (x=0) fixed
+                nww = sw + du;
+                if (nww < 0) { sa = -sa; sc_ = -sc_; nww = -nww; }
+                break;
+            case 2: // bottom (y=h) — drag V, keep top (y=0) fixed
+                nwh = sh + dv;
+                if (nwh < 0) { sb = -sb; sd = -sd; nwh = -nwh; }
+                break;
+            case 3: // left (x=0) — drag U, keep right (x=w) fixed
+                nww = sw - du;
+                ttx = stx + sa*du; tty = sty + sc_*du;
+                if (nww < 0) { sa = -sa; sc_ = -sc_; nww = -nww; }
+                break;
+            }
+            xform->ww = nww; xform->wh = nwh;
+            xform->mat[0] = sa; xform->mat[1] = sb;
+            xform->mat[3] = sc_; xform->mat[4] = sd;
+            xform->mat[2] = ttx; xform->mat[5] = tty;
+            if (fabsf(xform->ww) < 1.0f) xform->ww = (xform->ww < 0) ? -1.0f : 1.0f;
+            if (fabsf(xform->wh) < 1.0f) xform->wh = (xform->wh < 0) ? -1.0f : 1.0f;
+            if (lockAspect) {
+                float ratio = sw / sh;
+                if (s_dragEdge == 0 || s_dragEdge == 2)
+                    xform->ww = xform->wh * ratio;
+                else
+                    xform->wh = xform->ww / ratio;
             }
         }
         return true;
@@ -347,7 +343,7 @@ bool TransformHandle_Input(RectXform* xform,
             float sa = s_savedXform.mat[0], sb = s_savedXform.mat[1];
             float sc_ = s_savedXform.mat[3], sd = s_savedXform.mat[4];
             float stx = s_savedXform.mat[2], sty = s_savedXform.mat[5];
-            float sw = s_savedXform.w, sh = s_savedXform.h;
+            float sw = s_savedXform.ww, sh = s_savedXform.wh;
             float dx = canvasPos.x - stx;
             float dy = canvasPos.y - sty;
             float det = sa*sd - sb*sc_;
@@ -356,61 +352,73 @@ bool TransformHandle_Input(RectXform* xform,
             float curLx = (dx*sd - dy*sb)*invDet;
             float curLy = (-dx*sc_ + dy*sa)*invDet;
             float nw, nh;
+            float ttx=stx, tty=sty;
             switch (s_dragCorner) {
             case 0: // TL → opposite BR stays at (sw, sh)
                 nw = sw - curLx;
                 nh = sh - curLy;
-                xform->mat[2] = stx + sa*curLx + sb*curLy;
-                xform->mat[5] = sty + sc_*curLx + sd*curLy;
+                ttx = stx + sa*curLx + sb*curLy;
+                tty = sty + sc_*curLx + sd*curLy;
+                if (nw < 0) { sa = -sa; sb = -sb; nw = -nw; }
+                if (nh < 0) { sc_ = -sc_; sd = -sd; nh = -nh; }
                 break;
             case 1: // TR → opposite BL stays at (0, sh)
                 nw = curLx;
                 nh = sh - curLy;
-                xform->mat[2] = stx + sb*curLy;
-                xform->mat[5] = sty + sd*curLy;
+                ttx = stx + sb*curLy;
+                tty = sty + sd*curLy;
+                if (nw < 0) { sa = -sa; sb = -sb; nw = -nw; }
+                if (nh < 0) { sc_ = -sc_; sd = -sd; nh = -nh; }
                 break;
             case 2: // BR → opposite TL stays at (0, 0)
                 nw = curLx;
                 nh = curLy;
+                if (nw < 0) { sa = -sa; sb = -sb; nw = -nw; }
+                if (nh < 0) { sc_ = -sc_; sd = -sd; nh = -nh; }
                 break;
             case 3: // BL → opposite TR stays at (sw, 0)
                 nw = sw - curLx;
                 nh = curLy;
-                xform->mat[2] = stx + sa*curLx;
-                xform->mat[5] = sty + sc_*curLx;
+                ttx = stx + sa*curLx;
+                tty = sty + sc_*curLx;
+                if (nw < 0) { sa = -sa; sb = -sb; nw = -nw; }
+                if (nh < 0) { sc_ = -sc_; sd = -sd; nh = -nh; }
                 break;
             }
-            xform->w = nw;
-            xform->h = nh;
-            if (fabsf(xform->w) < 1.0f) xform->w = (xform->w < 0) ? -1.0f : 1.0f;
-            if (fabsf(xform->h) < 1.0f) xform->h = (xform->h < 0) ? -1.0f : 1.0f;
+            xform->ww = nw; xform->wh = nh;
+            xform->mat[0] = sa; xform->mat[1] = sb;
+            xform->mat[3] = sc_; xform->mat[4] = sd;
+            xform->mat[2] = ttx; xform->mat[5] = tty;
+            if (fabsf(xform->ww) < 1.0f) xform->ww = (xform->ww < 0) ? -1.0f : 1.0f;
+            if (fabsf(xform->wh) < 1.0f) xform->wh = (xform->wh < 0) ? -1.0f : 1.0f;
             if (lockAspect) {
                 float ratio = sw / sh;
                 if (fabsf(nw - sw) > fabsf(nh - sh))
-                    xform->h = xform->w / ratio;
+                    xform->wh = xform->ww / ratio;
                 else
-                    xform->w = xform->h * ratio;
+                    xform->ww = xform->wh * ratio;
             }
         } else {
-            // Scale proportional to cursor (layer): scale matrix around cursor
+            // Layer mode — scale maps to ww/wh, matrix columns stay unit.
             float as = s_savedXform.mat[0], bs = s_savedXform.mat[1];
             float ts = s_savedXform.mat[2], cs = s_savedXform.mat[3];
             float ds = s_savedXform.mat[4], tys = s_savedXform.mat[5];
             float cx = s_savedCursor.x, cy = s_savedCursor.y;
+            float sw = s_savedXform.ww, sh = s_savedXform.wh;
             float dx = canvasPos.x - cx;
             float dy = canvasPos.y - cy;
             float det = as*ds - bs*cs;
             if (fabsf(det) > 0.0001f) {
                 float invDet = 1.0f/det;
                 float ia = ds*invDet, ib = -bs*invDet;
-                float ic = -cs*invDet, id = as*invDet;
+                float ic = -cs*invDet, id_ = as*invDet;
                 float pcx = (cx-ts)*ia + (cy-tys)*ib;
-                float pcy = (cx-ts)*ic + (cy-tys)*id;
+                float pcy = (cx-ts)*ic + (cy-tys)*id_;
                 float lx = dx*ia + dy*ib;
-                float ly = dx*ic + dy*id;
+                float ly = dx*ic + dy*id_;
                 int gc = s_dragCorner;
-                float grabLx = (gc==0||gc==3) ? 0.0f : s_savedXform.w;
-                float grabLy = (gc==0||gc==1) ? 0.0f : s_savedXform.h;
+                float grabLx = (gc==0||gc==3) ? 0.0f : sw;
+                float grabLy = (gc==0||gc==1) ? 0.0f : sh;
                 float initDx = grabLx - pcx;
                 float initDy = grabLy - pcy;
                 float sx_f = (fabsf(initDx)>0.001f) ? lx/initDx : 1.0f;
@@ -421,21 +429,19 @@ bool TransformHandle_Input(RectXform* xform,
                 }
                 if (fabsf(sx_f)<0.01f) sx_f = (sx_f<0) ? -0.01f : 0.01f;
                 if (fabsf(sy_f)<0.01f) sy_f = (sy_f<0) ? -0.01f : 0.01f;
-                float oldSx = sqrtf(as*as + cs*cs);
-                float oldSy = sqrtf(bs*bs + ds*ds);
-                float ux = (oldSx>0.0001f) ? as/oldSx : 1.0f;
-                float uy = (oldSx>0.0001f) ? cs/oldSx : 0.0f;
-                float newSx = oldSx*sx_f, newSy = oldSy*sy_f;
-                // V-axis: 90° rotation of U-axis, direction depends on handedness
-                float vx, vy;
-                if (det < 0) { vx =  uy; vy = -ux; }  // CW (flipped)
-                else         { vx = -uy; vy =  ux; }  // CCW (normal)
-                float m0 = ux*newSx, m1 = vx*newSy;
-                float m3_ = uy*newSx, m4 = vy*newSy;
-                xform->mat[0] = m0; xform->mat[1] = m1;
-                xform->mat[2] = cx - (m0*pcx + m1*pcy);
-                xform->mat[3] = m3_; xform->mat[4] = m4;
-                xform->mat[5] = cy - (m3_*pcx + m4*pcy);
+                float nw = sw * sx_f, nh = sh * sy_f;
+                if (fabsf(nw) < 1.0f) nw = (nw < 0) ? -1.0f : 1.0f;
+                if (fabsf(nh) < 1.0f) nh = (nh < 0) ? -1.0f : 1.0f;
+                // Flip normalization: negative extent → negate matrix column
+                if (nw < 0) { as = -as; bs = -bs; nw = -nw; sx_f = -sx_f; }
+                if (nh < 0) { cs = -cs; ds = -ds; nh = -nh; sy_f = -sy_f; }
+                xform->ww = nw;
+                xform->wh = nh;
+                xform->mat[0] = as; xform->mat[1] = bs;
+                xform->mat[3] = cs; xform->mat[4] = ds;
+                float ncx = pcx * (nw / sw), ncy = pcy * (nh / sh);
+                xform->mat[2] = cx - (as*ncx + bs*ncy);
+                xform->mat[5] = cy - (cs*ncx + ds*ncy);
             }
         }
         return true;
@@ -459,13 +465,28 @@ bool TransformHandle_Input(RectXform* xform,
         }
         // Store relative transform for repeat
         if (s_dragAction == 1 || s_dragAction == 3 || s_dragAction == 2 || s_dragAction == 5) {
-            float inv[6], idMat[6] = {1,0,0,0,1,0};
-            Xform_MulInv(inv, idMat, s_savedXform.mat);
-            Xform_Mul(s_repeatMat, xform->mat, inv);
+            if (s_dragAction == 1 || s_dragAction == 3) {
+                // Rot/translate: store relative matrix
+                float inv[6], idMat[6] = {1,0,0,0,1,0};
+                Xform_MulInv(inv, idMat, s_savedXform.mat);
+                Xform_Mul(s_repeatMat, xform->mat, inv);
+            }
+            if (s_dragAction == 3) {
+                // Strip pivot: s_repeatMat = T(cx)*Rot*T(-cx) → keep only Rot
+                // Rot = T(-cx) * s_repeatMat * T(cx)
+                float tmp[6];
+                Xform_SetTrans(tmp, -s_savedCursor.x, -s_savedCursor.y);
+                Xform_Mul(s_repeatMat, tmp, s_repeatMat);
+                Xform_SetTrans(tmp, s_savedCursor.x, s_savedCursor.y);
+                Xform_Mul(s_repeatMat, s_repeatMat, tmp);
+            }
+            // Scale factors tracked separately (always update)
+            s_repeatScaleU = (fabsf(s_savedXform.ww) > 0.0001f) ? xform->ww / s_savedXform.ww : 1.0f;
+            s_repeatScaleV = (fabsf(s_savedXform.wh) > 0.0001f) ? xform->wh / s_savedXform.wh : 1.0f;
         }
         // Normalize flips: transfer negative w/h to matrix rows
-        if (xform->w < 0) { xform->mat[0] = -xform->mat[0]; xform->mat[1] = -xform->mat[1]; xform->w = -xform->w; }
-        if (xform->h < 0) { xform->mat[3] = -xform->mat[3]; xform->mat[4] = -xform->mat[4]; xform->h = -xform->h; }
+        if (xform->ww < 0) { xform->mat[0] = -xform->mat[0]; xform->mat[1] = -xform->mat[1]; xform->ww = -xform->ww; }
+        if (xform->wh < 0) { xform->mat[3] = -xform->mat[3]; xform->mat[4] = -xform->mat[4]; xform->wh = -xform->wh; }
         ResetState();
     }
 
@@ -474,24 +495,44 @@ bool TransformHandle_Input(RectXform* xform,
 
 // ── Repeat last transform around a world-space pivot ────────────────
 void TransformHandle_RepeatLast(RectXform* xform, Vector2 pivot) {
-    // Build pivot-relative transform: T(pivot) * relMat * T(-pivot)
+    // Apply rotation+translation around the world-space pivot
     float toPivot[6], fromPivot[6], tmp[6], pivotRel[6];
     Xform_SetTrans(toPivot,   pivot.x, pivot.y);
     Xform_SetTrans(fromPivot, -pivot.x, -pivot.y);
     Xform_Mul(tmp, s_repeatMat, fromPivot);
     Xform_Mul(pivotRel, toPivot, tmp);
-    // Apply: new_xform = pivotRel * xform
     float newMat[6];
     Xform_Mul(newMat, pivotRel, xform->mat);
     memcpy(xform->mat, newMat, sizeof(newMat));
+
+    // Apply scale — keep pivot at fixed world position
+    if (s_repeatScaleU != 1.0f || s_repeatScaleV != 1.0f) {
+        float* m = xform->mat;
+        float pu = (pivot.x - m[2])*m[0] + (pivot.y - m[5])*m[3];
+        float pv = (pivot.x - m[2])*m[1] + (pivot.y - m[5])*m[4];
+        xform->ww *= s_repeatScaleU;
+        xform->wh *= s_repeatScaleV;
+        m[2] = pivot.x - m[0]*pu*s_repeatScaleU - m[1]*pv*s_repeatScaleV;
+        m[5] = pivot.y - m[3]*pu*s_repeatScaleU - m[4]*pv*s_repeatScaleV;
+    }
 }
 
 void TransformHandle_GetStore(float mat[6]) {
     memcpy(mat, s_repeatMat, 6 * sizeof(float));
+    // Encode scale into column magnitudes for UI decomposition
+    mat[0] *= s_repeatScaleU; mat[3] *= s_repeatScaleU;
+    mat[1] *= s_repeatScaleV; mat[4] *= s_repeatScaleV;
 }
 
 void TransformHandle_SetStore(const float mat[6]) {
     memcpy(s_repeatMat, mat, 6 * sizeof(float));
+    // Decompose scale from column magnitudes
+    float su = sqrtf(s_repeatMat[0]*s_repeatMat[0] + s_repeatMat[3]*s_repeatMat[3]);
+    float sv = sqrtf(s_repeatMat[1]*s_repeatMat[1] + s_repeatMat[4]*s_repeatMat[4]);
+    s_repeatScaleU = su; s_repeatScaleV = sv;
+    // Normalize to unit columns
+    if (su > 0.0001f) { s_repeatMat[0] /= su; s_repeatMat[3] /= su; }
+    if (sv > 0.0001f) { s_repeatMat[1] /= sv; s_repeatMat[4] /= sv; }
 }
 
 // ── Draw ─────────────────────────────────────────────────────────────
@@ -508,7 +549,7 @@ void TransformHandle_Draw(const RectXform* xform,
     float ux = m[0], uy = m[3];    // U basis (full scale, not unit)
     float vx = m[1], vy = m[4];    // V basis (full scale, not unit)
     float tx = m[2], ty = m[5];
-    float w_ = xform->w, h_ = xform->h;
+    float w_ = xform->ww, h_ = xform->wh;
 
     // World-space four corners (local → world through matrix)
     Vector2 wc[4];

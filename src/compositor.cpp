@@ -183,6 +183,13 @@ void Compositor_BlitLayerOnto(
     // Combined transform: output = viewXform->mat * xform->mat
     float cmb[6];
     Xform_Mul(cmb, viewXform->mat, xform->mat);
+    // Embed scale: matrix columns are unit; extent lives in ww/wh.
+    // Scale U,V columns so quad (sw,sh) covers world extent (xform->ww, xform->wh).
+    // Skip when xform is identity (scale already baked into matrix by caller).
+    if (xform->ww > 0.0f && xform->wh > 0.0f) {
+        cmb[0] *= xform->ww / sw; cmb[3] *= xform->ww / sw;
+        cmb[1] *= xform->wh / sh; cmb[4] *= xform->wh / sh;
+    }
 
     if(params->seamless) {
         // 3×3 tile — render directly into dst at dstRegion
@@ -213,7 +220,7 @@ void Compositor_BlitLayerOnto(
     // Non-seamless: compute AABB, clip to dstRegion, rectify, blend
     RectXform rx;
     memcpy(rx.mat, cmb, sizeof(cmb));
-    rx.w = sw; rx.h = sh;
+    rx.ww = sw; rx.wh = sh;
     Rectangle aabb = GetWorldAABB(&rx);
     // Clip aabb to dstRegion
     float l = fmaxf(aabb.x, dstRegion.x);
@@ -269,20 +276,30 @@ void Compositor_ApplyLayerToLayer(
     int bw=bottomRT.texture.width, bh=bottomRT.texture.height;
     if(bw<1||bh<1) return;
 
-    // Compute relative transform: top-local → bottom-local
-    // relMat = inv(bottomXform) * topXform  (topXform applied first,
-    // then inv(bottomXform) converts world → bottom-local)
+    // Compute relative transform: top-local → bottom-RT-pixel
     float relMat[6];
     float invBottom[6];
     float idMat[6] = {1,0,0,0,1,0};
-    Xform_MulInv(invBottom, idMat, bottomXform->mat);  // invBottom = inv(bottomXform)
-    Xform_Mul(relMat, invBottom, topXform->mat);         // relMat = invBottom * topXform
+    Xform_MulInv(invBottom, idMat, bottomXform->mat);
+    Xform_Mul(relMat, invBottom, topXform->mat);
+    // Embed top layer's extent into matrix columns
+    int tw = topTex.width, th = topTex.height;
+    float topUS = (tw > 0) ? topXform->ww / tw : 1.0f;
+    float topVS = (th > 0) ? topXform->wh / th : 1.0f;
+    relMat[0] *= topUS; relMat[3] *= topUS;
+    relMat[1] *= topVS; relMat[4] *= topVS;
+    // Apply bottom's pixel-to-world-unit ratio
+    float btmUS = (fabsf(bottomXform->ww) > 0.0001f) ? bw / bottomXform->ww : 1.0f;
+    float btmVS = (fabsf(bottomXform->wh) > 0.0001f) ? bh / bottomXform->wh : 1.0f;
+    relMat[0] *= btmUS; relMat[3] *= btmVS;
+    relMat[1] *= btmUS; relMat[4] *= btmVS;
+    relMat[2] *= btmUS; relMat[5] *= btmVS;
 
     // Build viewXform from relMat
     RectXform viewXf;
     memcpy(viewXf.mat, relMat, sizeof(relMat));
-    viewXf.w = topXform->w;
-    viewXf.h = topXform->h;
+    viewXf.ww = topXform->ww;
+    viewXf.wh = topXform->wh;
 
     // Identity layer xform — the viewXform already incorporates both
     RectXform identity = {};

@@ -24,19 +24,11 @@ float RngConv(float inval,float inmin,float inmax,float outmin,float outmax) {
 
 Document Doc_New(int w, int h) {
     Document d;
-    d.ppu = 1.0f;
     d.window = RectXform_Pivot(0, 0, (float)w, (float)h, 0.0f);
     return d;
 }
 
-Document Doc_NewPPU(float ppu, float cw, float ch) {
-    Document d;
-    d.ppu = ppu;
-    d.window = RectXform_Pivot(0, 0, cw, ch, 0.0f);
-    return d;
-}
-
-void ComputeCanvasMatrix(float ppu, const RectXform* rx, int outW, int outH, float mat[6]) {
+void ComputeCanvasMatrix(const RectXform* rx, int outW, int outH, float mat[6]) {
     (void)outW; (void)outH;
     float cx = rx->mat[2], cy = rx->mat[5];
     float a = rx->mat[0], b = rx->mat[1];
@@ -44,27 +36,26 @@ void ComputeCanvasMatrix(float ppu, const RectXform* rx, int outW, int outH, flo
     float det = a * d - b * c;
     if (fabsf(det) < 0.0001f) { Xform_Identity(mat); return; }
     float invDet = 1.0f / det;
-    // paint = ppu * W^(-1) * (world - P)
+    // paint = W^(-1) * (world - P)
     float ia = d * invDet, ib = -b * invDet;
     float ic = -c * invDet, id = a * invDet;
-    mat[0] = ppu * ia;
-    mat[1] = ppu * ib;
-    mat[2] = -ppu * (ia * cx + ib * cy);
-    mat[3] = ppu * ic;
-    mat[4] = ppu * id;
-    mat[5] = -ppu * (ic * cx + id * cy);
+    mat[0] = ia;
+    mat[1] = ib;
+    mat[2] = -(ia * cx + ib * cy);
+    mat[3] = ic;
+    mat[4] = id;
+    mat[5] = -(ic * cx + id * cy);
 }
 
 void ApplyCanvasWindow(Document* doc) {
     float a = doc->window.mat[0], b = doc->window.mat[1];
     float cx = doc->window.mat[2], cy = doc->window.mat[5];
     float c = doc->window.mat[3], d = doc->window.mat[4];
-    float ww = doc->window.w, wh = doc->window.h;
-    float ppu = doc->ppu;
+    float ww = doc->window.ww, wh = doc->window.wh;
 
     // Full 2×2 inverse of the window matrix (supports rotation).
     // Maps old-world content to new-world origin so that baking into layers
-    // preserves the visual output when canvasView becomes ppu-only.
+    // preserves the visual output.
     float det = a*d - b*c;
     float invDet = (fabsf(det) < 0.0001f) ? 0.0f : 1.0f / det;
     float C[6] = {
@@ -76,15 +67,15 @@ void ApplyCanvasWindow(Document* doc) {
     LayerStack_BakeCanvasWindow(doc);   // bakes C into layers, resets canvasView to identity
 
     // Identity canvasView — camera at (0,0) aligns with shifted layer pivot.
-    float ppuCv[6] = {ppu, 0, 0, 0, ppu, 0};
-    LayerStack_SetCanvasView(ppuCv);
+    float idCv[6] = {1, 0, 0, 0, 1, 0};
+    LayerStack_SetCanvasView(idCv);
 
-    // Reset window: no rotation, pivot at origin, same world-unit extent
+    // Reset window: no rotation, pivot at origin, same pixel extent
     doc->window.mat[0] = 1; doc->window.mat[1] = 0;
     doc->window.mat[2] = 0;
     doc->window.mat[3] = 0; doc->window.mat[4] = 1;
     doc->window.mat[5] = 0;
-    doc->window.w = ww; doc->window.h = wh;
+    doc->window.ww = ww; doc->window.wh = wh;
 
-    LayerStack_SetRenderWindow((int)(fabsf(ww) * ppu + 0.5f), (int)(fabsf(wh) * ppu + 0.5f));
+    LayerStack_SetRenderWindow((int)(fabsf(ww) + 0.5f), (int)(fabsf(wh) + 0.5f));
 }

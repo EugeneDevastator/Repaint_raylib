@@ -3,6 +3,10 @@
 
 #include "raylib.h"
 
+// ── World units ───────────────────────────────────────────────────────
+// 1 world unit = 256 pixels (the canvas PPU)
+#define WORLD_UNIT_PX 256.0f
+
 // ── 2×3 affine matrix (row-major: [a, b, tx, c, d, ty]) ─────────
 // Pivot is always at (0,0). Matrix maps from local space to the
 // coordinate space of its parent, independent of any w/h extent.
@@ -20,12 +24,12 @@ typedef float unsigned_float;
 
 // ── RectXform — oriented rectangle in world-space ────────────────
 // mat maps from local space (pivot at origin) to world space.
-// w,h are the extent in world units — purely metadata, the matrix
+// ww,wh are the extent in world units — purely metadata, the matrix
 // does not depend on them.  When rot=0 and pivot is top-left:
-// the rectangle covers (cx,cy) .. (cx+w, cy+h).
+// the rectangle covers (cx,cy) .. (cx+ww, cy+wh).
 typedef struct {
     float mat[6];
-    unsigned_float w, h;
+    unsigned_float ww, wh;
 } RectXform;
 
 // Build mat = translate(cx,cy) · rotate(rot).  (cx,cy) is the
@@ -48,11 +52,5 @@ Rectangle GetWorldAABB(const RectXform* rx);
 // Intersection of two AABBs (quick overlap check for oriented rects).
 // Returns true if they intersect, optionally filling the intersection rect.
 bool GetWorldIntersectionAABB(const RectXform* a, const RectXform* b, Rectangle* out);
-
-// Convert world coordinates to pixel coordinates at the world origin.
-// pixel = world * ppu
-static inline Vector2 GetPixelCoord(float worldX, float worldY, float ppu) {
-    return Vector2{worldX * ppu, worldY * ppu};
-}
 
 #endif

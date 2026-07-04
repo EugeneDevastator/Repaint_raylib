@@ -26,8 +26,8 @@ void UndoManager::Snapshot(AppState* state, TexSlotID slot) {
         srcRT = LayerStack_GetRT(li);
         sLayerProps* p = LayerStack_GetProps(li);
         if (!p || srcRT.id == 0) return;
-        w = p->layerW;
-        h = p->layerH;
+        w = GetLayerWpx(li);
+        h = GetLayerHpx(li);
     } else {
         TexSlot* ts = TM_Get(slot);
         if (!ts || ts->rt.id == 0) return;
@@ -62,8 +62,8 @@ bool UndoManager::Undo(AppState* state, TexSlotID slot) {
         srcRT = LayerStack_GetRT(li);
         sLayerProps* p = LayerStack_GetProps(li);
         if (!p || srcRT.id == 0) return false;
-        w = p->layerW;
-        h = p->layerH;
+        w = GetLayerWpx(li);
+        h = GetLayerHpx(li);
     } else {
         TexSlot* ts = TM_Get(slot);
         if (!ts || ts->rt.id == 0) return false;
@@ -105,8 +105,8 @@ bool UndoManager::Redo(AppState* state, TexSlotID slot) {
         srcRT = LayerStack_GetRT(li);
         sLayerProps* p = LayerStack_GetProps(li);
         if (!p || srcRT.id == 0) return false;
-        w = p->layerW;
-        h = p->layerH;
+        w = GetLayerWpx(li);
+        h = GetLayerHpx(li);
     } else {
         TexSlot* ts = TM_Get(slot);
         if (!ts || ts->rt.id == 0) return false;

@@ -22,7 +22,6 @@ extern int uiPanelWidth;
 extern bool panelResizing;
 extern bool g_panelsVisible;
 #define LAYER_ENTRY_H 56
-#define WORLD_UNIT_PX 256.0f
 #define MAX_STROKE_PTS 65536
 #define PEN_MODE_COUNT 13
 
@@ -73,13 +72,17 @@ typedef struct {
     float threshold;
     float feather;
     char layerName[256];
-    RectXform xform;     // 2×3 affine matrix; w,h = extent in world units
-    int layerW, layerH;  // native texture resolution in pixels
+    RectXform xform;     // 2×3 affine matrix; ww,wh = extent in world units
     bool seamless;       // use seamless merge (3x3 tile wrap) on drop
     bool instanced;      // shares RT/texture with another layer
 } sLayerProps;
 
 #include "texture_manager.h"
+
+// Pixel dimensions come from the render texture, never stored in xform.
+extern RenderTexture2D LayerStack_GetRT(int idx);
+inline int GetLayerWpx(int idx) { return LayerStack_GetRT(idx).texture.width; }
+inline int GetLayerHpx(int idx) { return LayerStack_GetRT(idx).texture.height; }
 
 typedef struct {
     PackedFloat Prad_in, Prad_out;
@@ -113,17 +116,16 @@ typedef struct { uint8_t ToolID; d_Brush Brush; uint8_t startseed, Noisemode; d_
 typedef struct { d_Stroke Stroke; d_Brush BrushFrom, Brush; uint8_t BrushID,NoiseID,Noisemode,ToolID,startseed,layer; float spacing; uint8_t scatter,rRadout,rRadrel,rScale,rScaleRel,rAngle,rSpacing,rSpread,rOp,rSol,rSol2,rCrv,rCop,rPwr,rHue,rSat,rLit; } d_Section;
 typedef struct { uint8_t ActID; int16_t layer, layerto; uint8_t bm; float op; bool vis; Rectangle rect; } d_LAction;
 
-// Document — resolution (ppu) + canvas window framing
+// Document — canvas window framing (all in pixel units)
 typedef struct {
-    float ppu;       // pixels per unit (default 256)
     RectXform window; // framing rectangle in document space
 } Document;
 
 enum FramingMode { FRAME_DEFAULT, FRAME_CROP };
 
 // Helpers — explicit rounding, not hidden in a macro
-static inline int DocOutPxW(const Document* d) { return (int)(fabsf(d->window.w) * d->ppu + 0.5f); }
-static inline int DocOutPxH(const Document* d) { return (int)(fabsf(d->window.h) * d->ppu + 0.5f); }
+static inline int DocOutPxW(const Document* d) { return (int)(fabsf(d->window.ww) + 0.5f); }
+static inline int DocOutPxH(const Document* d) { return (int)(fabsf(d->window.wh) + 0.5f); }
 
 struct BrushDab  { float x, y; float srcX, srcY; d_RealBrush brush; };
 struct DrawCommand { float x, y; uint32_t color; float radius; };
@@ -202,11 +204,10 @@ float RngConv(float inval, float inmin, float inmax, float outmin, float outmax)
 
 // Document operations
 Document Doc_New(int w, int h);
-Document Doc_NewPPU(float ppu, float cw, float ch);
 void app_new_document(int w, int h, Color fill);
 
 // Canvas window matrix — pure function, maps document coords → output pixel coords
-void ComputeCanvasMatrix(float ppu, const RectXform* rx, int outW, int outH, float mat[6]);
+void ComputeCanvasMatrix(const RectXform* rx, int outW, int outH, float mat[6]);
 
 // Commit the canvas window: bake the window transform into all layers,
 // reset document to identity window at the new size.

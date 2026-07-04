@@ -25,7 +25,7 @@ static int g_previewW = 0, g_previewH = 0;
 // transform into a small preview RT matching canvas proportion.
 void LayerPanel_UpdatePreviews(AppState* state) {
     int count = LayerStack_Count();
-    int cw = (int)state->doc.window.w, ch = (int)state->doc.window.h;
+    int cw = (int)state->doc.window.ww, ch = (int)state->doc.window.wh;
     if (cw < 1 || ch < 1 || count < 1) return;
 
     int pw = (int)(36.0f * cw / ch);
@@ -61,7 +61,7 @@ void LayerPanel_UpdatePreviews(AppState* state) {
         float* M = p->xform.mat;
         float mg[16]={sx*M[0],sy*M[3],0,0, sx*M[1],sy*M[4],0,0, 0,0,1,0, sx*M[2],sy*M[5],0,1};
         rlMultMatrixf(mg);
-        DrawTextureRec(src,Rectangle{0,0,(float)p->layerW,(float)-p->layerH},Vector2{0,0},WHITE);
+        DrawTextureRec(src,Rectangle{0,0,(float)GetLayerWpx(i),(float)-GetLayerHpx(i)},Vector2{0,0},WHITE);
         rlPopMatrix();
         EndTextureMode();
     }
