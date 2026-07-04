@@ -115,8 +115,12 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         float ia = d * invDet, ib = -b * invDet, itx = (b * ty - d * tx) * invDet;
         float ic = -c * invDet, id = a * invDet, ity = (c * tx - a * ty) * invDet;
         Vector2 pt;
-        pt.x = worldPt.x * ia + worldPt.y * ib + itx;
-        pt.y = worldPt.x * ic + worldPt.y * id + ity;
+        // Local UV in world units, then convert to texture pixels
+        float u = worldPt.x * ia + worldPt.y * ib + itx;
+        float v = worldPt.x * ic + worldPt.y * id + ity;
+        int texW = GetLayerWpx(active), texH = GetLayerHpx(active);
+        pt.x = (lp->xform.ww > 0.0f) ? u * texW / lp->xform.ww : u;
+        pt.y = (lp->xform.wh > 0.0f) ? v * texH / lp->xform.wh : v;
         return pt;
     };
 
@@ -135,10 +139,11 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
     float worldToTexPx = WORLD_UNIT_PX;
     if (!state->editTexMode && active >= 0 && active < LayerStack_Count()) {
         sLayerProps* lp = LayerStack_GetProps(active);
-        float sx = sqrtf(lp->xform.mat[0] * lp->xform.mat[0] + lp->xform.mat[3] * lp->xform.mat[3]);
-        float sy = sqrtf(lp->xform.mat[1] * lp->xform.mat[1] + lp->xform.mat[4] * lp->xform.mat[4]);
-        float avg = (sx + sy) * 0.5f;
-        if (avg > 0.001f) worldToTexPx = WORLD_UNIT_PX / avg;
+        int texW = GetLayerWpx(active), texH = GetLayerHpx(active);
+        float avgDiv = 0.0f;
+        if (lp->xform.ww > 0.0f) avgDiv += lp->xform.ww / texW;
+        if (lp->xform.wh > 0.0f) avgDiv += lp->xform.wh / texH;
+        if (avgDiv > 0.001f) worldToTexPx = WORLD_UNIT_PX / (avgDiv * 0.5f);
     }
 
     // Record raw input positions for debug (during active stroke)
