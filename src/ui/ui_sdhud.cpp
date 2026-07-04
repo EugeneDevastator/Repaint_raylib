@@ -36,6 +36,32 @@ static uint8_t*           g_resultPng = nullptr;
 static size_t             g_resultSize = 0;
 static char               g_progressMsg[256] = "";
 
+// ── Input preview (composited layers inside g_sdXform area) ───────────
+static RenderTexture2D g_inputPreview = {0};
+static bool            g_previewDirty = true;
+static bool            g_hoverPreview = false;
+
+// Build viewXform: maps g_sdXform world-rect to output of (pw, ph) pixels.
+static RectXform BuildCropViewXform(int pw, int ph) {
+    RectXform vx = {};
+    if (g_sdXform.ww > 0.0f && g_sdXform.wh > 0.0f) {
+        float su = pw / g_sdXform.ww;
+        float sv = ph / g_sdXform.wh;
+        float* m = g_sdXform.mat;
+        float det = m[0]*m[4] - m[1]*m[3];
+        if (fabsf(det) > 0.0001f) {
+            float invDet = 1.0f/det;
+            float ia = m[4]*invDet, ib = -m[1]*invDet;
+            float ic = -m[3]*invDet, id = m[0]*invDet;
+            float itx = (m[1]*m[5] - m[4]*m[2])*invDet;
+            float ity = (m[3]*m[2] - m[0]*m[5])*invDet;
+            vx.mat[0]=ia*su; vx.mat[1]=ib*su; vx.mat[2]=itx*su;
+            vx.mat[3]=ic*sv; vx.mat[4]=id*sv; vx.mat[5]=ity*sv;
+        }
+    }
+    return vx;
+}
+
 static void progress_cb(const char* msg) {
     snprintf(g_progressMsg, sizeof(g_progressMsg), "%s", msg);
 }
@@ -110,6 +136,7 @@ bool SDHudModule::HandleInput(InputState& input, const DrawRect& rect) {
             &rect);
         if (changed) {
             input.mouseCaptured = true;
+            g_previewDirty = true;
         }
     }
 
@@ -122,6 +149,19 @@ bool SDHudModule::HandleInput(InputState& input, const DrawRect& rect) {
 void SDHudModule::DrawGL(const DrawRect& rect) {
     if (g_activeHud != HUD_SD) return;
     TransformHandle_Draw(&g_sdXform, g_sdCursor, &state->camera);
+
+    // Hover overlay: show composited input at g_sdXform world rect with point filtering
+    if (g_hoverPreview && g_inputPreview.id) {
+        Rectangle aabb = GetWorldAABB(&g_sdXform);
+        if (aabb.width > 0 && aabb.height > 0) {
+            SetTextureFilter(g_inputPreview.texture, TEXTURE_FILTER_POINT);
+            rlDrawRenderBatchActive();
+            DrawTexturePro(g_inputPreview.texture,
+                Rectangle{0,0,(float)g_inputPreview.texture.width,(float)g_inputPreview.texture.height},
+                aabb, Vector2{0,0}, 0, ColorAlpha(WHITE, 0.85f));
+            SetTextureFilter(g_inputPreview.texture, TEXTURE_FILTER_BILINEAR);
+        }
+    }
 }
 
 void SDHudModule::DrawGUI(const DrawRect& rect) {
@@ -143,24 +183,38 @@ void SDHudModule::DrawGUI(const DrawRect& rect) {
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
     {
-        ImGui::Text("Preview  %d x %d", g_resolution, g_resolution);
+        ImGui::Text("Preview");
         ImGui::Separator();
-        if (g_resultPng && g_resultSize > 0) {
-            Image img = LoadImageFromMemory(".png", g_resultPng, g_resultSize);
-            if (img.data) {
-                float scale = fminf((previewW - 20) / img.width,
-                                    (previewH - 40) / img.height);
-                int rw_img = (int)(img.width * scale);
-                int rh_img = (int)(img.height * scale);
-                ImageResize(&img, rw_img, rh_img);
-                Texture2D tex = LoadTextureFromImage(img);
-                UnloadImage(img);
-                ImGui::Image((ImTextureID)(intptr_t)tex.id,
-                             ImVec2((float)rw_img, (float)rh_img));
-                UnloadTexture(tex);
-            }
+        int pw = g_resolution;
+        int ph = g_lockSquare ? pw
+                 : (int)(pw * (g_sdXform.wh / g_sdXform.ww) + 0.5f);
+        if (ph < 16) ph = 16;
+        pw = (pw / 8) * 8; ph = (ph / 8) * 8;
+
+        // Update cached composite when dirty
+        if (g_previewDirty || g_inputPreview.id == 0 ||
+            g_inputPreview.texture.width != (unsigned int)pw ||
+            g_inputPreview.texture.height != (unsigned int)ph)
+        {
+            if (g_inputPreview.id) UnloadRenderTexture(g_inputPreview);
+            g_inputPreview = LoadRenderTexture(pw, ph);
+            RectXform viewXf = BuildCropViewXform(pw, ph);
+            ViewportManager_CompositeViewInto(g_inputPreview, &viewXf, pw, ph);
+            g_previewDirty = false;
+        }
+
+        if (g_inputPreview.id) {
+            float scale = fminf((previewW - 20) / pw, (previewH - 40) / ph);
+            int dw = (int)(pw * scale), dh = (int)(ph * scale);
+            if (dw < 1) dw = 1; if (dh < 1) dh = 1;
+            SetTextureFilter(g_inputPreview.texture, TEXTURE_FILTER_BILINEAR);
+            ImGui::Image((ImTextureID)(intptr_t)g_inputPreview.texture.id,
+                         ImVec2((float)dw, (float)dh));
+            g_hoverPreview = ImGui::IsItemHovered();
+            ImGui::SameLine();
+            ImGui::Text("%d x %d", pw, ph);
         } else {
-            ImGui::TextUnformatted(g_running ? "Generating..." : "Set prompt + Generate");
+            ImGui::Text("No layers");
         }
     }
     ImGui::End();
@@ -228,7 +282,9 @@ void SDHudModule::DrawGUI(const DrawRect& rect) {
             if (pw < 16) pw = 16;
             if (ph < 16) ph = 16;
 
-            RenderTexture2D rt = ViewportManager_GetMergedTexture(&g_sdXform, pw, ph);
+            RenderTexture2D rt = LoadRenderTexture(pw, ph);
+            RectXform viewXf = BuildCropViewXform(pw, ph);
+            ViewportManager_CompositeViewInto(rt, &viewXf, pw, ph);
             Image img = LoadImageFromTexture(rt.texture);
             UnloadRenderTexture(rt);
 
