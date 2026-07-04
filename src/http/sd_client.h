@@ -6,5 +6,6 @@ typedef void (*SDProgressFn)(const char* msg);
 
 int sd_request(const char* prompt, float strength, float cfg, int steps,
                int w, int h,
+               const uint8_t* src_png, size_t src_size,
                uint8_t** out_png, size_t* out_size,
                SDProgressFn progress_fn);

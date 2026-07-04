@@ -78,11 +78,13 @@ static void progress_cb(const char* msg) {
 }
 
 static void sd_worker(char* prompt, float strength, float cfg,
-                       int steps, int w, int h) {
+                       int steps, int w, int h,
+                       uint8_t* src_png, size_t src_size) {
     uint8_t* png = nullptr;
     size_t   sz  = 0;
     bool ok = (sd_request(prompt, strength, cfg, steps, w, h,
-                          &png, &sz, progress_cb) == 0);
+                          src_png, src_size, &png, &sz, progress_cb) == 0);
+    free(src_png);
     free(prompt);
     g_resultPng   = png;
     g_resultSize  = sz;
@@ -191,7 +193,8 @@ void SDHudModule::DrawGUI(const DrawRect& rect) {
     ImGui::SetNextWindowSize(ImVec2(previewW, previewH));
     ImGui::Begin("##sdPrev", NULL,
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
+        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
+        ImGuiWindowFlags_NoScrollbar);
     {
         ImGui::Text("Preview");
         ImGui::Separator();
@@ -284,66 +287,65 @@ void SDHudModule::DrawGUI(const DrawRect& rect) {
                   : (int)(g_resolution * (g_sdXform.wh / g_sdXform.ww) + 0.5f);
         ImGui::Text("Output: %d x %d", g_resolution, outH);
         ImGui::Separator();
-        bool canUpscale = !g_running && state->activeLayer >= 0;
-        ImGui::BeginDisabled(!canUpscale);
-        if (ImGui::Button("Upscale", ImVec2(-1, 28))) {
-            int pw = g_resolution;
-            int ph = g_lockSquare ? pw
-                     : (int)(pw * (g_sdXform.wh / g_sdXform.ww) + 0.5f);
-            if (pw < 16) pw = 16;
-            if (ph < 16) ph = 16;
 
+        float bw = (ImGui::GetContentRegionAvail().x - 4) * 0.5f;
+        bool canUp = !g_running && state->activeLayer >= 0;
+        bool canGen = g_prompt[0] && !g_running;
+
+        // Row 1: Upscale | Upscale Layer
+        ImGui::BeginDisabled(!canUp);
+        if (ImGui::Button("Upscale", ImVec2(bw, 28))) {
+            int pw = g_resolution, ph = g_lockSquare ? pw : (int)(pw * (g_sdXform.wh / g_sdXform.ww) + 0.5f);
+            if (pw < 16) pw = 16; if (ph < 16) ph = 16;
             RenderTexture2D rt = LoadRenderTexture(pw, ph);
             RectXform viewXf = BuildCropViewXform(pw, ph);
             ViewportManager_CompositeViewInto(rt, &viewXf, pw, ph);
-            Image img = LoadImageFromTexture(rt.texture);
-            ImageFlipVertical(&img);
-            UnloadRenderTexture(rt);
-
-            if (img.data) {
-                g_running = true;
-                g_threadDone = false;
-                g_progressMsg[0] = '\0';
-                std::thread t(upscale_worker, img);
-                t.detach();
-            }
+            Image img = LoadImageFromTexture(rt.texture); ImageFlipVertical(&img); UnloadRenderTexture(rt);
+            if (img.data) { g_running = true; g_threadDone = false; g_progressMsg[0] = '\0';
+                std::thread t(upscale_worker, img); t.detach(); }
         }
         ImGui::EndDisabled();
-        ImGui::Dummy(ImVec2(0, 4));
-        bool canUpLayer = !g_running && state->activeLayer >= 0;
-        ImGui::BeginDisabled(!canUpLayer);
-        if (ImGui::Button("Upscale Active Layer", ImVec2(-1, 28))) {
+        ImGui::SameLine(0, 4);
+        ImGui::BeginDisabled(!canUp);
+        if (ImGui::Button("Upscale Layer", ImVec2(bw, 28))) {
             Image img = LayerStack_ReadFromGPU(state->activeLayer);
-            if (img.data) {
-                ImageFormat(&img, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
-                g_running = true;
-                g_threadDone = false;
-                g_progressMsg[0] = '\0';
-                std::thread t(upscale_worker, img);
-                t.detach();
-            }
+            if (img.data) { ImageFormat(&img, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+                g_running = true; g_threadDone = false; g_progressMsg[0] = '\0';
+                std::thread t(upscale_worker, img); t.detach(); }
+        }
+        ImGui::EndDisabled();
+
+        // Row 2: Generate | img2img
+        ImGui::BeginDisabled(!canGen);
+        if (ImGui::Button("Generate", ImVec2(bw, 28))) {
+            int pw = g_resolution, ph = g_lockSquare ? pw : (int)(pw * (g_sdXform.wh / g_sdXform.ww) + 0.5f);
+            if (ph < 16) ph = 16;
+            char* pc = strdup(g_prompt);
+            g_running = true; g_threadDone = false; g_progressMsg[0] = '\0';
+            std::thread t(sd_worker, pc, g_strength, g_guidance, g_steps, pw, ph, nullptr, 0); t.detach();
+        }
+        ImGui::EndDisabled();
+        ImGui::SameLine(0, 4);
+        ImGui::BeginDisabled(!canGen);
+        if (ImGui::Button("img2img", ImVec2(bw, 28))) {
+            int pw = g_resolution, ph = g_lockSquare ? pw : (int)(pw * (g_sdXform.wh / g_sdXform.ww) + 0.5f);
+            if (pw < 16) pw = 16; if (ph < 16) ph = 16;
+            RenderTexture2D rt = LoadRenderTexture(pw, ph);
+            RectXform viewXf = BuildCropViewXform(pw, ph);
+            ViewportManager_CompositeViewInto(rt, &viewXf, pw, ph);
+            Image cap = LoadImageFromTexture(rt.texture); ImageFlipVertical(&cap); UnloadRenderTexture(rt);
+            int tmp_size = 0;
+            uint8_t* src_png_data = ExportImageToMemory(cap, ".png", &tmp_size);
+            size_t src_png_size = (size_t)tmp_size; UnloadImage(cap);
+            char* pc = strdup(g_prompt);
+            g_running = true; g_threadDone = false; g_progressMsg[0] = '\0';
+            std::thread t(sd_worker, pc, g_strength, g_guidance, g_steps, pw, ph, src_png_data, src_png_size); t.detach();
         }
         ImGui::EndDisabled();
         ImGui::EndGroup();
 
         float availY = ImGui::GetContentRegionAvail().y;
-        ImGui::Dummy(ImVec2(0, fmaxf(availY - 36, 4)));
-
-        bool canGen = g_prompt[0] && !g_running;
-        ImGui::BeginDisabled(!canGen);
-        if (ImGui::Button("Generate", ImVec2(-1, 32))) {
-            int pw = g_resolution;
-            int ph = g_lockSquare ? pw
-                     : (int)(pw * (g_sdXform.wh / g_sdXform.ww) + 0.5f);
-            if (ph < 16) ph = 16;
-            char* pc = strdup(g_prompt);
-            g_running = true;
-            g_threadDone = false;
-            g_progressMsg[0] = '\0';
-            std::thread t(sd_worker, pc, g_strength, g_guidance, g_steps, pw, ph);
-            t.detach();
-        }
-        ImGui::EndDisabled();
+        ImGui::Dummy(ImVec2(0, fmaxf(availY - 4, 4)));
         ImGui::TextUnformatted(g_progressMsg);
     }
     ImGui::End();
