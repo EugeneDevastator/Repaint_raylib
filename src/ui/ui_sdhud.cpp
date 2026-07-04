@@ -36,7 +36,7 @@ static int    g_resolution = 512;
 static bool   g_lockSquare = true;
 static float  g_strength   = 0.4f;
 static float  g_guidance   = 1.3f;
-static int    g_steps      = 4;
+static int    g_steps      = 8;
 static char   g_prompt[1024] = "";
 
 // ── Thread state ──────────────────────────────────────────────────────
@@ -159,17 +159,20 @@ void SDHudModule::DrawGL(const DrawRect& rect) {
     if (g_activeHud != HUD_SD) return;
     TransformHandle_Draw(&g_sdXform, g_sdCursor, &state->camera);
 
-    // Hover overlay: show composited input centered 1:1 on screen (point sampling)
+    // Hover overlay: show composited input in a centered square, fit to screen
     if (g_hoverPreview && g_inputPreview.id) {
         int tw = g_inputPreview.texture.width, th = g_inputPreview.texture.height;
         if (tw > 0 && th > 0) {
-            float sx = (float)GetScreenWidth(), sy = (float)GetScreenHeight();
-            float dx = (sx - tw) * 0.5f, dy = (sy - th) * 0.5f;
+            float maxDim = fminf((float)GetScreenWidth(), (float)GetScreenHeight()) * 0.9f;
+            float scale = fminf(maxDim / tw, maxDim / th);
+            float dw = tw * scale, dh = th * scale;
+            float dx = (GetScreenWidth() - dw) * 0.5f;
+            float dy = (GetScreenHeight() - dh) * 0.5f;
             SetTextureFilter(g_inputPreview.texture, TEXTURE_FILTER_POINT);
             rlDrawRenderBatchActive();
             DrawTexturePro(g_inputPreview.texture,
                 Rectangle{0,(float)th,(float)tw,(float)-th},
-                Rectangle{dx, dy, (float)tw, (float)th},
+                Rectangle{dx, dy, dw, dh},
                 Vector2{0,0}, 0, WHITE);
             SetTextureFilter(g_inputPreview.texture, TEXTURE_FILTER_BILINEAR);
         }
@@ -184,12 +187,31 @@ void SDHudModule::DrawGUI(const DrawRect& rect) {
     float thirdW = (rw - margin * 4) / 3.0f;
     float bottomRowH = 200.0f;
     float previewW = 220.0f, previewH = 220.0f;
+    float sliderMargin = 32.0f;
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8, 8));
 
-    // ── Preview (top-left) ────────────────────────────────────────────
-    ImGui::SetNextWindowPos(ImVec2(rx + margin, ry + margin));
+    // ── Resolution slider (full width, above everything) ─────────────
+    ImGui::SetNextWindowPos(ImVec2(rx + sliderMargin, ry + margin));
+    ImGui::SetNextWindowSize(ImVec2(rw - sliderMargin * 2, 0));
+    ImGui::Begin("##sdRes", NULL,
+        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
+        ImGuiWindowFlags_NoScrollbar);
+    {
+        if (g_lockSquare) g_resolution = 512;
+        int res = g_resolution;
+        ImGui::SetNextItemWidth(-1);
+        DrawSingleSliderInt("##res", &res, 16, 2048, "Resolution %d px");
+        g_resolution = (res / 8) * 8;
+        g_hoverPreview = g_hoverPreview || ImGui::IsItemActive();
+    }
+    ImGui::End();
+
+    // ── Preview (left below res slider) ──────────────────────────────
+    float prevY = ry + margin + 40;
+    ImGui::SetNextWindowPos(ImVec2(rx + margin, prevY));
     ImGui::SetNextWindowSize(ImVec2(previewW, previewH));
     ImGui::Begin("##sdPrev", NULL,
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
@@ -244,10 +266,6 @@ void SDHudModule::DrawGUI(const DrawRect& rect) {
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
         ImGuiWindowFlags_NoScrollbar);
     {
-        if (g_lockSquare) g_resolution = 512;
-        DrawSingleSliderInt("Resolution", &g_resolution, 16, 2048, "Resolution %d px");
-        g_resolution = (g_resolution / 8) * 8;
-
         DrawSingleSlider("Strength", &g_strength, 0.0f, 1.0f, "Strength %.2f");
 
         DrawSingleSlider("Guidance", &g_guidance, 0.0f, 2.0f, "Guidance %.2f");
