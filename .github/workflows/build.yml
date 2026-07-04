@@ -28,9 +28,6 @@ jobs:
         run: |
           mkdir -p dist/repaint-linux
           cp build/linux-release/bin/repaint dist/repaint-linux/
-          cp build/linux-release/bin/nnserver dist/repaint-linux/ 2>/dev/null || true
-          cp build/linux-release/bin/model_url.txt dist/repaint-linux/ 2>/dev/null || true
-          cp build/linux-release/onnxruntime/lib/libonnxruntime.so* dist/repaint-linux/ 2>/dev/null || true
           cp -r shaders dist/repaint-linux/ 2>/dev/null || true
           cp -r resources dist/repaint-linux/ 2>/dev/null || true
           zip -r repaint-linux.zip dist/repaint-linux
@@ -63,13 +60,9 @@ jobs:
         run: |
           mkdir -p dist/repaint-windows
           cp build/win64-release/bin/repaint.exe dist/repaint-windows/
-          cp build/win64-release/bin/nnserver.exe dist/repaint-windows/
-          cp build/win64-release/bin/onnxruntime.dll dist/repaint-windows/
-          cp build/win64-release/bin/model_url.txt dist/repaint-windows/
           cp "$MINGW_PREFIX/bin/libwinpthread-1.dll"  dist/repaint-windows/
           cp "$MINGW_PREFIX/bin/libgcc_s_seh-1.dll"   dist/repaint-windows/
           cp "$MINGW_PREFIX/bin/libstdc++-6.dll"       dist/repaint-windows/
-          cp "$MINGW_PREFIX/bin/libgomp-1.dll"          dist/repaint-windows/
           cp -r shaders   dist/repaint-windows/ 2>/dev/null || true
           cp -r resources dist/repaint-windows/ 2>/dev/null || true
           cd dist && zip -r ../repaint-windows.zip repaint-windows
