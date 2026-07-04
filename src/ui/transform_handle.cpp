@@ -256,27 +256,34 @@ bool TransformHandle_Input(RectXform* xform,
         float dv = curV - s_startUV.y;
         if (scaleProportionalToCursor) {
             // Layer mode — scale maps to ww/wh, matrix columns stay unit.
-            switch (s_dragEdge) {
-            case 0: // top — shrink wh, keep bottom fixed
-                xform->wh = sh - dv;
-                xform->mat[2] = stx + sb*dv;
-                xform->mat[5] = sty + sd*dv;
-                xform->ww = sw;
-                break;
-            case 1: // right — grow ww, keep left fixed
-                xform->ww = sw + du;
-                xform->wh = sh;
-                break;
-            case 2: // bottom — grow wh, keep top fixed
-                xform->wh = sh + dv;
-                xform->ww = sw;
-                break;
-            case 3: // left — shrink ww, keep right fixed
-                xform->ww = sw - du;
-                xform->mat[2] = stx + sa*du;
-                xform->mat[5] = sty + sc_*du;
-                xform->wh = sh;
-                break;
+            // Compute new extents and handle flips (negative → negate column)
+            {
+                float nww=sw, nwh=sh;
+                float ttx=stx, tty=sty;
+                switch (s_dragEdge) {
+                case 0: // top — shrink wh, keep bottom fixed
+                    nwh = sh - dv;
+                    ttx = stx + sb*dv; tty = sty + sd*dv;
+                    if (nwh < 0) { sb = -sb; sd = -sd; nwh = -nwh; }
+                    break;
+                case 1: // right — grow ww, keep left fixed
+                    nww = sw + du;
+                    if (nww < 0) { sa = -sa; sc_ = -sc_; nww = -nww; }
+                    break;
+                case 2: // bottom — grow wh, keep top fixed
+                    nwh = sh + dv;
+                    if (nwh < 0) { sb = -sb; sd = -sd; nwh = -nwh; }
+                    break;
+                case 3: // left — shrink ww, keep right fixed
+                    nww = sw - du;
+                    ttx = stx + sa*du; tty = sty + sc_*du;
+                    if (nww < 0) { sa = -sa; sc_ = -sc_; nww = -nww; }
+                    break;
+                }
+                xform->ww = nww; xform->wh = nwh;
+                xform->mat[0] = sa; xform->mat[1] = sb;
+                xform->mat[3] = sc_; xform->mat[4] = sd;
+                xform->mat[2] = ttx; xform->mat[5] = tty;
             }
             if (fabsf(xform->ww) < 1.0f) xform->ww = (xform->ww < 0) ? -1.0f : 1.0f;
             if (fabsf(xform->wh) < 1.0f) xform->wh = (xform->wh < 0) ? -1.0f : 1.0f;
@@ -289,28 +296,32 @@ bool TransformHandle_Input(RectXform* xform,
             }
         } else {
             // Crop mode — change w/h directly
+            float nww=sw, nwh=sh;
+            float ttx=stx, tty=sty;
             switch (s_dragEdge) {
             case 0: // top (y=0) — drag V, keep bottom (y=h) fixed
-                xform->ww = sw;
-                xform->wh = sh - dv;
-                xform->mat[2] = stx + sb*dv;
-                xform->mat[5] = sty + sd*dv;
+                nwh = sh - dv;
+                ttx = stx + sb*dv; tty = sty + sd*dv;
+                if (nwh < 0) { sb = -sb; sd = -sd; nwh = -nwh; }
                 break;
             case 1: // right (x=w) — drag U, keep left (x=0) fixed
-                xform->ww = sw + du;
-                xform->wh = sh;
+                nww = sw + du;
+                if (nww < 0) { sa = -sa; sc_ = -sc_; nww = -nww; }
                 break;
             case 2: // bottom (y=h) — drag V, keep top (y=0) fixed
-                xform->ww = sw;
-                xform->wh = sh + dv;
+                nwh = sh + dv;
+                if (nwh < 0) { sb = -sb; sd = -sd; nwh = -nwh; }
                 break;
             case 3: // left (x=0) — drag U, keep right (x=w) fixed
-                xform->ww = sw - du;
-                xform->wh = sh;
-                xform->mat[2] = stx + sa*du;
-                xform->mat[5] = sty + sc_*du;
+                nww = sw - du;
+                ttx = stx + sa*du; tty = sty + sc_*du;
+                if (nww < 0) { sa = -sa; sc_ = -sc_; nww = -nww; }
                 break;
             }
+            xform->ww = nww; xform->wh = nwh;
+            xform->mat[0] = sa; xform->mat[1] = sb;
+            xform->mat[3] = sc_; xform->mat[4] = sd;
+            xform->mat[2] = ttx; xform->mat[5] = tty;
             if (fabsf(xform->ww) < 1.0f) xform->ww = (xform->ww < 0) ? -1.0f : 1.0f;
             if (fabsf(xform->wh) < 1.0f) xform->wh = (xform->wh < 0) ? -1.0f : 1.0f;
             if (lockAspect) {
@@ -341,32 +352,43 @@ bool TransformHandle_Input(RectXform* xform,
             float curLx = (dx*sd - dy*sb)*invDet;
             float curLy = (-dx*sc_ + dy*sa)*invDet;
             float nw, nh;
+            float ttx=stx, tty=sty;
             switch (s_dragCorner) {
             case 0: // TL → opposite BR stays at (sw, sh)
                 nw = sw - curLx;
                 nh = sh - curLy;
-                xform->mat[2] = stx + sa*curLx + sb*curLy;
-                xform->mat[5] = sty + sc_*curLx + sd*curLy;
+                ttx = stx + sa*curLx + sb*curLy;
+                tty = sty + sc_*curLx + sd*curLy;
+                if (nw < 0) { sa = -sa; sb = -sb; nw = -nw; }
+                if (nh < 0) { sc_ = -sc_; sd = -sd; nh = -nh; }
                 break;
             case 1: // TR → opposite BL stays at (0, sh)
                 nw = curLx;
                 nh = sh - curLy;
-                xform->mat[2] = stx + sb*curLy;
-                xform->mat[5] = sty + sd*curLy;
+                ttx = stx + sb*curLy;
+                tty = sty + sd*curLy;
+                if (nw < 0) { sa = -sa; sb = -sb; nw = -nw; }
+                if (nh < 0) { sc_ = -sc_; sd = -sd; nh = -nh; }
                 break;
             case 2: // BR → opposite TL stays at (0, 0)
                 nw = curLx;
                 nh = curLy;
+                if (nw < 0) { sa = -sa; sb = -sb; nw = -nw; }
+                if (nh < 0) { sc_ = -sc_; sd = -sd; nh = -nh; }
                 break;
             case 3: // BL → opposite TR stays at (sw, 0)
                 nw = sw - curLx;
                 nh = curLy;
-                xform->mat[2] = stx + sa*curLx;
-                xform->mat[5] = sty + sc_*curLx;
+                ttx = stx + sa*curLx;
+                tty = sty + sc_*curLx;
+                if (nw < 0) { sa = -sa; sb = -sb; nw = -nw; }
+                if (nh < 0) { sc_ = -sc_; sd = -sd; nh = -nh; }
                 break;
             }
-            xform->ww = nw;
-            xform->wh = nh;
+            xform->ww = nw; xform->wh = nh;
+            xform->mat[0] = sa; xform->mat[1] = sb;
+            xform->mat[3] = sc_; xform->mat[4] = sd;
+            xform->mat[2] = ttx; xform->mat[5] = tty;
             if (fabsf(xform->ww) < 1.0f) xform->ww = (xform->ww < 0) ? -1.0f : 1.0f;
             if (fabsf(xform->wh) < 1.0f) xform->wh = (xform->wh < 0) ? -1.0f : 1.0f;
             if (lockAspect) {
@@ -410,11 +432,14 @@ bool TransformHandle_Input(RectXform* xform,
                 float nw = sw * sx_f, nh = sh * sy_f;
                 if (fabsf(nw) < 1.0f) nw = (nw < 0) ? -1.0f : 1.0f;
                 if (fabsf(nh) < 1.0f) nh = (nh < 0) ? -1.0f : 1.0f;
+                // Flip normalization: negative extent → negate matrix column
+                if (nw < 0) { as = -as; bs = -bs; nw = -nw; sx_f = -sx_f; }
+                if (nh < 0) { cs = -cs; ds = -ds; nh = -nh; sy_f = -sy_f; }
                 xform->ww = nw;
                 xform->wh = nh;
                 xform->mat[0] = as; xform->mat[1] = bs;
                 xform->mat[3] = cs; xform->mat[4] = ds;
-                float ncx = pcx * sx_f, ncy = pcy * sy_f;
+                float ncx = pcx * (nw / sw), ncy = pcy * (nh / sh);
                 xform->mat[2] = cx - (as*ncx + bs*ncy);
                 xform->mat[5] = cy - (cs*ncx + ds*ncy);
             }
