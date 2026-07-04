@@ -166,14 +166,14 @@ void SDHudModule::DrawGL(const DrawRect& rect) {
             float maxDim = fminf((float)GetScreenWidth(), (float)GetScreenHeight()) * 0.9f;
             float scale = fminf(maxDim / tw, maxDim / th);
             float dw = tw * scale, dh = th * scale;
-            float dx = (GetScreenWidth() - dw) * 0.5f;
-            float dy = (GetScreenHeight() - dh) * 0.5f;
+            float dx = floorf((GetScreenWidth() - dw) * 0.5f);
+            float dy = floorf((GetScreenHeight() - dh) * 0.5f);
             SetTextureFilter(g_inputPreview.texture, TEXTURE_FILTER_POINT);
-            rlDrawRenderBatchActive();
             DrawTexturePro(g_inputPreview.texture,
                 Rectangle{0,(float)th,(float)tw,(float)-th},
                 Rectangle{dx, dy, dw, dh},
                 Vector2{0,0}, 0, WHITE);
+            rlDrawRenderBatchActive();
             SetTextureFilter(g_inputPreview.texture, TEXTURE_FILTER_BILINEAR);
         }
     }
@@ -181,37 +181,19 @@ void SDHudModule::DrawGL(const DrawRect& rect) {
 
 void SDHudModule::DrawGUI(const DrawRect& rect) {
     if (g_activeHud != HUD_SD) return;
+    g_hoverPreview = false;
 
     float rx = rect.x, ry = rect.y, rw = rect.w, rh = rect.h;
     float margin = 10.0f;
     float thirdW = (rw - margin * 4) / 3.0f;
     float bottomRowH = 200.0f;
     float previewW = 220.0f, previewH = 220.0f;
-    float sliderMargin = 32.0f;
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8, 8));
 
-    // ── Resolution slider (full width, above everything) ─────────────
-    ImGui::SetNextWindowPos(ImVec2(rx + sliderMargin, ry + margin));
-    ImGui::SetNextWindowSize(ImVec2(rw - sliderMargin * 2, 0));
-    ImGui::Begin("##sdRes", NULL,
-        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
-        ImGuiWindowFlags_NoScrollbar);
-    {
-        if (g_lockSquare) g_resolution = 512;
-        int res = g_resolution;
-        ImGui::SetNextItemWidth(-1);
-        DrawSingleSliderInt("##res", &res, 16, 2048, "Resolution %d px");
-        g_resolution = (res / 8) * 8;
-        g_hoverPreview = g_hoverPreview || ImGui::IsItemActive();
-    }
-    ImGui::End();
-
-    // ── Preview (left below res slider) ──────────────────────────────
-    float prevY = ry + margin + 40;
-    ImGui::SetNextWindowPos(ImVec2(rx + margin, prevY));
+    // ── Preview (top-left) ────────────────────────────────────────────
+    ImGui::SetNextWindowPos(ImVec2(rx + margin, ry + margin));
     ImGui::SetNextWindowSize(ImVec2(previewW, previewH));
     ImGui::Begin("##sdPrev", NULL,
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
@@ -255,8 +237,33 @@ void SDHudModule::DrawGUI(const DrawRect& rect) {
     }
     ImGui::End();
 
-    // ── Bottom row: 3 panels ─────────────────────────────────────────
+    // ── Resolution slider (above bottom panels, full width) ──────────
     float by = ry + rh - bottomRowH - margin;
+    float resSliderY = by - 42;
+    ImGui::SetNextWindowPos(ImVec2(rx + margin, resSliderY));
+    ImGui::SetNextWindowSize(ImVec2(rw - margin * 2, 0));
+    ImGui::Begin("##sdRes", NULL,
+        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
+        ImGuiWindowFlags_NoScrollbar);
+    {
+        ImGui::Text("Resolution");
+        ImGui::SameLine();
+        if (g_lockSquare) g_resolution = 512;
+        int res = g_resolution;
+        ImGui::SetNextItemWidth(-1);
+        ImGui::PushStyleColor(ImGuiCol_SliderGrab, (ImVec4)ImColor(80,150,255,255));
+        ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, (ImVec4)ImColor(100,170,255,255));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, (ImVec4)ImColor(160,200,255,180));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgActive, (ImVec4)ImColor(160,200,255,200));
+        DrawSingleSliderInt("##res", &res, 16, 2048, "%d px");
+        ImGui::PopStyleColor(4);
+        g_resolution = (res / 8) * 8;
+        if (ImGui::IsItemActive()) g_hoverPreview = true;
+    }
+    ImGui::End();
+
+    // ── Bottom row: 3 panels ─────────────────────────────────────────
 
     // Sliders
     ImGui::SetNextWindowPos(ImVec2(rx + margin, by));

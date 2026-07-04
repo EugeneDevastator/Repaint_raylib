@@ -8,6 +8,9 @@ on:
         required: false
         default: latest
 
+permissions:
+  contents: write
+
 jobs:
   nnserver-windows:
     runs-on: windows-latest
@@ -17,12 +20,7 @@ jobs:
       - uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
-          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-make zip mingw-w64-x86_64-vulkan-headers mingw-w64-x86_64-vulkan-loader
-
-      # Remove prebuilt .a files so FetchContent builds from source (matches CI's GCC version)
-      - name: Prepare (force FetchContent)
-        shell: msys2 {0}
-        run: rm -f NNModelServer/sd-build/win64/*.a
+          install: mingw-w64-x86_64-gcc=15.2.0-8 mingw-w64-x86_64-gcc-libs=15.2.0-8 mingw-w64-x86_64-crt-git=13.0.0.r354.g40ab95d18-1 mingw-w64-x86_64-winpthreads=13.0.0.r354.g40ab95d18-1 mingw-w64-x86_64-cmake mingw-w64-x86_64-make zip mingw-w64-x86_64-vulkan-headers mingw-w64-x86_64-vulkan-loader
 
       - name: Configure
         shell: msys2 {0}

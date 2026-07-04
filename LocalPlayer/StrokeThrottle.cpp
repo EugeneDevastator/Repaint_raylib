@@ -3,6 +3,7 @@
 #include "brush_blend.h"
 #include "repaint.h"
 #include "texture_manager.h"
+#include "raylib.h"
 
 StrokeThrottle* g_throttle = nullptr;
 
@@ -13,8 +14,10 @@ void StrokeThrottle::Push(const SegmentData& seg) {
     m_segTail = next;
 }
 
-int StrokeThrottle::DrawPending(AppState* state, int pixelBudget) {
+int StrokeThrottle::DrawPending(AppState* state) {
+    double tStart = GetTime();
     int drawn = 0;
+    int pixelBudget = m_dynamicBudget;
     while (pixelBudget > 0) {
         if (m_dabIdx >= m_dabCount) {
             if (m_segHead == m_segTail) break;
@@ -25,7 +28,6 @@ int StrokeThrottle::DrawPending(AppState* state, int pixelBudget) {
             m_seamless = seg.seamless != 0;
             m_pixelPerfect = seg.pixelPerfect != 0;
             if (seg.isStrokeStart) m_hasPrevAngle = false;
-            // Forward last dab's angle so next segment's first dab gets a correct delta
             if (m_hasPrevAngle)
                 seg.brushFrom.resangle = m_lastSegEndAngle;
 
@@ -33,20 +35,15 @@ int StrokeThrottle::DrawPending(AppState* state, int pixelBudget) {
             m_dabCount = DrawLinear(seg, 0, 0.0f, m_dabBuf, DAB_CAP, &r);
 
             if (m_dabCount > 0) {
-                if (!m_hasPrevAngle) {
-                    // First segment: no previous dab to chain from, first dab's delta = 0
+                if (!m_hasPrevAngle)
                     m_dabBuf[0].srcAngle = m_dabBuf[0].brush.resangle;
-                }
                 m_lastSegEndAngle = m_dabBuf[m_dabCount - 1].brush.resangle;
                 m_hasPrevAngle = true;
             }
 
-            printf("[THR] unpacked seg: %d dabs, rad=%.1f, spacing=%.2f\n",
-                m_dabCount, seg.brushFrom.rad_out_px, seg.brushFrom.spacing);
-            fflush(stdout);
-            m_dabIdx = 0;
             if (m_dabCount >= DAB_CAP)
                 printf("[THR] WARNING: dabs hit DAB_CAP (%d)!\n", DAB_CAP);
+            m_dabIdx = 0;
             m_segHead = (m_segHead + 1) % SEG_CAP;
         }
 
@@ -83,8 +80,17 @@ int StrokeThrottle::DrawPending(AppState* state, int pixelBudget) {
             frameDabs++;
         }
         if (frameDabs == 0) break;
-        printf("[THR] frame: drew %d dabs, budget left=%d, remaining in seg=%d\n",
-            frameDabs, pixelBudget, m_dabCount - m_dabIdx);
     }
+
+    if (drawn > 0) {
+        double elapsed = GetTime() - tStart;
+        if (elapsed > m_targetFrameTime * 1.2)
+            m_dynamicBudget = (int)(m_dynamicBudget * 0.85);
+        else if (elapsed < m_targetFrameTime * 0.5)
+            m_dynamicBudget = (int)(m_dynamicBudget * 1.15);
+        if (m_dynamicBudget < m_minBudget) m_dynamicBudget = m_minBudget;
+        if (m_dynamicBudget > m_maxBudget) m_dynamicBudget = m_maxBudget;
+    }
+
     return drawn;
 }
