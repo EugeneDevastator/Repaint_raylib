@@ -168,7 +168,7 @@ void SDHudModule::DrawGL(const DrawRect& rect) {
             DrawTexturePro(g_inputPreview.texture,
                 Rectangle{0,(float)th,(float)tw,(float)-th},
                 Rectangle{dx, dy, (float)tw, (float)th},
-                Vector2{0,0}, 0, ColorAlpha(WHITE, 0.85f));
+                Vector2{0,0}, 0, WHITE);
             SetTextureFilter(g_inputPreview.texture, TEXTURE_FILTER_BILINEAR);
         }
     }
@@ -217,7 +217,7 @@ void SDHudModule::DrawGUI(const DrawRect& rect) {
             float scale = fminf((previewW - 20) / pw, (previewH - 40) / ph);
             int dw = (int)(pw * scale), dh = (int)(ph * scale);
             if (dw < 1) dw = 1; if (dh < 1) dh = 1;
-            SetTextureFilter(g_inputPreview.texture, TEXTURE_FILTER_BILINEAR);
+            SetTextureFilter(g_inputPreview.texture, TEXTURE_FILTER_POINT);
             ImGui::Image((ImTextureID)(intptr_t)g_inputPreview.texture.id,
                          ImVec2((float)dw, (float)dh),
                          ImVec2(0,1), ImVec2(1,0));
