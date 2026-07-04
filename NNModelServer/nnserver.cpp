@@ -263,17 +263,6 @@ int main(int argc, char** argv) {
     fprintf(stderr, "[nnserver] SD available: %s\n", g_sd_available ? "yes" : "no");
 
     std::string upscale_path = dl_resolve_optional(DL_UPSCALER_MODEL);
-
-    /* Hack: prefer non-Lite upscaler if found locally */
-    const char* upscale_full = "4x-UltraSharpV2_fp32_op17.onnx";
-    if (dl_file_exists(upscale_full))
-        upscale_path = upscale_full;
-    else {
-        std::string cached = dl_cache_dir() + "/" + upscale_full;
-        if (dl_file_exists(cached.c_str()))
-            upscale_path = cached;
-    }
-
     g_upscale_model_path = upscale_path;
     if (!g_upscale_model_path.empty())
         fprintf(stderr, "[nnserver] upscaler will be loaded on first request\n");
