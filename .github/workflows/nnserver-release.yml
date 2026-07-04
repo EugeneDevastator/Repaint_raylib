@@ -19,6 +19,11 @@ jobs:
           msystem: MINGW64
           install: mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-make zip mingw-w64-x86_64-vulkan-headers mingw-w64-x86_64-vulkan-loader
 
+      # Remove prebuilt .a files so FetchContent builds from source (matches CI's GCC version)
+      - name: Prepare (force FetchContent)
+        shell: msys2 {0}
+        run: rm -f NNModelServer/sd-build/win64/*.a
+
       - name: Configure
         shell: msys2 {0}
         run: cmake --preset win64-release -DCMAKE_MAKE_PROGRAM=mingw32-make
@@ -64,7 +69,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            libcurl4-openssl-dev libvulkan-dev
+            libcurl4-openssl-dev libvulkan-dev shaderc
 
       - name: Configure
         run: cmake --preset linux-release

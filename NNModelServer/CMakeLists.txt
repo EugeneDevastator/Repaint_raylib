@@ -159,8 +159,14 @@ if(WIN32)
             GIT_TAG        master
             GIT_SHALLOW    TRUE
             GIT_SUBMODULES "ggml")
-        set(SD_VULKAN ON CACHE BOOL "" FORCE)
-        set(GGML_VULKAN ON CACHE BOOL "" FORCE)
+        find_package(Vulkan QUIET COMPONENTS glslc glslangValidator)
+        if(Vulkan_FOUND)
+            message(STATUS "vulkan: enabling GPU backend")
+            set(SD_VULKAN ON CACHE BOOL "" FORCE)
+            set(GGML_VULKAN ON CACHE BOOL "" FORCE)
+        else()
+            message(STATUS "vulkan: not found — CPU only")
+        endif()
         FetchContent_MakeAvailable(stable-diffusion-cpp)
 
         target_compile_options(stable-diffusion PRIVATE -frtti)
@@ -207,8 +213,14 @@ else()  # ── Linux ───────────────────
         GIT_TAG        master
         GIT_SHALLOW    TRUE
         GIT_SUBMODULES "ggml")
-    set(SD_VULKAN ON CACHE BOOL "" FORCE)
-    set(GGML_VULKAN ON CACHE BOOL "" FORCE)
+    find_package(Vulkan QUIET COMPONENTS glslc glslangValidator)
+    if(Vulkan_FOUND)
+        message(STATUS "vulkan: enabling GPU backend")
+        set(SD_VULKAN ON CACHE BOOL "" FORCE)
+        set(GGML_VULKAN ON CACHE BOOL "" FORCE)
+    else()
+        message(STATUS "vulkan: not found — CPU only")
+    endif()
     FetchContent_MakeAvailable(stable-diffusion-cpp)
 
     target_compile_options(stable-diffusion PRIVATE -frtti)
