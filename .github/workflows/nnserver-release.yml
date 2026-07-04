@@ -35,19 +35,17 @@ jobs:
           $out = "$env:TEMP\vksdk.exe"
           Write-Host "Downloading Vulkan SDK..."
           curl.exe -sL $url -o $out
-          Write-Host "Extracting glslc..."
-          & 7z x $out "-oC:\VulkanSDK" -y *\Bin\glslc.exe *\Bin\glslangValidator.exe *\Lib\* | Out-Null
-          $exe = Get-ChildItem C:\VulkanSDK -Recurse -Filter glslc.exe | Select-Object -First 1
-          if ($exe) {
-            Copy-Item $exe.FullName C:\msys64\mingw64\bin\ -Force
-            Write-Host "glslc installed"
-          } else {
-            Write-Host "glslc NOT found — Vulkan backend will be CPU-only"
-          }
+          Write-Host "Extracting SDK..."
+          & 7z x $out "-oC:\VulkanSDK" -y | Out-Null
+          $glslc = Get-ChildItem C:\VulkanSDK -Recurse -Filter glslc.exe | Select-Object -First 1
+          if (-not $glslc) { throw "glslc.exe not found in Vulkan SDK extraction" }
+          $vkRoot = $glslc.Directory.Parent.FullName
+          Write-Host "Found glslc at $($glslc.FullName), VULKAN_SDK=$vkRoot"
+          echo "VULKAN_SDK=$vkRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Configure
         shell: msys2 {0}
-        run: cmake --preset win64-release -DCMAKE_MAKE_PROGRAM=mingw32-make
+        run: cmake --preset win64-release -DCMAKE_MAKE_PROGRAM=mingw32-make -DSD_VULKAN=ON -DGGML_VULKAN=ON
 
       - name: Build nnserver
         shell: msys2 {0}
@@ -90,10 +88,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            libcurl4-openssl-dev libvulkan-dev shaderc
+            libcurl4-openssl-dev libvulkan-dev glslc-tools
 
       - name: Configure
-        run: cmake --preset linux-release
+        run: cmake --preset linux-release -DSD_VULKAN=ON -DGGML_VULKAN=ON
 
       - name: Build nnserver
         run: cmake --build build/linux-release --target nnserver --parallel
