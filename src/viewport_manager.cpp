@@ -228,15 +228,11 @@ int ViewportManager_CreateLayerFromImage(Image img) {
     if (!img.data) return -1;
 
     int n = LayerStack_Count();
-    int newIdx = LayerStack_InsertLayer(n > 0 ? n - 1 : 0);
+    // Create at the END with pixel-accurate RT and xform
+    int newIdx = LayerStack_Add(img.width, img.height);
     sLayerProps* lp = LayerStack_GetProps(newIdx);
 
-    /* xform extent in world units (1 unit = WORLD_UNIT_PX px) */
-    lp->xform = RectXform_Pivot(0, 0,
-        (float)img.width / WORLD_UNIT_PX,
-        (float)img.height / WORLD_UNIT_PX, 0);
-
-    /* Upload image content */
+    // Upload image content
     Texture2D tmp = LoadTextureFromImage(img);
     UnloadImage(img);
     BeginTextureMode(LayerStack_GetRT(newIdx));
@@ -247,6 +243,9 @@ int ViewportManager_CreateLayerFromImage(Image img) {
     rlSetBlendMode(RL_BLEND_ALPHA);
     EndTextureMode();
     UnloadTexture(tmp);
+
+    // Move above bottommost layer
+    if (n > 1) LayerStack_MoveLayer(newIdx, n - 1);
 
     ViewportManager_SetDirty();
     return newIdx;
