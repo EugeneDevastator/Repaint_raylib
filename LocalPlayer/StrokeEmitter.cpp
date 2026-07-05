@@ -14,6 +14,7 @@ StrokeEmitter::StrokeEmitter(StrokeThrottle* throttle)
     m_processedCount = 0;
     m_initDirSet = false;
     m_prevSegLen = 0;
+    memset(&m_modulated, 0, sizeof(m_modulated));
 }
 
 void StrokeEmitter::handleBegin(const InputEntry& e) {
@@ -44,9 +45,10 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
     m_splinePts[0] = start;
     m_segEpCount = 0;
 
-    // ── Emit first dab immediately at stroke start ────────────────
+    m_modulated = ResolveModulatedConfig(m_config, e.toolMode, e.initAngle, g_modPars.Pars);
+
     if (isFirstDabPainted) {
-        DabBrush cb = MakeDabBrush(m_config, e.brush);
+        DabBrush cb = MakeDabBrush(m_modulated, m_brushFrom.rad_out);
         SegmentData dseg;
         memset(&dseg, 0, sizeof(dseg));
         dseg.pos1 = dseg.pos2 = start;
@@ -69,12 +71,13 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
         if (g_broker)   g_broker->on_segment(dseg);
 
         m_emittedAny = true;
-        m_lastDabRad = cb.rad_out_px;
+        m_lastDabRad = m_modulated.radOut;
     }
 }
 
 void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 ctrl3,
-                               const d_RealBrush& brush, float initAngle, int toolMode) {
+                                const d_RealBrush& brush, float initAngle, int toolMode,
+                                const ModulatedBrushConfig& modFrom) {
     float segDx = p2.x - m_lastDabPos.x;
     float segDy = p2.y - m_lastDabPos.y;
     float segLen = sqrtf(segDx*segDx + segDy*segDy);
@@ -93,15 +96,13 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
     m_prevSegDir = Vector2{segDx, segDy};
     m_prevSegLen = segLen;
 
-    d_RealBrush target = brush;
-    ResolveBrushParams(m_config, &target, toolMode, initAngle, g_modPars.Pars);
-    target.rad_out *= m_worldToTexPx;
+    ModulatedBrushConfig modTo = ResolveModulatedConfig(m_config, toolMode, initAngle, g_modPars.Pars);
+    modTo.radOut *= m_worldToTexPx;
+    modTo.jitRadOut *= m_worldToTexPx;
 
-    DabBrush cbFrom = MakeDabBrush(m_config, m_brushFrom);
-    DabBrush cbTo   = MakeDabBrush(m_config, target);
+    DabBrush cbFrom = MakeDabBrush(modFrom, m_brushFrom.rad_out);
+    DabBrush cbTo   = MakeDabBrush(modTo, modTo.radOut);
 
-    // Rebase ctrl0 from p1 to m_lastDabPos, and ctrl3 from p2 to the actual
-    // segment end, rescaling both handle lengths to the actual segment length.
     float hLen = segLen * 0.33f;
     Vector2 c0dir = {ctrl0.x - p1.x, ctrl0.y - p1.y};
     float c0l = sqrtf(c0dir.x*c0dir.x + c0dir.y*c0dir.y);
@@ -157,6 +158,7 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
         m_lastDabPos.y = roundf(m_lastDabPos.y);
     }
 
+    m_modulated = modTo;
     m_emittedAny = true;
 }
 
@@ -172,8 +174,9 @@ void StrokeEmitter::handlePoint(const InputEntry& e) {
     g_modPars.Pars[csXtilt]    = e.tiltX;
     g_modPars.Pars[csYtilt]    = e.tiltY;
 
-    // Velocity from input filter (already smoothed in Feed())
     g_modPars.Pars[csVel] = e.velocity;
+
+    ModulatedBrushConfig modNow = ResolveModulatedConfig(m_config, m_toolMode, m_initAngle, g_modPars.Pars);
 
     if (g_strokeSmoothingMode == SMOOTH_MODE_LINEAR) {
         float lineLen = Dist2D(m_lastDabPos, pos);
@@ -182,7 +185,8 @@ void StrokeEmitter::handlePoint(const InputEntry& e) {
         if (lineLen > 0.001f) { dir.x /= lineLen; dir.y /= lineLen; }
         Vector2 c0 = {m_lastDabPos.x + dir.x * hLen, m_lastDabPos.y + dir.y * hLen};
         Vector2 c3 = {pos.x - dir.x * hLen, pos.y - dir.y * hLen};
-        emitSegment(m_lastDabPos, pos, c0, c3, m_brushFrom, m_initAngle, m_toolMode);
+        emitSegment(m_lastDabPos, pos, c0, c3, m_brushFrom, m_initAngle, m_toolMode, m_modulated);
+        m_modulated = modNow;
         return;
     }
 
@@ -190,9 +194,7 @@ void StrokeEmitter::handlePoint(const InputEntry& e) {
     if (g_strokeSmoothingMode == SMOOTH_MODE_SMOOTH) {
         threshold = fmaxf(g_strokeThrottle, 0.5f);
     } else if (g_strokeThrottle <= 0.0f) {
-        float sizeMul = 0.5;
-        threshold = GetModVal(&bpSize) * sizeMul;
-        threshold *= m_worldToTexPx;
+        threshold = modNow.radOut * 0.5f * m_worldToTexPx;
         if (threshold < 0.5f) threshold = 0.5f;
     } else {
         threshold = fmaxf(g_strokeThrottle, 0.5f);
@@ -231,7 +233,8 @@ void StrokeEmitter::handlePoint(const InputEntry& e) {
             Vector2 c0 = p1, c3 = p2;
             if (t1l > 0.001f) { c0.x = p1.x + t1.x/t1l * hLen; c0.y = p1.y + t1.y/t1l * hLen; }
             if (t2l > 0.001f) { c3.x = p2.x - t2.x/t2l * hLen; c3.y = p2.y - t2.y/t2l * hLen; }
-            emitSegment(p1, p2, c0, c3, m_brushFrom, m_initAngle, m_toolMode);
+            emitSegment(p1, p2, c0, c3, m_brushFrom, m_initAngle, m_toolMode, m_modulated);
+            m_modulated = modNow;
         }
         m_processedCount = seg + 1;
     }
@@ -267,7 +270,7 @@ void StrokeEmitter::flushSmoothing(const d_RealBrush& brush, float initAngle, in
             Vector2 c0 = p1, c3 = p2;
             if (t1l > 0.001f) { c0.x = p1.x + t1.x/t1l * hLen; c0.y = p1.y + t1.y/t1l * hLen; }
             if (t2l > 0.001f) { c3.x = p2.x - t2.x/t2l * hLen; c3.y = p2.y - t2.y/t2l * hLen; }
-            emitSegment(p1, p2, c0, c3, brush, initAngle, toolMode);
+            emitSegment(p1, p2, c0, c3, brush, initAngle, toolMode, m_modulated);
         }
     }
 }
@@ -277,7 +280,7 @@ void StrokeEmitter::handleEnd() {
     flushSmoothing(m_brushFrom, m_initAngle, m_toolMode);
 
     if (!m_emittedAny) {
-        DabBrush cb = MakeDabBrush(m_config, m_brushFrom);
+        DabBrush cb = MakeDabBrush(m_modulated, m_brushFrom.rad_out);
     SegmentData dseg;
         memset(&dseg, 0, sizeof(dseg));
         dseg.pos1 = dseg.pos2 = m_lastDabPos;
@@ -300,8 +303,6 @@ void StrokeEmitter::handleEnd() {
         if (g_broker) g_broker->on_segment(dseg);
     }
 
-    // Reset global modulators to neutral so the next frame's UI brush
-    // computation (app.cpp:196) reads clean values.
     g_modPars.Pars[csDir]    = 0.5f;
     g_modPars.Pars[csIdir]   = 0.5f;
     g_modPars.Pars[csCrv]    = 0.5f;

@@ -12,11 +12,10 @@ public:
     StrokeEmitter(StrokeThrottle* throttle);
     void ProcessInputQueue();
 
-    Vector2 m_lastDabPos;  // public for Distort/Contrast debug
+    Vector2 m_lastDabPos;
     float m_lastDabRad;
     bool isFirstDabPainted = true;
 
-    // Debug
     static const int DBG_SEG_PTS = 2048;
     Vector2 m_segEndpoints[DBG_SEG_PTS];
     int m_segEpCount = 0;
@@ -29,6 +28,7 @@ private:
     bool m_active;
     d_RealBrush m_brushFrom;
     UserBrushConfig m_config;
+    ModulatedBrushConfig m_modulated;
     bool m_emittedAny;
     uint16_t m_seed;
     TexSlotID m_targetSlot;
@@ -49,7 +49,8 @@ private:
     void handlePoint(const InputEntry& e);
     void handleEnd();
     void emitSegment(Vector2 p0, Vector2 p2, Vector2 ctrl0, Vector2 ctrl3,
-                     const d_RealBrush& brush, float initAngle, int toolMode);
+                     const d_RealBrush& brush, float initAngle, int toolMode,
+                     const ModulatedBrushConfig& modFrom);
     void flushSmoothing(const d_RealBrush& brush, float initAngle, int toolMode);
 };
 

@@ -4,11 +4,11 @@
 #include "repaint.h"
 #include "brush_draw.h"
 
-void ResolveBrushParams(const UserBrushConfig& cfg, d_RealBrush* out, int toolMode,
-                         float initAngle, const float modValues[csSTOP]);
-void ResolveBrushParamsMax(const UserBrushConfig& cfg, d_RealBrush* out,
-                           int toolMode, float initAngle);
-DabBrush MakeDabBrush(const UserBrushConfig& cfg, const d_RealBrush& resolved);
+ModulatedBrushConfig ResolveModulatedConfig(const UserBrushConfig& cfg, int toolMode,
+                                             float initAngle, const float modValues[csSTOP]);
+ModulatedBrushConfig ResolveModulatedConfigMax(const UserBrushConfig& cfg, int toolMode,
+                                               float initAngle);
+DabBrush MakeDabBrush(const ModulatedBrushConfig& mod, const float rad_out_px_override = 0.0f);
 
 void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex, bool useTexture,
                               const d_RealBrush* baseBrush, int toolMode,

@@ -25,35 +25,6 @@ BParam bpFocalOffset;
 
 d_StrokePars g_modPars;
 
-static float ApplyBP(float clipminF, float clipmaxF, float jitter,
-                    float cpar, float outMin, float outMax) {
-    float rng = clipmaxF - clipminF;
-    float respar = cpar * rng + clipminF;
-    float randm = (((float)rand() / (float)RAND_MAX) - 0.5f) * 2.0f * jitter;
-    float res = fminf(fmaxf(respar + randm, 0.0f), 1.0f);
-    return res * (outMax - outMin) + outMin;
-}
-
-float GetModVal(BParam* bp) {
-    float cpar = 1.0f;
-    int pm = bp->penMode;
-    if (pm >= 0 && pm < csSTOP)
-        cpar = g_modPars.Pars[pm];
-    float n = bp->user.clipmaxF;
-    if (bp->power != 1.0f)
-        n = powf(n, bp->power);
-    return ApplyBP(bp->user.clipminF, n, bp->user.jitter,
-                   cpar, bp->outMin, bp->outMax);
-}
-
-float GetModValFor(BParam* bp, float cpar) {
-    float n = bp->run.clipmaxF;
-    if (bp->power != 1.0f)
-        n = powf(n, bp->power);
-    return ApplyBP(bp->run.clipminF, n, bp->user.jitter,
-                   cpar, bp->outMin, bp->outMax);
-}
-
 void Modulators_Init(void) {
     BParam_Init(&bpOpacity, 0, "Opacity", 0.0f, 1.0f, 1.0f);
     bpOpacity.power = 2.0f;

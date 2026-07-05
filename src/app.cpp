@@ -303,23 +303,22 @@ void UpdateUI(AppState* state) {
     CaptureBrushConfig(&brushCfg);
     brushCfg.toolMode = state->mode;
 
-    d_RealBrush uiBrush = state->currentBrush.Realb;
-    ResolveBrushParams(brushCfg, &uiBrush, state->mode, state->initialAngle, g_modPars.Pars);
+    ModulatedBrushConfig mod = ResolveModulatedConfig(brushCfg, state->mode, state->initialAngle, g_modPars.Pars);
 
-    state->currentBrush.Realb.rad_out    = uiBrush.rad_out;
-    state->currentBrush.Realb.radInRatio = uiBrush.radInRatio;
-    state->currentBrush.Realb.crv        = uiBrush.crv;
-    state->currentBrush.Realb.opacity    = uiBrush.opacity;
-    state->currentBrush.Realb.resangle   = (float)uiBrush.resangle;
-    state->currentBrush.Realb.x2y        = uiBrush.x2y;
-    state->currentBrush.Realb.cop        = uiBrush.cop;
-    state->currentBrush.Realb.texScale   = uiBrush.texScale;
-    state->currentBrush.Realb.texFeather = uiBrush.texFeather;
-    state->currentBrush.Realb.texThresh  = uiBrush.texThresh;
-    state->currentBrush.Realb.texBlendVal = uiBrush.texBlendVal;
-    state->currentBrush.Realb.pwr        = uiBrush.pwr;
-    state->currentBrush.Realb.perspective = uiBrush.perspective;
-    state->currentBrush.Realb.col        = uiBrush.col;
+    state->currentBrush.Realb.rad_out    = mod.radOut;
+    state->currentBrush.Realb.radInRatio = mod.radInRatio;
+    state->currentBrush.Realb.crv        = mod.crv;
+    state->currentBrush.Realb.opacity    = mod.opacity;
+    state->currentBrush.Realb.resangle   = mod.resangle;
+    state->currentBrush.Realb.x2y        = mod.scaleRel;
+    state->currentBrush.Realb.cop        = mod.cop;
+    state->currentBrush.Realb.texScale   = mod.texScale;
+    state->currentBrush.Realb.texFeather = mod.texFeather;
+    state->currentBrush.Realb.texThresh  = mod.texThresh;
+    state->currentBrush.Realb.texBlendVal = mod.texBlendVal;
+    state->currentBrush.Realb.pwr        = mod.pwr;
+    state->currentBrush.Realb.perspective = mod.perspective;
+    state->currentBrush.Realb.col        = mod.col;
     state->currentBrush.Realb.eraseMode  = state->eraseMode;
 
     colorHue = bpQuickHue.user.clipmaxF;

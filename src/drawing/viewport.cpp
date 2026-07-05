@@ -12,7 +12,8 @@
 static void PushDabSegment(ICommandBroker* b, float x, float y, float srcX, float srcY, const d_RealBrush& brush, int toolMode) {
     UserBrushConfig cfg;
     CaptureBrushConfig(&cfg);
-    DabBrush cb = MakeDabBrush(cfg, brush);
+    ModulatedBrushConfig mod = ResolveModulatedConfig(cfg, toolMode, 0.0f, g_modPars.Pars);
+    DabBrush cb = MakeDabBrush(mod, brush.rad_out);
     SegmentData s; memset(&s, 0, sizeof(s));
     s.pos1 = Vector2{x, y};
     s.pos2 = Vector2{srcX, srcY};
@@ -276,7 +277,9 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                 }
             } else {
                 // Distort / Contrast
-                float sv = BParam_GetValue(&bpSpacing);
+                UserBrushConfig cfg;
+                CaptureBrushConfig(&cfg);
+                float sv = ResolveModulatedConfig(cfg, state->mode, 0.0f, g_modPars.Pars).spacing;
                 float scaledRad = state->currentBrush.Realb.rad_out * worldToTexPx;
                 float spacing = scaledRad * 2.0f * sv;
                 if (spacing < 2.0f) spacing = 2.0f;
@@ -331,7 +334,9 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             vp->lineLastDabPos = paintPos;
             vp->wasMouseDown = true;
         } else {
-            float spacing = fmaxf(state->currentBrush.Realb.rad_out * worldToTexPx * 2.0f * BParam_GetValue(&bpSpacing), 2.0f);
+            UserBrushConfig cfg;
+            CaptureBrushConfig(&cfg);
+            float spacing = fmaxf(state->currentBrush.Realb.rad_out * worldToTexPx * 2.0f * ResolveModulatedConfig(cfg, state->mode, 0.0f, g_modPars.Pars).spacing, 2.0f);
             if (Dist2D(vp->lineLastDabPos, paintPos) > spacing) {
                 float segLen = Dist2D(vp->lineLastDabPos, paintPos);
                 int steps = (int)(segLen / spacing) + 1;

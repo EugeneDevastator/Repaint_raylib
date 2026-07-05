@@ -228,8 +228,6 @@ void BParam_SetValue(BParam* bp, float val);
 void BParam_SnapRunState(BParam* bp);
 Color HSLToRGB(float h, float s, float l);
 void RGBToHSL(Color c, float& h, float& s, float& l);
-float GetModVal(BParam* bp);
-float GetModValFor(BParam* bp, float cpar);
 
 extern float colorHue, colorSat, colorLit;
 extern int quickPanelMouseMode;

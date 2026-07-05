@@ -52,24 +52,6 @@ static float RawRnd(uint16_t seed, float range) {
     return x / 25500.0f * range;
 }
 
-// ── ApplyNoise ─────────────────────────────────────────────────────
-static void ApplyNoise(DabBrush& b, int noisemode, uint16_t seed,
-                       Vector2 pos, uint16_t n, float& noisex, float& noisey) {
-    (void)b;
-    if (noisemode == 0) {
-        noisex = (float)(RawRnd(seed + n * 3, 1024) * 1024.0f);
-        noisey = (float)(RawRnd(seed + n + 21, 1024) * 1024.0f);
-    } else if (noisemode == 1) {
-        noisex = 34.0f;
-        noisey = 76.0f;
-    } else {
-        noisex = fmaxf(0, (int)pos.x);
-        noisey = fmaxf(0, (int)pos.y);
-    }
-    noisex = noisex - 1024.0f * (float)(int)(noisex / 1024.0f);
-    noisey = noisey - 1024.0f * (float)(int)(noisey / 1024.0f);
-}
-
 // ── Blend ──────────────────────────────────────────────────────────
 DabBrush BlendBrushes(DabBrush from, DabBrush to, float k) {
     auto lerp = [](float a, float b, float t) { return a + (b - a) * t; };
