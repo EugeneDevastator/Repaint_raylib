@@ -11,22 +11,25 @@ uniform float layerThreshold;
 uniform float layerFeather;
 
 #include blend.glsl
+float applytr(float inp, float range, float maxv) {
+    float minv = clamp(maxv - range, 0.0, 1.0);
+    float span = maxv - minv;
 
+    if(span < 0.0001) return inp > maxv ? 1.0 : 0.0;
+
+    return clamp((inp - minv) / span, 0.0, 1.0);
+}
 void main() {
     vec4 underLayer = texture(underTex, fragTexCoord);
     vec4 thisLayer  = texture(layerTex, fract(fragTexCoord));
     float layerA    = thisLayer.a;
 
-    // Apply threshold and feather
-    if (layerThreshold > 0.0 || layerFeather < 1.0) {
-        float t = layerThreshold;
-        float f = max(layerFeather, 0.001);
-        float edgeDist = layerA - t;
-        layerA = clamp(edgeDist / f, 0.0, 1.0);
-    }
+	layerA = applytr(layerA, layerFeather, 1-layerThreshold);
 
-    if (layerA < 0.0001) { finalColor = underLayer; return; }
-			  layerA     *= layerAlpha;
+    if (layerA < 0.0001) {
+		finalColor = underLayer; return;
+	}
+	layerA     *= layerAlpha;
     finalColor = applyBlend(bmidx, underLayer, thisLayer.rgb, layerA);
 
 }
