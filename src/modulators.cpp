@@ -1,5 +1,6 @@
 #include "repaint.h"
 #include "raylib.h"
+#include "brush_draw.h"
 
 BParam bpOpacity;
 BParam bpSize;
@@ -188,4 +189,37 @@ void Modulators_Shutdown(void) {
     if (bpCurvature.iconLoaded) UnloadTexture(bpCurvature.iconTex);
     if (bpScatter.iconLoaded) UnloadTexture(bpScatter.iconTex);
     if (bpCloneOpacity.iconLoaded) UnloadTexture(bpCloneOpacity.iconTex);
+}
+
+static void CaptureBP(const BParam& src, BPConfig* dst) {
+    dst->userMax     = src.user.clipmaxF;
+    dst->userMin     = src.user.clipminF;
+    dst->outMin      = src.outMin;
+    dst->outMax      = src.outMax;
+    dst->power       = src.power;
+    dst->modulatorId = src.penMode;
+    dst->jitter      = src.user.jitter;
+}
+
+void CaptureBrushConfig(UserBrushConfig* cfg) {
+    memset(cfg, 0, sizeof(*cfg));
+    CaptureBP(bpSize,        &cfg->size);
+    CaptureBP(bpHardness,    &cfg->hardness);
+    CaptureBP(bpCurvature,   &cfg->curvature);
+    CaptureBP(bpOpacity,     &cfg->opacity);
+    CaptureBP(bpAngle,       &cfg->angle);
+    CaptureBP(bpScaleRel,    &cfg->scaleRel);
+    CaptureBP(bpCloneOpacity,&cfg->cloneOpacity);
+    CaptureBP(bpQuickHue,    &cfg->hue);
+    CaptureBP(bpQuickSat,    &cfg->sat);
+    CaptureBP(bpQuickLit,    &cfg->lit);
+    CaptureBP(bpTexScale,    &cfg->texScale);
+    CaptureBP(bpTexFeather,  &cfg->texFeather);
+    CaptureBP(bpTexThresh,   &cfg->texThresh);
+    CaptureBP(bpTexBlendVal, &cfg->texBlendVal);
+    CaptureBP(bpPower,       &cfg->power);
+    CaptureBP(bpPerspective, &cfg->perspective);
+    CaptureBP(bpFocalOffset, &cfg->focalOffset);
+    CaptureBP(bpSizeMul,     &cfg->sizeMul);
+    CaptureBP(bpSpacing,     &cfg->spacing);
 }

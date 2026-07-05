@@ -28,6 +28,7 @@ private:
 
     bool m_active;
     d_RealBrush m_brushFrom;
+    UserBrushConfig m_config;
     bool m_emittedAny;
     uint16_t m_seed;
     TexSlotID m_targetSlot;

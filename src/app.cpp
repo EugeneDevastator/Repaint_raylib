@@ -299,8 +299,12 @@ void UpdateUI(AppState* state) {
         }
     }
 
+    UserBrushConfig brushCfg;
+    CaptureBrushConfig(&brushCfg);
+    brushCfg.toolMode = state->mode;
+
     d_RealBrush uiBrush = state->currentBrush.Realb;
-    ResolveBrushParams(&uiBrush, state->mode, state->initialAngle, g_modPars.Pars);
+    ResolveBrushParams(brushCfg, &uiBrush, state->mode, state->initialAngle, g_modPars.Pars);
 
     state->currentBrush.Realb.rad_out    = uiBrush.rad_out;
     state->currentBrush.Realb.radInRatio = uiBrush.radInRatio;

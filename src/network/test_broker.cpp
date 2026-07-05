@@ -52,7 +52,9 @@ void TestBroker::poll(AppState* state) {
         if (ts && ts->rt.id > 0) rt = ts->rt;
 
         if (rt.id > 0) {
-            DabBrush cb = MakeDabBrush(d->brush);
+            UserBrushConfig cfg;
+            CaptureBrushConfig(&cfg);
+            DabBrush cb = MakeDabBrush(cfg, d->brush);
             Texture2D brushTex = {0};
             bool useTexture = false;
             TexSlotID texId = {d->userTexBucket, d->userTexSlot};

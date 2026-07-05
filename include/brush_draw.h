@@ -5,6 +5,57 @@
 #include "raylib.h"
 #include "texture_manager.h"
 
+// ── Single slider/pot configuration ───────────────────────────────
+struct BPConfig {
+    float userMax;      // clipmaxF — slider position (0–1)
+    float userMin;      // clipminF
+    float outMin;       // output min
+    float outMax;       // output max
+    float power;        // non-linear curve (1.0 = linear)
+    int   modulatorId;  // csNone=0, csPressure=1, csVel=2, etc.
+    float jitter;       // per-dab jitter amount (0–1)
+};
+
+// ── User-facing brush configuration ───────────────────────────────
+struct UserBrushConfig {
+    int toolMode;
+
+    BPConfig size;
+    BPConfig hardness;
+    BPConfig curvature;
+    BPConfig opacity;
+    BPConfig angle;
+    BPConfig scaleRel;
+    BPConfig cloneOpacity;
+    BPConfig hue;
+    BPConfig sat;
+    BPConfig lit;
+    BPConfig texScale;
+    BPConfig texFeather;
+    BPConfig texThresh;
+    BPConfig texBlendVal;
+    BPConfig power;
+    BPConfig perspective;
+    BPConfig focalOffset;
+    BPConfig sizeMul;     // size multiplier slider
+    BPConfig spacing;     // dab spacing slider
+
+    // Non-modulated flags from the brush struct
+    int   texBlendMode;
+    int   texNoisemode;
+    int   texColorMode;
+    bool  useTexLumAsAlpha;
+    int   bmidx;
+    uint8_t preserveop;
+    float userTexOriginX;
+    float userTexOriginY;
+    float userTexDirection;
+    uint16_t baseSeed;
+};
+
+// ── Capture current BParam globals into a config ──
+void CaptureBrushConfig(UserBrushConfig* cfg);
+
 // ── Drawing-space brush (collapsed from UI parameters) ──────────────
 struct DabBrush {
     float rad_out_px;   // outer radius in pixels

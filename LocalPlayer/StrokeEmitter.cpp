@@ -19,6 +19,8 @@ StrokeEmitter::StrokeEmitter(StrokeThrottle* throttle)
 void StrokeEmitter::handleBegin(const InputEntry& e) {
     m_active = true;
     m_brushFrom = e.brush;
+    CaptureBrushConfig(&m_config);
+    m_config.toolMode = e.toolMode;
     m_emittedAny = false;
     m_seed = e.brush.seed;
     m_initAngle = e.initAngle;
@@ -44,7 +46,7 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
 
     // ── Emit first dab immediately at stroke start ────────────────
     if (isFirstDabPainted) {
-        DabBrush cb = MakeDabBrush(e.brush);
+        DabBrush cb = MakeDabBrush(m_config, e.brush);
         SegmentData dseg;
         memset(&dseg, 0, sizeof(dseg));
         dseg.pos1 = dseg.pos2 = start;
@@ -92,11 +94,11 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
     m_prevSegLen = segLen;
 
     d_RealBrush target = brush;
-    ResolveBrushParams(&target, toolMode, initAngle, g_modPars.Pars);
+    ResolveBrushParams(m_config, &target, toolMode, initAngle, g_modPars.Pars);
     target.rad_out *= m_worldToTexPx;
 
-    DabBrush cbFrom = MakeDabBrush(m_brushFrom);
-    DabBrush cbTo   = MakeDabBrush(target);
+    DabBrush cbFrom = MakeDabBrush(m_config, m_brushFrom);
+    DabBrush cbTo   = MakeDabBrush(m_config, target);
 
     // Rebase ctrl0 from p1 to m_lastDabPos, and ctrl3 from p2 to the actual
     // segment end, rescaling both handle lengths to the actual segment length.
@@ -275,7 +277,7 @@ void StrokeEmitter::handleEnd() {
     flushSmoothing(m_brushFrom, m_initAngle, m_toolMode);
 
     if (!m_emittedAny) {
-        DabBrush cb = MakeDabBrush(m_brushFrom);
+        DabBrush cb = MakeDabBrush(m_config, m_brushFrom);
     SegmentData dseg;
         memset(&dseg, 0, sizeof(dseg));
         dseg.pos1 = dseg.pos2 = m_lastDabPos;
