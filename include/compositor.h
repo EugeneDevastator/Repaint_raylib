@@ -35,6 +35,7 @@ bool     Compositor_PresentInited(void);
 Shader   Compositor_GetPresentShader(void);
 void     Compositor_SetPresentTexSize(int w, int h);
 void     Compositor_SetPresentDither(bool on);
+void     Compositor_SetPresentNearest(bool on);
 
 // Checker texture
 void     Compositor_EnsureChecker(int w, int h);

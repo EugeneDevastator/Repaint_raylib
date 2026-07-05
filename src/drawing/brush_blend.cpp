@@ -314,9 +314,6 @@ void BrushBlend_ApplyStamp(
         float diam = radOut * 2.0f;
         int roundedDiam = (int)(diam + 0.5f);
         if (roundedDiam < 1) roundedDiam = 1;
-        printf("[PP] radOut=%.3f diam=%.3f rounded=%d %s\n",
-            radOut, diam, roundedDiam,
-            (roundedDiam % 2 == 1) ? "ODD->fs=0.5" : "EVEN");
         if (roundedDiam % 2 == 1) {
             fs[0] = 0.5f;
             fs[1] = 0.5f;
