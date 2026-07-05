@@ -174,7 +174,7 @@ typedef struct {
     Vector2 strokePts[MAX_STROKE_PTS], inputPts[MAX_STROKE_PTS];
     int strokeLen, inputLen;
     bool wasMouseDown, debugShowStamps, rightMouseDown;
-    Vector2 lastMousePos; bool inBounds, strokeEnded; int endLayer;
+    Vector2 lastMousePos; bool inBounds, strokeEnded, spaceHeldPrev; int endLayer;
     ICommandBroker* broker; InputFilter inputFilter;
     Vector2 lineLastDabPos;
     Vector2 m_distortLastDabPos;
