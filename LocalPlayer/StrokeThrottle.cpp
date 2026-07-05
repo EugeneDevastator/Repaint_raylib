@@ -31,6 +31,12 @@ int StrokeThrottle::DrawPending(AppState* state) {
             if (m_hasPrevAngle)
                 seg.brushFrom.resangle = m_lastSegEndAngle;
 
+            if (m_pixelPerfect) {
+                float sn = roundf(seg.brushFrom.spacing);
+                if (sn < 1.0f) sn = 1.0f;
+                seg.brushFrom.spacing = sn;
+            }
+
             SegResult r;
             m_dabCount = DrawLinear(seg, 0, 0.0f, m_dabBuf, DAB_CAP, &r);
 
