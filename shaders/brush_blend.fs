@@ -45,6 +45,7 @@ uniform bool  uPixelPerfect;
 in vec2 canvasFragUV;
 in vec2 outCanvasPx;
 uniform vec2 blitSize;
+uniform vec2 fracShift;
 #include blend.glsl
 
 float coneGradient(vec2 p, float R, float shift) {
@@ -102,7 +103,10 @@ vec4 readCanvas(ivec2 px) {
 }
 
 void main() {
-    vec2 uv = fragTexCoord;
+    vec2 uv = vec2(
+        fragTexCoord.x - fracShift.x / blitSize.x,
+        fragTexCoord.y + fracShift.y / blitSize.y
+    );
     vec2 p = (uv - 0.5) / max(uSize, 0.001);
 
     float persp = uPerspective;

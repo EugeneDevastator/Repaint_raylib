@@ -135,6 +135,7 @@ void BrushBlend_Init(void) {
     locStampCenter    = GetShaderLocation(brushBlendShader, "stampCenter");
     locBlitOrigin     = GetShaderLocation(brushBlendShader, "blitOrigin");
     locBlitSize       = GetShaderLocation(brushBlendShader, "blitSize");
+    locFracShift      = GetShaderLocation(brushBlendShader, "fracShift");
     locPwr            = GetShaderLocation(brushBlendShader, "pwr");
     locEraseMode      = GetShaderLocation(brushBlendShader, "eraseMode");
     locSeamless       = GetShaderLocation(brushBlendShader, "uSeamless");
@@ -301,6 +302,9 @@ void BrushBlend_ApplyStamp(
     float bs[2] = { (float)isz, (float)isz };
     SetShaderValue(brushBlendShader, locBlitOrigin, bo, SHADER_UNIFORM_VEC2);
     SetShaderValue(brushBlendShader, locBlitSize,   bs, SHADER_UNIFORM_VEC2);
+    float fs[2] = { x0 - (float)ix0, y0 - (float)iy0 };
+    if (pixelPerfect) { fs[0] = fs[1] = 0.0f; }
+    SetShaderValue(brushBlendShader, locFracShift,  fs, SHADER_UNIFORM_VEC2);
 
     float pwr = brush.pwr;
     SetShaderValue(brushBlendShader, locPwr, &pwr, SHADER_UNIFORM_FLOAT);
