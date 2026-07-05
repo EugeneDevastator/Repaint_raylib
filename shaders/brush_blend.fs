@@ -62,7 +62,12 @@ float coneGradient(vec2 p, float R, float shift) {
         float sq = sqrt(disc);
         float t1 = (-B + sq) / (2.0*A);
         float t2 = (-B - sq) / (2.0*A);
-        t = (t1 >= 0.0 && t1 <= 1.0) ? t1 : t2;
+        if (t1 >= 0.0 && t1 <= 1.0)
+            t = t1;
+        else if (t2 >= 0.0 && t2 <= 1.0)
+            t = t2;
+        else
+            t = (C > 0.0) ? 0.0 : 1.0;
     }
     return clamp(t, 0.0, 1.0);
 }
