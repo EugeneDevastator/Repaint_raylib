@@ -2,6 +2,7 @@
 #include "gpu_preference.h"
 #include "brush_blend.h"
 #include "brush_preset.h"
+#include "stroke_engine.h"
 #include "rlgl.h"
 #include "imgui.h"
 #include "stroke.h"
@@ -298,42 +299,28 @@ void UpdateUI(AppState* state) {
         }
     }
 
-    state->currentBrush.Realb.rad_out  = GetModVal(&bpSize);
-    state->currentBrush.Realb.radInRatio = GetModVal(&bpHardness);
-    state->currentBrush.Realb.crv      = GetModVal(&bpCurvature);
-    state->currentBrush.Realb.opacity  = GetModVal(&bpOpacity);
-    state->currentBrush.Realb.resangle = fmodf(state->initialAngle + GetModVal(&bpAngle), 360.0f);
-    state->currentBrush.Realb.x2y      = GetModVal(&bpScaleRel);
+    SetupBrushContext(state->currentBrush.Realb, state->mode, state->initialAngle);
+    CollapsedBrush cb = GetCollapsedBrush(g_modPars.Pars);
 
-    float sizeMulFactor = powf(5.0f, BParam_GetValue(&bpSizeMul) / 128.0f - 1.0f);
-    state->currentBrush.Realb.rad_out *= sizeMulFactor;
-
-    state->currentBrush.Realb.cop = (state->mode == eSmudge)
-        ? GetModVal(&bpCloneOpacity) : 0.0f;
-
-    if (g_texScaleMode == 1) {
-        // Global scale: 1 UV = 256 canvas px (stamp diameter / 256 = base texScale)
-        float s = GetModVal(&bpTexScale);
-        float r = state->currentBrush.Realb.rad_out;
-        state->currentBrush.Realb.texScale = s * r * (WORLD_UNIT_PX / 128.0f);
-    } else {
-        state->currentBrush.Realb.texScale = GetModVal(&bpTexScale);
-    }
-    state->currentBrush.Realb.texFeather = GetModVal(&bpTexFeather);
-    state->currentBrush.Realb.texThresh  = GetModVal(&bpTexThresh);
-    state->currentBrush.Realb.texBlendVal = GetModVal(&bpTexBlendVal);
-    state->currentBrush.Realb.pwr        = GetModVal(&bpPower);
+    state->currentBrush.Realb.rad_out    = cb.rad_out_px;
+    state->currentBrush.Realb.radInRatio = cb.radInRatio;
+    state->currentBrush.Realb.crv        = cb.crv;
+    state->currentBrush.Realb.opacity    = cb.opacity;
+    state->currentBrush.Realb.resangle   = (float)cb.resangle;
+    state->currentBrush.Realb.x2y        = cb.scale_y;
+    state->currentBrush.Realb.cop        = cb.cop;
+    state->currentBrush.Realb.texScale   = cb.texScale;
+    state->currentBrush.Realb.texFeather = cb.texFeather;
+    state->currentBrush.Realb.texThresh  = cb.texThresh;
+    state->currentBrush.Realb.texBlendVal = cb.texBlendVal;
+    state->currentBrush.Realb.pwr        = cb.pwr;
+    state->currentBrush.Realb.perspective = cb.perspective;
+    state->currentBrush.Realb.col        = cb.col;
     state->currentBrush.Realb.eraseMode  = state->eraseMode;
-    state->currentBrush.Realb.perspective = GetModVal(&bpPerspective);
 
     colorHue = bpQuickHue.user.clipmaxF;
     colorSat = bpQuickSat.user.clipmaxF;
     colorLit = bpQuickLit.user.clipmaxF;
-    // Apply pen mode modulation to color channels for the brush
-    float colH = GetModVal(&bpQuickHue);
-    float colS = GetModVal(&bpQuickSat);
-    float colL = GetModVal(&bpQuickLit);
-    state->currentBrush.Realb.col = HSLToRGB(colH, colS, colL);
 }
 
 NetworkBroker networkBroker;

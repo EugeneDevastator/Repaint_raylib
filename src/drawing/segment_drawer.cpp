@@ -357,7 +357,7 @@ int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
         CollapsedBrush dabCB = BlendBrushes(seg.brushFrom, seg.brush, k);
         dabCB.rad_out_px = nextRadUnJit;
 
-        // Per-dab rotation: always use curve tangent direction
+        // Per-dab direction: update modulator for stroke direction
         {
             float t = nextArc / totalLen;
             if (t < 0) t = 0; if (t > 1) t = 1;
@@ -368,7 +368,6 @@ int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
             if (tx != 0 || ty != 0) {
                 float dirAng = AtanXY(tx, ty);
                 g_modPars.Pars[csDir] = RngConv(dirAng, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
-                dabCB.resangle = fmodf(seg.initAngle + GetModVal(&bpAngle), 360.0f);
             }
         }
 

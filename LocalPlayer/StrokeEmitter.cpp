@@ -44,7 +44,9 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
 
     // ── Emit first dab immediately at stroke start ────────────────
     if (isFirstDabPainted) {
-        CollapsedBrush cb = CollapseBrushParams(e.brush, e.initAngle, e.toolMode);
+        SetupBrushContext(e.brush, e.toolMode, e.initAngle);
+        CollapsedBrush cb = GetCollapsedBrush(g_modPars.Pars);
+        cb.rad_out_px *= m_worldToTexPx;
         SegmentData dseg;
         memset(&dseg, 0, sizeof(dseg));
         dseg.pos1 = dseg.pos2 = start;
@@ -91,11 +93,13 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
     m_prevSegDir = Vector2{segDx, segDy};
     m_prevSegLen = segLen;
 
-    d_RealBrush target = ModulateBrushParams(brush, initAngle, toolMode);
-    target.rad_out *= m_worldToTexPx;
+    SetupBrushContext(m_brushFrom, toolMode, initAngle);
+    CollapsedBrush cbFrom = GetCollapsedBrush(g_modPars.Pars);
+    cbFrom.rad_out_px *= m_worldToTexPx;
 
-    CollapsedBrush cbFrom = CollapseBrushParams(m_brushFrom, initAngle, toolMode);
-    CollapsedBrush cbTo   = CollapseBrushParams(target, initAngle, toolMode);
+    SetupBrushContext(brush, toolMode, initAngle);
+    CollapsedBrush cbTo = GetCollapsedBrush(g_modPars.Pars);
+    cbTo.rad_out_px *= m_worldToTexPx;
 
     // Rebase ctrl0 from p1 to m_lastDabPos, and ctrl3 from p2 to the actual
     // segment end, rescaling both handle lengths to the actual segment length.
@@ -154,7 +158,6 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
         m_lastDabPos.y = roundf(m_lastDabPos.y);
     }
 
-    m_brushFrom = target;
     m_emittedAny = true;
 }
 
@@ -275,7 +278,9 @@ void StrokeEmitter::handleEnd() {
     flushSmoothing(m_brushFrom, m_initAngle, m_toolMode);
 
     if (!m_emittedAny) {
-        CollapsedBrush cb = CollapseBrushParams(m_brushFrom, m_initAngle, m_toolMode);
+        SetupBrushContext(m_brushFrom, m_toolMode, m_initAngle);
+        CollapsedBrush cb = GetCollapsedBrush(g_modPars.Pars);
+        cb.rad_out_px *= m_worldToTexPx;
     SegmentData dseg;
         memset(&dseg, 0, sizeof(dseg));
         dseg.pos1 = dseg.pos2 = m_lastDabPos;

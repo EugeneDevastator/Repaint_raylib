@@ -52,7 +52,8 @@ void TestBroker::poll(AppState* state) {
         if (ts && ts->rt.id > 0) rt = ts->rt;
 
         if (rt.id > 0) {
-            CollapsedBrush cb = CollapseBrushParams(d->brush, 0.0f, eBrush);
+            SetupBrushContext(d->brush, eBrush, 0.0f);
+            CollapsedBrush cb = GetCollapsedBrush(g_modPars.Pars);
             Texture2D brushTex = {0};
             bool useTexture = false;
             TexSlotID texId = {d->userTexBucket, d->userTexSlot};
