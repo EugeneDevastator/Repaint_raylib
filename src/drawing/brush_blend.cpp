@@ -185,10 +185,20 @@ void BrushBlend_ApplyStamp(
     float squish   = fmaxf((float)brush.scale_y, 0.01f);
 
     if (pixelPerfect) {
-        stampX = roundf(stampX);
-        stampY = roundf(stampY);
-        srcX   = roundf(srcX);
-        srcY   = roundf(srcY);
+        float diam = radOut * 2.0f;
+        int roundedDiam = (int)(diam + 0.5f);
+        if (roundedDiam < 1) roundedDiam = 1;
+        if (roundedDiam % 2 == 1) {
+            stampX = floorf(stampX);
+            stampY = floorf(stampY);
+            srcX   = floorf(srcX);
+            srcY   = floorf(srcY);
+        } else {
+            stampX = roundf(stampX);
+            stampY = roundf(stampY);
+            srcX   = roundf(srcX);
+            srcY   = roundf(srcY);
+        }
     }
 
     if (fabsf(brush.focalOffset) > 0.0001f && radOut > 0.001f) {
