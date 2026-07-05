@@ -149,6 +149,10 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
     if (g_broker) g_broker->on_segment(dseg);
 
     SegDrawer_ComputeSegmentEnd(dseg, 0, m_lastDabRad, &m_lastDabPos, &m_lastDabRad);
+    if (g_pixelPerfect) {
+        m_lastDabPos.x = roundf(m_lastDabPos.x);
+        m_lastDabPos.y = roundf(m_lastDabPos.y);
+    }
 
     m_brushFrom = target;
     m_emittedAny = true;
