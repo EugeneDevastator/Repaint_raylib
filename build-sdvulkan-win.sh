@@ -21,6 +21,13 @@ GGML_COMMIT="eced84c8"                       # ggml submodule commit (pinned to 
 PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
 OUTDIR="$PROJECT_ROOT/NNModelServer/sd-build"
 
+# ─── 0. Skip if prebuilt libs already exist ───────────────────────────
+if [ -f "$OUTDIR/win64/libstable-diffusion.a" ] && [ -f "$OUTDIR/include/stable-diffusion.h" ]; then
+    echo "=== Prebuilt libs found, nothing to do."
+    echo "    rm -f $OUTDIR/win64/*.a to rebuild."
+    exit 0
+fi
+
 # ─── 1. Install Vulkan dev packages ───────────────────────────────────
 echo "=== Installing Vulkan packages..."
 pacman -S --noconfirm --needed \

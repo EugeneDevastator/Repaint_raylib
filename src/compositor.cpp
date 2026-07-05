@@ -21,6 +21,7 @@ static struct {
     int locPresentTex;
     int locTexSize;
     int locApplyDither;
+    int locUseNearest;
 } CS;
 
 static Rectangle FullRect(float w, float h) { return Rectangle{0,0,w,-h}; }
@@ -57,6 +58,7 @@ static void EnsurePresentShader(void) {
         CS.locTexSize=GetShaderLocation(CS.presentShader,"texSize");
         CS.locApplyDither=GetShaderLocation(CS.presentShader,"applyDither");
         if(CS.locApplyDither>=0){ int v=1; SetShaderValue(CS.presentShader,CS.locApplyDither,&v,SHADER_UNIFORM_INT); }
+        CS.locUseNearest=GetShaderLocation(CS.presentShader,"useNearest");
     }
 }
 
@@ -316,6 +318,9 @@ void Compositor_SetPresentTexSize(int w, int h) {
 }
 void Compositor_SetPresentDither(bool on) {
     if(CS.locApplyDither>=0){ int v=on?1:0; SetShaderValue(CS.presentShader,CS.locApplyDither,&v,SHADER_UNIFORM_INT); }
+}
+void Compositor_SetPresentNearest(bool on) {
+    if(CS.locUseNearest>=0){ int v=on?1:0; SetShaderValue(CS.presentShader,CS.locUseNearest,&v,SHADER_UNIFORM_INT); }
 }
 void Compositor_EnsureChecker(int w, int h) {
     if(w>0&&h>0) EnsureChecker(w,h);

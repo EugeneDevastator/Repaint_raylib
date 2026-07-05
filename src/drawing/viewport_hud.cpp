@@ -3,6 +3,7 @@
 #include "viewport_manager.h"
 #include "render_utils.h"
 #include "rlgl.h"
+#include "external/glad.h"
 #include "stroke_engine.h"
 #include <math.h>
 
@@ -116,7 +117,7 @@ void ViewportHUD_Draw(AppState* state) {
                     if(r>l&&b>t) checkerRect = {l,t,r-l,b-t};
                 }
                 ViewportManager_CompositeViewInto(g_viewResRT, &vXf, vpW, vpH, &checkerRect);
-                if (usePresent) { BeginShaderMode(Compositor_GetPresentShader()); Compositor_SetPresentTexSize(vpW, vpH); Compositor_SetPresentDither(true); }
+                if (usePresent) { BeginShaderMode(Compositor_GetPresentShader()); Compositor_SetPresentTexSize(vpW, vpH); Compositor_SetPresentDither(true); Compositor_SetPresentNearest(true); }
                 DrawTextureRec(g_viewResRT.texture,
                     Rectangle{0, 0, (float)vpW, (float)-vpH},
                     Vector2{vpBounds.x, vpBounds.y}, WHITE);
@@ -127,6 +128,10 @@ void ViewportHUD_Draw(AppState* state) {
             // Normal mode: composite at canvas resolution with canvasView
             docBlendTex = ViewportManager_Composite();
             if (!docBlendTex || docBlendTex->id == 0) return;
+
+            glBindTexture(GL_TEXTURE_2D, docBlendTex->texture.id);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
             float texW = (float)docBlendTex->texture.width;
             float texH = (float)docBlendTex->texture.height;
@@ -140,7 +145,7 @@ void ViewportHUD_Draw(AppState* state) {
 
             if (g_seamlessPreview) {
                 SetTextureWrap(docBlendTex->texture, TEXTURE_WRAP_REPEAT);
-                if (usePresent) { BeginShaderMode(Compositor_GetPresentShader()); Compositor_SetPresentTexSize((int)texW, (int)texH); Compositor_SetPresentDither(true); }
+                if (usePresent) { BeginShaderMode(Compositor_GetPresentShader()); Compositor_SetPresentTexSize((int)texW, (int)texH); Compositor_SetPresentDither(true); Compositor_SetPresentNearest(true); }
                 for (int dy = -1; dy <= 1; dy++)
                     for (int dx = -1; dx <= 1; dx++)
                         DrawTexturePro(docBlendTex->texture, srcRect,
@@ -148,7 +153,7 @@ void ViewportHUD_Draw(AppState* state) {
                             Vector2{0, 0}, 0.0f, WHITE);
                 if (usePresent) EndShaderMode();
             } else {
-                if (usePresent) { BeginShaderMode(Compositor_GetPresentShader()); Compositor_SetPresentTexSize((int)texW, (int)texH); Compositor_SetPresentDither(true); }
+                if (usePresent) { BeginShaderMode(Compositor_GetPresentShader()); Compositor_SetPresentTexSize((int)texW, (int)texH); Compositor_SetPresentDither(true); Compositor_SetPresentNearest(true); }
                 DrawTexturePro(docBlendTex->texture, srcRect, dstRect, Vector2{0, 0}, 0.0f, WHITE);
                 if (usePresent) EndShaderMode();
             }

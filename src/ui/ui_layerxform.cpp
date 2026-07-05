@@ -118,7 +118,6 @@ void LayerXformModule::DrawGUI(const DrawRect& rect) {
     ImGui::Separator();
 
     bool changed = false;
-    ImGui::SetNextItemWidth(-1);
     changed |= ImGui::InputFloat("X", &tx, 0, 0, "%.1f");
     changed |= ImGui::InputFloat("Y", &ty, 0, 0, "%.1f");
     changed |= ImGui::InputFloat("SX", &sx, 0, 0, "%.3f");
@@ -156,6 +155,15 @@ void LayerXformModule::DrawGUI(const DrawRect& rect) {
         sLayerProps* lp = LayerStack_GetProps(state->activeLayer);
         TransformHandle_RepeatLast(&lp->xform, Vector2{g_pivotCursorX, g_pivotCursorY});
         layersDirty = true;
+    }
+    if (ImGui::Button("Reset Aspect", ImVec2(-1, 0)) && state->activeLayer >= 0) {
+        sLayerProps* lp = LayerStack_GetProps(state->activeLayer);
+        int texW = GetLayerWpx(state->activeLayer), texH = GetLayerHpx(state->activeLayer);
+        if (texW > 0 && texH > 0) {
+            float w = lp->xform.ww;
+            lp->xform.wh = w * texH / texW;
+            layersDirty = true;
+        }
     }
     ImGui::Checkbox("Lock Aspect", &g_lockAspect);
 

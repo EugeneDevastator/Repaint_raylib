@@ -6,8 +6,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-exceptions -fno-rtti")
 
-# ── dependencies ──────────────────────────────────────────────────────────────
+option(BUILD_GUI "Build the repaint GUI application" ON)
+
 include(FetchContent)
+
+# ── GUI-specific dependencies ─────────────────────────────────────────────────
+if(BUILD_GUI)
 
 # ── detect display server (X11 / Wayland) ────────────────────────────────────
 if(UNIX AND NOT APPLE)
@@ -73,6 +77,8 @@ FetchContent_Declare(
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
 )
 FetchContent_MakeAvailable(rlimgui)
+
+endif()  # BUILD_GUI
 
 # ── sources ───────────────────────────────────────────────────────────────────
 set(SOURCES
@@ -164,6 +170,9 @@ if(EXISTS ${PNG_SRC} AND NOT EXISTS ${ICO_DST})
     endif()
 endif()
 
+# ── GUI targets ──────────────────────────────────────────────────────────────
+if(BUILD_GUI)
+
 add_executable(repaint ${SOURCES})
 
 if(WIN32)
@@ -217,10 +226,11 @@ endif()
 
 target_link_libraries(tablet-calibrator PRIVATE raylib)
 
-# ── nnserver ──────────────────────────────────────────────────────────────────
-add_subdirectory(NNModelServer)
+endif()  # BUILD_GUI
 
+# ── nnserver is a standalone project built from NNModelServer/ ──────────────
 # ── platform linking ──────────────────────────────────────────────────────────
+if(BUILD_GUI)
 if(UNIX AND NOT APPLE)
     if(X11_FOUND)
         target_link_libraries(repaint PRIVATE ${X11_LIBRARIES})
@@ -232,8 +242,10 @@ if(UNIX AND NOT APPLE)
     endif()
     target_link_libraries(repaint PRIVATE m pthread dl)
 endif()
+endif()
 
 # ── resource copies (configure-time + post-build) ───────────────────────────
+if(BUILD_GUI)
 # Force-copy always by removing destination dir first, then re-copying
 set(RESOURCE_SHADER_FILES
     "${CMAKE_SOURCE_DIR}/shaders/*")
@@ -272,3 +284,4 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/resources")
         DEPENDS ${RESOURCE_FILES}
         COMMENT "Force-copying resources to build/bin dirs")
 endif()
+endif()  # BUILD_GUI

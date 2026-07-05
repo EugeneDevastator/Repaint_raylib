@@ -3,74 +3,151 @@
 #include "replay_recorder.h"
 #include "stroke_engine.h"
 #include <math.h>
+#include <string.h>
 
 int g_strokeSmoothingMode = SMOOTH_MODE_SMOOTH;
 float g_strokeThrottle = 0.0f;
 ICommandBroker* g_broker = nullptr;
 
-CollapsedBrush CollapseBrushParams(const d_RealBrush& b, float initialAngle, int toolMode) {
-    CollapsedBrush cb;
-    cb.rad_out_px = b.rad_out;
-    cb.radInRatio = fminf(b.radInRatio, 1.0f);
-    cb.scale_x    = 1.0f;
-    cb.scale_y    = b.x2y;
-    cb.resangle   = (float)b.resangle;
-    cb.opacity    = b.opacity;
-    cb.crv        = b.crv;
-    cb.cop        = (toolMode == eSmudge) ? b.cop : 0.0f;
-    cb.col        = b.col;
-    cb.pwr        = b.pwr;
-    cb.bmidx      = (int)b.bmidx;
-    cb.eraseMode  = b.eraseMode;
-    cb.preserveop = b.preserveop;
-    cb.perspective = b.perspective;
-    cb.texScale   = b.texScale;
-    cb.texFeather = b.texFeather;
-    cb.texThresh  = b.texThresh;
-    cb.texBlendVal = b.texBlendVal;
-    cb.texBlendMode = b.texBlendMode;
-    cb.texNoisemode = b.texNoisemode;
-    cb.texColorMode = b.texColorMode;
-    cb.useTexLumAsAlpha = b.useTexLumAsAlpha;
-    cb.userTexOriginX = b.userTexOriginX;
-    cb.userTexOriginY = b.userTexOriginY;
-    cb.userTexDirection = b.userTexDirection;
-    cb.focalOffset = GetModVal(&bpFocalOffset);
-    cb.spacing = BParam_GetValue(&bpSpacing);
-    cb.jitRadOut  = bpSize.user.jitter * b.rad_out;
-    cb.jitRadIn   = bpHardness.user.jitter;
-    cb.jitOpacity = bpOpacity.user.jitter;
-    cb.jitCrv     = bpCurvature.user.jitter;
-    cb.jitX2y     = bpScaleRel.user.jitter;
-    cb.jitHue     = bpQuickHue.user.jitter * (bpQuickHue.outMax - bpQuickHue.outMin);
-    cb.jitSat     = bpQuickSat.user.jitter * (bpQuickSat.outMax - bpQuickSat.outMin);
-    cb.jitLit     = bpQuickLit.user.jitter * (bpQuickLit.outMax - bpQuickLit.outMin);
-    cb.jitCloneOp = bpCloneOpacity.user.jitter;
-    cb.jitFocal   = bpFocalOffset.user.jitter;
-    cb.baseSeed   = b.seed;
-    return cb;
+static float ConfigRawVal(const BPConfig& cfg) {
+    float n = (cfg.power != 1.0f)
+        ? powf(cfg.userMax, cfg.power) : cfg.userMax;
+    return n * (cfg.outMax - cfg.outMin) + cfg.outMin;
 }
 
-// Shared modulation: applies bpAngle, bpSize, bpHardness, etc. to a brush.
-// Caller must set g_modPars.Pars[csDir], csPressure, etc. as desired before calling.
-d_RealBrush ModulateBrushParams(const d_RealBrush& brush, float initAngle, int toolMode) {
-    float sizeMul = powf(16.0f, BParam_GetValue(&bpSizeMul) / 128.0f - 1.0f);
-    d_RealBrush target = brush;
-    target.rad_out    = GetModVal(&bpSize) * sizeMul;
-    target.radInRatio = GetModVal(&bpHardness);
-    target.crv        = GetModVal(&bpCurvature);
-    target.opacity    = GetModVal(&bpOpacity);
-    target.resangle   = fmodf(initAngle + GetModVal(&bpAngle), 360.0f);
-    target.x2y        = GetModVal(&bpScaleRel);
-    target.col        = HSLToRGB(GetModVal(&bpQuickHue), GetModVal(&bpQuickSat), GetModVal(&bpQuickLit));
-    target.cop        = (toolMode == eSmudge) ? GetModVal(&bpCloneOpacity) : 0.0f;
-    return target;
+static float ModulateConfigVal(const BPConfig& cfg, const float modValues[csSTOP]) {
+    float cpar = (cfg.modulatorId >= 0 && cfg.modulatorId < csSTOP)
+        ? modValues[cfg.modulatorId] : 1.0f;
+    float n = (cfg.power != 1.0f)
+        ? powf(cfg.userMax, cfg.power) : cfg.userMax;
+    float rng = cfg.userMax - cfg.userMin;
+    float respar = cpar * rng + cfg.userMin;
+    float randm = (((float)rand() / (float)RAND_MAX) - 0.5f) * 2.0f * cfg.jitter;
+    float res = fminf(fmaxf(respar + randm, 0.0f), 1.0f);
+    return res * (cfg.outMax - cfg.outMin) + cfg.outMin;
+}
+
+ModulatedBrushConfig ResolveModulatedConfig(const UserBrushConfig& cfg, int toolMode,
+                                             float initAngle, const float modValues[csSTOP]) {
+    float sizeMul = powf(5.0f, ConfigRawVal(cfg.sizeMul) / 128.0f - 1.0f);
+
+    ModulatedBrushConfig out;
+    memset(&out, 0, sizeof(out));
+
+    out.radOut       = ModulateConfigVal(cfg.size, modValues) * sizeMul;
+    out.radInRatio   = fminf(ModulateConfigVal(cfg.hardness, modValues), 1.0f);
+    out.scaleRel     = ModulateConfigVal(cfg.scaleRel, modValues);
+    out.resangle     = fmodf(initAngle + ModulateConfigVal(cfg.angle, modValues), 360.0f);
+    out.opacity      = ModulateConfigVal(cfg.opacity, modValues);
+    out.crv          = ModulateConfigVal(cfg.curvature, modValues);
+    out.cop          = (toolMode == eSmudge) ? ModulateConfigVal(cfg.cloneOpacity, modValues) : 0.0f;
+    out.col          = HSLToRGB(
+        ModulateConfigVal(cfg.hue, modValues),
+        ModulateConfigVal(cfg.sat, modValues),
+        ModulateConfigVal(cfg.lit, modValues));
+    out.pwr          = ModulateConfigVal(cfg.power, modValues);
+    out.perspective  = ModulateConfigVal(cfg.perspective, modValues);
+
+    float ts = ModulateConfigVal(cfg.texScale, modValues);
+    if (g_texScaleMode == 1)
+        out.texScale = ts * out.radOut * (WORLD_UNIT_PX / 128.0f);
+    else
+        out.texScale = ts;
+
+    out.texFeather   = ModulateConfigVal(cfg.texFeather,  modValues);
+    out.texThresh    = ModulateConfigVal(cfg.texThresh,   modValues);
+    out.texBlendVal  = ModulateConfigVal(cfg.texBlendVal, modValues);
+
+    out.focalOffset  = ModulateConfigVal(cfg.focalOffset, modValues);
+    out.spacing      = ConfigRawVal(cfg.spacing);
+
+    out.texBlendMode   = cfg.texBlendMode;
+    out.texNoisemode   = cfg.texNoisemode;
+    out.texColorMode   = cfg.texColorMode;
+    out.useTexLumAsAlpha = cfg.useTexLumAsAlpha;
+    out.bmidx          = cfg.bmidx;
+    out.preserveop     = cfg.preserveop;
+    out.userTexOriginX = cfg.userTexOriginX;
+    out.userTexOriginY = cfg.userTexOriginY;
+    out.userTexDirection = cfg.userTexDirection;
+    out.baseSeed       = cfg.baseSeed;
+
+    out.jitRadOut  = cfg.size.jitter    * out.radOut;
+    out.jitRadIn   = cfg.hardness.jitter;
+    out.jitOpacity = cfg.opacity.jitter;
+    out.jitCrv     = cfg.curvature.jitter;
+    out.jitX2y     = cfg.scaleRel.jitter;
+    out.jitHue     = cfg.hue.jitter     * (cfg.hue.outMax - cfg.hue.outMin);
+    out.jitSat     = cfg.sat.jitter     * (cfg.sat.outMax - cfg.sat.outMin);
+    out.jitLit     = cfg.lit.jitter     * (cfg.lit.outMax - cfg.lit.outMin);
+    out.jitCloneOp = cfg.cloneOpacity.jitter;
+    out.jitFocal   = cfg.focalOffset.jitter;
+
+    return out;
+}
+
+ModulatedBrushConfig ResolveModulatedConfigMax(const UserBrushConfig& cfg, int toolMode, float initAngle) {
+    float maxPars[csSTOP];
+    for (int i = 0; i < csSTOP; i++) maxPars[i] = 1.0f;
+    maxPars[csDir] = maxPars[csIdir] = maxPars[csCrv] = 0.5f;
+    maxPars[csHVdir] = maxPars[csRelang] = 0.5f;
+    return ResolveModulatedConfig(cfg, toolMode, initAngle, maxPars);
+}
+
+DabBrush MakeDabBrush(const ModulatedBrushConfig& mod, const float rad_out_px_override) {
+    DabBrush cb;
+    memset(&cb, 0, sizeof(cb));
+
+    cb.rad_out_px  = rad_out_px_override > 0.0f ? rad_out_px_override : mod.radOut;
+    cb.radInRatio  = mod.radInRatio;
+    cb.scale_x     = 1.0f;
+    cb.scale_y     = mod.scaleRel;
+    cb.resangle    = mod.resangle;
+    cb.opacity     = mod.opacity;
+    cb.crv         = mod.crv;
+    cb.cop         = mod.cop;
+    cb.col         = mod.col;
+    cb.pwr         = mod.pwr;
+    cb.bmidx       = mod.bmidx;
+    cb.eraseMode   = mod.eraseMode;
+    cb.preserveop  = mod.preserveop;
+    cb.perspective = mod.perspective;
+    cb.texScale    = mod.texScale;
+    cb.texFeather  = mod.texFeather;
+    cb.texThresh   = mod.texThresh;
+    cb.texBlendVal = mod.texBlendVal;
+    cb.texBlendMode   = mod.texBlendMode;
+    cb.texNoisemode   = mod.texNoisemode;
+    cb.texColorMode   = mod.texColorMode;
+    cb.useTexLumAsAlpha = mod.useTexLumAsAlpha;
+    cb.userTexOriginX  = mod.userTexOriginX;
+    cb.userTexOriginY  = mod.userTexOriginY;
+    cb.userTexDirection = mod.userTexDirection;
+    cb.baseSeed        = mod.baseSeed;
+
+    cb.focalOffset = mod.focalOffset;
+    cb.spacing     = mod.spacing;
+
+    cb.jitRadOut  = mod.jitRadOut;
+    cb.jitRadIn   = mod.jitRadIn;
+    cb.jitOpacity = mod.jitOpacity;
+    cb.jitCrv     = mod.jitCrv;
+    cb.jitX2y     = mod.jitX2y;
+    cb.jitHue     = mod.jitHue;
+    cb.jitSat     = mod.jitSat;
+    cb.jitLit     = mod.jitLit;
+    cb.jitCloneOp = mod.jitCloneOp;
+    cb.jitFocal   = mod.jitFocal;
+
+    return cb;
 }
 
 void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex, bool useTexture,
                               const d_RealBrush* baseBrush, int toolMode,
                               float initialAngle, float cx, float cy) {
-    float spacingVal = BParam_GetValue(&bpSpacing);
+    UserBrushConfig cfg;
+    CaptureBrushConfig(&cfg);
+
     float radOut = baseBrush->rad_out * WORLD_UNIT_PX;
     float segLen = radOut * 3.0f;
     if (segLen < 2.0f) segLen = 2.0f;
@@ -80,7 +157,6 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex, bool us
     dirX /= dirLen; dirY /= dirLen;
     float dirAng = AtanXY(dirX, dirY);
 
-    // Set modulator state exactly as the real stroke does
     float savedPars[csSTOP];
     memcpy(savedPars, g_modPars.Pars, sizeof(float) * csSTOP);
     g_modPars.Pars[csDir]    = RngConv(dirAng, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
@@ -93,47 +169,32 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex, bool us
     g_modPars.Pars[csRelang] = 0.5f;
     g_modPars.Pars[csPressure] = 1.0f;
 
-    // Suppress jitter for deterministic preview
-    float jitSize    = bpSize.user.jitter;        bpSize.user.jitter = 0;
-    float jitHard    = bpHardness.user.jitter;     bpHardness.user.jitter = 0;
-    float jitCrv     = bpCurvature.user.jitter;    bpCurvature.user.jitter = 0;
-    float jitOpacity = bpOpacity.user.jitter;      bpOpacity.user.jitter = 0;
-    float jitAngle   = bpAngle.user.jitter;        bpAngle.user.jitter = 0;
-    float jitScale   = bpScaleRel.user.jitter;     bpScaleRel.user.jitter = 0;
-    float jitHue     = bpQuickHue.user.jitter;     bpQuickHue.user.jitter = 0;
-    float jitSat     = bpQuickSat.user.jitter;     bpQuickSat.user.jitter = 0;
-    float jitLit     = bpQuickLit.user.jitter;     bpQuickLit.user.jitter = 0;
-    float jitCop     = bpCloneOpacity.user.jitter; bpCloneOpacity.user.jitter = 0;
-    float jitFocal   = bpFocalOffset.user.jitter;  bpFocalOffset.user.jitter = 0;
+    cfg.size.jitter = 0;
+    cfg.hardness.jitter = 0;
+    cfg.curvature.jitter = 0;
+    cfg.opacity.jitter = 0;
+    cfg.angle.jitter = 0;
+    cfg.scaleRel.jitter = 0;
+    cfg.hue.jitter = cfg.sat.jitter = cfg.lit.jitter = 0;
+    cfg.cloneOpacity.jitter = 0;
+    cfg.focalOffset.jitter = 0;
 
-    // Same modulation as the real stroke (emitSegment line 67-77)
-    d_RealBrush modulated = ModulateBrushParams(*baseBrush, initialAngle, toolMode);
-    modulated.rad_out *= WORLD_UNIT_PX;
-    CollapsedBrush cbFull = CollapseBrushParams(modulated, initialAngle, toolMode);
-    // Zero jitter ranges for deterministic preview
-    cbFull.jitRadOut = cbFull.jitRadIn = cbFull.jitOpacity = cbFull.jitCrv = cbFull.jitX2y = 0;
-    cbFull.jitHue = cbFull.jitSat = cbFull.jitLit = cbFull.jitCloneOp = cbFull.jitFocal = 0;
-    cbFull.baseSeed = 0;
-    cbFull.spacing = spacingVal;
+    ModulatedBrushConfig mod = ResolveModulatedConfig(cfg, toolMode, initialAngle, g_modPars.Pars);
+    float spacingVal = mod.spacing;
+    mod.radOut *= WORLD_UNIT_PX;
+    mod.jitRadOut = mod.jitRadIn = mod.jitOpacity = mod.jitCrv = mod.jitX2y = 0;
+    mod.jitHue = mod.jitSat = mod.jitLit = mod.jitCloneOp = mod.jitFocal = 0;
+    mod.baseSeed = 0;
+    mod.spacing = spacingVal;
 
-    // Restore jitter and pars
-    bpSize.user.jitter        = jitSize;
-    bpHardness.user.jitter    = jitHard;
-    bpCurvature.user.jitter   = jitCrv;
-    bpOpacity.user.jitter     = jitOpacity;
-    bpAngle.user.jitter       = jitAngle;
-    bpScaleRel.user.jitter    = jitScale;
-    bpQuickHue.user.jitter    = jitHue;
-    bpQuickSat.user.jitter    = jitSat;
-    bpQuickLit.user.jitter    = jitLit;
-    bpCloneOpacity.user.jitter = jitCop;
-    bpFocalOffset.user.jitter  = jitFocal;
     memcpy(g_modPars.Pars, savedPars, sizeof(float) * csSTOP);
 
-    CollapsedBrush cbTiny = cbFull;
-    cbTiny.rad_out_px = 1.0f;
+    DabBrush cbFull = MakeDabBrush(mod, mod.radOut);
 
-    // Single stamp at center (same as single-click real stroke)
+    ModulatedBrushConfig modTiny = mod;
+    modTiny.radOut = 1.0f;
+    DabBrush cbTiny = MakeDabBrush(modTiny, 1.0f);
+
     SegmentData seed;
     memset(&seed, 0, sizeof(seed));
     seed.pos1 = seed.pos2 = Vector2{cx, cy};
@@ -145,9 +206,8 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex, bool us
     seed.smudgeSrcX = cx;
     seed.smudgeSrcY = cy;
     seed.initAngle = initialAngle;
-    DrawSegment(seed, dstRT, brushTex, useTexture, seed.seamless != 0, 0, false);
+    DrawSegment(seed, dstRT, brushTex, useTexture, seed.seamless != 0, 0, g_pixelPerfect);
 
-    // Path segment with a curve so per-dab rotation modulation is visible
     Vector2 start = {cx, cy};
     Vector2 end   = {cx + segLen * dirX, cy + segLen * dirY};
     Vector2 mid   = {(start.x + end.x) * 0.5f, (start.y + end.y) * 0.5f};
@@ -165,5 +225,5 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex, bool us
     s.smudgeSrcX = cx;
     s.smudgeSrcY = cy;
     s.initAngle = initialAngle;
-    DrawSegment(s, dstRT, brushTex, useTexture, s.seamless != 0, 0);
+    DrawSegment(s, dstRT, brushTex, useTexture, s.seamless != 0, 0, g_pixelPerfect);
 }

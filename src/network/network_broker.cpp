@@ -255,7 +255,10 @@ void NetworkBroker::ProcessReceived(uint8_t hid, uint8_t* data, uint32_t size) {
             seg.pos2 = act.Stroke.pos2;
             seg.ctrl0 = seg.pos1;
             seg.ctrl3 = seg.pos2;
-            seg.brushFrom = CollapseBrushParams(act.Brush.Realb, 0.0f, act.ToolID);
+            UserBrushConfig cfg;
+            CaptureBrushConfig(&cfg);
+            ModulatedBrushConfig mod = ResolveModulatedConfig(cfg, act.ToolID, 0.0f, g_modPars.Pars);
+            seg.brushFrom = MakeDabBrush(mod, act.Brush.Realb.rad_out);
             seg.brush = seg.brushFrom;
             seg.seed = act.Brush.Realb.seed;
             seg.tool = act.ToolID;

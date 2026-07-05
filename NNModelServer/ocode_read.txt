@@ -1,11 +1,15 @@
-read progess like this:
+Export the model to ONNX (one-time, you do this offline):
+python
+torch.onnx.export(model, ...)  # produces vitmatte.onnx ~100MB
+Use ONNX Runtime C API — it's cross-platform (Win/Mac/Linux), CPU-only, ~10MB library, no Python needed at all.
 
-loop:
-    read 1 byte → type
-    if type == 'P':
-        read 4-byte length → n
-        read n bytes → show progress string
-    if type == 'R':
-        read 4-byte length → n
-        read n bytes → that's your PNG result
-        break
+Your C server does:
+
+Load .onnx file
+Preprocess image (just pixel normalization, trivial)
+Run OrtRun()
+Return alpha mask
+ONNX Runtime C API: https://onnxruntime.ai/docs/api/c/
+
+The model file ships separately (~100MB, downloaded once), the runtime lib is tiny.
+

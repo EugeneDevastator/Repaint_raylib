@@ -5,10 +5,70 @@
 #include "raylib.h"
 #include "texture_manager.h"
 
-// ── Drawing-space brush (collapsed from UI parameters) ──────────────
-struct CollapsedBrush {
-    float rad_out_px;   // outer radius in pixels
-    float radInRatio;   // 0–1
+struct BPConfig {
+    float userMax;
+    float userMin;
+    float outMin, outMax;
+    float power;
+    int   modulatorId;
+    float jitter;
+};
+
+struct UserBrushConfig {
+    int toolMode;
+
+    BPConfig size;
+    BPConfig hardness;
+    BPConfig curvature;
+    BPConfig opacity;
+    BPConfig angle;
+    BPConfig scaleRel;
+    BPConfig cloneOpacity;
+    BPConfig hue;
+    BPConfig sat;
+    BPConfig lit;
+    BPConfig texScale;
+    BPConfig texFeather;
+    BPConfig texThresh;
+    BPConfig texBlendVal;
+    BPConfig power;
+    BPConfig perspective;
+    BPConfig focalOffset;
+    BPConfig sizeMul;
+    BPConfig spacing;
+
+    int   texBlendMode;
+    int   texNoisemode;
+    int   texColorMode;
+    bool  useTexLumAsAlpha;
+    int   bmidx;
+    uint8_t preserveop;
+    float userTexOriginX;
+    float userTexOriginY;
+    float userTexDirection;
+    uint16_t baseSeed;
+};
+
+struct ModulatedBrushConfig {
+    float radOut, radInRatio, scaleRel, resangle, opacity, crv, cop;
+    Color col;
+    float pwr, perspective, texScale, texFeather, texThresh, texBlendVal;
+    float focalOffset, spacing;
+    int   texBlendMode, texNoisemode, texColorMode;
+    bool  useTexLumAsAlpha;
+    int   bmidx;
+    uint8_t preserveop, eraseMode;
+    float userTexOriginX, userTexOriginY, userTexDirection;
+    uint16_t baseSeed;
+    float jitRadOut, jitRadIn, jitOpacity, jitCrv, jitX2y;
+    float jitHue, jitSat, jitLit, jitCloneOp, jitFocal;
+};
+
+void CaptureBrushConfig(UserBrushConfig* cfg);
+
+struct DabBrush {
+    float rad_out_px;
+    float radInRatio;
     float scale_x, scale_y;
     float resangle;
     float opacity;
@@ -25,10 +85,9 @@ struct CollapsedBrush {
     bool  useTexLumAsAlpha;
     float userTexOriginX, userTexOriginY;
     float userTexDirection;
-    float focalOffset;   // -1..1, oblique cone tip offset for radial gradient
-    float spacing;       // 0–1 multiplier for dab spacing
+    float focalOffset;
+    float spacing;
 
-    // Per-dab jitter ranges (drawing-space units, 0 = no jitter)
     float jitRadOut;
     float jitRadIn;
     float jitOpacity;
@@ -36,54 +95,46 @@ struct CollapsedBrush {
     float jitX2y;
     float jitHue, jitSat, jitLit;
     float jitCloneOp;
-    float jitFocal;      // per-dab focal offset jitter
+    float jitFocal;
     uint16_t baseSeed;
 };
 
-// ── Point output from DrawLinear (replaces C callback) ─────────────
 struct DabPoint {
     float x, y, srcX, srcY;
-    float srcRad, srcAngle;   // source dab radius + rotation (degrees) for smudge transform
-    CollapsedBrush brush;
+    float srcRad, srcAngle;
+    DabBrush brush;
 };
 
-// ── Unified segment struct ─────────────────────────────────────────
 struct SegmentData {
     Vector2 pos1, pos2;
     Vector2 ctrl0, ctrl3;
-    CollapsedBrush brushFrom, brush;
+    DabBrush brushFrom, brush;
     uint8_t tool, seamless, pixelPerfect, isStrokeStart;
     uint16_t seed;
     float smudgeSrcX, smudgeSrcY;
     TexSlotID targetSlot;
-    uint8_t userTexBucket;   // TM_BUCKET_USER typically, 0xFF = none
-    uint8_t userTexSlot;     // slot within bucket, 0xFF = none
+    uint8_t userTexBucket;
+    uint8_t userTexSlot;
     int dabOffset;
-    float initAngle;    // base angle for per-dab rotation modulation; 0 = use baked resangle
+    float initAngle;
 };
 
-// ── Stateless: draws one segment onto a render target ──────────────
 void DrawSegment(const SegmentData& dseg, RenderTexture2D rt, Texture2D brushTex, bool useTexture, bool seamless, int dabOffset, bool pixelPerfect = false);
 
-// ── Segment computation helpers (no rendering) ─────────────────────
 void SegDrawer_SetSegmentStart(float startRad, Vector2 startPos, SegmentData* seg);
 void SegDrawer_ComputeSegmentEnd(const SegmentData& seg, int dabOffset, float initialRad,
                                   Vector2* outLastPos, float* outLastRad);
 
-// ── Segment result ─────────────────────────────────────────────────
 struct SegResult {
     Vector2 lastDabPos;
     float lastRadOut;
     float overdraw;
 };
 
-// ── Blend brushes (interpolate all fields) ─────────────────────────
-CollapsedBrush BlendBrushes(CollapsedBrush from, CollapsedBrush to, float k);
+DabBrush BlendBrushes(DabBrush from, DabBrush to, float k);
 
-// ── Apply per-dab jitter from ranges (uses deterministic rng) ──────
-void JitterBrush(CollapsedBrush& b, uint16_t baseSeed, int dabIdx);
+void JitterBrush(DabBrush& b, uint16_t baseSeed, int dabIdx);
 
-// ── Linear stroke: places next dab only when distance >= spacing ──
 int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
                DabPoint* outPoints, int maxOut, SegResult* res);
 

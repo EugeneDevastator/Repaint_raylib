@@ -38,7 +38,7 @@ static int locURadIn  = -1, locUCurve = -1;
 static int locFocalOffset = -1;
 static bool inited = false;
 
-#define POOL_COUNT 64
+#define POOL_COUNT 128
 static RenderTexture2D intermediatePool[POOL_COUNT] = {0};
 static Texture2D whiteTex = {0};
 
@@ -135,6 +135,7 @@ void BrushBlend_Init(void) {
     locStampCenter    = GetShaderLocation(brushBlendShader, "stampCenter");
     locBlitOrigin     = GetShaderLocation(brushBlendShader, "blitOrigin");
     locBlitSize       = GetShaderLocation(brushBlendShader, "blitSize");
+    locFracShift      = GetShaderLocation(brushBlendShader, "fracShift");
     locPwr            = GetShaderLocation(brushBlendShader, "pwr");
     locEraseMode      = GetShaderLocation(brushBlendShader, "eraseMode");
     locSeamless       = GetShaderLocation(brushBlendShader, "uSeamless");
@@ -167,7 +168,7 @@ void BrushBlend_Shutdown(void) {
 
 void BrushBlend_ApplyStamp(
     RenderTexture2D dstRT,
-    const CollapsedBrush& brush,
+    const DabBrush& brush,
     Texture2D brushTex, bool useTexture,
     float stampX, float stampY,
     float srcX,   float srcY,
@@ -182,6 +183,23 @@ void BrushBlend_ApplyStamp(
     float radOut   = fmaxf(brush.rad_out_px, 0.001f);
     float angleRad = (float)brush.resangle * (3.14159265f / 180.0f);
     float squish   = fmaxf((float)brush.scale_y, 0.01f);
+
+    if (pixelPerfect) {
+        float diam = radOut * 2.0f;
+        int roundedDiam = (int)(diam + 0.5f);
+        if (roundedDiam < 1) roundedDiam = 1;
+        if (roundedDiam % 2 == 1) {
+            stampX = floorf(stampX);
+            stampY = floorf(stampY);
+            srcX   = floorf(srcX);
+            srcY   = floorf(srcY);
+        } else {
+            stampX = roundf(stampX);
+            stampY = roundf(stampY);
+            srcX   = roundf(srcX);
+            srcY   = roundf(srcY);
+        }
+    }
 
     if (fabsf(brush.focalOffset) > 0.0001f && radOut > 0.001f) {
         float shift = brush.focalOffset * radOut; // *squish; need if squishing from other side
@@ -199,7 +217,7 @@ void BrushBlend_ApplyStamp(
     int sz = (int)ceilf(bboxHalf * 2.0f);
     if (sz < 4) sz = 4;
     int bucket = next_mult32(sz);
-    if (bucket > 2048) bucket = 2048;
+    if (bucket > 4096) bucket = 4096;
     int drawSz = bucket;
 
     float stampSizePx = (float)drawSz;
@@ -301,6 +319,17 @@ void BrushBlend_ApplyStamp(
     float bs[2] = { (float)isz, (float)isz };
     SetShaderValue(brushBlendShader, locBlitOrigin, bo, SHADER_UNIFORM_VEC2);
     SetShaderValue(brushBlendShader, locBlitSize,   bs, SHADER_UNIFORM_VEC2);
+    float fs[2] = { x0 - (float)ix0, y0 - (float)iy0 };
+    if (pixelPerfect) {
+        float diam = radOut * 2.0f;
+        int roundedDiam = (int)(diam + 0.5f);
+        if (roundedDiam < 1) roundedDiam = 1;
+        if (roundedDiam % 2 == 1) {
+            fs[0] = 0.5f;
+            fs[1] = 0.5f;
+        }
+    }
+    SetShaderValue(brushBlendShader, locFracShift,  fs, SHADER_UNIFORM_VEC2);
 
     float pwr = brush.pwr;
     SetShaderValue(brushBlendShader, locPwr, &pwr, SHADER_UNIFORM_FLOAT);
@@ -316,7 +345,6 @@ void BrushBlend_ApplyStamp(
         SetTextureWrap(dstRT.texture, TEXTURE_WRAP_CLAMP);
 
     // Render stamp to intermediate RT
-    SetTextureFilter(intermediateRT->texture, TEXTURE_FILTER_POINT);
     BeginTextureMode(*intermediateRT);
     rlSetBlendMode(RL_BLEND_CUSTOM);
     rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
@@ -355,6 +383,12 @@ void BrushBlend_ApplyStamp(
     BeginTextureMode(dstRT);
     rlSetBlendMode(RL_BLEND_CUSTOM);
     rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+
+    if (pixelPerfect) {
+        glBindTexture(GL_TEXTURE_2D, intermediateRT->texture.id);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    }
 
     if (seamless) {
         for (int dy = -1; dy <= 1; dy++) {

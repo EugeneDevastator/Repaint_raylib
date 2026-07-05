@@ -45,6 +45,7 @@ uniform bool  uPixelPerfect;
 in vec2 canvasFragUV;
 in vec2 outCanvasPx;
 uniform vec2 blitSize;
+uniform vec2 fracShift;
 #include blend.glsl
 
 float coneGradient(vec2 p, float R, float shift) {
@@ -61,7 +62,12 @@ float coneGradient(vec2 p, float R, float shift) {
         float sq = sqrt(disc);
         float t1 = (-B + sq) / (2.0*A);
         float t2 = (-B - sq) / (2.0*A);
-        t = (t1 >= 0.0 && t1 <= 1.0) ? t1 : t2;
+        if (t1 >= 0.0 && t1 <= 1.0)
+            t = t1;
+        else if (t2 >= 0.0 && t2 <= 1.0)
+            t = t2;
+        else
+            t = (C > 0.0) ? 0.0 : 1.0;
     }
     return clamp(t, 0.0, 1.0);
 }
@@ -74,7 +80,8 @@ float applyThreshold(float combined, float cut, float texFeather) {
 
 float curvePWR = 6.0;
 float applyRadialFalloff(float d) {
-    if (d < 0.00001) return 0.0;
+    if (d < 0.00001) return 1.0;
+
     float innerT = clamp(uRadIn, 0.0, 0.99);
     float a = 1.0;
     if (d > innerT) {
@@ -102,7 +109,10 @@ vec4 readCanvas(ivec2 px) {
 }
 
 void main() {
-    vec2 uv = fragTexCoord;
+    vec2 uv = vec2(
+        fragTexCoord.x - fracShift.x / blitSize.x,
+        fragTexCoord.y + fracShift.y / blitSize.y
+    );
     vec2 p = (uv - 0.5) / max(uSize, 0.001);
 
     float persp = uPerspective;

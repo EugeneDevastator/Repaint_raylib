@@ -245,7 +245,7 @@ int ViewportManager_CreateLayerFromImage(Image img) {
     UnloadTexture(tmp);
 
     // Move above bottommost layer
-    if (n > 1) LayerStack_MoveLayer(newIdx, n - 1);
+    if (n > 1) { LayerStack_MoveLayer(newIdx, n - 1); newIdx = n - 1; }
 
     ViewportManager_SetDirty();
     return newIdx;

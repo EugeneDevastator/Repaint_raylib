@@ -20,23 +20,29 @@ jobs:
       - uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
-          install: mingw-w64-x86_64-gcc=15.2.0-8 mingw-w64-x86_64-gcc-libs=15.2.0-8 mingw-w64-x86_64-crt-git=13.0.0.r354.g40ab95d18-1 mingw-w64-x86_64-winpthreads=13.0.0.r354.g40ab95d18-1 mingw-w64-x86_64-cmake mingw-w64-x86_64-make zip mingw-w64-x86_64-vulkan-headers mingw-w64-x86_64-vulkan-loader
+          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-make zip mingw-w64-x86_64-vulkan-headers mingw-w64-x86_64-vulkan-loader mingw-w64-x86_64-spirv-headers mingw-w64-x86_64-shaderc
+
+      # Remove prebuilt .a so FetchContent builds from source (CI GCC may differ)
+      - name: Prepare
+        shell: msys2 {0}
+        run: rm -f NNModelServer/sd-build/win64/*.a
 
       - name: Configure
         shell: msys2 {0}
-        run: cmake --preset win64-release -DCMAKE_MAKE_PROGRAM=mingw32-make
+        working-directory: NNModelServer
+        run: cmake -B ../build/nnserver -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_MAKE_PROGRAM=mingw32-make
 
       - name: Build nnserver
         shell: msys2 {0}
-        run: cmake --build build/win64-release --target nnserver --parallel
+        run: cmake --build build/nnserver --parallel -j $(nproc)
 
       - name: Package
         shell: msys2 {0}
         run: |
           mkdir -p dist/nnserver-windows
-          cp build/win64-release/bin/nnserver.exe dist/nnserver-windows/
-          cp build/win64-release/bin/onnxruntime.dll dist/nnserver-windows/
-          cp build/win64-release/bin/model_url.txt dist/nnserver-windows/
+          cp build/nnserver/bin/nnserver.exe dist/nnserver-windows/
+          cp build/nnserver/bin/onnxruntime.dll dist/nnserver-windows/
+          cp build/nnserver/bin/model_url.txt dist/nnserver-windows/
           cp "$MINGW_PREFIX/bin/libgomp-1.dll"        dist/nnserver-windows/ 2>/dev/null || true
           cp "$MINGW_PREFIX/bin/libwinpthread-1.dll"  dist/nnserver-windows/ 2>/dev/null || true
           cp "$MINGW_PREFIX/bin/libgcc_s_seh-1.dll"   dist/nnserver-windows/ 2>/dev/null || true
@@ -66,21 +72,26 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            libcurl4-openssl-dev libvulkan-dev shaderc
+          sudo apt-get install -y libcurl4-openssl-dev
+          # LunarG repo for glslc (ggml-vulkan requires it)
+          wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/lunarg.gpg
+          sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-noble.list https://packages.lunarg.com/vulkan/lunarg-vulkan-noble.list
+          sudo apt-get update
+          sudo apt-get install -y shaderc libvulkan-dev
 
       - name: Configure
-        run: cmake --preset linux-release
+        working-directory: NNModelServer
+        run: cmake -B ../build/nnserver -DCMAKE_BUILD_TYPE=Release
 
       - name: Build nnserver
-        run: cmake --build build/linux-release --target nnserver --parallel
+        run: cmake --build build/nnserver --parallel
 
       - name: Package
         run: |
           mkdir -p dist/nnserver-linux
-          cp build/linux-release/bin/nnserver dist/nnserver-linux/ 2>/dev/null || true
-          cp build/linux-release/bin/model_url.txt dist/nnserver-linux/ 2>/dev/null || true
-          cp build/linux-release/onnxruntime/lib/libonnxruntime.so* dist/nnserver-linux/ 2>/dev/null || true
+          cp build/nnserver/bin/nnserver dist/nnserver-linux/ 2>/dev/null || true
+          cp build/nnserver/bin/model_url.txt dist/nnserver-linux/ 2>/dev/null || true
+          cp build/nnserver/onnxruntime/lib/libonnxruntime.so* dist/nnserver-linux/ 2>/dev/null || true
           cd dist && zip -r ../nnserver-linux.zip nnserver-linux
 
       - uses: actions/upload-artifact@v4

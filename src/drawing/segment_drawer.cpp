@@ -52,28 +52,10 @@ static float RawRnd(uint16_t seed, float range) {
     return x / 25500.0f * range;
 }
 
-// ── ApplyNoise ─────────────────────────────────────────────────────
-static void ApplyNoise(CollapsedBrush& b, int noisemode, uint16_t seed,
-                       Vector2 pos, uint16_t n, float& noisex, float& noisey) {
-    (void)b;
-    if (noisemode == 0) {
-        noisex = (float)(RawRnd(seed + n * 3, 1024) * 1024.0f);
-        noisey = (float)(RawRnd(seed + n + 21, 1024) * 1024.0f);
-    } else if (noisemode == 1) {
-        noisex = 34.0f;
-        noisey = 76.0f;
-    } else {
-        noisex = fmaxf(0, (int)pos.x);
-        noisey = fmaxf(0, (int)pos.y);
-    }
-    noisex = noisex - 1024.0f * (float)(int)(noisex / 1024.0f);
-    noisey = noisey - 1024.0f * (float)(int)(noisey / 1024.0f);
-}
-
 // ── Blend ──────────────────────────────────────────────────────────
-CollapsedBrush BlendBrushes(CollapsedBrush from, CollapsedBrush to, float k) {
+DabBrush BlendBrushes(DabBrush from, DabBrush to, float k) {
     auto lerp = [](float a, float b, float t) { return a + (b - a) * t; };
-    CollapsedBrush r;
+    DabBrush r;
     r.rad_out_px = lerp(from.rad_out_px, to.rad_out_px, k);
     r.radInRatio = lerp(from.radInRatio, to.radInRatio, k);
     r.scale_x    = lerp(from.scale_x, to.scale_x, k);
@@ -128,7 +110,7 @@ CollapsedBrush BlendBrushes(CollapsedBrush from, CollapsedBrush to, float k) {
 }
 
 // ── Per-dab jitter ─────────────────────────────────────────────────
-void JitterBrush(CollapsedBrush& b, uint16_t baseSeed, int dabIdx) {
+void JitterBrush(DabBrush& b, uint16_t baseSeed, int dabIdx) {
     float dr = RawRnd(baseSeed + (uint16_t)(dabIdx * 7 + 1), 1024) / 1024.0f * 2.0f - 1.0f;
 
     float baseRad = b.rad_out_px;  // save before jitter
@@ -354,10 +336,10 @@ int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
         // 6. Build final brush
         float k = nextArc / totalLen;
         if (k > 1.0f) k = 1.0f;
-        CollapsedBrush dabCB = BlendBrushes(seg.brushFrom, seg.brush, k);
+        DabBrush dabCB = BlendBrushes(seg.brushFrom, seg.brush, k);
         dabCB.rad_out_px = nextRadUnJit;
 
-        // Per-dab rotation: always use curve tangent direction
+        // Per-dab direction: update modulator for stroke direction
         {
             float t = nextArc / totalLen;
             if (t < 0) t = 0; if (t > 1) t = 1;
@@ -368,7 +350,6 @@ int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
             if (tx != 0 || ty != 0) {
                 float dirAng = AtanXY(tx, ty);
                 g_modPars.Pars[csDir] = RngConv(dirAng, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
-                dabCB.resangle = fmodf(seg.initAngle + GetModVal(&bpAngle), 360.0f);
             }
         }
 
