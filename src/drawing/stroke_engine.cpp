@@ -54,7 +54,7 @@ CollapsedBrush CollapseBrushParams(const d_RealBrush& b, float initialAngle, int
 // Shared modulation: applies bpAngle, bpSize, bpHardness, etc. to a brush.
 // Caller must set g_modPars.Pars[csDir], csPressure, etc. as desired before calling.
 d_RealBrush ModulateBrushParams(const d_RealBrush& brush, float initAngle, int toolMode) {
-    float sizeMul = powf(16.0f, BParam_GetValue(&bpSizeMul) / 128.0f - 1.0f);
+    float sizeMul = powf(5.0f, BParam_GetValue(&bpSizeMul) / 128.0f - 1.0f);
     d_RealBrush target = brush;
     target.rad_out    = GetModVal(&bpSize) * sizeMul;
     target.radInRatio = GetModVal(&bpHardness);
