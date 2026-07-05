@@ -14,8 +14,21 @@ static const Color SLIDER_BG_COL      = {210, 210, 210, 255};
 static const Color SLIDER_GRAD_FROM   = {150, 150, 150, 255};
 static const Color SLIDER_GRAD_TO     = {235, 235, 235, 255};
 static const float SLIDER_ROUNDING    = 3.0f;
-static const bool SLIDER_IS_ALT_PRECISE_MODE = false;  // toggle for 10% snap + extended rect
-
+static const bool SLIDER_IS_ALT_PRECISE_MODE = true;  // toggle for 10% snap + extended rect
+/*
+*and for the next task - look at the bparam slider. it has alternative mode which is currently off.
+i want to refactor it a bit -
+new idea is - when we move cursor in slider area it behaves as usual, no snapping no nothing.
+when cursor was captured initiall and is outside of initial rect - we change behavior.
+if it is to the Up (or left for vertical slider) - we do the snapping to each 10%
+if it is to the right - we do this precise mode - scanning between diagonals, - the further away from slider - the more precision.
+maybe.. hm maybe lets make not direct diagonals but halves. for ex
+horizontal slider. its x bounds are x0 and x1
+mosue distance to lower bound is ym.
+right diagonal point R = x1+ym/2
+left diagonal is L = x0-ym/2
+and value is calculated from point between those two, normalized.
+and after that enable this mode.*/
 /* ── Core slider renderer (procedural — works for both H and V) ──────
  *   length  = size along the slide axis (width for H, height for V)
  *   thickness = size perpendicular to the slide axis (height for H, width for V)
@@ -223,37 +236,37 @@ static void SliderInteraction(const ImRect& bb, int orient, BParam* bp) {
     if (ImGui::IsItemActive()) {
         ImVec2 mp = ImGui::GetMousePos();
         float v;
-        if (orient == 0) {
-            float bw = bb.Max.x - bb.Min.x;
-            if (SLIDER_IS_ALT_PRECISE_MODE) {
-                bool inside2d = (mp.x >= bb.Min.x && mp.x <= bb.Max.x &&
-                                 mp.y >= bb.Min.y && mp.y <= bb.Max.y);
-                if (inside2d)
-                    v = roundf((mp.x - bb.Min.x) / bw * 10.0f) / 10.0f;
-                else {
-                    float extL = bb.Min.x - bw * 0.5f;
-                    float extR = bb.Max.x + bw * 0.5f;
-                    v = (mp.x - extL) / (extR - extL);
+        // Relative coordinates based on orientation
+        float mside  = (orient == 0) ? mp.x  : mp.y;
+        float mperp  = (orient == 0) ? mp.y  : mp.x;
+        float bbMinS = (orient == 0) ? bb.Min.x : bb.Min.y;
+        float bbMaxS = (orient == 0) ? bb.Max.x : bb.Max.y;
+        float bbMinP = (orient == 0) ? bb.Min.y : bb.Min.x;
+        float bbMaxP = (orient == 0) ? bb.Max.y : bb.Max.x;
+        bool  flip   = (orient != 0); // vertical slider is inverted
+
+        float bs = bbMaxS - bbMinS;
+
+        if (SLIDER_IS_ALT_PRECISE_MODE) {
+            bool inside2d = (mside >= bbMinS && mside <= bbMaxS &&
+                             mperp >= bbMinP && mperp <= bbMaxP);
+            if (inside2d)
+                v = (mside - bbMinS) / bs;
+            else {
+                if (mperp < bbMinP) // snap (orient==0: above, orient==1: left)
+                    v = roundf((mside - bbMinS) / bs * 10.0f) / 10.0f;
+                else { // precise
+                    float extA = bbMinS - bs * 0.5f;
+                    float extB = bbMaxS + bs * 0.5f;
+                    v = (mside - extA) / (extB - extA);
                 }
-            } else {
-                v = (mp.x - bb.Min.x) / bw;
             }
         } else {
-            float bh = bb.Max.y - bb.Min.y;
-            if (SLIDER_IS_ALT_PRECISE_MODE) {
-                bool inside2d = (mp.y >= bb.Min.y && mp.y <= bb.Max.y &&
-                                 mp.x >= bb.Min.x && mp.x <= bb.Max.x);
-                if (inside2d)
-                    v = 1.0f - roundf((mp.y - bb.Min.y) / bh * 10.0f) / 10.0f;
-                else {
-                    float extT = bb.Min.y - bh * 0.5f;
-                    float extB = bb.Max.y + bh * 0.5f;
-                    v = 1.0f - (mp.y - extT) / (extB - extT);
-                }
-            } else {
-                v = 1.0f - (mp.y - bb.Min.y) / bh;
-            }
+            v = (mside - bbMinS) / bs;
         }
+
+        if (flip) v = 1.0f - v;
+
         v = fminf(fmaxf(v, 0.0f), 1.0f);
         if (ImGui::IsMouseDown(0))
             bp->user.clipmaxF = v;
