@@ -1,11 +1,21 @@
-# ── nnserver (standalone matting inference server) ─────────────────────────────
+cmake_minimum_required(VERSION 3.20)
+project(nnserver C CXX)
+
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+
 set(NNSERVER_VERSION  "1.21.0" CACHE STRING "ONNX Runtime version")
+
+# Parent of NNModelServer/ — root of shared code
+get_filename_component(PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}" DIRECTORY)
+
 set(NNSERVER_SOURCES
     nnserver.cpp
     nn_onnx.cpp
     matte_module.cpp
     nn_downloader.cpp
-    ${CMAKE_SOURCE_DIR}/src/network/sock_platform.cpp
+    ${PROJECT_ROOT}/src/network/sock_platform.cpp
 )
 
 # stb_image headers (single-file, public domain)
@@ -21,16 +31,15 @@ if(NOT EXISTS "${STB_DIR}/stb_image_write.h")
         "${STB_DIR}/stb_image_write.h")
 endif()
 
-# Create target early so platform-specific sections can reference it
 add_executable(nnserver ${NNSERVER_SOURCES})
 
 target_include_directories(nnserver PRIVATE
-    ${CMAKE_SOURCE_DIR}/include
+    ${PROJECT_ROOT}/include
     "${STB_DIR}")
 
 # ── ONNX Runtime + platform-specific deps ──────────────────────────────────
 if(WIN32)
-    target_sources(nnserver PRIVATE ${CMAKE_SOURCE_DIR}/src/network/nn_download_win.cpp)
+    target_sources(nnserver PRIVATE ${PROJECT_ROOT}/src/network/nn_download_win.cpp)
 
     set(ORT_ROOT "${CMAKE_BINARY_DIR}/onnxruntime" CACHE PATH "ONNX Runtime directory")
     set(ORT_INCLUDE_DIR "${ORT_ROOT}/include")
@@ -113,7 +122,6 @@ if(WIN32)
 
         # Link Vulkan backend if prebuilt
         if(EXISTS "${SD_LIB_DIR}/ggml-vulkan.a" OR EXISTS "${SD_LIB_DIR}/libggml-vulkan.a")
-            # Mingw64's libvulkan-1.dll.a (not the MS SDK's .lib)
             find_library(_vulkan_lib vulkan-1
                 PATHS "C:/msys64/mingw64/lib"
                       "$ENV{MINGW_PREFIX}/lib")
@@ -177,7 +185,7 @@ if(WIN32)
     endif()
 
 else()  # ── Linux ──────────────────────────────────────────────────────────
-    target_sources(nnserver PRIVATE ${CMAKE_SOURCE_DIR}/src/network/nn_download_lnx.cpp)
+    target_sources(nnserver PRIVATE ${PROJECT_ROOT}/src/network/nn_download_lnx.cpp)
 
     set(ORT_ROOT "${CMAKE_BINARY_DIR}/onnxruntime" CACHE PATH "ONNX Runtime directory")
     set(ORT_INCLUDE_DIR "${ORT_ROOT}/include")

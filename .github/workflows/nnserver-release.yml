@@ -29,19 +29,20 @@ jobs:
 
       - name: Configure
         shell: msys2 {0}
-        run: cmake --preset win64-release -DCMAKE_MAKE_PROGRAM=mingw32-make
+        working-directory: NNModelServer
+        run: cmake -B ../build/nnserver -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_MAKE_PROGRAM=mingw32-make
 
       - name: Build nnserver
         shell: msys2 {0}
-        run: cmake --build build/win64-release --target nnserver --parallel
+        run: cmake --build build/nnserver --parallel -j $(nproc)
 
       - name: Package
         shell: msys2 {0}
         run: |
           mkdir -p dist/nnserver-windows
-          cp build/win64-release/bin/nnserver.exe dist/nnserver-windows/
-          cp build/win64-release/bin/onnxruntime.dll dist/nnserver-windows/
-          cp build/win64-release/bin/model_url.txt dist/nnserver-windows/
+          cp build/nnserver/bin/nnserver.exe dist/nnserver-windows/
+          cp build/nnserver/bin/onnxruntime.dll dist/nnserver-windows/
+          cp build/nnserver/bin/model_url.txt dist/nnserver-windows/
           cp "$MINGW_PREFIX/bin/libgomp-1.dll"        dist/nnserver-windows/ 2>/dev/null || true
           cp "$MINGW_PREFIX/bin/libwinpthread-1.dll"  dist/nnserver-windows/ 2>/dev/null || true
           cp "$MINGW_PREFIX/bin/libgcc_s_seh-1.dll"   dist/nnserver-windows/ 2>/dev/null || true
@@ -79,17 +80,18 @@ jobs:
           sudo apt-get install -y shaderc libvulkan-dev
 
       - name: Configure
-        run: cmake --preset linux-release
+        working-directory: NNModelServer
+        run: cmake -B ../build/nnserver -DCMAKE_BUILD_TYPE=Release
 
       - name: Build nnserver
-        run: cmake --build build/linux-release --target nnserver --parallel
+        run: cmake --build build/nnserver --parallel
 
       - name: Package
         run: |
           mkdir -p dist/nnserver-linux
-          cp build/linux-release/bin/nnserver dist/nnserver-linux/ 2>/dev/null || true
-          cp build/linux-release/bin/model_url.txt dist/nnserver-linux/ 2>/dev/null || true
-          cp build/linux-release/onnxruntime/lib/libonnxruntime.so* dist/nnserver-linux/ 2>/dev/null || true
+          cp build/nnserver/bin/nnserver dist/nnserver-linux/ 2>/dev/null || true
+          cp build/nnserver/bin/model_url.txt dist/nnserver-linux/ 2>/dev/null || true
+          cp build/nnserver/onnxruntime/lib/libonnxruntime.so* dist/nnserver-linux/ 2>/dev/null || true
           cd dist && zip -r ../nnserver-linux.zip nnserver-linux
 
       - uses: actions/upload-artifact@v4
