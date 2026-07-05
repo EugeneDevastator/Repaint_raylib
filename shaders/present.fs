@@ -6,10 +6,10 @@ out vec4 finalColor;
 uniform sampler2D presentTex;
 uniform vec2      texSize;
 uniform bool      applyDither;
+uniform bool      useNearest;
 
 #include blend.glsl
 
-// ── Spatial hash for dither ──────────────────────────────────────────
 float hash21(vec2 p) {
     vec3 p3 = fract(vec3(p.xyx) * 0.1031);
     p3 += dot(p3, p3.yzx + 33.33);
@@ -17,9 +17,15 @@ float hash21(vec2 p) {
 }
 
 void main() {
-    vec4 col = sampleBilinear(presentTex, fragTexCoord * texSize, texSize, 0, false);
+    vec4 col;
+    if (useNearest) {
+        ivec2 px = ivec2(floor(fragTexCoord * texSize));
+        px = clamp(px, ivec2(0), ivec2(texSize - vec2(1.0)));
+        col = texelFetch(presentTex, px, 0);
+    } else {
+        col = sampleBilinear(presentTex, fragTexCoord * texSize, texSize, 0, false);
+    }
 
-    // Spatial dither — breaks up banding (screen only)
     float off = 0.0;
     if (applyDither) {
         float d = hash21(floor(gl_FragCoord.xy));
