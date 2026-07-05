@@ -44,10 +44,7 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
 
     // ── Emit first dab immediately at stroke start ────────────────
     if (isFirstDabPainted) {
-        SetupBrushContext(e.brush, e.toolMode, e.initAngle);
-        CollapsedBrush cb = GetCollapsedBrush(g_modPars.Pars);
-        cb.rad_out_px *= m_worldToTexPx;
-        cb.jitRadOut  *= m_worldToTexPx;
+        DabBrush cb = MakeDabBrush(e.brush);
         SegmentData dseg;
         memset(&dseg, 0, sizeof(dseg));
         dseg.pos1 = dseg.pos2 = start;
@@ -94,19 +91,12 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
     m_prevSegDir = Vector2{segDx, segDy};
     m_prevSegLen = segLen;
 
-    SetupBrushContext(m_brushFrom, toolMode, initAngle);
-    float neutralMods[csSTOP];
-    for (int i = 0; i < csSTOP; i++) neutralMods[i] = 1.0f;
-    neutralMods[csDir] = neutralMods[csIdir] = neutralMods[csCrv] = 0.5f;
-    neutralMods[csHVdir] = neutralMods[csRelang] = 0.5f;
-    CollapsedBrush cbFrom = GetCollapsedBrush(neutralMods);
-    cbFrom.rad_out_px *= m_worldToTexPx;
-    cbFrom.jitRadOut  *= m_worldToTexPx;
+    d_RealBrush target = brush;
+    ResolveBrushParams(&target, toolMode, initAngle, g_modPars.Pars);
+    target.rad_out *= m_worldToTexPx;
 
-    SetupBrushContext(brush, toolMode, initAngle);
-    CollapsedBrush cbTo = GetCollapsedBrush(g_modPars.Pars);
-    cbTo.rad_out_px *= m_worldToTexPx;
-    cbTo.jitRadOut  *= m_worldToTexPx;
+    DabBrush cbFrom = MakeDabBrush(m_brushFrom);
+    DabBrush cbTo   = MakeDabBrush(target);
 
     // Rebase ctrl0 from p1 to m_lastDabPos, and ctrl3 from p2 to the actual
     // segment end, rescaling both handle lengths to the actual segment length.
@@ -285,9 +275,7 @@ void StrokeEmitter::handleEnd() {
     flushSmoothing(m_brushFrom, m_initAngle, m_toolMode);
 
     if (!m_emittedAny) {
-        SetupBrushContext(m_brushFrom, m_toolMode, m_initAngle);
-        CollapsedBrush cb = GetCollapsedBrush(g_modPars.Pars);
-        cb.rad_out_px *= m_worldToTexPx;
+        DabBrush cb = MakeDabBrush(m_brushFrom);
     SegmentData dseg;
         memset(&dseg, 0, sizeof(dseg));
         dseg.pos1 = dseg.pos2 = m_lastDabPos;

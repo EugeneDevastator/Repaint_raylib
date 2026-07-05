@@ -268,7 +268,7 @@ bool LayerProps_Deserialize(sLayerProps* lp, uint8_t* buf, size_t len) {
 }
 
 size_t Segment_Serialize(const SegmentData& seg, uint8_t* buf, size_t cap) {
-    size_t need = sizeof(Vector2)*4 + sizeof(CollapsedBrush)*2 + sizeof(uint16_t)
+    size_t need = sizeof(Vector2)*4 + sizeof(DabBrush)*2 + sizeof(uint16_t)
                 + sizeof(TexSlotID) + sizeof(uint8_t)*2 + sizeof(float)*2;
     if (cap < need) return 0;
     size_t off = 0;
@@ -276,8 +276,8 @@ size_t Segment_Serialize(const SegmentData& seg, uint8_t* buf, size_t cap) {
     memcpy(buf + off, &seg.pos2, sizeof(Vector2)); off += sizeof(Vector2);
     memcpy(buf + off, &seg.ctrl0, sizeof(Vector2)); off += sizeof(Vector2);
     memcpy(buf + off, &seg.ctrl3, sizeof(Vector2)); off += sizeof(Vector2);
-    memcpy(buf + off, &seg.brushFrom, sizeof(CollapsedBrush)); off += sizeof(CollapsedBrush);
-    memcpy(buf + off, &seg.brush, sizeof(CollapsedBrush)); off += sizeof(CollapsedBrush);
+    memcpy(buf + off, &seg.brushFrom, sizeof(DabBrush)); off += sizeof(DabBrush);
+    memcpy(buf + off, &seg.brush, sizeof(DabBrush)); off += sizeof(DabBrush);
     memcpy(buf + off, &seg.seed, sizeof(uint16_t)); off += sizeof(uint16_t);
     memcpy(buf + off, &seg.targetSlot, sizeof(TexSlotID)); off += sizeof(TexSlotID);
     buf[off++] = seg.tool;
@@ -288,7 +288,7 @@ size_t Segment_Serialize(const SegmentData& seg, uint8_t* buf, size_t cap) {
 }
 
 bool Segment_Deserialize(SegmentData* seg, uint8_t* buf, size_t len) {
-    size_t need = sizeof(Vector2)*4 + sizeof(CollapsedBrush)*2 + sizeof(uint16_t)
+    size_t need = sizeof(Vector2)*4 + sizeof(DabBrush)*2 + sizeof(uint16_t)
                 + sizeof(TexSlotID) + sizeof(uint8_t)*2 + sizeof(float)*2;
     if (len < need) return false;
     size_t off = 0;
@@ -296,8 +296,8 @@ bool Segment_Deserialize(SegmentData* seg, uint8_t* buf, size_t len) {
     memcpy(&seg->pos2, buf + off, sizeof(Vector2)); off += sizeof(Vector2);
     memcpy(&seg->ctrl0, buf + off, sizeof(Vector2)); off += sizeof(Vector2);
     memcpy(&seg->ctrl3, buf + off, sizeof(Vector2)); off += sizeof(Vector2);
-    memcpy(&seg->brushFrom, buf + off, sizeof(CollapsedBrush)); off += sizeof(CollapsedBrush);
-    memcpy(&seg->brush, buf + off, sizeof(CollapsedBrush)); off += sizeof(CollapsedBrush);
+    memcpy(&seg->brushFrom, buf + off, sizeof(DabBrush)); off += sizeof(DabBrush);
+    memcpy(&seg->brush, buf + off, sizeof(DabBrush)); off += sizeof(DabBrush);
     memcpy(&seg->seed, buf + off, sizeof(uint16_t)); off += sizeof(uint16_t);
     memcpy(&seg->targetSlot, buf + off, sizeof(TexSlotID)); off += sizeof(TexSlotID);
     seg->tool = buf[off++];

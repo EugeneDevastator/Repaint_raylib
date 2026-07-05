@@ -299,23 +299,23 @@ void UpdateUI(AppState* state) {
         }
     }
 
-    SetupBrushContext(state->currentBrush.Realb, state->mode, state->initialAngle);
-    CollapsedBrush cb = GetCollapsedBrush(g_modPars.Pars);
+    d_RealBrush uiBrush = state->currentBrush.Realb;
+    ResolveBrushParams(&uiBrush, state->mode, state->initialAngle, g_modPars.Pars);
 
-    state->currentBrush.Realb.rad_out    = cb.rad_out_px;
-    state->currentBrush.Realb.radInRatio = cb.radInRatio;
-    state->currentBrush.Realb.crv        = cb.crv;
-    state->currentBrush.Realb.opacity    = cb.opacity;
-    state->currentBrush.Realb.resangle   = (float)cb.resangle;
-    state->currentBrush.Realb.x2y        = cb.scale_y;
-    state->currentBrush.Realb.cop        = cb.cop;
-    state->currentBrush.Realb.texScale   = cb.texScale;
-    state->currentBrush.Realb.texFeather = cb.texFeather;
-    state->currentBrush.Realb.texThresh  = cb.texThresh;
-    state->currentBrush.Realb.texBlendVal = cb.texBlendVal;
-    state->currentBrush.Realb.pwr        = cb.pwr;
-    state->currentBrush.Realb.perspective = cb.perspective;
-    state->currentBrush.Realb.col        = cb.col;
+    state->currentBrush.Realb.rad_out    = uiBrush.rad_out;
+    state->currentBrush.Realb.radInRatio = uiBrush.radInRatio;
+    state->currentBrush.Realb.crv        = uiBrush.crv;
+    state->currentBrush.Realb.opacity    = uiBrush.opacity;
+    state->currentBrush.Realb.resangle   = (float)uiBrush.resangle;
+    state->currentBrush.Realb.x2y        = uiBrush.x2y;
+    state->currentBrush.Realb.cop        = uiBrush.cop;
+    state->currentBrush.Realb.texScale   = uiBrush.texScale;
+    state->currentBrush.Realb.texFeather = uiBrush.texFeather;
+    state->currentBrush.Realb.texThresh  = uiBrush.texThresh;
+    state->currentBrush.Realb.texBlendVal = uiBrush.texBlendVal;
+    state->currentBrush.Realb.pwr        = uiBrush.pwr;
+    state->currentBrush.Realb.perspective = uiBrush.perspective;
+    state->currentBrush.Realb.col        = uiBrush.col;
     state->currentBrush.Realb.eraseMode  = state->eraseMode;
 
     colorHue = bpQuickHue.user.clipmaxF;

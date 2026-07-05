@@ -168,7 +168,7 @@ void BrushBlend_Shutdown(void) {
 
 void BrushBlend_ApplyStamp(
     RenderTexture2D dstRT,
-    const CollapsedBrush& brush,
+    const DabBrush& brush,
     Texture2D brushTex, bool useTexture,
     float stampX, float stampY,
     float srcX,   float srcY,

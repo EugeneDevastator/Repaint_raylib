@@ -9,80 +9,91 @@ int g_strokeSmoothingMode = SMOOTH_MODE_SMOOTH;
 float g_strokeThrottle = 0.0f;
 ICommandBroker* g_broker = nullptr;
 
-static d_RealBrush g_resolveBrush;
-static int         g_resolveToolMode = eBrush;
-static float       g_resolveInitAngle = 0.0f;
-
-void SetupBrushContext(const d_RealBrush& brush, int toolMode, float initAngle) {
-    g_resolveBrush = brush;
-    g_resolveToolMode = toolMode;
-    g_resolveInitAngle = initAngle;
-}
-
-CollapsedBrush GetCollapsedBrush(const float modValues[csSTOP]) {
+void ResolveBrushParams(d_RealBrush* out, int toolMode, float initAngle, const float modValues[csSTOP]) {
     float savedPars[csSTOP];
     memcpy(savedPars, g_modPars.Pars, sizeof(float) * csSTOP);
     memcpy(g_modPars.Pars, modValues, sizeof(float) * csSTOP);
 
     float sizeMul = powf(5.0f, BParam_GetValue(&bpSizeMul) / 128.0f - 1.0f);
 
-    CollapsedBrush cb;
-    memset(&cb, 0, sizeof(cb));
-
-    cb.rad_out_px  = GetModVal(&bpSize) * sizeMul;
-    cb.radInRatio  = fminf(GetModVal(&bpHardness), 1.0f);
-    cb.scale_x     = 1.0f;
-    cb.scale_y     = GetModVal(&bpScaleRel);
-    cb.resangle    = fmodf(g_resolveInitAngle + GetModVal(&bpAngle), 360.0f);
-    cb.opacity     = GetModVal(&bpOpacity);
-    cb.crv         = GetModVal(&bpCurvature);
-    cb.cop         = (g_resolveToolMode == eSmudge) ? GetModVal(&bpCloneOpacity) : 0.0f;
-    cb.col         = HSLToRGB(GetModVal(&bpQuickHue), GetModVal(&bpQuickSat), GetModVal(&bpQuickLit));
-    cb.pwr         = GetModVal(&bpPower);
-    cb.perspective = GetModVal(&bpPerspective);
+    out->rad_out    = GetModVal(&bpSize) * sizeMul;
+    out->radInRatio = fminf(GetModVal(&bpHardness), 1.0f);
+    out->x2y        = GetModVal(&bpScaleRel);
+    out->resangle   = fmodf(initAngle + GetModVal(&bpAngle), 360.0f);
+    out->opacity    = GetModVal(&bpOpacity);
+    out->crv        = GetModVal(&bpCurvature);
+    out->cop        = (toolMode == eSmudge) ? GetModVal(&bpCloneOpacity) : 0.0f;
+    out->col        = HSLToRGB(GetModVal(&bpQuickHue), GetModVal(&bpQuickSat), GetModVal(&bpQuickLit));
+    out->pwr        = GetModVal(&bpPower);
+    out->perspective = GetModVal(&bpPerspective);
 
     float ts = GetModVal(&bpTexScale);
     if (g_texScaleMode == 1)
-        cb.texScale = ts * cb.rad_out_px * (WORLD_UNIT_PX / 128.0f);
+        out->texScale = ts * out->rad_out * (WORLD_UNIT_PX / 128.0f);
     else
-        cb.texScale = ts;
+        out->texScale = ts;
 
-    cb.texFeather     = GetModVal(&bpTexFeather);
-    cb.texThresh      = GetModVal(&bpTexThresh);
-    cb.texBlendVal    = GetModVal(&bpTexBlendVal);
-    cb.texBlendMode   = g_resolveBrush.texBlendMode;
-    cb.texNoisemode   = g_resolveBrush.texNoisemode;
-    cb.texColorMode   = g_resolveBrush.texColorMode;
-    cb.useTexLumAsAlpha = g_resolveBrush.useTexLumAsAlpha;
-    cb.bmidx          = (int)g_resolveBrush.bmidx;
-    cb.eraseMode      = g_resolveBrush.eraseMode;
-    cb.preserveop     = g_resolveBrush.preserveop;
-    cb.userTexOriginX = g_resolveBrush.userTexOriginX;
-    cb.userTexOriginY = g_resolveBrush.userTexOriginY;
-    cb.userTexDirection = g_resolveBrush.userTexDirection;
-    cb.focalOffset    = GetModVal(&bpFocalOffset);
-    cb.spacing        = BParam_GetValue(&bpSpacing);
-    cb.baseSeed       = g_resolveBrush.seed;
-
-    cb.jitRadOut  = bpSize.user.jitter * cb.rad_out_px;
-    cb.jitRadIn   = bpHardness.user.jitter;
-    cb.jitOpacity = bpOpacity.user.jitter;
-    cb.jitCrv     = bpCurvature.user.jitter;
-    cb.jitX2y     = bpScaleRel.user.jitter;
-    cb.jitHue     = bpQuickHue.user.jitter * (bpQuickHue.outMax - bpQuickHue.outMin);
-    cb.jitSat     = bpQuickSat.user.jitter * (bpQuickSat.outMax - bpQuickSat.outMin);
-    cb.jitLit     = bpQuickLit.user.jitter * (bpQuickLit.outMax - bpQuickLit.outMin);
-    cb.jitCloneOp = bpCloneOpacity.user.jitter;
-    cb.jitFocal   = bpFocalOffset.user.jitter;
+    out->texFeather  = GetModVal(&bpTexFeather);
+    out->texThresh   = GetModVal(&bpTexThresh);
+    out->texBlendVal = GetModVal(&bpTexBlendVal);
 
     memcpy(g_modPars.Pars, savedPars, sizeof(float) * csSTOP);
-    return cb;
 }
 
-CollapsedBrush GetCollapsedBrushMax() {
+void ResolveBrushParamsMax(d_RealBrush* out, int toolMode, float initAngle) {
     float maxPars[csSTOP];
     for (int i = 0; i < csSTOP; i++) maxPars[i] = 1.0f;
-    return GetCollapsedBrush(maxPars);
+    maxPars[csDir] = maxPars[csIdir] = maxPars[csCrv] = 0.5f;
+    maxPars[csHVdir] = maxPars[csRelang] = 0.5f;
+    ResolveBrushParams(out, toolMode, initAngle, maxPars);
+}
+
+DabBrush MakeDabBrush(const d_RealBrush& resolved) {
+    DabBrush cb;
+    memset(&cb, 0, sizeof(cb));
+
+    cb.rad_out_px  = resolved.rad_out;
+    cb.radInRatio  = fminf(resolved.radInRatio, 1.0f);
+    cb.scale_x     = 1.0f;
+    cb.scale_y     = resolved.x2y;
+    cb.resangle    = (float)resolved.resangle;
+    cb.opacity     = resolved.opacity;
+    cb.crv         = resolved.crv;
+    cb.cop         = resolved.cop;
+    cb.col         = resolved.col;
+    cb.pwr         = resolved.pwr;
+    cb.bmidx       = (int)resolved.bmidx;
+    cb.eraseMode   = resolved.eraseMode;
+    cb.preserveop  = resolved.preserveop;
+    cb.perspective = resolved.perspective;
+    cb.texScale    = resolved.texScale;
+    cb.texFeather  = resolved.texFeather;
+    cb.texThresh   = resolved.texThresh;
+    cb.texBlendVal = resolved.texBlendVal;
+    cb.texBlendMode   = resolved.texBlendMode;
+    cb.texNoisemode   = resolved.texNoisemode;
+    cb.texColorMode   = resolved.texColorMode;
+    cb.useTexLumAsAlpha = resolved.useTexLumAsAlpha;
+    cb.userTexOriginX  = resolved.userTexOriginX;
+    cb.userTexOriginY  = resolved.userTexOriginY;
+    cb.userTexDirection = resolved.userTexDirection;
+    cb.baseSeed        = resolved.seed;
+
+    cb.focalOffset = GetModVal(&bpFocalOffset);
+    cb.spacing     = BParam_GetValue(&bpSpacing);
+
+    cb.jitRadOut   = bpSize.user.jitter * cb.rad_out_px;
+    cb.jitRadIn    = bpHardness.user.jitter;
+    cb.jitOpacity  = bpOpacity.user.jitter;
+    cb.jitCrv      = bpCurvature.user.jitter;
+    cb.jitX2y      = bpScaleRel.user.jitter;
+    cb.jitHue      = bpQuickHue.user.jitter * (bpQuickHue.outMax - bpQuickHue.outMin);
+    cb.jitSat      = bpQuickSat.user.jitter * (bpQuickSat.outMax - bpQuickSat.outMin);
+    cb.jitLit      = bpQuickLit.user.jitter * (bpQuickLit.outMax - bpQuickLit.outMin);
+    cb.jitCloneOp  = bpCloneOpacity.user.jitter;
+    cb.jitFocal    = bpFocalOffset.user.jitter;
+
+    return cb;
 }
 
 void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex, bool useTexture,
@@ -122,9 +133,10 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex, bool us
     float jitCop     = bpCloneOpacity.user.jitter; bpCloneOpacity.user.jitter = 0;
     float jitFocal   = bpFocalOffset.user.jitter;  bpFocalOffset.user.jitter = 0;
 
-    SetupBrushContext(*baseBrush, toolMode, initialAngle);
-    CollapsedBrush cbFull = GetCollapsedBrush(g_modPars.Pars);
-    cbFull.rad_out_px *= WORLD_UNIT_PX;
+    d_RealBrush previewBrush = *baseBrush;
+    ResolveBrushParams(&previewBrush, toolMode, initialAngle, g_modPars.Pars);
+    previewBrush.rad_out *= WORLD_UNIT_PX;
+    DabBrush cbFull = MakeDabBrush(previewBrush);
     cbFull.jitRadOut = cbFull.jitRadIn = cbFull.jitOpacity = cbFull.jitCrv = cbFull.jitX2y = 0;
     cbFull.jitHue = cbFull.jitSat = cbFull.jitLit = cbFull.jitCloneOp = cbFull.jitFocal = 0;
     cbFull.baseSeed = 0;
@@ -143,7 +155,7 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex, bool us
     bpFocalOffset.user.jitter  = jitFocal;
     memcpy(g_modPars.Pars, savedPars, sizeof(float) * csSTOP);
 
-    CollapsedBrush cbTiny = cbFull;
+    DabBrush cbTiny = cbFull;
     cbTiny.rad_out_px = 1.0f;
 
     SegmentData seed;

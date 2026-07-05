@@ -53,7 +53,7 @@ static float RawRnd(uint16_t seed, float range) {
 }
 
 // ── ApplyNoise ─────────────────────────────────────────────────────
-static void ApplyNoise(CollapsedBrush& b, int noisemode, uint16_t seed,
+static void ApplyNoise(DabBrush& b, int noisemode, uint16_t seed,
                        Vector2 pos, uint16_t n, float& noisex, float& noisey) {
     (void)b;
     if (noisemode == 0) {
@@ -71,9 +71,9 @@ static void ApplyNoise(CollapsedBrush& b, int noisemode, uint16_t seed,
 }
 
 // ── Blend ──────────────────────────────────────────────────────────
-CollapsedBrush BlendBrushes(CollapsedBrush from, CollapsedBrush to, float k) {
+DabBrush BlendBrushes(DabBrush from, DabBrush to, float k) {
     auto lerp = [](float a, float b, float t) { return a + (b - a) * t; };
-    CollapsedBrush r;
+    DabBrush r;
     r.rad_out_px = lerp(from.rad_out_px, to.rad_out_px, k);
     r.radInRatio = lerp(from.radInRatio, to.radInRatio, k);
     r.scale_x    = lerp(from.scale_x, to.scale_x, k);
@@ -128,7 +128,7 @@ CollapsedBrush BlendBrushes(CollapsedBrush from, CollapsedBrush to, float k) {
 }
 
 // ── Per-dab jitter ─────────────────────────────────────────────────
-void JitterBrush(CollapsedBrush& b, uint16_t baseSeed, int dabIdx) {
+void JitterBrush(DabBrush& b, uint16_t baseSeed, int dabIdx) {
     float dr = RawRnd(baseSeed + (uint16_t)(dabIdx * 7 + 1), 1024) / 1024.0f * 2.0f - 1.0f;
 
     float baseRad = b.rad_out_px;  // save before jitter
@@ -354,7 +354,7 @@ int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
         // 6. Build final brush
         float k = nextArc / totalLen;
         if (k > 1.0f) k = 1.0f;
-        CollapsedBrush dabCB = BlendBrushes(seg.brushFrom, seg.brush, k);
+        DabBrush dabCB = BlendBrushes(seg.brushFrom, seg.brush, k);
         dabCB.rad_out_px = nextRadUnJit;
 
         // Per-dab direction: update modulator for stroke direction

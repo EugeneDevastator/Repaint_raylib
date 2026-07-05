@@ -4,11 +4,9 @@
 #include "repaint.h"
 #include "brush_draw.h"
 
-void SetupBrushContext(const d_RealBrush& brush, int toolMode, float initAngle);
-
-// ── Single resolution point: BParam sliders + modulator state → CollapsedBrush ──
-CollapsedBrush GetCollapsedBrush(const float modValues[csSTOP]);
-CollapsedBrush GetCollapsedBrushMax();
+void ResolveBrushParams(d_RealBrush* out, int toolMode, float initAngle, const float modValues[csSTOP]);
+void ResolveBrushParamsMax(d_RealBrush* out, int toolMode, float initAngle);
+DabBrush MakeDabBrush(const d_RealBrush& resolved);
 
 void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex, bool useTexture,
                               const d_RealBrush* baseBrush, int toolMode,

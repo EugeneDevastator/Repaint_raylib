@@ -10,8 +10,7 @@
 #include "network_broker.h"
 
 static void PushDabSegment(ICommandBroker* b, float x, float y, float srcX, float srcY, const d_RealBrush& brush, int toolMode) {
-    SetupBrushContext(brush, toolMode, 0.0f);
-    CollapsedBrush cb = GetCollapsedBrush(g_modPars.Pars);
+    DabBrush cb = MakeDabBrush(brush);
     SegmentData s; memset(&s, 0, sizeof(s));
     s.pos1 = Vector2{x, y};
     s.pos2 = Vector2{srcX, srcY};

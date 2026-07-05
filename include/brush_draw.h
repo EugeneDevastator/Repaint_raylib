@@ -6,7 +6,7 @@
 #include "texture_manager.h"
 
 // ── Drawing-space brush (collapsed from UI parameters) ──────────────
-struct CollapsedBrush {
+struct DabBrush {
     float rad_out_px;   // outer radius in pixels
     float radInRatio;   // 0–1
     float scale_x, scale_y;
@@ -44,14 +44,14 @@ struct CollapsedBrush {
 struct DabPoint {
     float x, y, srcX, srcY;
     float srcRad, srcAngle;   // source dab radius + rotation (degrees) for smudge transform
-    CollapsedBrush brush;
+    DabBrush brush;
 };
 
 // ── Unified segment struct ─────────────────────────────────────────
 struct SegmentData {
     Vector2 pos1, pos2;
     Vector2 ctrl0, ctrl3;
-    CollapsedBrush brushFrom, brush;
+    DabBrush brushFrom, brush;
     uint8_t tool, seamless, pixelPerfect, isStrokeStart;
     uint16_t seed;
     float smudgeSrcX, smudgeSrcY;
@@ -78,10 +78,10 @@ struct SegResult {
 };
 
 // ── Blend brushes (interpolate all fields) ─────────────────────────
-CollapsedBrush BlendBrushes(CollapsedBrush from, CollapsedBrush to, float k);
+DabBrush BlendBrushes(DabBrush from, DabBrush to, float k);
 
 // ── Apply per-dab jitter from ranges (uses deterministic rng) ──────
-void JitterBrush(CollapsedBrush& b, uint16_t baseSeed, int dabIdx);
+void JitterBrush(DabBrush& b, uint16_t baseSeed, int dabIdx);
 
 // ── Linear stroke: places next dab only when distance >= spacing ──
 int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,

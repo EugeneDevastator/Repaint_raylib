@@ -99,8 +99,8 @@ bool ReplayRecorder::Save(const char* path) {
         fwrite(&seg.pos2, sizeof(Vector2), 1, f);
         fwrite(&seg.ctrl0, sizeof(Vector2), 1, f);
         fwrite(&seg.ctrl3, sizeof(Vector2), 1, f);
-        fwrite(&seg.brushFrom, sizeof(CollapsedBrush), 1, f);
-        fwrite(&seg.brush, sizeof(CollapsedBrush), 1, f);
+        fwrite(&seg.brushFrom, sizeof(DabBrush), 1, f);
+        fwrite(&seg.brush, sizeof(DabBrush), 1, f);
         fwrite(&seg.seed, sizeof(uint16_t), 1, f);
         fwrite(&seg.tool, sizeof(uint8_t), 1, f);
         fwrite(&seg.seamless, sizeof(uint8_t), 1, f);
@@ -144,8 +144,8 @@ bool ReplayRecorder::Load(const char* path) {
         if (fread(&seg.pos2, sizeof(Vector2), 1, f) != 1) break;
         if (fread(&seg.ctrl0, sizeof(Vector2), 1, f) != 1) break;
         if (fread(&seg.ctrl3, sizeof(Vector2), 1, f) != 1) break;
-        if (fread(&seg.brushFrom, sizeof(CollapsedBrush), 1, f) != 1) break;
-        if (fread(&seg.brush, sizeof(CollapsedBrush), 1, f) != 1) break;
+        if (fread(&seg.brushFrom, sizeof(DabBrush), 1, f) != 1) break;
+        if (fread(&seg.brush, sizeof(DabBrush), 1, f) != 1) break;
         if (fread(&seg.seed, sizeof(uint16_t), 1, f) != 1) break;
         if (fread(&seg.tool, sizeof(uint8_t), 1, f) != 1) break;
         if (fread(&seg.seamless, sizeof(uint8_t), 1, f) != 1) break;
