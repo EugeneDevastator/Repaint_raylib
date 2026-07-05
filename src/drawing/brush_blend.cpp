@@ -185,20 +185,10 @@ void BrushBlend_ApplyStamp(
     float squish   = fmaxf((float)brush.scale_y, 0.01f);
 
     if (pixelPerfect) {
-        float diam = radOut * 2.0f;
-        int roundedDiam = (int)(diam + 0.5f);
-        if (roundedDiam < 1) roundedDiam = 1;
-        if (roundedDiam % 2 == 0) {
-            stampX = roundf(stampX);
-            stampY = roundf(stampY);
-            srcX   = roundf(srcX);
-            srcY   = roundf(srcY);
-        } else {
-            stampX = roundf(stampX - 0.5f) + 0.5f;
-            stampY = roundf(stampY - 0.5f) + 0.5f;
-            srcX   = roundf(srcX - 0.5f) + 0.5f;
-            srcY   = roundf(srcY - 0.5f) + 0.5f;
-        }
+        stampX = roundf(stampX);
+        stampY = roundf(stampY);
+        srcX   = roundf(srcX);
+        srcY   = roundf(srcY);
     }
 
     if (fabsf(brush.focalOffset) > 0.0001f && radOut > 0.001f) {
@@ -320,7 +310,18 @@ void BrushBlend_ApplyStamp(
     SetShaderValue(brushBlendShader, locBlitOrigin, bo, SHADER_UNIFORM_VEC2);
     SetShaderValue(brushBlendShader, locBlitSize,   bs, SHADER_UNIFORM_VEC2);
     float fs[2] = { x0 - (float)ix0, y0 - (float)iy0 };
-    if (pixelPerfect) { fs[0] = fs[1] = 0.0f; }
+    if (pixelPerfect) {
+        float diam = radOut * 2.0f;
+        int roundedDiam = (int)(diam + 0.5f);
+        if (roundedDiam < 1) roundedDiam = 1;
+        printf("[PP] radOut=%.3f diam=%.3f rounded=%d %s\n",
+            radOut, diam, roundedDiam,
+            (roundedDiam % 2 == 1) ? "ODD->fs=0.5" : "EVEN");
+        if (roundedDiam % 2 == 1) {
+            fs[0] = 0.5f;
+            fs[1] = 0.5f;
+        }
+    }
     SetShaderValue(brushBlendShader, locFracShift,  fs, SHADER_UNIFORM_VEC2);
 
     float pwr = brush.pwr;
@@ -337,7 +338,6 @@ void BrushBlend_ApplyStamp(
         SetTextureWrap(dstRT.texture, TEXTURE_WRAP_CLAMP);
 
     // Render stamp to intermediate RT
-    SetTextureFilter(intermediateRT->texture, TEXTURE_FILTER_POINT);
     BeginTextureMode(*intermediateRT);
     rlSetBlendMode(RL_BLEND_CUSTOM);
     rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
@@ -376,6 +376,12 @@ void BrushBlend_ApplyStamp(
     BeginTextureMode(dstRT);
     rlSetBlendMode(RL_BLEND_CUSTOM);
     rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+
+    if (pixelPerfect) {
+        glBindTexture(GL_TEXTURE_2D, intermediateRT->texture.id);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    }
 
     if (seamless) {
         for (int dy = -1; dy <= 1; dy++) {

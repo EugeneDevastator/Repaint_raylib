@@ -145,7 +145,7 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex, bool us
     seed.smudgeSrcX = cx;
     seed.smudgeSrcY = cy;
     seed.initAngle = initialAngle;
-    DrawSegment(seed, dstRT, brushTex, useTexture, seed.seamless != 0, 0, false);
+    DrawSegment(seed, dstRT, brushTex, useTexture, seed.seamless != 0, 0, g_pixelPerfect);
 
     // Path segment with a curve so per-dab rotation modulation is visible
     Vector2 start = {cx, cy};
@@ -165,5 +165,5 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex, bool us
     s.smudgeSrcX = cx;
     s.smudgeSrcY = cy;
     s.initAngle = initialAngle;
-    DrawSegment(s, dstRT, brushTex, useTexture, s.seamless != 0, 0);
+    DrawSegment(s, dstRT, brushTex, useTexture, s.seamless != 0, 0, g_pixelPerfect);
 }
