@@ -47,6 +47,7 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
         SetupBrushContext(e.brush, e.toolMode, e.initAngle);
         CollapsedBrush cb = GetCollapsedBrush(g_modPars.Pars);
         cb.rad_out_px *= m_worldToTexPx;
+        cb.jitRadOut  *= m_worldToTexPx;
         SegmentData dseg;
         memset(&dseg, 0, sizeof(dseg));
         dseg.pos1 = dseg.pos2 = start;
@@ -94,12 +95,18 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
     m_prevSegLen = segLen;
 
     SetupBrushContext(m_brushFrom, toolMode, initAngle);
-    CollapsedBrush cbFrom = GetCollapsedBrush(g_modPars.Pars);
+    float neutralMods[csSTOP];
+    for (int i = 0; i < csSTOP; i++) neutralMods[i] = 1.0f;
+    neutralMods[csDir] = neutralMods[csIdir] = neutralMods[csCrv] = 0.5f;
+    neutralMods[csHVdir] = neutralMods[csRelang] = 0.5f;
+    CollapsedBrush cbFrom = GetCollapsedBrush(neutralMods);
     cbFrom.rad_out_px *= m_worldToTexPx;
+    cbFrom.jitRadOut  *= m_worldToTexPx;
 
     SetupBrushContext(brush, toolMode, initAngle);
     CollapsedBrush cbTo = GetCollapsedBrush(g_modPars.Pars);
     cbTo.rad_out_px *= m_worldToTexPx;
+    cbTo.jitRadOut  *= m_worldToTexPx;
 
     // Rebase ctrl0 from p1 to m_lastDabPos, and ctrl3 from p2 to the actual
     // segment end, rescaling both handle lengths to the actual segment length.
