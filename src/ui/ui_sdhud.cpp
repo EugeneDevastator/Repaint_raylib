@@ -47,6 +47,10 @@ static uint8_t*           g_resultPng = nullptr;
 static size_t             g_resultSize = 0;
 static char               g_progressMsg[256] = "";
 
+// Snapshot of g_sdXform at request time (result uses this, not current handles)
+static RectXform          g_resultXform = {};
+static bool               g_placeAtCrop = false;
+
 // ── Input preview (composited layers inside g_sdXform area) ───────────
 static RenderTexture2D g_inputPreview = {0};
 static bool            g_previewDirty = true;
@@ -363,6 +367,7 @@ void SDHudModule::DrawGUI(const DrawRect& rect) {
             uint8_t* src_png_data = ExportImageToMemory(cap, ".png", &tmp_size);
             size_t src_png_size = (size_t)tmp_size; UnloadImage(cap);
             char* pc = strdup(g_prompt);
+            g_resultXform = g_sdXform; g_placeAtCrop = true;
             g_running = true; g_threadDone = false; g_progressMsg[0] = '\0';
             std::thread t(sd_worker, pc, g_strength, g_guidance, g_steps, pw, ph, src_png_data, src_png_size); t.detach();
         }
@@ -384,7 +389,13 @@ void SDHudModule::DrawGUI(const DrawRect& rect) {
             if (img.data) {
                 int newIdx = ViewportManager_CreateLayerFromImage(img);
                 if (newIdx >= 0) {
+                    if (g_placeAtCrop) {
+                        sLayerProps* lp = LayerStack_GetProps(newIdx);
+                        lp->xform = g_resultXform;
+                        g_placeAtCrop = false;
+                    }
                     state->activeLayer = newIdx;
+                    g_previewDirty = true;
                     layersDirty = true;
                 }
             }
