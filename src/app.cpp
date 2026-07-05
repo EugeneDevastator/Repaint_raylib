@@ -305,7 +305,7 @@ void UpdateUI(AppState* state) {
     state->currentBrush.Realb.resangle = fmodf(state->initialAngle + GetModVal(&bpAngle), 360.0f);
     state->currentBrush.Realb.x2y      = GetModVal(&bpScaleRel);
 
-    float sizeMulFactor = powf(16.0f, BParam_GetValue(&bpSizeMul) / 128.0f - 1.0f);
+    float sizeMulFactor = powf(5.0f, BParam_GetValue(&bpSizeMul) / 128.0f - 1.0f);
     state->currentBrush.Realb.rad_out *= sizeMulFactor;
 
     state->currentBrush.Realb.cop = (state->mode == eSmudge)

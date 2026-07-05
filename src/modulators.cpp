@@ -131,7 +131,7 @@ void Modulators_Init(void) {
     BParam_SetIcon(&bpScaleRel, "ctlscalerel");
 
     BParam_Init(&bpSizeMul, 42, "SizeMul", 0.0f, 256.0f, 128.0f);
-    strncpy(bpSizeMul.tooltip, "Size multiplier: 0=÷16, 128=×1, 256=×16", sizeof(bpSizeMul.tooltip) - 1);
+    strncpy(bpSizeMul.tooltip, "Size multiplier: 0=÷5, 128=×1, 256=×5", sizeof(bpSizeMul.tooltip) - 1);
     BParam_SetIcon(&bpSizeMul, "ctlradmul");
 
     BParam_Init(&bpPower, 43, "Power", 0.0f, 1.0f, 0.0f);

@@ -38,7 +38,7 @@ static int locURadIn  = -1, locUCurve = -1;
 static int locFocalOffset = -1;
 static bool inited = false;
 
-#define POOL_COUNT 64
+#define POOL_COUNT 128
 static RenderTexture2D intermediatePool[POOL_COUNT] = {0};
 static Texture2D whiteTex = {0};
 
@@ -199,7 +199,7 @@ void BrushBlend_ApplyStamp(
     int sz = (int)ceilf(bboxHalf * 2.0f);
     if (sz < 4) sz = 4;
     int bucket = next_mult32(sz);
-    if (bucket > 2048) bucket = 2048;
+    if (bucket > 4096) bucket = 4096;
     int drawSz = bucket;
 
     float stampSizePx = (float)drawSz;
