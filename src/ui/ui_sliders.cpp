@@ -236,36 +236,41 @@ static void SliderInteraction(const ImRect& bb, int orient, BParam* bp) {
     if (ImGui::IsItemActive()) {
         ImVec2 mp = ImGui::GetMousePos();
         float v;
-        // Relative coordinates based on orientation
         float mside  = (orient == 0) ? mp.x  : mp.y;
         float mperp  = (orient == 0) ? mp.y  : mp.x;
         float bbMinS = (orient == 0) ? bb.Min.x : bb.Min.y;
         float bbMaxS = (orient == 0) ? bb.Max.x : bb.Max.y;
         float bbMinP = (orient == 0) ? bb.Min.y : bb.Min.x;
         float bbMaxP = (orient == 0) ? bb.Max.y : bb.Max.x;
-        bool  flip   = (orient != 0); // vertical slider is inverted
+        bool  flip   = (orient != 0);
 
         float bs = bbMaxS - bbMinS;
 
         if (SLIDER_IS_ALT_PRECISE_MODE) {
             bool inside2d = (mside >= bbMinS && mside <= bbMaxS &&
                              mperp >= bbMinP && mperp <= bbMaxP);
-            if (inside2d)
+            if (inside2d) {
                 v = (mside - bbMinS) / bs;
-            else {
-                if (mperp < bbMinP) // snap (orient==0: above, orient==1: left)
-                    v = roundf((mside - bbMinS) / bs * 10.0f) / 10.0f;
-                else { // precise
-                    float extA = bbMinS - bs * 0.5f;
-                    float extB = bbMaxS + bs * 0.5f;
-                    v = (mside - extA) / (extB - extA);
-                }
+            } else if (mperp < bbMinP) {
+                // snap side: expand section upward, then snap to 10%
+                float dist = bbMinP - mperp;
+                float extA = bbMinS - dist * 0.5f;
+                float extB = bbMaxS + dist * 0.5f;
+                v = roundf((mside - extA) / (extB - extA) * 10.0f) / 10.0f;
+            } else {
+                // precise side: expand section downward
+                float dist = mperp - bbMaxP;
+                float extA = bbMinS - dist * 0.5f;
+                float extB = bbMaxS + dist * 0.5f;
+                v = (mside - extA) / (extB - extA);
             }
         } else {
             v = (mside - bbMinS) / bs;
         }
 
         if (flip) v = 1.0f - v;
+
+
 
         v = fminf(fmaxf(v, 0.0f), 1.0f);
         if (ImGui::IsMouseDown(0))
