@@ -176,19 +176,15 @@ static void RecomputeCorners() {
     g_warpDirty = true;
 }
 
+// ── Forward declarations ──────────────────────────────────────────────
+
+static void GetCoeffs(Vector2 pt, Vector2 center, Vector2 axA, Vector2 axB, float& sA, float& sB);
+
 // ── Init scalars from corner/axis positions ──────────────────────────
 
 static void InitScalars() {
-    Vector2 uL = Dir(g_center, g_left);
-    Vector2 uR = Dir(g_center, g_right);
-    Vector2 uT = Dir(g_center, g_top);
-    Vector2 uB = Dir(g_center, g_bottom);
-    Vector2 t = Sub2(g_corners[0], g_center); // TL - C
-    g_sa = Dot2(t, uL);
-    g_sb = Dot2(t, uT);
-    t = Sub2(g_corners[2], g_center); // BR - C
-    g_sc = Dot2(t, uR);
-    g_sd = Dot2(t, uB);
+    GetCoeffs(g_corners[0], g_center, g_left, g_top, g_sa, g_sb);
+    GetCoeffs(g_corners[2], g_center, g_right, g_bottom, g_sc, g_sd);
     RecomputeCorners();
 }
 
@@ -209,6 +205,17 @@ static void ResetModel() {
     g_corners[3]={mx,(float)ch-my};          // BL
     InitScalars();
     g_warpValid=true; g_warpDirty=true;
+}
+
+// ── Solve 2x2 to get linear combination coefficients ────────────────
+// pt = center + sA*uA + sB*uB  where uA = Dir(center, axA), uB = Dir(center, axB)
+static void GetCoeffs(Vector2 pt, Vector2 center, Vector2 axA, Vector2 axB, float& sA, float& sB) {
+    Vector2 v = Sub2(pt, center);
+    Vector2 uA = Dir(center, axA), uB = Dir(center, axB);
+    float det = uA.x*uB.y - uA.y*uB.x;
+    if (fabsf(det) < 0.0001f) { sA = Dot2(v,uA); sB = Dot2(v,uB); return; }
+    sA = (uB.y*v.x - uB.x*v.y) / det;
+    sB = (-uA.y*v.x + uA.x*v.y) / det;
 }
 
 // ── Project a point onto axis direction, return scalar ───────────────
@@ -341,8 +348,7 @@ bool WarpHudModule::HandleInput(InputState& input, const DrawRect& rect) {
     g_hoverWhich=(g_dragWhich>=0)?g_dragWhich:HitTest(mp,&state->camera);
 
     // --- start drag ---
-    // TR(6) and BL(8) are derived corners — not directly draggable
-    if(isDown&&g_dragWhich<0&&g_hoverWhich>=0 && g_hoverWhich!=6 && g_hoverWhich!=8){
+    if(isDown&&g_dragWhich<0&&g_hoverWhich>=0){
         g_dragWhich=g_hoverWhich;
         Vector2*pt=nullptr;
         if(g_dragWhich==0)pt=&g_center;
@@ -385,31 +391,33 @@ bool WarpHudModule::HandleInput(InputState& input, const DrawRect& rect) {
                 g_sd=GetScalar(np,g_center,g_bottom);
                 RecomputeCorners(); break;
             }
-            case 5:{ // TL — set corner, update scalars, constrain BL/TR
-                g_sa=GetScalar(np,g_center,g_left);
-                g_sb=GetScalar(np,g_center,g_top);
+            case 5:{ // TL — update scalars, constrain TR and BL, preserve BR
+                GetCoeffs(np,g_center,g_left,g_top,g_sa,g_sb);
                 g_corners[0]=np;
-                g_corners[3]=Intersect2(np,g_left,g_bottom,g_corners[2]);
-                g_corners[1]=Intersect2(np,g_top,g_right,g_corners[2]);
-                break;
+                g_corners[1]=Intersect2(np,g_top,g_right,g_corners[2]); // TR
+                g_corners[3]=Intersect2(np,g_left,g_bottom,g_corners[2]); // BL
+                g_warpDirty=true; break;
             }
-            case 6:{ // TR — derived corner, recompute via scalars
-                g_sb=GetScalar(np,g_center,g_top);
-                g_sc=GetScalar(np,g_center,g_right);
-                RecomputeCorners(); break;
+            case 6:{ // TR — update scalars, constrain TL and BR, preserve BL
+                GetCoeffs(np,g_center,g_right,g_top,g_sc,g_sb);
+                g_corners[1]=np;
+                g_corners[0]=Intersect2(np,g_top,g_left,g_corners[3]); // TL
+                g_corners[2]=Intersect2(np,g_right,g_bottom,g_corners[3]); // BR
+                g_warpDirty=true; break;
             }
-            case 7:{ // BR — set corner, update scalars, constrain BL/TR
-                g_sc=GetScalar(np,g_center,g_right);
-                g_sd=GetScalar(np,g_center,g_bottom);
+            case 7:{ // BR — update scalars, constrain TR and BL, preserve TL
+                GetCoeffs(np,g_center,g_right,g_bottom,g_sc,g_sd);
                 g_corners[2]=np;
-                g_corners[3]=Intersect2(g_corners[0],g_left,g_bottom,np);
-                g_corners[1]=Intersect2(g_corners[0],g_top,g_right,np);
-                break;
+                g_corners[1]=Intersect2(np,g_right,g_top,g_corners[0]); // TR
+                g_corners[3]=Intersect2(np,g_bottom,g_left,g_corners[0]); // BL
+                g_warpDirty=true; break;
             }
-            case 8:{ // BL — derived corner, recompute via scalars
-                g_sa=GetScalar(np,g_center,g_left);
-                g_sd=GetScalar(np,g_center,g_bottom);
-                RecomputeCorners(); break;
+            case 8:{ // BL — update scalars, constrain TL and BR, preserve TR
+                GetCoeffs(np,g_center,g_left,g_bottom,g_sa,g_sd);
+                g_corners[3]=np;
+                g_corners[0]=Intersect2(np,g_left,g_top,g_corners[1]); // TL
+                g_corners[2]=Intersect2(np,g_bottom,g_right,g_corners[1]); // BR
+                g_warpDirty=true; break;
             }
         }
         input.mouseCaptured=true;return false;
