@@ -269,7 +269,7 @@ bool LayerProps_Deserialize(sLayerProps* lp, uint8_t* buf, size_t len) {
 
 size_t Segment_Serialize(const SegmentData& seg, uint8_t* buf, size_t cap) {
     size_t need = sizeof(Vector2)*4 + sizeof(DabBrush)*2 + sizeof(uint16_t)
-                + sizeof(TexSlotID) + sizeof(uint8_t)*2 + sizeof(float)*2;
+                + sizeof(TexSlotID) + sizeof(uint8_t)*2 + sizeof(float)*3;
     if (cap < need) return 0;
     size_t off = 0;
     memcpy(buf + off, &seg.pos1, sizeof(Vector2)); off += sizeof(Vector2);
@@ -284,14 +284,17 @@ size_t Segment_Serialize(const SegmentData& seg, uint8_t* buf, size_t cap) {
     buf[off++] = seg.seamless;
     memcpy(buf + off, &seg.smudgeSrcX, sizeof(float)); off += sizeof(float);
     memcpy(buf + off, &seg.smudgeSrcY, sizeof(float)); off += sizeof(float);
+    memcpy(buf + off, &seg.ppBias, sizeof(float)); off += sizeof(float);
     return off;
 }
 
 bool Segment_Deserialize(SegmentData* seg, uint8_t* buf, size_t len) {
-    size_t need = sizeof(Vector2)*4 + sizeof(DabBrush)*2 + sizeof(uint16_t)
-                + sizeof(TexSlotID) + sizeof(uint8_t)*2 + sizeof(float)*2;
-    if (len < need) return false;
+    size_t baseNeed = sizeof(Vector2)*4 + sizeof(DabBrush)*2 + sizeof(uint16_t)
+                    + sizeof(TexSlotID) + sizeof(uint8_t)*2 + sizeof(float)*2;
+    size_t need = baseNeed + sizeof(float);
+    if (len < baseNeed) return false;
     size_t off = 0;
+    memset(seg, 0, sizeof(*seg));
     memcpy(&seg->pos1, buf + off, sizeof(Vector2)); off += sizeof(Vector2);
     memcpy(&seg->pos2, buf + off, sizeof(Vector2)); off += sizeof(Vector2);
     memcpy(&seg->ctrl0, buf + off, sizeof(Vector2)); off += sizeof(Vector2);
@@ -306,5 +309,10 @@ bool Segment_Deserialize(SegmentData* seg, uint8_t* buf, size_t len) {
     seg->dabOffset = 0;
     memcpy(&seg->smudgeSrcX, buf + off, sizeof(float)); off += sizeof(float);
     memcpy(&seg->smudgeSrcY, buf + off, sizeof(float)); off += sizeof(float);
+    if (len >= need) {
+        memcpy(&seg->ppBias, buf + off, sizeof(float)); off += sizeof(float);
+    } else {
+        seg->ppBias = -1.0f;
+    }
     return true;
 }

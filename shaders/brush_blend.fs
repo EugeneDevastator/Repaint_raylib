@@ -39,7 +39,6 @@ uniform float radOut;
 uniform vec2  stampCenter;
 uniform vec2  canvasSize;
 uniform float pwr;
-uniform int   eraseMode;
 uniform bool  uSeamless;
 uniform bool  uPixelPerfect;
 in vec2 canvasFragUV;
@@ -190,17 +189,6 @@ void main() {
 
     finalAlpha *= opacity;
     if (finalAlpha < 0.000000001) { finalColor = canvas; return; }
-
-    if (eraseMode == 1) {
-        float brushLum = dot(brushFinal, vec3(0.299, 0.587, 0.114));
-        float newA = mix(canvas.a, brushLum, finalAlpha);
-        finalColor = vec4(canvas.rgb, newA);
-        return;
-    } else if (eraseMode == 2) {
-        finalColor = applyBlend(MODE_ERASECLR, canvas, brushFinal, finalAlpha);
-        if (preserveop > 0.5) finalColor.a = canvas.a;
-        return;
-    }
 
     float cloneOpacity = smudgeStrength;
     if (cloneOpacity > 0.000001) {

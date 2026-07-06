@@ -203,6 +203,13 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex, bool us
     seed.seed = baseBrush->seed;
     seed.tool = eSingleStamp;
     seed.seamless = g_seamlessPaint ? 1 : 0;
+    seed.pixelPerfect = g_pixelPerfect ? 1 : 0;
+    if (g_pixelPerfect) {
+        float firstRad = cbFull.rad_out_px;
+        int d0 = (int)(firstRad * 2.0f + 0.5f);
+        if (d0 < 1) d0 = 1;
+        seed.ppBias = (d0 % 2 == 1) ? 0.5f : 0.0f;
+    }
     seed.smudgeSrcX = cx;
     seed.smudgeSrcY = cy;
     seed.initAngle = initialAngle;
@@ -222,6 +229,13 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex, bool us
     s.seed = baseBrush->seed;
     s.tool = (uint8_t)toolMode;
     s.seamless = g_seamlessPaint ? 1 : 0;
+    s.pixelPerfect = g_pixelPerfect ? 1 : 0;
+    if (g_pixelPerfect) {
+        float firstRad = cbFull.rad_out_px;
+        int d0 = (int)(firstRad * 2.0f + 0.5f);
+        if (d0 < 1) d0 = 1;
+        s.ppBias = (d0 % 2 == 1) ? 0.5f : 0.0f;
+    }
     s.smudgeSrcX = cx;
     s.smudgeSrcY = cy;
     s.initAngle = initialAngle;

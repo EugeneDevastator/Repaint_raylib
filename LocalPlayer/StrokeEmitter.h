@@ -14,6 +14,7 @@ public:
 
     Vector2 m_lastDabPos;
     float m_lastDabRad;
+    float m_ppBias = -1.0f;
     bool isFirstDabPainted = true;
 
     static const int DBG_SEG_PTS = 2048;

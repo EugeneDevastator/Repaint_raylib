@@ -26,6 +26,7 @@ static void ImportImage(Image img) {
     int w = img.width, h = img.height;
     int idx = LayerStack_Add(w, h);
     LayerStack_UploadToGPU(idx, img);
+    if (s_state) s_state->activeLayer = idx;
 }
 
 static void _updateWorkingDir(const char* path) {

@@ -22,6 +22,7 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
     m_brushFrom = e.brush;
     CaptureBrushConfig(&m_config);
     m_config.toolMode = e.toolMode;
+    m_config.bmidx = m_brushFrom.bmidx;
     m_emittedAny = false;
     m_seed = e.brush.seed;
     m_initAngle = e.initAngle;
@@ -47,6 +48,15 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
 
     m_modulated = ResolveModulatedConfig(m_config, e.toolMode, e.initAngle, g_modPars.Pars);
 
+    // Pixel-perfect: lock radius parity for entire stroke
+    m_ppBias = -1.0f;
+    if (g_pixelPerfect) {
+        float firstRadPx = m_modulated.radOut * e.worldToTexPx;
+        int d0 = (int)(firstRadPx * 2.0f + 0.5f);
+        if (d0 < 1) d0 = 1;
+        m_ppBias = (d0 % 2 == 1) ? 0.5f : 0.0f;
+    }
+
     if (isFirstDabPainted) {
         DabBrush cb = MakeDabBrush(m_modulated, m_brushFrom.rad_out);
         SegmentData dseg;
@@ -57,6 +67,7 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
         dseg.tool     = eSingleStamp;
         dseg.seamless = g_seamlessPaint ? 1 : 0;
         dseg.pixelPerfect = g_pixelPerfect ? 1 : 0;
+        dseg.ppBias   = m_ppBias;
         dseg.seed     = e.brush.seed;
         dseg.smudgeSrcX = start.x;
         dseg.smudgeSrcY = start.y;
@@ -130,6 +141,7 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
     dseg.tool      = (uint8_t)toolMode;
     dseg.seamless  = g_seamlessPaint ? 1 : 0;
     dseg.pixelPerfect = g_pixelPerfect ? 1 : 0;
+    dseg.ppBias    = m_ppBias;
     dseg.seed      = m_seed;
     dseg.smudgeSrcX = m_lastDabPos.x;
     dseg.smudgeSrcY = m_lastDabPos.y;
@@ -289,6 +301,7 @@ void StrokeEmitter::handleEnd() {
         dseg.tool = eSingleStamp;
         dseg.seamless = g_seamlessPaint ? 1 : 0;
         dseg.pixelPerfect = g_pixelPerfect ? 1 : 0;
+        dseg.ppBias   = m_ppBias;
         dseg.seed = m_seed;
         dseg.smudgeSrcX = m_lastDabPos.x;
         dseg.smudgeSrcY = m_lastDabPos.y;
@@ -316,6 +329,7 @@ void StrokeEmitter::handleEnd() {
     m_active = false;
     m_splineCount = 0;
     m_processedCount = 0;
+    m_ppBias = -1.0f;
 }
 
 void StrokeEmitter::ProcessInputQueue() {

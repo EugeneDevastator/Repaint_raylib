@@ -29,7 +29,6 @@ static int locBlitOrigin = -1;
 static int locBlitSize   = -1;
 static int locFracShift  = -1;
 static int locPwr = -1;
-static int locEraseMode = -1;
 static int locSeamless = -1;
 static int locPixelPerfect = -1;
 static int locUAngle  = -1, locUSquish = -1, locUSize = -1;
@@ -137,7 +136,6 @@ void BrushBlend_Init(void) {
     locBlitSize       = GetShaderLocation(brushBlendShader, "blitSize");
     locFracShift      = GetShaderLocation(brushBlendShader, "fracShift");
     locPwr            = GetShaderLocation(brushBlendShader, "pwr");
-    locEraseMode      = GetShaderLocation(brushBlendShader, "eraseMode");
     locSeamless       = GetShaderLocation(brushBlendShader, "uSeamless");
     locPixelPerfect   = GetShaderLocation(brushBlendShader, "uPixelPerfect");
     locUAngle         = GetShaderLocation(brushBlendShader, "uAngle");
@@ -184,11 +182,12 @@ void BrushBlend_ApplyStamp(
     float angleRad = (float)brush.resangle * (3.14159265f / 180.0f);
     float squish   = fmaxf((float)brush.scale_y, 0.01f);
 
+    int ppRoundedDiam = 0;
     if (pixelPerfect) {
         float diam = radOut * 2.0f;
-        int roundedDiam = (int)(diam + 0.5f);
-        if (roundedDiam < 1) roundedDiam = 1;
-        if (roundedDiam % 2 == 1) {
+        ppRoundedDiam = (int)(diam + 0.5f);
+        if (ppRoundedDiam < 1) ppRoundedDiam = 1;
+        if (ppRoundedDiam % 2 == 1) {
             stampX = floorf(stampX);
             stampY = floorf(stampY);
             srcX   = floorf(srcX);
@@ -333,9 +332,6 @@ void BrushBlend_ApplyStamp(
 
     float pwr = brush.pwr;
     SetShaderValue(brushBlendShader, locPwr, &pwr, SHADER_UNIFORM_FLOAT);
-
-    int eraseMode = brush.eraseMode;
-    SetShaderValue(brushBlendShader, locEraseMode, &eraseMode, SHADER_UNIFORM_INT);
 
     // Set dstRT.texture wrap for shader reads
     SetTextureFilter(dstRT.texture, TEXTURE_FILTER_POINT);

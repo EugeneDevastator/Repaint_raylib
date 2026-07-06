@@ -355,6 +355,14 @@ int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
 
         JitterBrush(dabCB, seg.brushFrom.baseSeed, dabOffset + count);
 
+        // Pixel-perfect: lock radius parity (bias set per-stroke in emitter)
+        if (seg.pixelPerfect && seg.ppBias >= 0.0f) {
+            float r = fmaxf(0.5f, dabCB.rad_out_px);
+            int ip = (int)r;
+            if (seg.ppBias == 0.0f && ip < 1) ip = 1;
+            dabCB.rad_out_px = (float)ip + seg.ppBias;
+        }
+
         if (outPoints) {
             outPoints[count].x = pos.x;
             outPoints[count].y = pos.y;
@@ -401,6 +409,7 @@ void DrawSegment(const SegmentData& dseg, RenderTexture2D rt, Texture2D brushTex
     static DabPoint pts[65536];
     SegResult r;
     int cnt = DrawLinear(dseg, dabOffset, 0.0f, pts, 65536, &r);
+
     for (int i = 0; i < cnt; i++)
         BrushBlend_ApplyStamp(rt, pts[i].brush, brushTex, useTexture,
                               pts[i].x, pts[i].y, pts[i].srcX, pts[i].srcY,

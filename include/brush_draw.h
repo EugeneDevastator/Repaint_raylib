@@ -111,6 +111,7 @@ struct SegmentData {
     DabBrush brushFrom, brush;
     uint8_t tool, seamless, pixelPerfect, isStrokeStart;
     uint16_t seed;
+    float ppBias;          // pixel-perfect parity bias (-1=unused, 0=even, 0.5=odd)
     float smudgeSrcX, smudgeSrcY;
     TexSlotID targetSlot;
     uint8_t userTexBucket;
