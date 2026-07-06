@@ -5,7 +5,7 @@
 #include <stdio.h>
 
 #define RPL_MAGIC "RPLREP"
-#define RPL_VER 6
+#define RPL_VER 7
 
 void ReplayRecorder::on_segment(const SegmentData& seg) {
     if (m_playing) return;
@@ -105,6 +105,7 @@ bool ReplayRecorder::Save(const char* path) {
         fwrite(&seg.tool, sizeof(uint8_t), 1, f);
         fwrite(&seg.seamless, sizeof(uint8_t), 1, f);
         fwrite(&seg.pixelPerfect, sizeof(uint8_t), 1, f);
+        fwrite(&seg.ppBias, sizeof(float), 1, f);
         fwrite(&seg.smudgeSrcX, sizeof(float), 1, f);
         fwrite(&seg.smudgeSrcY, sizeof(float), 1, f);
     }
@@ -153,6 +154,11 @@ bool ReplayRecorder::Load(const char* path) {
             if (fread(&seg.pixelPerfect, sizeof(uint8_t), 1, f) != 1) break;
         } else {
             seg.pixelPerfect = 0;
+        }
+        if (ver >= 7) {
+            if (fread(&seg.ppBias, sizeof(float), 1, f) != 1) break;
+        } else {
+            seg.ppBias = -1.0f;
         }
         if (fread(&seg.smudgeSrcX, sizeof(float), 1, f) != 1) break;
         if (fread(&seg.smudgeSrcY, sizeof(float), 1, f) != 1) break;

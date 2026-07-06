@@ -34,23 +34,6 @@ int StrokeThrottle::DrawPending(AppState* state) {
             SegResult r;
             m_dabCount = DrawLinear(seg, 0, 0.0f, m_dabBuf, DAB_CAP, &r);
 
-            // Pixel-perfect: lock radius parity for entire stroke
-            if (seg.isStrokeStart) m_ppBias = -1.0f;
-            if (m_pixelPerfect && m_dabCount > 0) {
-                if (m_ppBias < 0.0f) {
-                    float r0 = fmaxf(0.5f, m_dabBuf[0].brush.rad_out_px);
-                    int d0 = (int)(r0 * 2.0f + 0.5f);
-                    if (d0 < 1) d0 = 1;
-                    m_ppBias = (d0 % 2 == 1) ? 0.5f : 0.0f;
-                }
-                for (int i = 0; i < m_dabCount; i++) {
-                    float r = fmaxf(0.5f, m_dabBuf[i].brush.rad_out_px);
-                    int ip = (int)r;
-                    if (m_ppBias == 0.0f && ip < 1) ip = 1;
-                    m_dabBuf[i].brush.rad_out_px = (float)ip + m_ppBias;
-                }
-            }
-
             if (m_dabCount > 0) {
                 if (!m_hasPrevAngle)
                     m_dabBuf[0].srcAngle = m_dabBuf[0].brush.resangle;
