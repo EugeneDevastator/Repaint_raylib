@@ -27,6 +27,7 @@ private:
 
     float m_lastSegEndAngle = 0.0f;
     bool  m_hasPrevAngle = false;
+    float m_ppBias = -1.0f;
 
     int m_dynamicBudget = 2 * 1024 * 1024;
     int m_minBudget = 10000;

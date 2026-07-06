@@ -184,11 +184,12 @@ void BrushBlend_ApplyStamp(
     float angleRad = (float)brush.resangle * (3.14159265f / 180.0f);
     float squish   = fmaxf((float)brush.scale_y, 0.01f);
 
+    int ppRoundedDiam = 0;
     if (pixelPerfect) {
         float diam = radOut * 2.0f;
-        int roundedDiam = (int)(diam + 0.5f);
-        if (roundedDiam < 1) roundedDiam = 1;
-        if (roundedDiam % 2 == 1) {
+        ppRoundedDiam = (int)(diam + 0.5f);
+        if (ppRoundedDiam < 1) ppRoundedDiam = 1;
+        if (ppRoundedDiam % 2 == 1) {
             stampX = floorf(stampX);
             stampY = floorf(stampY);
             srcX   = floorf(srcX);
