@@ -4,6 +4,7 @@
 #include "tablet.h"
 #include "platform_utils.h"
 #include "platform_clipboard.h"
+#include "transform_handle.h"
 #include <pthread.h>
 
 typedef struct GLFWwindow GLFWwindow;
@@ -57,6 +58,17 @@ int main() {
                 ? (ICommandBroker*)&g_testBroker
                 : (ICommandBroker*)&networkBroker;
             InputState input;
+
+            // KEY_R: repeat last transform — works globally regardless of mouse position
+            if (g_activeHud == HUD_LAYER_XFORM && state.activeLayer >= 0 &&
+                state.activeLayer < LayerStack_Count() && IsKeyPressed(KEY_R))
+            {
+                sLayerProps* lp = LayerStack_GetProps(state.activeLayer);
+                TransformHandle_RepeatLast(&lp->xform, Vector2{g_pivotCursorX, g_pivotCursorY});
+                layersDirty = true;
+                DisplayInfoText("Repeated transform");
+            }
+
             g_moduleStack.HandleInput(input);
         }
         App_Draw(&state);
