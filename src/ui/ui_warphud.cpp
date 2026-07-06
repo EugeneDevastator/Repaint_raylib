@@ -7,29 +7,23 @@
 #include "imgui.h"
 #include "external/glad.h"
 #include <math.h>
-#include <string.h>
 
 extern bool layersDirty;
 
-#define DEG2RAD_F 0.01745329252f
-
 // ── Model ─────────────────────────────────────────────────────────────
-// Hierarchy (strict, no circular):
-//   1. Center (C) — core. Nothing modifies it except direct drag.
-//   2. Axes (L,R,T,B) — always pass through C. Cannot move C.
-//   3. Corners — placed on rect sides. Cannot move C or axes.
+// 5-point perspective grid:
+//   1. Center (C) — maps to output texture center
+//   2. L/R (left/right midpoints, collinear with C) — map to output
+//      left/right side midpoints
+//   3. T/B (top/bottom midpoints, collinear with C) — map to output
+//      top/bottom side midpoints
 //
-// Axes: L/R collinear with C, T/B collinear with C.
-//   Dragging an axis endpoint rotates/stretches the line around C.
-//   The opposite endpoint projects onto the new line (keeps its distance).
+// Corners are computed from a DLT-solved homography that maps a local
+// unit frame (C=0,0, L=(-1,0), R=(1,0), T=(0,-1), B=(0,1)) to the
+// user's 5 screen points, then evaluated at (-1,-1),(1,-1),(1,1),(-1,1).
 //
-// Corners: each stored as 2 scalars along adjacent axis directions.
-//   TL = C + a*uL + b*uT   (stored: a,b)
-//   BR = C + c*uR + d*uB   (stored: c,d)
-//   TR = C + c*uR + b*uT   (computed from BR's c and TL's b)
-//   BL = C + a*uL + d*uB   (computed from TL's a and BR's d)
-// Dragging TL → updates a,b. Dragging BR → updates c,d.
-// Dragging TR → updates c,b. Dragging BL → updates a,d.
+// Axis drags → recompute corners from the 5-point perspective model.
+// Corner drags → store raw position; next axis drag recomputes it.
 
 static Vector2 g_center  = {0,0};
 static Vector2 g_left    = {0,0};
@@ -37,8 +31,6 @@ static Vector2 g_right   = {0,0};
 static Vector2 g_top     = {0,0};
 static Vector2 g_bottom  = {0,0};
 
-// Stored scalars (TL: a,b  BR: c,d). TR and BL computed.
-static float g_sa = 0, g_sb = 0, g_sc = 0, g_sd = 0;
 static Vector2 g_corners[4] = {{0,0},{0,0},{0,0},{0,0}};
 
 // Drag state: 0=C,1=L,2=R,3=T,4=B,5=TL,6=TR,7=BR,8=BL
@@ -145,47 +137,46 @@ static Vector2 Dir(Vector2 from, Vector2 to) {
     return Mul2(d, 1.0f/l);
 }
 
-// ── Line intersection helper ──────────────────────────────────────────
-
-static Vector2 Intersect2(Vector2 a1, Vector2 a2, Vector2 b1, Vector2 b2) {
-    // line A: a1 + t*(a2-a1),  line B: b1 + u*(b2-b1)
-    Vector2 da = Sub2(a2,a1), db = Sub2(b2,b1);
-    float det = da.x*db.y - da.y*db.x;
-    if (fabsf(det) < 0.0001f) return a1;  // parallel → fallback
-    float t = ((b1.x-a1.x)*db.y - (b1.y-a1.y)*db.x) / det;
-    return Add2(a1, Mul2(da, t));
-}
-
-// ── Recompute corners: TL/BR from stored scalars, BL/TR from constraint
-//     BL = intersection of edge(TL→L) with edge(B→BR)
-//     TR = intersection of edge(TL→T) with edge(R→BR)
-//     This ensures every edge passes through its axis endpoint.
+// ── Perspective corner computation from 5-point grid ─────────────────
+// Local unit frame:  C=(0,0)  L=(-1,0)  R=(1,0)  T=(0,-1)  B=(0,1)
+// A homography H maps local→screen. H is solved from the 5 correspondences
+// using DLT (h13=cx, h23=cy from C; h31,h32 averaged from L/R/T/B).
+// The 4 corners are H(-1,-1), H(1,-1), H(1,1), H(-1,1).
+// This guarantees C→texture center and midpoints→side midpoints.
 
 static void RecomputeCorners() {
-    Vector2 uL = Dir(g_center, g_left);
-    Vector2 uR = Dir(g_center, g_right);
-    Vector2 uT = Dir(g_center, g_top);
-    Vector2 uB = Dir(g_center, g_bottom);
-    // TL and BR from stored scalars
-    g_corners[0] = Add2(g_center, Add2(Mul2(uL,g_sa), Mul2(uT,g_sb))); // TL
-    g_corners[2] = Add2(g_center, Add2(Mul2(uR,g_sc), Mul2(uB,g_sd))); // BR
-    // BL from constraint: on line(TL,L) and line(B,BR)
-    g_corners[3] = Intersect2(g_corners[0], g_left, g_bottom, g_corners[2]);
-    // TR from constraint: on line(TL,T) and line(R,BR)
-    g_corners[1] = Intersect2(g_corners[0], g_top, g_right, g_corners[2]);
+    float cx=g_center.x, cy=g_center.y;
+    float lx=g_left.x, ly=g_left.y, rx=g_right.x, ry=g_right.y;
+    float tx=g_top.x, ty=g_top.y, bx=g_bottom.x, by=g_bottom.y;
+
+    float h31=0, h32=0;
+    // h31 from L/R (x and y constraints, averaged)
+    float drx = rx - lx, dry = ry - ly;
+    if (fabsf(drx) > 0.0001f && fabsf(dry) > 0.0001f)
+        h31 = ((2*cx-rx-lx)/drx + (2*cy-ry-ly)/dry) * 0.5f;
+    // h32 from T/B
+    float dtbx = tx - bx, dtby = ty - by;
+    if (fabsf(dtbx) > 0.0001f && fabsf(dtby) > 0.0001f)
+        h32 = ((bx+tx-2*cx)/dtbx + (by+ty-2*cy)/dtby) * 0.5f;
+
+    float h11 = cx - lx + h31*lx;
+    float h12 = cx - tx + h32*tx;
+    float h13 = cx;
+    float h21 = cy - ly + h31*ly;
+    float h22 = cy - ty + h32*ty;
+    float h23 = cy;
+
+    auto app = [&](float u, float v)->Vector2{
+        float w = h31*u + h32*v + 1;
+        if(fabsf(w)<0.0001f)return g_center;
+        return {(h11*u+h12*v+h13)/w, (h21*u+h22*v+h23)/w};
+    };
+
+    g_corners[0] = app(-1,-1); // TL
+    g_corners[1] = app( 1,-1); // TR
+    g_corners[2] = app( 1, 1); // BR
+    g_corners[3] = app(-1, 1); // BL
     g_warpDirty = true;
-}
-
-// ── Forward declarations ──────────────────────────────────────────────
-
-static void GetCoeffs(Vector2 pt, Vector2 center, Vector2 axA, Vector2 axB, float& sA, float& sB);
-
-// ── Init scalars from corner/axis positions ──────────────────────────
-
-static void InitScalars() {
-    GetCoeffs(g_corners[0], g_center, g_left, g_top, g_sa, g_sb);
-    GetCoeffs(g_corners[2], g_center, g_right, g_bottom, g_sc, g_sd);
-    RecomputeCorners();
 }
 
 // ── Reset ────────────────────────────────────────────────────────────
@@ -203,19 +194,8 @@ static void ResetModel() {
     g_corners[1]={(float)cw-mx,my};          // TR
     g_corners[2]={(float)cw-mx,(float)ch-my};// BR
     g_corners[3]={mx,(float)ch-my};          // BL
-    InitScalars();
+    RecomputeCorners();
     g_warpValid=true; g_warpDirty=true;
-}
-
-// ── Solve 2x2 to get linear combination coefficients ────────────────
-// pt = center + sA*uA + sB*uB  where uA = Dir(center, axA), uB = Dir(center, axB)
-static void GetCoeffs(Vector2 pt, Vector2 center, Vector2 axA, Vector2 axB, float& sA, float& sB) {
-    Vector2 v = Sub2(pt, center);
-    Vector2 uA = Dir(center, axA), uB = Dir(center, axB);
-    float det = uA.x*uB.y - uA.y*uB.x;
-    if (fabsf(det) < 0.0001f) { sA = Dot2(v,uA); sB = Dot2(v,uB); return; }
-    sA = (uB.y*v.x - uB.x*v.y) / det;
-    sB = (-uA.y*v.x + uA.x*v.y) / det;
 }
 
 // ── Project a point onto axis direction, return scalar ───────────────
@@ -429,54 +409,22 @@ bool WarpHudModule::HandleInput(InputState& input, const DrawRect& rect) {
                 g_top=Add2(g_top,d); g_bottom=Add2(g_bottom,d);
                 RecomputeCorners(); break;
             }
-            case 1:{ // left — update scalar a to keep L on left edge
-                g_left=np; RecalcRight();
-                g_sa=GetScalar(np,g_center,g_left);
-                RecomputeCorners(); break;
+            case 1:{ // left — rotate axis, recompute corners
+                g_left=np; RecalcRight(); RecomputeCorners(); break;
             }
-            case 2:{ // right — update scalar c
-                g_right=np; RecalcLeft();
-                g_sc=GetScalar(np,g_center,g_right);
-                RecomputeCorners(); break;
+            case 2:{ // right
+                g_right=np; RecalcLeft(); RecomputeCorners(); break;
             }
-            case 3:{ // top — update scalar b
-                g_top=np; RecalcBottom();
-                g_sb=GetScalar(np,g_center,g_top);
-                RecomputeCorners(); break;
+            case 3:{ // top
+                g_top=np; RecalcBottom(); RecomputeCorners(); break;
             }
-            case 4:{ // bottom — update scalar d
-                g_bottom=np; RecalcTop();
-                g_sd=GetScalar(np,g_center,g_bottom);
-                RecomputeCorners(); break;
+            case 4:{ // bottom
+                g_bottom=np; RecalcTop(); RecomputeCorners(); break;
             }
-            case 5:{ // TL — update scalars, constrain TR and BL, preserve BR
-                GetCoeffs(np,g_center,g_left,g_top,g_sa,g_sb);
-                g_corners[0]=np;
-                g_corners[1]=Intersect2(np,g_top,g_right,g_corners[2]); // TR
-                g_corners[3]=Intersect2(np,g_left,g_bottom,g_corners[2]); // BL
-                g_warpDirty=true; break;
-            }
-            case 6:{ // TR — update scalars, constrain TL and BR, preserve BL
-                GetCoeffs(np,g_center,g_right,g_top,g_sc,g_sb);
-                g_corners[1]=np;
-                g_corners[0]=Intersect2(np,g_top,g_left,g_corners[3]); // TL
-                g_corners[2]=Intersect2(np,g_right,g_bottom,g_corners[3]); // BR
-                g_warpDirty=true; break;
-            }
-            case 7:{ // BR — update scalars, constrain TR and BL, preserve TL
-                GetCoeffs(np,g_center,g_right,g_bottom,g_sc,g_sd);
-                g_corners[2]=np;
-                g_corners[1]=Intersect2(np,g_right,g_top,g_corners[0]); // TR
-                g_corners[3]=Intersect2(np,g_bottom,g_left,g_corners[0]); // BL
-                g_warpDirty=true; break;
-            }
-            case 8:{ // BL — update scalars, constrain TL and BR, preserve TR
-                GetCoeffs(np,g_center,g_left,g_bottom,g_sa,g_sd);
-                g_corners[3]=np;
-                g_corners[0]=Intersect2(np,g_left,g_top,g_corners[1]); // TL
-                g_corners[2]=Intersect2(np,g_bottom,g_right,g_corners[1]); // BR
-                g_warpDirty=true; break;
-            }
+            case 5: g_corners[0]=np; g_warpDirty=true; break; // TL
+            case 6: g_corners[1]=np; g_warpDirty=true; break; // TR
+            case 7: g_corners[2]=np; g_warpDirty=true; break; // BR
+            case 8: g_corners[3]=np; g_warpDirty=true; break; // BL
         }
         input.mouseCaptured=true;return false;
     }
