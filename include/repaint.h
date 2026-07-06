@@ -248,6 +248,7 @@ extern int g_texPanelAreaY; // y-coordinate for the texture panel in the Quick H
 #define HUD_CANVAS_XFORM 3
 #define HUD_NN 4
 #define HUD_SD 5
+#define HUD_WARP 6
 extern int g_activeHud;
 #include "info_text.h"
 
@@ -416,6 +417,16 @@ struct SDHudModule : IModule {
     bool HandleInput(InputState& input, const DrawRect& rect) override;
     void DrawGL(const DrawRect& rect) override;
     void DrawGUI(const DrawRect& rect) override;
+};
+
+struct WarpHudModule : IModule {
+    AppState* state;
+    explicit WarpHudModule(AppState* s) : state(s) {}
+    const char* Name() const override { return "WarpHud"; }
+    bool HandleInput(InputState& input, const DrawRect& rect) override;
+    void DrawGL(const DrawRect& rect) override;
+    void DrawGUI(const DrawRect& rect) override;
+    void OnExit() override;
 };
 
 struct PaintHudModule : IModule {

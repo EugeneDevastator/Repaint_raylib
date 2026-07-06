@@ -111,6 +111,7 @@ set(SOURCES
     src/ui/ui_quickhud.cpp
     src/ui/ui_nnhud.cpp
     src/ui/ui_sdhud.cpp
+    src/ui/ui_warphud.cpp
     src/ui/ui_painthud.cpp
     src/ui/ui_layerxform.cpp
     src/ui/ui_canvasxform.cpp
