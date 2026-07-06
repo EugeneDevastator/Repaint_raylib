@@ -339,9 +339,11 @@ static void AcceptWarp(AppState* state) {
     UnloadRenderTexture(rt);
     if(!img.data){printf("[WARP] Accept readback failed\n");return;}
     ImageFlipVertical(&img);
+    // ViewportManager_CreateLayerFromImage takes ownership of img.data
+    // (it calls UnloadImage internally). DO NOT call UnloadImage again.
     int nl=ViewportManager_CreateLayerFromImage(img);
     if(nl>=0){state->activeLayer=nl;layersDirty=true;}
-    UnloadImage(img);
+    // img.data was consumed — do not unload here
     HudSetActive(state,HUD_NONE);
 }
 
