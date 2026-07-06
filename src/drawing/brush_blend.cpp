@@ -29,7 +29,6 @@ static int locBlitOrigin = -1;
 static int locBlitSize   = -1;
 static int locFracShift  = -1;
 static int locPwr = -1;
-static int locEraseMode = -1;
 static int locSeamless = -1;
 static int locPixelPerfect = -1;
 static int locUAngle  = -1, locUSquish = -1, locUSize = -1;
@@ -137,7 +136,6 @@ void BrushBlend_Init(void) {
     locBlitSize       = GetShaderLocation(brushBlendShader, "blitSize");
     locFracShift      = GetShaderLocation(brushBlendShader, "fracShift");
     locPwr            = GetShaderLocation(brushBlendShader, "pwr");
-    locEraseMode      = GetShaderLocation(brushBlendShader, "eraseMode");
     locSeamless       = GetShaderLocation(brushBlendShader, "uSeamless");
     locPixelPerfect   = GetShaderLocation(brushBlendShader, "uPixelPerfect");
     locUAngle         = GetShaderLocation(brushBlendShader, "uAngle");
@@ -334,9 +332,6 @@ void BrushBlend_ApplyStamp(
 
     float pwr = brush.pwr;
     SetShaderValue(brushBlendShader, locPwr, &pwr, SHADER_UNIFORM_FLOAT);
-
-    int eraseMode = brush.eraseMode;
-    SetShaderValue(brushBlendShader, locEraseMode, &eraseMode, SHADER_UNIFORM_INT);
 
     // Set dstRT.texture wrap for shader reads
     SetTextureFilter(dstRT.texture, TEXTURE_FILTER_POINT);
