@@ -48,8 +48,7 @@ static int    g_hoverWhich = -1;
 
 static RenderTexture2D g_warpRT = {0};
 static int g_warpW = 0, g_warpH = 0;
-static float g_topSqueeze = 1.0f;
-static float g_topTilt = 0.0f;
+static float g_aspectRatio = 1.0f;
 static bool g_warpValid = false;
 static bool g_warpDirty = true;
 static bool g_needReset = true;
@@ -126,14 +125,15 @@ static void CornersBbox(const Vector2 c[4], float* ox,float* oy,float* bw,float*
     *ox=mnx;*oy=mny;*bw=mxx-mnx;*bh=mxy-mny;
 }
 
-static void ComputeDestCorners(const Vector2 src[4], Vector2 dst[4], float squeeze,float tiltDeg) {
+static void ComputeDestCorners(const Vector2 src[4], Vector2 dst[4], float aspectRatio) {
     float ox,oy,bw,bh; CornersBbox(src,&ox,&oy,&bw,&bh);
-    float midX=ox+bw*.5f,topY=oy,botY=oy+bh;
-    float topHalf=bw*squeeze*.5f,tiltRad=tiltDeg*DEG2RAD_F;
-    float ct=cosf(tiltRad),st=sinf(tiltRad),lx=midX-topHalf,rx=midX+topHalf;
-    dst[0]={midX+(lx-midX)*ct,topY+(lx-midX)*st};
-    dst[1]={midX+(rx-midX)*ct,topY+(rx-midX)*st};
-    dst[2]={ox+bw,botY};dst[3]={ox,botY};
+    float cx=ox+bw*0.5f, cy=oy+bh*0.5f;
+    float outH=bh;
+    float outW=bh*aspectRatio;
+    dst[0]={cx-outW*0.5f, cy-outH*0.5f};
+    dst[1]={cx+outW*0.5f, cy-outH*0.5f};
+    dst[2]={cx+outW*0.5f, cy+outH*0.5f};
+    dst[3]={cx-outW*0.5f, cy+outH*0.5f};
 }
 
 // ── Direction helpers ─────────────────────────────────────────────────
@@ -240,48 +240,104 @@ static void EnsureShader() {
     if(locSrcTex>=0){int u=1;SetShaderValue(g_warpShader,locSrcTex,&u,SHADER_UNIFORM_INT);}
 }
 
-static void UpdateWarpPreview() {
-    if(!g_warpValid)return;
+// ── Common warp render helper ─────────────────────────────────────────
+// Renders the warp into an RT at the DESTINATION bbox size.
+// Returns the RT or {0} on failure. Caller owns the RT.
+
+static RenderTexture2D RenderWarpRT() {
+    RenderTexture2D empty = {0};
+    if(!g_warpValid)return empty;
     int cw=LayerStack_RenderW(),ch=LayerStack_RenderH();
-    if(cw<1||ch<1)return;
+    if(cw<1||ch<1)return empty;
     RenderTexture2D* comp=ViewportManager_Composite();
-    if(!comp||comp->id==0)return;
-    float ox,oy,bw,bh; CornersBbox(g_corners,&ox,&oy,&bw,&bh);
-    int bW=(int)(bw+0.5f),bH=(int)(bh+0.5f);
-    if(bW<2)bW=2;if(bH<2)bH=2;
-    if(g_warpW!=bW||g_warpH!=bH){if(g_warpRT.id)UnloadRenderTexture(g_warpRT);
-        g_warpRT=Load16BitRT(bW,bH);g_warpW=bW;g_warpH=bH;}
-    if(g_warpRT.id==0)return;
+    if(!comp||comp->id==0)return empty;
+
+    Vector2 dst[4]; ComputeDestCorners(g_corners,dst,g_aspectRatio);
+    float dstBX,dstBY,dstBW,dstBH;
+    CornersBbox(dst,&dstBX,&dstBY,&dstBW,&dstBH);
+    int dW=(int)(dstBW+0.5f),dH=(int)(dstBH+0.5f);
+    if(dW<2)dW=2;if(dH<2)dH=2;
+
+    Vector2 lDst[4]; for(int i=0;i<4;i++){lDst[i].x=dst[i].x-dstBX;lDst[i].y=dst[i].y-dstBY;}
+    float H[9]; if(!SolveHomography(g_corners,lDst,H))return empty;
+    float invH[9]; if(!InvertMatrix3(H,invH))return empty;
+
     EnsureShader();
-    Vector2 dst[4];ComputeDestCorners(g_corners,dst,g_topSqueeze,g_topTilt);
-    Vector2 lDst[4];for(int i=0;i<4;i++){lDst[i].x=dst[i].x-ox;lDst[i].y=dst[i].y-oy;}
-    float H[9];if(!SolveHomography(g_corners,lDst,H)){g_warpValid=false;return;}
-    float invH[9];if(!InvertMatrix3(H,invH)){g_warpValid=false;return;}
     if(g_whiteTex.id==0){Image w=GenImageColor(2,2,WHITE);g_whiteTex=LoadTextureFromImage(w);UnloadImage(w);}
-    BeginTextureMode(g_warpRT);
+
+    RenderTexture2D rt = LoadRenderTexture(dW,dH);
+    if(rt.id==0)return empty;
+
+    BeginTextureMode(rt);
     rlSetBlendMode(RL_BLEND_CUSTOM);rlSetBlendFactors(RL_ONE,RL_ZERO,RL_FUNC_ADD);
     ClearBackground((Color){0,0,0,0});
     rlActiveTextureSlot(1);rlEnableTexture(comp->texture.id);rlActiveTextureSlot(0);
     BeginShaderMode(g_warpShader);
-    float sS[2]={(float)cw,(float)ch},dS[2]={(float)bW,(float)bH};
+    float sS[2]={(float)cw,(float)ch},dS[2]={(float)dW,(float)dH};
     if(locSrcSize>=0)SetShaderValue(g_warpShader,locSrcSize,sS,SHADER_UNIFORM_VEC2);
     if(locDstSize>=0)SetShaderValue(g_warpShader,locDstSize,dS,SHADER_UNIFORM_VEC2);
     if(locRow0>=0)SetShaderValue(g_warpShader,locRow0,&invH[0],SHADER_UNIFORM_VEC3);
     if(locRow1>=0)SetShaderValue(g_warpShader,locRow1,&invH[3],SHADER_UNIFORM_VEC3);
     if(locRow2>=0)SetShaderValue(g_warpShader,locRow2,&invH[6],SHADER_UNIFORM_VEC3);
-    DrawTexturePro(g_whiteTex,(Rectangle){0,0,2,2},(Rectangle){0,0,(float)bW,(float)bH},{0,0},0,WHITE);
+    DrawTexturePro(g_whiteTex,(Rectangle){0,0,2,2},(Rectangle){0,0,(float)dW,(float)dH},{0,0},0,WHITE);
     EndShaderMode();
     rlActiveTextureSlot(1);rlDisableTexture();rlActiveTextureSlot(0);
     EndTextureMode();rlSetBlendMode(RL_BLEND_ALPHA);
-    g_warpDirty=false;
+
+    return rt;
+}
+
+static void UpdateWarpPreview() {
+    if(!g_warpValid)return;
+    // Recreate g_warpRT on each update (size may change with aspect ratio)
+    if(g_warpRT.id)UnloadRenderTexture(g_warpRT);
+    g_warpRT = RenderWarpRT();
+    g_warpW = g_warpRT.id ? (int)g_warpRT.texture.width : 0;
+    g_warpH = g_warpRT.id ? (int)g_warpRT.texture.height : 0;
+    g_warpDirty = false;
+}
+
+// ── Manual GPU readback (avoids raylib LoadImageFromTexture issues) ──
+// Creates an RGBA8 Image from a RenderTexture2D's color attachment
+// using a temporary FBO + glReadPixels.
+
+static Image ReadRTImage(RenderTexture2D rt) {
+    Image img = {0};
+    int w = (int)rt.texture.width, h = (int)rt.texture.height;
+    if (w < 1 || h < 1) return img;
+    // Cap at reasonable size to prevent OOM
+    if (w > 8192) w = 8192; if (h > 8192) h = 8192;
+
+    void* pixels = calloc(1, (size_t)w * h * 4);
+    if (!pixels) return img;
+
+    rlDrawRenderBatchActive();
+    glFinish();
+
+    GLuint fbo = 0;
+    glGenFramebuffers(1, &fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                           GL_TEXTURE_2D, rt.texture.id, 0);
+    glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glDeleteFramebuffers(1, &fbo);
+
+    img.data = pixels;
+    img.width = w;
+    img.height = h;
+    img.mipmaps = 1;
+    img.format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
+    return img;
 }
 
 static void AcceptWarp(AppState* state) {
     if(!g_warpValid)return;
-    UpdateWarpPreview();
-    if(g_warpRT.id==0||g_warpW<1||g_warpH<1)return;
-    Image img=LoadImageFromTexture(g_warpRT.texture);
-    if(!img.data)return;
+    RenderTexture2D rt = RenderWarpRT();
+    if(rt.id==0)return;
+    Image img = ReadRTImage(rt);
+    UnloadRenderTexture(rt);
+    if(!img.data){printf("[WARP] Accept readback failed\n");return;}
     ImageFlipVertical(&img);
     int nl=ViewportManager_CreateLayerFromImage(img);
     if(nl>=0){state->activeLayer=nl;layersDirty=true;}
@@ -480,25 +536,32 @@ void WarpHudModule::DrawGUI(const DrawRect& rect) {
     ImGui::SetNextWindowPos(ImVec2(rect.x+rect.w-270,rect.y+10),ImGuiCond_Once);
     ImGui::SetNextWindowSize(ImVec2(250,0),ImGuiCond_Once);
     ImGui::Begin("Perspective Warp",NULL,ImGuiWindowFlags_NoCollapse|ImGuiWindowFlags_AlwaysAutoResize);
-    ImGui::TextWrapped("Drag corners. Axes auto-align to side midpoints.");
+    ImGui::TextWrapped("Drag corners to match the warped region.");
     ImGui::Separator();
-    DrawSingleSlider("Top Squeeze",&g_topSqueeze,0.1f,1.0f,"Squeeze %.2f");
-    if(ImGui::IsItemActive())g_warpDirty=true;
-    DrawSingleSlider("Top Tilt",&g_topTilt,-45,45,"Tilt %.1f\xC2\xB0");
+    ImGui::Text("Output proportions"); ImGui::SameLine();
+    DrawSingleSlider("##ar",&g_aspectRatio,0.25f,4.0f,"W:H %.2f");
     if(ImGui::IsItemActive())g_warpDirty=true;
     ImGui::Separator();
+
+    if(g_warpDirty)UpdateWarpPreview();
+    float av=ImGui::GetContentRegionAvail().x;
+    // Square preview frame — image centered inside with true aspect ratio
+    ImVec2 po=ImGui::GetCursorScreenPos();ImDrawList*dl=ImGui::GetWindowDrawList();
+    dl->AddRectFilled(po,ImVec2(po.x+av,po.y+av),IM_COL32(50,50,55,255));
+    if(g_warpValid&&g_warpRT.id&&g_warpW>0&&g_warpH>0){
+        float imgAR=(float)g_warpW/(float)g_warpH;
+        float dw=av, dh=av;
+        if(imgAR>1.0f){dw=av;dh=av/imgAR;}
+        else{dw=av*imgAR;dh=av;}
+        float dx=(av-dw)*0.5f, dy=(av-dh)*0.5f;
+        dl->AddImage((ImTextureID)(intptr_t)g_warpRT.texture.id,
+            ImVec2(po.x+dx,po.y+dy),ImVec2(po.x+dx+dw,po.y+dy+dh),
+            ImVec2(0,1),ImVec2(1,0));
+    }else{const char*t="No preview";ImVec2 ts=ImGui::CalcTextSize(t);
+        dl->AddText(ImVec2(po.x+(av-ts.x)*.5f,po.y+(av-ts.y)*.5f),IM_COL32(130,130,150,180),t);}
+    ImGui::Dummy(ImVec2(av,av+4));
     if(ImGui::Button("Accept Warp",ImVec2(ImGui::GetContentRegionAvail().x,28)))AcceptWarp(state);
     ImGui::Spacing();
-    if(g_warpDirty)UpdateWarpPreview();
-    float av=ImGui::GetContentRegionAvail().x,ph=fminf(av*0.6f,180);if(ph<60)ph=60;
-    ImVec2 po=ImGui::GetCursorScreenPos();ImDrawList*dl=ImGui::GetWindowDrawList();
-    dl->AddRectFilled(po,ImVec2(po.x+av,po.y+ph),IM_COL32(50,50,55,255));
-    if(g_warpValid&&g_warpRT.id&&g_warpW>0&&g_warpH>0)
-        dl->AddImage((ImTextureID)(intptr_t)g_warpRT.texture.id,
-            ImVec2(po.x,po.y),ImVec2(po.x+av,po.y+ph),ImVec2(0,1),ImVec2(1,0));
-    else{const char*t="No preview";ImVec2 ts=ImGui::CalcTextSize(t);
-        dl->AddText(ImVec2(po.x+(av-ts.x)*.5f,po.y+(ph-ts.y)*.5f),IM_COL32(130,130,150,180),t);}
-    ImGui::Dummy(ImVec2(av,ph+4));
     if(ImGui::Button("Reset",ImVec2(ImGui::GetContentRegionAvail().x,0)))ResetModel();
     if(g_warpValid)ImGui::TextColored(ImVec4(.3f,.85f,.3f,1),"Ready  [R]eset  [Enter] Accept  [Esc] Cancel");
     else ImGui::TextColored(ImVec4(.9f,.3f,.3f,1),"Invalid shape");
