@@ -193,4 +193,5 @@ void CaptureBrushConfig(UserBrushConfig* cfg) {
     CaptureBP(bpFocalOffset, &cfg->focalOffset);
     CaptureBP(bpSizeMul,     &cfg->sizeMul);
     CaptureBP(bpSpacing,     &cfg->spacing);
+    CaptureBP(bpScatter,     &cfg->scatter);
 }

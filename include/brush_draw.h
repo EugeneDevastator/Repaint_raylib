@@ -36,6 +36,7 @@ struct UserBrushConfig {
     BPConfig focalOffset;
     BPConfig sizeMul;
     BPConfig spacing;
+    BPConfig scatter;
 
     int   texBlendMode;
     int   texNoisemode;
@@ -63,6 +64,7 @@ struct ModulatedBrushConfig {
     uint16_t baseSeed;
     float jitRadOut, jitRadIn, jitOpacity, jitCrv, jitX2y;
     float jitHue, jitSat, jitLit, jitCloneOp, jitFocal;
+    float scatter;
 };
 
 void CaptureBrushConfig(UserBrushConfig* cfg);
@@ -97,6 +99,7 @@ struct DabBrush {
     float jitHue, jitSat, jitLit;
     float jitCloneOp;
     float jitFocal;
+    float scatter;
     uint16_t baseSeed;
 };
 
@@ -121,7 +124,7 @@ struct SegmentData {
     float initAngle;
 };
 
-void DrawSegment(const SegmentData& dseg, RenderTexture2D rt, Texture2D brushTex, bool useTexture, bool seamless, int dabOffset, bool pixelPerfect = false);
+int DrawSegment(const SegmentData& dseg, RenderTexture2D rt, Texture2D brushTex, bool useTexture, bool seamless, int dabOffset, bool pixelPerfect = false);
 
 void SegDrawer_SetSegmentStart(float startRad, Vector2 startPos, SegmentData* seg);
 void SegDrawer_ComputeSegmentEnd(const SegmentData& seg, int dabOffset, float initialRad,
@@ -129,6 +132,7 @@ void SegDrawer_ComputeSegmentEnd(const SegmentData& seg, int dabOffset, float in
 
 struct SegResult {
     Vector2 lastDabPos;
+    Vector2 lastSmudgeSrc;
     float lastRadOut;
     float overdraw;
 };

@@ -27,12 +27,22 @@ int StrokeThrottle::DrawPending(AppState* state) {
             m_userTexSlot = seg.userTexSlot;
             m_seamless = seg.seamless != 0;
             m_pixelPerfect = seg.pixelPerfect != 0;
-            if (seg.isStrokeStart) m_hasPrevAngle = false;
+            if (seg.isStrokeStart) { m_hasPrevAngle = false; m_hasPrevSmudge = false; m_totalDabs = 0; }
             if (m_hasPrevAngle)
                 seg.brushFrom.resangle = m_lastSegEndAngle;
 
+            if (m_hasPrevSmudge) {
+                seg.smudgeSrcX = m_prevSmudgeSrcX;
+                seg.smudgeSrcY = m_prevSmudgeSrcY;
+            }
+
             SegResult r;
-            m_dabCount = DrawLinear(seg, 0, 0.0f, m_dabBuf, DAB_CAP, &r);
+            m_dabCount = DrawLinear(seg, m_totalDabs, 0.0f, m_dabBuf, DAB_CAP, &r);
+
+            m_prevSmudgeSrcX = r.lastSmudgeSrc.x;
+            m_prevSmudgeSrcY = r.lastSmudgeSrc.y;
+            m_hasPrevSmudge = m_dabCount > 0;
+            m_totalDabs += m_dabCount;
 
             if (m_dabCount > 0) {
                 if (!m_hasPrevAngle)

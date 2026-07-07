@@ -106,6 +106,7 @@ DabBrush BlendBrushes(DabBrush from, DabBrush to, float k) {
     r.jitCloneOp = from.jitCloneOp;
     r.jitFocal  = lerp(from.jitFocal, to.jitFocal, k);
     r.baseSeed  = from.baseSeed;
+    r.scatter   = from.scatter;
     return r;
 }
 
@@ -246,6 +247,7 @@ int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
     if (!res) return 0;
     Vector2 from = seg.pos1;
     res->lastDabPos = from;
+    res->lastSmudgeSrc = Vector2{seg.smudgeSrcX, seg.smudgeSrcY};
     res->lastRadOut = seg.brushFrom.rad_out_px;
     res->overdraw = 0.0f;
 
@@ -261,6 +263,7 @@ int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
             outPoints[0].brush = seg.brushFrom;
         }
         res->lastDabPos = Vector2{from.x, from.y};
+        res->lastSmudgeSrc = Vector2{from.x, from.y};
         res->lastRadOut = seg.brushFrom.rad_out_px;
         return 1;
     }
@@ -340,18 +343,37 @@ int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
         dabCB.rad_out_px = nextRadUnJit;
 
         // Per-dab direction: update modulator for stroke direction
+        float tx = 0, ty = 0;
         {
             float t = nextArc / totalLen;
             if (t < 0) t = 0; if (t > 1) t = 1;
             int idx = (int)(t * 64);
             if (idx < 0) idx = 0; if (idx > 63) idx = 63;
-            float tx = curvePts[idx+1].x - curvePts[idx].x;
-            float ty = curvePts[idx+1].y - curvePts[idx].y;
+            tx = curvePts[idx+1].x - curvePts[idx].x;
+            ty = curvePts[idx+1].y - curvePts[idx].y;
             if (tx != 0 || ty != 0) {
                 float dirAng = AtanXY(tx, ty);
                 g_modPars.Pars[csDir] = RngConv(dirAng, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
             }
         }
+
+        // Scatter: shift perpendicular to travel (before jitter — use unjittered radius)
+        float scatterRad = dabCB.scatter * dabCB.rad_out_px;
+        Vector2 scatterPos = pos;
+        if (scatterRad > 0.001f) {
+            float len = sqrtf(tx*tx + ty*ty);
+            if (len > 0.001f) {
+                uint16_t seed = seg.brushFrom.baseSeed + (uint16_t)((dabOffset + count) * 13 + 37);
+                float raw = RawRnd(seed, 1024);
+                float u = raw / 1024.0f;
+                float off = (u * 2.0f - 1.0f) * scatterRad;
+                //printf("[SCATTER] dab=%d baseSeed=%u seed=%u raw=%.4f u=%.4f off=%.2f rad=%.2f scatter=%.2f\n",
+                //       count, seg.brushFrom.baseSeed, seed, raw, u, off, dabCB.rad_out_px, dabCB.scatter);
+                scatterPos.x += (-ty / len) * off;
+                scatterPos.y += (tx / len) * off;
+            }
+        }
+        pos = scatterPos;
 
         JitterBrush(dabCB, seg.brushFrom.baseSeed, dabOffset + count);
 
@@ -400,12 +422,13 @@ int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
             res->lastDabPos = Vector2{from.x + lastDabPos * x2r, from.y + lastDabPos * y2r};
         }
     }
+    res->lastSmudgeSrc = Vector2{lastSrcX, lastSrcY};
     return count;
 }
 
 
 // ── DrawSegment ────────────────────────────────────────────────────
-void DrawSegment(const SegmentData& dseg, RenderTexture2D rt, Texture2D brushTex, bool useTexture, bool seamless, int dabOffset, bool pixelPerfect) {
+int DrawSegment(const SegmentData& dseg, RenderTexture2D rt, Texture2D brushTex, bool useTexture, bool seamless, int dabOffset, bool pixelPerfect) {
     static DabPoint pts[65536];
     SegResult r;
     int cnt = DrawLinear(dseg, dabOffset, 0.0f, pts, 65536, &r);
@@ -415,6 +438,7 @@ void DrawSegment(const SegmentData& dseg, RenderTexture2D rt, Texture2D brushTex
                               pts[i].x, pts[i].y, pts[i].srcX, pts[i].srcY,
                               pts[i].srcRad, pts[i].srcAngle,
                               seamless, pixelPerfect);
+    return cnt;
 }
 
 // ── SegDrawer helpers (computation only, no rendering) ─────────────

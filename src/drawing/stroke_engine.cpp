@@ -60,6 +60,7 @@ ModulatedBrushConfig ResolveModulatedConfig(const UserBrushConfig& cfg, int tool
 
     out.focalOffset  = ModulateConfigVal(cfg.focalOffset, modValues);
     out.spacing      = ConfigRawVal(cfg.spacing);
+    out.scatter      = ConfigRawVal(cfg.scatter);
 
     out.texBlendMode   = cfg.texBlendMode;
     out.texNoisemode   = cfg.texNoisemode;
@@ -139,6 +140,7 @@ DabBrush MakeDabBrush(const ModulatedBrushConfig& mod, const float rad_out_px_ov
     cb.jitLit     = mod.jitLit;
     cb.jitCloneOp = mod.jitCloneOp;
     cb.jitFocal   = mod.jitFocal;
+    cb.scatter    = mod.scatter;
 
     return cb;
 }
