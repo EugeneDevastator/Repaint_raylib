@@ -15,6 +15,7 @@ StrokeEmitter::StrokeEmitter(StrokeThrottle* throttle)
     m_initDirSet = false;
     m_prevSegLen = 0;
     memset(&m_modulated, 0, sizeof(m_modulated));
+    Xform_Identity(m_destXform.mat);
 }
 
 void StrokeEmitter::handleBegin(const InputEntry& e) {
@@ -41,8 +42,11 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
     m_userTexBucket = e.userTexBucket;
     m_userTexSlot = e.userTexSlot;
     m_worldToTexPx = e.worldToTexPx;
+    m_destXform = e.destXform;
 
-    Vector2 start = {e.x, e.y};
+    float* m = m_destXform.mat;
+    Vector2 start = {e.x * m[0] + e.y * m[1] + m[2],
+                     e.x * m[3] + e.y * m[4] + m[5]};
     m_lastDabPos = start;
     m_lastDabRad = 0;
     m_prevSegPos = start;
@@ -187,7 +191,9 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
 void StrokeEmitter::handlePoint(const InputEntry& e) {
     if (!m_active) return;
 
-    Vector2 pos = {e.x, e.y};
+    float* m = m_destXform.mat;
+    Vector2 pos = {e.x * m[0] + e.y * m[1] + m[2],
+                   e.x * m[3] + e.y * m[4] + m[5]};
     g_modPars.Pars[csPressure] = e.pressure;
     g_modPars.Pars[csRot]      = e.rotation;
     g_modPars.Pars[csTilt]     = e.tiltX;

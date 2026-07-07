@@ -38,6 +38,7 @@ private:
     float m_initAngle;
     int   m_toolMode;
     float m_worldToTexPx;
+    RectXform m_destXform;
 
     Vector2 m_prevSegPos, m_prevSegDir;
     float m_prevSegLen;

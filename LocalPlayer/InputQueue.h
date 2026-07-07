@@ -3,6 +3,7 @@
 
 #include "repaint.h"
 #include "tablet.h"
+#include "xform.h"
 
 struct InputEntry {
     enum Type : uint8_t { Begin, Point, End };
@@ -22,6 +23,7 @@ struct InputEntry {
     uint8_t userTexBucket;  // TM_BUCKET_USER typically, 0xFF = none
     uint8_t userTexSlot;    // slot within bucket, 0xFF = none
     float worldToTexPx;
+    RectXform destXform;
 };
 
 class InputQueue {
