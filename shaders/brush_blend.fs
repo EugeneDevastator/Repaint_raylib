@@ -33,6 +33,7 @@ uniform int   texNoisemode;
 uniform bool  useLumAsAlpha;
 uniform bool  hasTexture;
 uniform int   texColorMode;
+uniform int   texTiling;
 uniform int   bmidx;
 uniform vec4  brushColor;
 uniform float radOut;
@@ -164,6 +165,8 @@ void main() {
             stUV = (quadUV - 0.5) * texScale + userTexOrigin;
         }
         vec4 texel = texture(brushTex, stUV);
+        if (texTiling == 1 && (stUV.x < 0.0 || stUV.x > 1.0 || stUV.y < 0.0 || stUV.y > 1.0))
+            texel.a = 0.0;
         float userTexA = useLumAsAlpha
             ? (texel.r + texel.g + texel.b) * (1.0 / 3.0)
             : texel.a;

@@ -70,7 +70,7 @@ static unsigned int ComputeBrushHash(const UserBrushConfig& cfg, TexSlotID texSl
     HF(cfg.spacing.power); HF(cfg.spacing.modulatorId); HF(cfg.spacing.jitter);
     HF(cfg.scatter.userMax); HF(cfg.scatter.userMin); HF(cfg.scatter.outMin); HF(cfg.scatter.outMax);
     HF(cfg.scatter.power); HF(cfg.scatter.modulatorId); HF(cfg.scatter.jitter);
-    HF(cfg.texBlendMode); HF(cfg.texNoisemode); HF(cfg.texColorMode);
+    HF(cfg.texBlendMode); HF(cfg.texNoisemode); HF(cfg.texColorMode); HF(cfg.texTiling);
     HF(cfg.useTexLumAsAlpha); HF(cfg.bmidx); HF(cfg.preserveop); HF(cfg.eraseMode);
     HF(cfg.userTexOriginX); HF(cfg.userTexOriginY); HF(cfg.userTexDirection);
     HF(cfg.baseSeed);
@@ -217,6 +217,7 @@ void ViewportHUD_Draw(AppState* state) {
             cfg.texBlendMode   = br.texBlendMode;
             cfg.texNoisemode   = br.texNoisemode;
             cfg.texColorMode   = br.texColorMode;
+            cfg.texTiling      = br.texTiling;
             cfg.useTexLumAsAlpha = br.useTexLumAsAlpha;
             cfg.preserveop     = br.preserveop;
             cfg.eraseMode      = br.eraseMode;

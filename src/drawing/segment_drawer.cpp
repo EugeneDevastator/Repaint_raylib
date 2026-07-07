@@ -88,6 +88,7 @@ DabBrush BlendBrushes(DabBrush from, DabBrush to, float k) {
     r.texBlendMode = from.texBlendMode;
     r.texNoisemode = from.texNoisemode;
     r.texColorMode = from.texColorMode;
+    r.texTiling    = from.texTiling;
     r.useTexLumAsAlpha = from.useTexLumAsAlpha;
     r.userTexOriginX = from.userTexOriginX;
     r.userTexOriginY = from.userTexOriginY;

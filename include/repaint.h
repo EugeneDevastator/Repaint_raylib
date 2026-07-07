@@ -104,6 +104,7 @@ typedef struct {
     int texNoisemode; float texScale, texFeather, texThresh;
     bool useTexLumAsAlpha, texUseRGB;
     int texColorMode;
+    int texTiling;
     int eraseMode;
     float perspective;
     Color col;

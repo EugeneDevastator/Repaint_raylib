@@ -41,6 +41,7 @@ struct UserBrushConfig {
     int   texBlendMode;
     int   texNoisemode;
     int   texColorMode;
+    int   texTiling;
     bool  useTexLumAsAlpha;
     int   bmidx;
     uint8_t preserveop;
@@ -56,7 +57,7 @@ struct ModulatedBrushConfig {
     Color col;
     float pwr, perspective, texScale, texFeather, texThresh, texBlendVal;
     float focalOffset, spacing;
-    int   texBlendMode, texNoisemode, texColorMode;
+    int   texBlendMode, texNoisemode, texColorMode, texTiling;
     bool  useTexLumAsAlpha;
     int   bmidx;
     uint8_t preserveop, eraseMode;
@@ -84,7 +85,7 @@ struct DabBrush {
     uint8_t preserveop;
     float perspective;
     float texScale, texFeather, texThresh, texBlendVal;
-    int   texBlendMode, texNoisemode, texColorMode;
+    int   texBlendMode, texNoisemode, texColorMode, texTiling;
     bool  useTexLumAsAlpha;
     float userTexOriginX, userTexOriginY;
     float userTexDirection;

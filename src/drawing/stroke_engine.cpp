@@ -65,6 +65,7 @@ ModulatedBrushConfig ResolveModulatedConfig(const UserBrushConfig& cfg, int tool
     out.texBlendMode   = cfg.texBlendMode;
     out.texNoisemode   = cfg.texNoisemode;
     out.texColorMode   = cfg.texColorMode;
+    out.texTiling      = cfg.texTiling;
     out.useTexLumAsAlpha = cfg.useTexLumAsAlpha;
     out.bmidx          = cfg.bmidx;
     out.preserveop     = cfg.preserveop;
@@ -121,6 +122,7 @@ DabBrush MakeDabBrush(const ModulatedBrushConfig& mod, const float rad_out_px_ov
     cb.texBlendMode   = mod.texBlendMode;
     cb.texNoisemode   = mod.texNoisemode;
     cb.texColorMode   = mod.texColorMode;
+    cb.texTiling      = mod.texTiling;
     cb.useTexLumAsAlpha = mod.useTexLumAsAlpha;
     cb.userTexOriginX  = mod.userTexOriginX;
     cb.userTexOriginY  = mod.userTexOriginY;
@@ -174,6 +176,7 @@ int StrokeEngine_GeneratePreviewDabs(const d_RealBrush* baseBrush, int toolMode,
     cfg.texBlendMode   = baseBrush->texBlendMode;
     cfg.texNoisemode   = baseBrush->texNoisemode;
     cfg.texColorMode   = baseBrush->texColorMode;
+    cfg.texTiling      = baseBrush->texTiling;
     cfg.useTexLumAsAlpha = baseBrush->useTexLumAsAlpha;
     cfg.preserveop     = baseBrush->preserveop;
     cfg.eraseMode      = baseBrush->eraseMode;

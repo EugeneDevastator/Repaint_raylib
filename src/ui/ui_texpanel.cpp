@@ -135,6 +135,7 @@ void TexPanelModule::DrawGUI(const DrawRect& rect) {
     static const char* items2[] = {"Stencil", "Random", "Const"};
     static const char* items3[] = {"brush RGB", "texture RGB", "mul brush*tex", "lum-color"};
     static const char* items4[] = {"Brush", "Global"};
+    static const char* items5[] = {"Repeat", "Single"};
 
     float gap = 4.0f;
     float pW = (rect.w - gap * 2.0f) / 3.0f;
@@ -145,26 +146,33 @@ void TexPanelModule::DrawGUI(const DrawRect& rect) {
     // ── Left area: selectors in a transparent child (constrained to 1/3) ──
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0, 0, 0, 0));
     ImGui::SetCursorScreenPos(ImVec2(rect.x + 6, yPos + 6));
-    ImGui::BeginChild("##texLeft", ImVec2(pW - 12.0f, 0), false);
+    ImGui::BeginChild("##texLeft", ImVec2(pW - 12.0f, 0), ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar);
     {
+        // Row 1: Mask Mode | Color | Sample Mode
         float sw = (ImGui::GetContentRegionAvail().x - 4.0f) / 3.0f;
-
-        ImGui::BeginChild("##h0", ImVec2(sw, 0), false);
+        ImGui::BeginChild("##h0", ImVec2(sw, 0), ImGuiChildFlags_AutoResizeY, ImGuiWindowFlags_NoScrollbar);
         DrawSelector("Mask Mode", &mm, items0, 2);
         ImGui::EndChild();
         ImGui::SameLine(0, 2);
-
-        ImGui::BeginChild("##h1", ImVec2(sw, 0), false);
+        ImGui::BeginChild("##h1", ImVec2(sw, 0), ImGuiChildFlags_AutoResizeY, ImGuiWindowFlags_NoScrollbar);
         DrawSelector("Color", &cm, items3, 4);
         ImGui::EndChild();
         ImGui::SameLine(0, 2);
-
-        ImGui::BeginChild("##h2", ImVec2(sw, 0), false);
+        ImGui::BeginChild("##h2", ImVec2(sw, 0), ImGuiChildFlags_AutoResizeY, ImGuiWindowFlags_NoScrollbar);
         DrawSelector("Sample Mode", &tnm, items2, 3);
         ImGui::EndChild();
 
-        ImGui::SetCursorPos(ImVec2(0, 150));
+        // Row 2: Tiling Mode | Tex Scale
+        float sw2 = (ImGui::GetContentRegionAvail().x - 2.0f) / 2.0f;
+        ImGui::BeginChild("##h3", ImVec2(sw2, 0), ImGuiChildFlags_AutoResizeY, ImGuiWindowFlags_NoScrollbar);
+        int tiling = state->currentBrush.Realb.texTiling;
+        DrawSelector("Tiling", &tiling, items5, 2);
+        state->currentBrush.Realb.texTiling = tiling;
+        ImGui::EndChild();
+        ImGui::SameLine(0, 2);
+        ImGui::BeginChild("##h4", ImVec2(sw2, 0), ImGuiChildFlags_AutoResizeY, ImGuiWindowFlags_NoScrollbar);
         DrawSelector("Tex Scale", &g_texScaleMode, items4, 2);
+        ImGui::EndChild();
     }
     ImGui::EndChild();
     ImGui::PopStyleColor();
