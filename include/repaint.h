@@ -117,7 +117,10 @@ typedef struct { uint8_t ToolID; d_Brush Brush; uint8_t startseed, Noisemode; d_
 typedef struct { d_Stroke Stroke; d_Brush BrushFrom, Brush; uint8_t BrushID,NoiseID,Noisemode,ToolID,startseed,layer; float spacing; uint8_t scatter,rRadout,rRadrel,rScale,rScaleRel,rAngle,rSpacing,rSpread,rOp,rSol,rSol2,rCrv,rCop,rPwr,rHue,rSat,rLit; } d_Section;
 typedef struct { uint8_t ActID; int16_t layer, layerto; uint8_t bm; float op; bool vis; Rectangle rect; } d_LAction;
 
-// Document — canvas window framing (all in pixel units)
+// Document — canvas window framing (all in pixel units).
+// Default: 1 world unit = 1 pixel. Texture size (LayerStack_RenderW/H)
+// and world size (ww/wh) must not be affected by texture size.
+// The texture is always fitted into the world-space region defined by ww/wh.
 typedef struct {
     RectXform window; // framing rectangle in document space
 } Document;

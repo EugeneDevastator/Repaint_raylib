@@ -56,4 +56,7 @@ void LayerStack_BakeCanvasWindow(const Document* doc);
 // For viewport/renderer access
 const float* LayerStack_GetCanvasView(void);
 
+// Resize a layer's texture (image content is scaled into the new RT).
+void LayerStack_ResizeLayer(int idx, int newW, int newH);
+
 #endif

@@ -160,5 +160,15 @@ void LayerXformModule::DrawGUI(const DrawRect& rect) {
     }
     ImGui::Checkbox("Lock Aspect", &g_lockAspect);
 
+    ImGui::Separator();
+    if (ImGui::Button("Half Res", ImVec2(-1, 0)) && state->activeLayer >= 0) {
+        int w = GetLayerWpx(state->activeLayer);
+        int h = GetLayerHpx(state->activeLayer);
+        if (w > 4 && h > 4) {
+            LayerStack_ResizeLayer(state->activeLayer, w/2, h/2);
+            layersDirty = true;
+        }
+    }
+
     ImGui::End();
 }

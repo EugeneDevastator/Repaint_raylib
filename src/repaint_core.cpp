@@ -75,12 +75,13 @@ void ApplyCanvasWindow(Document* doc) {
     float idCv[6] = {1, 0, 0, 0, 1, 0};
     LayerStack_SetCanvasView(idCv);
 
-    // Reset window: no rotation, pivot at origin, same pixel extent
+    // Reset window: no rotation, pivot at origin, same pixel extent.
+    // Texture size (LayerStack_RenderW/H) is NOT changed here — the
+    // viewport clips the composite source to min(texSize, ww/wh) so any
+    // extra texture area beyond the crop rect is never shown on screen.
     doc->window.mat[0] = 1; doc->window.mat[1] = 0;
     doc->window.mat[2] = 0;
     doc->window.mat[3] = 0; doc->window.mat[4] = 1;
     doc->window.mat[5] = 0;
     doc->window.ww = ww; doc->window.wh = wh;
-
-    LayerStack_SetRenderWindow((int)(fabsf(ww) + 0.5f), (int)(fabsf(wh) + 0.5f));
 }

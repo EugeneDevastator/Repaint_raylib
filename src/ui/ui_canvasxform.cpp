@@ -13,6 +13,8 @@ static bool     g_entrySaved = false;
 static Vector2  g_cropCursor = {0, 0}; // independent rotation center
 static int      g_cropPixelW = 0;      // resolution text fields (pixels)
 static int      g_cropPixelH = 0;
+static int      g_origTexW = 0;        // texture size on crop entry (for discard restore)
+static int      g_origTexH = 0;
 
 static void ExitCropMode(AppState* state, bool accept) {
     if (accept) {
@@ -23,9 +25,9 @@ static void ExitCropMode(AppState* state, bool accept) {
         };
     } else {
         state->doc.window = g_entryWindow;
-        int cw = DocOutPxW(&state->doc), ch = DocOutPxH(&state->doc);
-        float cv[6]; ComputeCanvasMatrix(&state->doc.window, cw, ch, cv);
-        LayerStack_SetCanvasView(cv); LayerStack_SetRenderWindow(cw, ch);
+        LayerStack_SetRenderWindow(g_origTexW, g_origTexH);
+        float cv[6]; ComputeCanvasMatrix(&state->doc.window, g_origTexW, g_origTexH, cv);
+        LayerStack_SetCanvasView(cv);
     }
     state->framingMode = FRAME_DEFAULT;
     g_activeHud = HUD_NONE;
@@ -44,9 +46,11 @@ bool CanvasXformModule::HandleInput(InputState& input, const DrawRect& rect) {
         return false;
     }
 
-    // Save initial canvas window on first frame after entering crop mode
+    // Save initial canvas window + texture size on first frame after entering crop mode
     if (!g_entrySaved) {
         g_entryWindow = state->doc.window;
+        g_origTexW = LayerStack_RenderW();
+        g_origTexH = LayerStack_RenderH();
         g_entrySaved = true;
         // Init crop cursor to window center
         float* m = state->doc.window.mat;
@@ -116,10 +120,10 @@ void CanvasXformModule::DrawGUI(const DrawRect& rect) {
     ImGui::Text("Canvas Window");
     ImGui::Separator();
 
-    // Pixel-resolution text fields — sync from doc when not actively editing
+    // Pixel-resolution text fields — sync from actual texture size, not ww/wh
     if (!ImGui::IsAnyItemActive()) {
-        g_cropPixelW = DocOutPxW(&state->doc);
-        g_cropPixelH = DocOutPxH(&state->doc);
+        g_cropPixelW = LayerStack_RenderW();
+        g_cropPixelH = LayerStack_RenderH();
     }
     ImGui::Text("Res (px)");
     ImGui::SetNextItemWidth(70);
@@ -134,16 +138,21 @@ void CanvasXformModule::DrawGUI(const DrawRect& rect) {
     bool hDeact = ImGui::IsItemDeactivatedAfterEdit();
     if (hEdited && g_cropPixelH < 1) g_cropPixelH = 1;
     if (wDeact || hDeact) {
-        float aspect = g_entryWindow.ww / g_entryWindow.wh;
+        // Texture must maintain the same aspect ratio as the world region (ww/wh).
+        float aspect = state->doc.window.ww / state->doc.window.wh;
         if (wDeact) {
-            state->doc.window.ww = (float)g_cropPixelW;
-            state->doc.window.wh = state->doc.window.ww / aspect;
-            g_cropPixelH = (int)(state->doc.window.wh + 0.5f);
+            int newW = g_cropPixelW < 1 ? 1 : g_cropPixelW;
+            int newH = fmaxf(1, (int)(newW / aspect + 0.5f));
+            LayerStack_SetRenderWindow(newW, newH);
         } else {
-            state->doc.window.wh = (float)g_cropPixelH;
-            state->doc.window.ww = state->doc.window.wh * aspect;
-            g_cropPixelW = (int)(state->doc.window.ww + 0.5f);
+            int newH = g_cropPixelH < 1 ? 1 : g_cropPixelH;
+            int newW = fmaxf(1, (int)(newH * aspect + 0.5f));
+            LayerStack_SetRenderWindow(newW, newH);
         }
+        // Sync display fields back (LayerStack may have clamped minimal sizes)
+        g_cropPixelW = LayerStack_RenderW();
+        g_cropPixelH = LayerStack_RenderH();
+        layersDirty = true;
     }
 
     ImGui::Text("rot: %.1f", RectXform_GetRot(&state->doc.window) * 180.0f / (float)M_PI);

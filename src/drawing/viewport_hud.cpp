@@ -179,7 +179,11 @@ void ViewportHUD_Draw(AppState* state) {
             float ww = state->doc.window.ww, wh = state->doc.window.wh;
             float dstW = ww * state->camera.zoom;
             float dstH = wh * state->camera.zoom;
-            Rectangle srcRect = {0, 0, texW, -texH};
+            // Clip source to min of texture and crop rect — so extra texture
+            // area beyond ww/wh (empty checker) is never shown on screen.
+            float srcW = texW < ww ? texW : ww;
+            float srcH = texH < wh ? texH : wh;
+            Rectangle srcRect = {0, 0, srcW, -srcH};
             Rectangle dstRect = {dstX, dstY, dstW, dstH};
 
             if (g_seamlessPreview) {

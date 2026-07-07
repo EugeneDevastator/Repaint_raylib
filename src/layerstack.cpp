@@ -238,3 +238,39 @@ void LayerStack_BakeCanvasWindow(const Document* doc) {
     }
     Xform_Identity(LS.canvasView);
 }
+
+// ── Resize a layer's texture ──────────────────────────────────────────
+void LayerStack_ResizeLayer(int idx, int newW, int newH) {
+    if(idx<0||idx>=LS.count||LS.rt[idx].id==0||newW<1||newH<1) return;
+    int oldW = GetLayerWpx(idx), oldH = GetLayerHpx(idx);
+    if(oldW==newW && oldH==newH) return;
+
+    RenderTexture2D newRT = Load16BitRT(newW, newH);
+    if(newRT.id==0) return;
+    BeginTextureMode(newRT);
+    ClearBackground(BLANK);
+    rlSetBlendMode(RL_BLEND_CUSTOM);
+    rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+    DrawTexturePro(LS.rt[idx].texture,
+        Rectangle{0,0,(float)oldW,(float)-oldH},
+        Rectangle{0,0,(float)newW,(float)newH},
+        Vector2{0,0}, 0.0f, WHITE);
+    rlSetBlendMode(RL_BLEND_ALPHA);
+    EndTextureMode();
+
+    // Replace the slot — register new RT, unregister old
+    {
+        char name[64];
+        snprintf(name, sizeof(name), "Layer %d", idx);
+        TexSlotID newSlot = TM_Register(TM_BUCKET_LAYER, newRT, name, false, newW, newH);
+        if(newSlot.slot >= 0) {
+            TM_Remove(LS.slotID[idx]);
+            RenderTexture2D oldRT = LS.rt[idx];
+            LS.rt[idx] = newRT;
+            LS.slotID[idx] = newSlot;
+            UnloadRenderTexture(oldRT);
+        } else {
+            UnloadRenderTexture(newRT);
+        }
+    }
+}
