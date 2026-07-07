@@ -153,8 +153,22 @@ int StrokeEngine_GeneratePreviewDabs(const d_RealBrush* baseBrush, int toolMode,
 
     float radOut = baseBrush->rad_out * WORLD_UNIT_PX;
     float segLen = fmaxf(radOut * 2.0f, 80.0f);
-    float dirAng = initialAngle;
-    float dirX = cosf(dirAng), dirY = -sinf(dirAng);
+    // Fixed stroke direction — initialAngle only affects brush rotation, not geometry
+    float dirX = 1.0f, dirY = -1.0f;
+    float dirLen = sqrtf(dirX * dirX + dirY * dirY);
+    dirX /= dirLen; dirY /= dirLen;
+
+    float savedPars[csSTOP];
+    memcpy(savedPars, g_modPars.Pars, sizeof(float) * csSTOP);
+    g_modPars.Pars[csDir]    = RngConv(initialAngle, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
+    g_modPars.Pars[csIdir]   = g_modPars.Pars[csDir];
+    g_modPars.Pars[csRelang] = 0.5f;
+    g_modPars.Pars[csCrv]    = 0.5f;
+    g_modPars.Pars[csAcc]    = 1.0f;
+    g_modPars.Pars[csHVdir]  = fabsf(dirX);
+    g_modPars.Pars[csVel]    = 1.0f;
+    g_modPars.Pars[csLenpx]  = 1.0f;
+    g_modPars.Pars[csPressure] = 1.0f;
 
     cfg.bmidx          = baseBrush->bmidx;
     cfg.texBlendMode   = baseBrush->texBlendMode;
@@ -236,6 +250,7 @@ int StrokeEngine_GeneratePreviewDabs(const d_RealBrush* baseBrush, int toolMode,
     int cnt = DrawLinear(s, total, 0.0f, outBuf + total, maxOut - total, &r);
     total += cnt;
 
+    memcpy(g_modPars.Pars, savedPars, sizeof(float) * csSTOP);
     return total;
 }
 

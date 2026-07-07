@@ -26,7 +26,7 @@ static int g_editCheckerW = 0, g_editCheckerH = 0;
 // Viewport-resolution RT for crop mode (bypasses canvasView clipping)
 static RenderTexture2D g_viewResRT = {0};
 
-static unsigned int ComputeBrushHash(const UserBrushConfig& cfg, TexSlotID texSlot) {
+static unsigned int ComputeBrushHash(const UserBrushConfig& cfg, TexSlotID texSlot, float initialAngle) {
     #define HF(v) do { float _f = (float)(v); unsigned int _iv; memcpy(&_iv, &_f, sizeof(_iv)); h = h * 33 + _iv; } while(0)
     unsigned int h = 0;
     HF(cfg.toolMode);
@@ -74,6 +74,7 @@ static unsigned int ComputeBrushHash(const UserBrushConfig& cfg, TexSlotID texSl
     HF(cfg.useTexLumAsAlpha); HF(cfg.bmidx); HF(cfg.preserveop); HF(cfg.eraseMode);
     HF(cfg.userTexOriginX); HF(cfg.userTexOriginY); HF(cfg.userTexDirection);
     HF(cfg.baseSeed);
+    HF(initialAngle);
     HF(texSlot.bucket); HF(texSlot.slot);
     HF(g_seamlessPaint); HF(g_pixelPerfect);
     #undef HF
@@ -210,7 +211,21 @@ void ViewportHUD_Draw(AppState* state) {
         UserBrushConfig cfg;
         CaptureBrushConfig(&cfg);
         cfg.toolMode = state->mode;
-        unsigned int currentHash = ComputeBrushHash(cfg, state->brushTexSlot);
+        {
+            const d_RealBrush& br = state->currentBrush.Realb;
+            cfg.bmidx          = br.bmidx;
+            cfg.texBlendMode   = br.texBlendMode;
+            cfg.texNoisemode   = br.texNoisemode;
+            cfg.texColorMode   = br.texColorMode;
+            cfg.useTexLumAsAlpha = br.useTexLumAsAlpha;
+            cfg.preserveop     = br.preserveop;
+            cfg.eraseMode      = br.eraseMode;
+            cfg.userTexOriginX = br.userTexOriginX;
+            cfg.userTexOriginY = br.userTexOriginY;
+            cfg.userTexDirection = br.userTexDirection;
+            cfg.baseSeed       = br.seed;
+        }
+        unsigned int currentHash = ComputeBrushHash(cfg, state->brushTexSlot, state->initialAngle);
         bool paramsChanged = (currentHash != g_lastPreviewHash);
 
         if (paramsChanged || g_lastPreviewHash == 0) {

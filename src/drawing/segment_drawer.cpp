@@ -94,17 +94,17 @@ DabBrush BlendBrushes(DabBrush from, DabBrush to, float k) {
     r.userTexDirection = from.userTexDirection;
     r.focalOffset = from.focalOffset;
 
-    // Jitter ranges — per-dab, not per-segment (carry from start)
-    r.jitRadOut = from.jitRadOut;
-    r.jitRadIn  = from.jitRadIn;
-    r.jitOpacity = from.jitOpacity;
-    r.jitCrv    = from.jitCrv;
-    r.jitX2y    = from.jitX2y;
-    r.jitHue    = from.jitHue;
-    r.jitSat    = from.jitSat;
-    r.jitLit    = from.jitLit;
+    // Jitter ranges (interpolated — rad jitRadOut overwritten per-dab in DrawLinear)
+    r.jitRadOut = lerp(from.jitRadOut, to.jitRadOut, k);
+    r.jitRadIn  = lerp(from.jitRadIn, to.jitRadIn, k);
+    r.jitOpacity = lerp(from.jitOpacity, to.jitOpacity, k);
+    r.jitCrv    = lerp(from.jitCrv, to.jitCrv, k);
+    r.jitX2y    = lerp(from.jitX2y, to.jitX2y, k);
+    r.jitHue    = lerp(from.jitHue, to.jitHue, k);
+    r.jitSat    = lerp(from.jitSat, to.jitSat, k);
+    r.jitLit    = lerp(from.jitLit, to.jitLit, k);
     r.jitCloneOp = from.jitCloneOp;
-    r.jitFocal  = from.jitFocal;
+    r.jitFocal  = lerp(from.jitFocal, to.jitFocal, k);
     r.baseSeed  = from.baseSeed;
     r.scatter   = from.scatter;
     return r;
@@ -341,6 +341,9 @@ int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
         if (k > 1.0f) k = 1.0f;
         DabBrush dabCB = BlendBrushes(seg.brushFrom, seg.brush, k);
         dabCB.rad_out_px = nextRadUnJit;
+        // Per-dab jitter range — proportional to this dab's own radius
+        float jitFrac = seg.brushFrom.jitRadOut / fmaxf(0.001f, seg.brushFrom.rad_out_px);
+        dabCB.jitRadOut = fmaxf(0.0f, dabCB.rad_out_px * jitFrac);
 
         // Per-dab direction: update modulator for stroke direction
         float tx = 0, ty = 0;

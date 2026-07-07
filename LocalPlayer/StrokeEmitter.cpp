@@ -121,9 +121,7 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
     modTo.radOut *= m_worldToTexPx;
     modTo.jitRadOut *= m_worldToTexPx;
 
-    ModulatedBrushConfig modFromScaled = modFrom;
-    modFromScaled.jitRadOut *= m_worldToTexPx;
-    DabBrush cbFrom = MakeDabBrush(modFromScaled, m_brushFrom.rad_out);
+    DabBrush cbFrom = MakeDabBrush(modFrom, m_brushFrom.rad_out);
     DabBrush cbTo   = MakeDabBrush(modTo, modTo.radOut);
 
     float hLen = segLen * 0.33f;
