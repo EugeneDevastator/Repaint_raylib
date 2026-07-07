@@ -53,16 +53,21 @@ void ApplyCanvasWindow(Document* doc) {
     float c = doc->window.mat[3], d = doc->window.mat[4];
     float ww = doc->window.ww, wh = doc->window.wh;
 
-    // Full 2×2 inverse of the window matrix (supports rotation).
-    // Maps old-world content to new-world origin so that baking into layers
-    // preserves the visual output.
-    float det = a*d - b*c;
-    float invDet = (fabsf(det) < 0.0001f) ? 0.0f : 1.0f / det;
-    float C[6] = {
-        d*invDet, -b*invDet, (-d*cx + b*cy)*invDet,
-        -c*invDet,  a*invDet, ( c*cx - a*cy)*invDet
-    };
-    if (fabsf(det) < 0.0001f) { Xform_Identity(C); }
+    // Decompose rotation + translation from the window matrix (remove scale).
+    // Layers are only rotated and moved, not rescaled.
+    float sx = sqrtf(a*a + c*c);
+    float sy = sqrtf(b*b + d*d);
+    float C[6];
+    if (sx < 0.0001f || sy < 0.0001f) {
+        Xform_Identity(C);
+    } else {
+        // Normalised rotation columns
+        float na = a/sx, nb = b/sy;
+        float nc = c/sx, nd = d/sy;
+        // Inverse of rotation-only matrix = transpose (orthogonal rotation)
+        C[0] = na;  C[1] = nc;  C[2] = -(na*cx + nc*cy);
+        C[3] = nb;  C[4] = nd;  C[5] = -(nb*cx + nd*cy);
+    }
     LayerStack_SetCanvasView(C);
     LayerStack_BakeCanvasWindow(doc);   // bakes C into layers, resets canvasView to identity
 

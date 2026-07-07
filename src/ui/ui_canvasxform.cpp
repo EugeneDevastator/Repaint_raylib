@@ -134,8 +134,16 @@ void CanvasXformModule::DrawGUI(const DrawRect& rect) {
     bool hDeact = ImGui::IsItemDeactivatedAfterEdit();
     if (hEdited && g_cropPixelH < 1) g_cropPixelH = 1;
     if (wDeact || hDeact) {
-        state->doc.window.ww = (float)g_cropPixelW;
-        state->doc.window.wh = (float)g_cropPixelH;
+        float aspect = g_entryWindow.ww / g_entryWindow.wh;
+        if (wDeact) {
+            state->doc.window.ww = (float)g_cropPixelW;
+            state->doc.window.wh = state->doc.window.ww / aspect;
+            g_cropPixelH = (int)(state->doc.window.wh + 0.5f);
+        } else {
+            state->doc.window.wh = (float)g_cropPixelH;
+            state->doc.window.ww = state->doc.window.wh * aspect;
+            g_cropPixelW = (int)(state->doc.window.ww + 0.5f);
+        }
     }
 
     ImGui::Text("rot: %.1f", RectXform_GetRot(&state->doc.window) * 180.0f / (float)M_PI);
