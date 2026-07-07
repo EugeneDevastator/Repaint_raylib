@@ -162,15 +162,6 @@ int StrokeEngine_GeneratePreviewDabs(const d_RealBrush* baseBrush, int toolMode,
 
     float savedPars[csSTOP];
     memcpy(savedPars, g_modPars.Pars, sizeof(float) * csSTOP);
-    g_modPars.Pars[csDir]    = RngConv(initialAngle, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
-    g_modPars.Pars[csIdir]   = g_modPars.Pars[csDir];
-    g_modPars.Pars[csRelang] = 0.5f;
-    g_modPars.Pars[csCrv]    = 0.5f;
-    g_modPars.Pars[csAcc]    = 1.0f;
-    g_modPars.Pars[csHVdir]  = fabsf(dirX);
-    g_modPars.Pars[csVel]    = 1.0f;
-    g_modPars.Pars[csLenpx]  = 1.0f;
-    g_modPars.Pars[csPressure] = 1.0f;
 
     cfg.bmidx          = baseBrush->bmidx;
     cfg.texBlendMode   = baseBrush->texBlendMode;
@@ -185,17 +176,38 @@ int StrokeEngine_GeneratePreviewDabs(const d_RealBrush* baseBrush, int toolMode,
     cfg.userTexDirection = baseBrush->userTexDirection;
     cfg.baseSeed       = baseBrush->seed;
 
+    // Curve geometry
+    Vector2 start = {cx, cy};
+    Vector2 end   = {cx + segLen * dirX, cy + segLen * dirY};
+    Vector2 mid   = {(start.x + end.x) * 0.5f, (start.y + end.y) * 0.5f};
+    float perpX = -dirY * segLen * 0.25f, perpY = dirX * segLen * 0.25f;
+    Vector2 c0 = {mid.x + perpX, mid.y + perpY};
+    Vector2 c3 = {mid.x - perpX, mid.y - perpY};
+
+    // Direction at curve start and end — so modulation (esp. angle) follows the stroke
+    float startDir = AtanXY(c0.x - start.x, c0.y - start.y);
+    float endDir   = AtanXY(end.x - c3.x, end.y - c3.y);
+
+    // Main brush (start of curve)
+    g_modPars.Pars[csDir]  = RngConv(startDir, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
+    g_modPars.Pars[csIdir] = g_modPars.Pars[csDir];
     ModulatedBrushConfig mod = ResolveModulatedConfig(cfg, toolMode, initialAngle, g_modPars.Pars);
     float spacingVal = mod.spacing;
     mod.radOut *= WORLD_UNIT_PX;
     mod.jitRadOut *= WORLD_UNIT_PX;
     mod.spacing = spacingVal;
-
     DabBrush cbFull = MakeDabBrush(mod, mod.radOut);
+
+    // End brush (1px, with end-direction angle)
+    g_modPars.Pars[csDir]  = RngConv(endDir, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
+    g_modPars.Pars[csIdir] = g_modPars.Pars[csDir];
+    ModulatedBrushConfig modEnd = ResolveModulatedConfig(cfg, toolMode, initialAngle, g_modPars.Pars);
+    modEnd.radOut = 1.0f;
+    DabBrush cbTiny = MakeDabBrush(modEnd, 1.0f);
 
     int total = 0;
 
-    // Stamp
+    // Stamp (uses start brush)
     SegmentData seed;
     memset(&seed, 0, sizeof(seed));
     seed.pos1 = seed.pos2 = Vector2{cx, cy};
@@ -221,16 +233,6 @@ int StrokeEngine_GeneratePreviewDabs(const d_RealBrush* baseBrush, int toolMode,
     }
 
     // Curved stroke (draws over several frames via incremental rendering)
-    ModulatedBrushConfig modTiny = mod;
-    modTiny.radOut = 1.0f;
-    DabBrush cbTiny = MakeDabBrush(modTiny, 1.0f);
-
-    Vector2 start = {cx, cy};
-    Vector2 end   = {cx + segLen * dirX, cy + segLen * dirY};
-    Vector2 mid   = {(start.x + end.x) * 0.5f, (start.y + end.y) * 0.5f};
-    float perpX = -dirY * segLen * 0.25f, perpY = dirX * segLen * 0.25f;
-    Vector2 c0 = {mid.x + perpX, mid.y + perpY};
-    Vector2 c3 = {mid.x - perpX, mid.y - perpY};
     SegmentData s;
     memset(&s, 0, sizeof(s));
     s.pos1 = start; s.pos2 = end;
@@ -252,6 +254,29 @@ int StrokeEngine_GeneratePreviewDabs(const d_RealBrush* baseBrush, int toolMode,
     SegResult r;
     int cnt = DrawLinear(s, total, 0.0f, outBuf + total, maxOut - total, &r);
     total += cnt;
+
+    // Per-dab angle fixup — recompute resangle from actual curve direction
+    for (int i = 1; i < total; i++) {
+        DabPoint& pt = outBuf[i];
+        // Direction from previous dab to this dab
+        float dx = pt.x - outBuf[i-1].x;
+        float dy = pt.y - outBuf[i-1].y;
+        float len = sqrtf(dx*dx + dy*dy);
+        if (len > 0.001f) {
+            float dirAng = AtanXY(dx, dy);
+            float dirVal = RngConv(dirAng, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
+            // Compute angle modulation using the same formula as ResolveModulatedConfig
+            float cpar = (cfg.angle.modulatorId >= 0 && cfg.angle.modulatorId < csSTOP)
+                ? dirVal : 1.0f;
+            float n = (cfg.angle.power != 1.0f)
+                ? powf(cfg.angle.userMax, cfg.angle.power) : cfg.angle.userMax;
+            float rng = cfg.angle.userMax - cfg.angle.userMin;
+            float respar = cpar * rng + cfg.angle.userMin;
+            float res = fminf(fmaxf(respar, 0.0f), 1.0f);
+            float angleMod = res * (cfg.angle.outMax - cfg.angle.outMin) + cfg.angle.outMin;
+            pt.brush.resangle = fmodf(initialAngle + angleMod, 360.0f);
+        }
+    }
 
     memcpy(g_modPars.Pars, savedPars, sizeof(float) * csSTOP);
     return total;
