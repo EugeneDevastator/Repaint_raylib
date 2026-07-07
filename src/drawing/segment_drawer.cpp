@@ -94,17 +94,17 @@ DabBrush BlendBrushes(DabBrush from, DabBrush to, float k) {
     r.userTexDirection = from.userTexDirection;
     r.focalOffset = from.focalOffset;
 
-    // Jitter ranges (interpolated — proportional to radius)
-    r.jitRadOut = lerp(from.jitRadOut, to.jitRadOut, k);
-    r.jitRadIn  = lerp(from.jitRadIn, to.jitRadIn, k);
-    r.jitOpacity = lerp(from.jitOpacity, to.jitOpacity, k);
-    r.jitCrv    = lerp(from.jitCrv, to.jitCrv, k);
-    r.jitX2y    = lerp(from.jitX2y, to.jitX2y, k);
-    r.jitHue    = lerp(from.jitHue, to.jitHue, k);
-    r.jitSat    = lerp(from.jitSat, to.jitSat, k);
-    r.jitLit    = lerp(from.jitLit, to.jitLit, k);
+    // Jitter ranges — per-dab, not per-segment (carry from start)
+    r.jitRadOut = from.jitRadOut;
+    r.jitRadIn  = from.jitRadIn;
+    r.jitOpacity = from.jitOpacity;
+    r.jitCrv    = from.jitCrv;
+    r.jitX2y    = from.jitX2y;
+    r.jitHue    = from.jitHue;
+    r.jitSat    = from.jitSat;
+    r.jitLit    = from.jitLit;
     r.jitCloneOp = from.jitCloneOp;
-    r.jitFocal  = lerp(from.jitFocal, to.jitFocal, k);
+    r.jitFocal  = from.jitFocal;
     r.baseSeed  = from.baseSeed;
     r.scatter   = from.scatter;
     return r;
