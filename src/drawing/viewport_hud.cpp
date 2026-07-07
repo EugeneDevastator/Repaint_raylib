@@ -5,6 +5,7 @@
 #include "rlgl.h"
 #include "external/glad.h"
 #include "stroke_engine.h"
+#include "brush_blend.h"
 #include <math.h>
 
 #define PREVIEW_SZ 512
@@ -13,8 +14,6 @@ extern Viewport viewport;
 extern bool g_seamlessPreview;
 
 static RenderTexture2D g_previewRT = {0};   // brush preview (strokes on transparent bg)
-static int g_frameCounter = 0;
-static const int g_previewUpdateInterval = 10;
 static unsigned int g_lastPreviewHash = 0;
 
 // Cached checkerboard texture for edit-texture backdrop.
@@ -27,18 +26,57 @@ static int g_editCheckerW = 0, g_editCheckerH = 0;
 // Viewport-resolution RT for crop mode (bypasses canvasView clipping)
 static RenderTexture2D g_viewResRT = {0};
 
-static unsigned int ComputeBrushHash(d_Brush* b) {
+static unsigned int ComputeBrushHash(const UserBrushConfig& cfg, TexSlotID texSlot) {
+    #define HF(v) do { float _f = (float)(v); unsigned int _iv; memcpy(&_iv, &_f, sizeof(_iv)); h = h * 33 + _iv; } while(0)
     unsigned int h = 0;
-    h ^= (unsigned int)(b->Realb.rad_out * 100);
-    h ^= (unsigned int)(b->Realb.radInRatio * 100) << 5;
-    h ^= (unsigned int)(b->Realb.opacity * 100) << 10;
-    h ^= (unsigned int)(b->Realb.crv * 100) << 15;
-    h ^= (unsigned int)(b->Realb.x2y * 100) << 20;
-    h ^= (unsigned int)(b->Realb.resangle) << 25;
-    h ^= b->Realb.bmidx << 28;
-    h ^= (unsigned int)(b->Realb.perspective * 100) << 12;
-    h ^= (unsigned int)(BParam_GetValue(&bpSpacing) * 100) << 8;
-    h ^= (unsigned int)(BParam_GetValue(&bpSizeMul) * 10) << 4;
+    HF(cfg.toolMode);
+    HF(cfg.size.userMax); HF(cfg.size.userMin); HF(cfg.size.outMin); HF(cfg.size.outMax);
+    HF(cfg.size.power); HF(cfg.size.modulatorId); HF(cfg.size.jitter);
+    HF(cfg.hardness.userMax); HF(cfg.hardness.userMin); HF(cfg.hardness.outMin); HF(cfg.hardness.outMax);
+    HF(cfg.hardness.power); HF(cfg.hardness.modulatorId); HF(cfg.hardness.jitter);
+    HF(cfg.curvature.userMax); HF(cfg.curvature.userMin); HF(cfg.curvature.outMin); HF(cfg.curvature.outMax);
+    HF(cfg.curvature.power); HF(cfg.curvature.modulatorId); HF(cfg.curvature.jitter);
+    HF(cfg.opacity.userMax); HF(cfg.opacity.userMin); HF(cfg.opacity.outMin); HF(cfg.opacity.outMax);
+    HF(cfg.opacity.power); HF(cfg.opacity.modulatorId); HF(cfg.opacity.jitter);
+    HF(cfg.angle.userMax); HF(cfg.angle.userMin); HF(cfg.angle.outMin); HF(cfg.angle.outMax);
+    HF(cfg.angle.power); HF(cfg.angle.modulatorId); HF(cfg.angle.jitter);
+    HF(cfg.scaleRel.userMax); HF(cfg.scaleRel.userMin); HF(cfg.scaleRel.outMin); HF(cfg.scaleRel.outMax);
+    HF(cfg.scaleRel.power); HF(cfg.scaleRel.modulatorId); HF(cfg.scaleRel.jitter);
+    HF(cfg.cloneOpacity.userMax); HF(cfg.cloneOpacity.userMin); HF(cfg.cloneOpacity.outMin); HF(cfg.cloneOpacity.outMax);
+    HF(cfg.cloneOpacity.power); HF(cfg.cloneOpacity.modulatorId); HF(cfg.cloneOpacity.jitter);
+    HF(cfg.hue.userMax); HF(cfg.hue.userMin); HF(cfg.hue.outMin); HF(cfg.hue.outMax);
+    HF(cfg.hue.power); HF(cfg.hue.modulatorId); HF(cfg.hue.jitter);
+    HF(cfg.sat.userMax); HF(cfg.sat.userMin); HF(cfg.sat.outMin); HF(cfg.sat.outMax);
+    HF(cfg.sat.power); HF(cfg.sat.modulatorId); HF(cfg.sat.jitter);
+    HF(cfg.lit.userMax); HF(cfg.lit.userMin); HF(cfg.lit.outMin); HF(cfg.lit.outMax);
+    HF(cfg.lit.power); HF(cfg.lit.modulatorId); HF(cfg.lit.jitter);
+    HF(cfg.texScale.userMax); HF(cfg.texScale.userMin); HF(cfg.texScale.outMin); HF(cfg.texScale.outMax);
+    HF(cfg.texScale.power); HF(cfg.texScale.modulatorId); HF(cfg.texScale.jitter);
+    HF(cfg.texFeather.userMax); HF(cfg.texFeather.userMin); HF(cfg.texFeather.outMin); HF(cfg.texFeather.outMax);
+    HF(cfg.texFeather.power); HF(cfg.texFeather.modulatorId); HF(cfg.texFeather.jitter);
+    HF(cfg.texThresh.userMax); HF(cfg.texThresh.userMin); HF(cfg.texThresh.outMin); HF(cfg.texThresh.outMax);
+    HF(cfg.texThresh.power); HF(cfg.texThresh.modulatorId); HF(cfg.texThresh.jitter);
+    HF(cfg.texBlendVal.userMax); HF(cfg.texBlendVal.userMin); HF(cfg.texBlendVal.outMin); HF(cfg.texBlendVal.outMax);
+    HF(cfg.texBlendVal.power); HF(cfg.texBlendVal.modulatorId); HF(cfg.texBlendVal.jitter);
+    HF(cfg.power.userMax); HF(cfg.power.userMin); HF(cfg.power.outMin); HF(cfg.power.outMax);
+    HF(cfg.power.power); HF(cfg.power.modulatorId); HF(cfg.power.jitter);
+    HF(cfg.perspective.userMax); HF(cfg.perspective.userMin); HF(cfg.perspective.outMin); HF(cfg.perspective.outMax);
+    HF(cfg.perspective.power); HF(cfg.perspective.modulatorId); HF(cfg.perspective.jitter);
+    HF(cfg.focalOffset.userMax); HF(cfg.focalOffset.userMin); HF(cfg.focalOffset.outMin); HF(cfg.focalOffset.outMax);
+    HF(cfg.focalOffset.power); HF(cfg.focalOffset.modulatorId); HF(cfg.focalOffset.jitter);
+    HF(cfg.sizeMul.userMax); HF(cfg.sizeMul.userMin); HF(cfg.sizeMul.outMin); HF(cfg.sizeMul.outMax);
+    HF(cfg.sizeMul.power); HF(cfg.sizeMul.modulatorId); HF(cfg.sizeMul.jitter);
+    HF(cfg.spacing.userMax); HF(cfg.spacing.userMin); HF(cfg.spacing.outMin); HF(cfg.spacing.outMax);
+    HF(cfg.spacing.power); HF(cfg.spacing.modulatorId); HF(cfg.spacing.jitter);
+    HF(cfg.scatter.userMax); HF(cfg.scatter.userMin); HF(cfg.scatter.outMin); HF(cfg.scatter.outMax);
+    HF(cfg.scatter.power); HF(cfg.scatter.modulatorId); HF(cfg.scatter.jitter);
+    HF(cfg.texBlendMode); HF(cfg.texNoisemode); HF(cfg.texColorMode);
+    HF(cfg.useTexLumAsAlpha); HF(cfg.bmidx); HF(cfg.preserveop); HF(cfg.eraseMode);
+    HF(cfg.userTexOriginX); HF(cfg.userTexOriginY); HF(cfg.userTexDirection);
+    HF(cfg.baseSeed);
+    HF(texSlot.bucket); HF(texSlot.slot);
+    HF(g_seamlessPaint); HF(g_pixelPerfect);
+    #undef HF
     return h;
 }
 
@@ -164,26 +202,23 @@ void ViewportHUD_Draw(AppState* state) {
     if (g_activeHud == HUD_QUICK) {
         EnsurePreviewRTs();
 
-        g_frameCounter++;
-        unsigned int currentHash = ComputeBrushHash(&state->currentBrush);
+        static DabPoint g_previewDabs[4096];
+        static int g_previewCount = 0;
+        static int g_previewRendered = 0;
+        static int g_previewBudget = 50000;
+        UserBrushConfig cfg;
+        CaptureBrushConfig(&cfg);
+        cfg.toolMode = state->mode;
+        unsigned int currentHash = ComputeBrushHash(cfg, state->brushTexSlot);
         bool paramsChanged = (currentHash != g_lastPreviewHash);
 
-        if (paramsChanged || g_lastPreviewHash == 0 || (g_frameCounter % g_previewUpdateInterval) == 0) {
+        if (paramsChanged || g_lastPreviewHash == 0) {
             d_RealBrush zoomBrush = state->currentBrush.Realb;
 
-            Texture2D bt = {0};
-            bool useTex = false;
-            if (TM_IsValid(state->brushTexSlot)) {
-                TexSlot* ts = TM_Get(state->brushTexSlot);
-                if (ts) { bt = ts->rt.texture; useTex = true; }
-            }
-
-            // Copy the visible canvas area as background (needed for smudge, harmless for paint)
+            // Clear RT and draw canvas background
             BeginTextureMode(g_previewRT);
             ClearBackground(BLANK);
             if (state->framingMode != FRAME_CROP && docBlendTex) {
-                // Position the texture so the pixel under the camera target
-                // lands at the preview center.
                 float texTX = state->camera.target.x;
                 float texTY = state->camera.target.y;
                 float drawX = PREVIEW_SZ * 0.5f - texTX;
@@ -194,13 +229,62 @@ void ViewportHUD_Draw(AppState* state) {
                     Rectangle{0, 0, (float)docBlendTex->texture.width, (float)-docBlendTex->texture.height},
                     Vector2{drawX, drawY}, WHITE);
             }
-            // Draw preview strokes on top (same modulation flow as real stroke)
-            StrokeEngine_DrawPreview(g_previewRT, bt, useTex, &zoomBrush, state->mode,
-                                     state->initialAngle,
-                                     PREVIEW_SZ * 0.5f, PREVIEW_SZ * 0.5f);
             EndTextureMode();
 
+            // Generate dab points (no rendering)
+            g_previewCount = StrokeEngine_GeneratePreviewDabs(&zoomBrush, state->mode,
+                state->initialAngle, PREVIEW_SZ * 0.5f, PREVIEW_SZ * 0.5f,
+                g_previewDabs, 4096);
+            g_previewRendered = 0;
+            g_previewBudget = 50000;
+
             g_lastPreviewHash = currentHash;
+        }
+
+        // Render pending dabs incrementally
+        if (g_previewRendered < g_previewCount) {
+            Texture2D bt = {0};
+            bool useTex = false;
+            if (TM_IsValid(state->brushTexSlot)) {
+                TexSlot* ts = TM_Get(state->brushTexSlot);
+                if (ts) { bt = ts->rt.texture; useTex = true; }
+            }
+
+            // If total remaining cost fits in budget, render all at once
+            int totalRemainingCost = 0;
+            int checkMax = g_previewRendered + 100 < g_previewCount ? g_previewRendered + 100 : g_previewCount;
+            for (int i = g_previewRendered; i < checkMax; i++) {
+                float r = g_previewDabs[i].brush.rad_out_px;
+                if (r < 0.5f) r = 0.5f;
+                totalRemainingCost += (int)(r * r);
+            }
+            bool renderAll = (totalRemainingCost <= g_previewBudget);
+
+            BeginTextureMode(g_previewRT);
+            double tStart = GetTime();
+            int cost = 0;
+            while (g_previewRendered < g_previewCount && (renderAll || cost < g_previewBudget)) {
+                DabPoint& pt = g_previewDabs[g_previewRendered];
+                BrushBlend_ApplyStamp(g_previewRT, pt.brush, bt, useTex,
+                    pt.x, pt.y, pt.srcX, pt.srcY, pt.srcRad, pt.srcAngle,
+                    g_seamlessPaint ? true : false, g_pixelPerfect ? true : false);
+                float r = pt.brush.rad_out_px;
+                if (r < 0.5f) r = 0.5f;
+                cost += (int)(r * r);
+                g_previewRendered++;
+            }
+            EndTextureMode();
+
+            // Adapt budget
+            if (!renderAll) {
+                double elapsed = GetTime() - tStart;
+                if (elapsed > 0.008)
+                    g_previewBudget = (int)(g_previewBudget * 0.85f);
+                else if (elapsed < 0.002)
+                    g_previewBudget = (int)(g_previewBudget * 1.15f);
+                if (g_previewBudget < 10000) g_previewBudget = 10000;
+                if (g_previewBudget > 500000) g_previewBudget = 500000;
+            }
         }
 
         // Display the preview quad — scale by zoom so brush size matches viewport canvas
@@ -223,5 +307,4 @@ void ViewportHUD_Shutdown(void) {
     if (g_viewResRT.id > 0) { UnloadRenderTexture(g_viewResRT); g_viewResRT = RenderTexture2D{0}; }
     if (g_editCheckerTex.id > 0) { UnloadTexture(g_editCheckerTex); g_editCheckerTex = Texture2D{0}; }
     g_lastPreviewHash = 0;
-    g_frameCounter = 0;
 }

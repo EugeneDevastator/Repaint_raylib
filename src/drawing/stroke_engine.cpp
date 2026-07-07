@@ -145,15 +145,14 @@ DabBrush MakeDabBrush(const ModulatedBrushConfig& mod, const float rad_out_px_ov
     return cb;
 }
 
-void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex, bool useTexture,
-                              const d_RealBrush* baseBrush, int toolMode,
-                              float initialAngle, float cx, float cy) {
+int StrokeEngine_GeneratePreviewDabs(const d_RealBrush* baseBrush, int toolMode,
+                                     float initialAngle, float cx, float cy,
+                                     DabPoint* outBuf, int maxOut) {
     UserBrushConfig cfg;
     CaptureBrushConfig(&cfg);
 
     float radOut = baseBrush->rad_out * WORLD_UNIT_PX;
-    float segLen = radOut * 3.0f;
-    if (segLen < 2.0f) segLen = 2.0f;
+    float segLen = fmaxf(radOut * 2.0f, 80.0f);
 
     float dirX = 1.0f, dirY = -1.0f;
     float dirLen = sqrtf(dirX * dirX + dirY * dirY);
@@ -197,6 +196,7 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex, bool us
     ModulatedBrushConfig mod = ResolveModulatedConfig(cfg, toolMode, initialAngle, g_modPars.Pars);
     float spacingVal = mod.spacing;
     mod.radOut *= WORLD_UNIT_PX;
+
     mod.jitRadOut = mod.jitRadIn = mod.jitOpacity = mod.jitCrv = mod.jitX2y = 0;
     mod.jitHue = mod.jitSat = mod.jitLit = mod.jitCloneOp = mod.jitFocal = 0;
     mod.baseSeed = 0;
@@ -206,10 +206,9 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex, bool us
 
     DabBrush cbFull = MakeDabBrush(mod, mod.radOut);
 
-    ModulatedBrushConfig modTiny = mod;
-    modTiny.radOut = 1.0f;
-    DabBrush cbTiny = MakeDabBrush(modTiny, 1.0f);
+    int total = 0;
 
+    // Stamp
     SegmentData seed;
     memset(&seed, 0, sizeof(seed));
     seed.pos1 = seed.pos2 = Vector2{cx, cy};
@@ -228,7 +227,16 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex, bool us
     seed.smudgeSrcX = cx;
     seed.smudgeSrcY = cy;
     seed.initAngle = initialAngle;
-    DrawSegment(seed, dstRT, brushTex, useTexture, seed.seamless != 0, 0, g_pixelPerfect);
+    {
+        SegResult r;
+        int cnt = DrawLinear(seed, 0, 0.0f, outBuf, maxOut, &r);
+        total += cnt;
+    }
+
+    // Curved stroke (draws over several frames via incremental rendering)
+    ModulatedBrushConfig modTiny = mod;
+    modTiny.radOut = 1.0f;
+    DabBrush cbTiny = MakeDabBrush(modTiny, 1.0f);
 
     Vector2 start = {cx, cy};
     Vector2 end   = {cx + segLen * dirX, cy + segLen * dirY};
@@ -254,5 +262,11 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex, bool us
     s.smudgeSrcX = cx;
     s.smudgeSrcY = cy;
     s.initAngle = initialAngle;
-    DrawSegment(s, dstRT, brushTex, useTexture, s.seamless != 0, 0, g_pixelPerfect);
+    SegResult r;
+    int cnt = DrawLinear(s, total, 0.0f, outBuf + total, maxOut - total, &r);
+    total += cnt;
+
+    return total;
 }
+
+// (StrokeEngine_DrawPreview removed — callers use StrokeEngine_GeneratePreviewDabs + incremental render)
