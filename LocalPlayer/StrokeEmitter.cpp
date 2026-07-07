@@ -22,7 +22,12 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
     m_brushFrom = e.brush;
     CaptureBrushConfig(&m_config);
     m_config.toolMode = e.toolMode;
-    m_config.bmidx = m_brushFrom.bmidx;
+    m_config.bmidx          = m_brushFrom.bmidx;
+    m_config.texColorMode   = m_brushFrom.texColorMode;
+    m_config.texNoisemode   = m_brushFrom.texNoisemode;
+    m_config.useTexLumAsAlpha = m_brushFrom.useTexLumAsAlpha;
+    m_config.preserveop     = m_brushFrom.preserveop;
+    m_config.texBlendMode   = m_brushFrom.texBlendMode;
     m_emittedAny = false;
     m_seed = e.brush.seed;
     m_initAngle = e.initAngle;
