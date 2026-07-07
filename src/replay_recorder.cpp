@@ -48,7 +48,6 @@ void ReplayRecorder::Play(AppState* state) {
     if (rt.id == 0) { printf("[REPLAY] RT invalid\n"); fflush(stdout); return; }
 
     int segIdx = 0;
-    int totalDabs = 0;
     for (auto& ns : m_segs) {
         segIdx++;
         // Scale positions to document size
@@ -75,7 +74,7 @@ void ReplayRecorder::Play(AppState* state) {
             replayTex = ts->rt.texture;
             replayUseTex = true;
         }
-        totalDabs += DrawSegment(dseg, rt, replayTex, replayUseTex, dseg.seamless != 0, totalDabs, dseg.pixelPerfect != 0);
+        DrawSegment(dseg, rt, replayTex, replayUseTex, dseg.seamless != 0, 0, dseg.pixelPerfect != 0);
     }
     printf("[REPLAY] Play done\n"); fflush(stdout);
 }

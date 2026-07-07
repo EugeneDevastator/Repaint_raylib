@@ -363,12 +363,11 @@ int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
         if (scatterRad > 0.001f) {
             float len = sqrtf(tx*tx + ty*ty);
             if (len > 0.001f) {
-                uint16_t seed = seg.brushFrom.baseSeed + (uint16_t)((dabOffset + count) * 13 + 37);
+                uint16_t segMix = (uint16_t)((int)seg.pos1.x * 73) ^ (uint16_t)((int)seg.pos1.y * 137);
+                uint16_t seed = seg.brushFrom.baseSeed + segMix + (uint16_t)(count * 13 + 37);
                 float raw = RawRnd(seed, 1024);
                 float u = raw / 1024.0f;
                 float off = (u * 2.0f - 1.0f) * scatterRad;
-                //printf("[SCATTER] dab=%d baseSeed=%u seed=%u raw=%.4f u=%.4f off=%.2f rad=%.2f scatter=%.2f\n",
-                //       count, seg.brushFrom.baseSeed, seed, raw, u, off, dabCB.rad_out_px, dabCB.scatter);
                 scatterPos.x += (-ty / len) * off;
                 scatterPos.y += (tx / len) * off;
             }
