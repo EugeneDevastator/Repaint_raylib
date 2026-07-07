@@ -12,12 +12,20 @@ void LayerStack_Init(void);
 void LayerStack_Shutdown(void);
 void LayerStack_ReloadShader(void);
 
-// Set the rendering window (for Composite output) and init accumulators
-void LayerStack_SetRenderWindow(int w, int h);
+// Canvas RT — the output texture that is composited onto the screen.
+// Its pixel size is the canvas resolution (independent of world-region ww/wh).
+// Created via LayerStack_InitCanvas, resized via LayerStack_ResizeCanvas.
+void LayerStack_InitCanvas(int w, int h);
+void LayerStack_ResizeCanvas(int newW, int newH);
+RenderTexture2D LayerStack_GetCanvasRT(void);
+RenderTexture2D* LayerStack_GetCanvasRTPtr(void);
+int             LayerStack_RenderW(void);
+int             LayerStack_RenderH(void);
 
-// Set the canvas-window matrix that is always pre-multiplied into every
-// layer's transform during compositing.
+// Canvas view matrix — maps world → canvas-local space.
+// The compositor uses this to blit layers onto the canvas RT.
 void LayerStack_SetCanvasView(const float mat[6]);
+const float* LayerStack_GetCanvasView(void);
 
 // ── Layer management ────────────────────────────────────────────────
 int  LayerStack_Add(int w, int h);

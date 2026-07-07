@@ -14,7 +14,8 @@ static struct {
     RenderTexture2D* rt;
     TexSlotID* slotID;
     int count;
-    int renderW, renderH;
+    RenderTexture2D canvasRT;
+    TexSlotID       canvasSlot;
     float canvasView[6];
 } LS;
 
@@ -81,15 +82,46 @@ static void RemoveLayerSlot(int idx) {
 }
 
 // ── Init / shutdown ──────────────────────────────────────────────────
-void LayerStack_Init(void) { LS = {0}; LS.canvasView[0]=1; LS.canvasView[4]=1; }
+void LayerStack_Init(void) {
+    LS = {0}; LS.canvasView[0]=1; LS.canvasView[4]=1;
+}
 
 void LayerStack_Shutdown(void) {
     for(int i=0;i<LS.count;i++) UnloadLayerSlotResources(i);
     free(LS.prop); free(LS.rt); free(LS.slotID);
+    if(LS.canvasRT.id>0) UnloadRenderTexture(LS.canvasRT);
+    LS.canvasRT={0}; LS.canvasSlot=TM_INVALID_SLOT;
     LS={0};
 }
 
-void LayerStack_SetRenderWindow(int w, int h) { LS.renderW=w; LS.renderH=h; }
+void LayerStack_InitCanvas(int w, int h) {
+    if(LS.canvasRT.id>0) UnloadRenderTexture(LS.canvasRT);
+    LS.canvasRT=Load16BitRT(w,h);
+    if(LS.canvasRT.id>0)
+        LS.canvasSlot=TM_Register(TM_BUCKET_LAYER, LS.canvasRT, "Canvas", true, w, h);
+}
+
+void LayerStack_ResizeCanvas(int newW, int newH) {
+    if(LS.canvasRT.id==0||newW<1||newH<1) return;
+    int oldW=(int)LS.canvasRT.texture.width, oldH=(int)LS.canvasRT.texture.height;
+    if(oldW==newW&&oldH==newH) return;
+    RenderTexture2D newRT=Load16BitRT(newW,newH);
+    if(newRT.id==0) return;
+    BeginTextureMode(newRT); ClearBackground(BLANK);
+    rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE,RL_ZERO,RL_FUNC_ADD);
+    DrawTexturePro(LS.canvasRT.texture, Rectangle{0,0,(float)oldW,(float)-oldH},
+        Rectangle{0,0,(float)newW,(float)newH}, Vector2{0,0}, 0.0f, WHITE);
+    rlSetBlendMode(RL_BLEND_ALPHA); EndTextureMode();
+    if(TM_IsValid(LS.canvasSlot)) TM_Remove(LS.canvasSlot);
+    UnloadRenderTexture(LS.canvasRT);
+    LS.canvasRT=newRT;
+    LS.canvasSlot=TM_Register(TM_BUCKET_LAYER, LS.canvasRT, "Canvas", true, newW, newH);
+}
+
+RenderTexture2D LayerStack_GetCanvasRT(void) { return LS.canvasRT; }
+RenderTexture2D* LayerStack_GetCanvasRTPtr(void) { return &LS.canvasRT; }
+int LayerStack_RenderW(void) { return LS.canvasRT.id>0?(int)LS.canvasRT.texture.width:0; }
+int LayerStack_RenderH(void) { return LS.canvasRT.id>0?(int)LS.canvasRT.texture.height:0; }
 
 void LayerStack_SetCanvasView(const float mat[6]) {
     memcpy(LS.canvasView, mat, 6*sizeof(float));
@@ -108,8 +140,6 @@ int             LayerStack_FindLayerBySlot(TexSlotID slot) {
         if (LS.slotID[i].bucket == slot.bucket && LS.slotID[i].slot == slot.slot) return i;
     return -1;
 }
-int LayerStack_RenderW(void) { return LS.renderW; }
-int LayerStack_RenderH(void) { return LS.renderH; }
 
 // ── Internal array resize ────────────────────────────────────────────
 static void ReallocArrays(int n) {
@@ -130,7 +160,8 @@ int LayerStack_Add(int w, int h) {
 
 int LayerStack_InsertLayer(int afterIdx) {
     int idx=afterIdx<0?0:afterIdx>LS.count?LS.count:afterIdx;
-    int cw=LS.renderW>0?LS.renderW:512, ch=LS.renderH>0?LS.renderH:512;
+    int cw=LayerStack_RenderW()>0?LayerStack_RenderW():512;
+    int ch=LayerStack_RenderH()>0?LayerStack_RenderH():512;
     ReallocArrays(LS.count+1); ShiftLayersUp(LS.count,idx);
     InitLayerSlot(idx,cw,ch); LS.count++; return idx;
 }

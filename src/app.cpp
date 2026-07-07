@@ -107,7 +107,7 @@ static void SyncCanvasFromDoc(const Document* doc, int* outW, int* outH) {
     float cv[6];
     ComputeCanvasMatrix(&doc->window, cw, ch, cv);
     LayerStack_SetCanvasView(cv);
-    LayerStack_SetRenderWindow(cw, ch);
+    LayerStack_InitCanvas(cw, ch);
 }
 
 static void DrawSplash(const char* msg) {

@@ -29,22 +29,23 @@ Document Doc_New(int w, int h) {
 }
 
 void ComputeCanvasMatrix(const RectXform* rx, int outW, int outH, float mat[6]) {
-    (void)outW; (void)outH;
     float cx = rx->mat[2], cy = rx->mat[5];
     float a = rx->mat[0], b = rx->mat[1];
     float c = rx->mat[3], d = rx->mat[4];
     float det = a * d - b * c;
     if (fabsf(det) < 0.0001f) { Xform_Identity(mat); return; }
     float invDet = 1.0f / det;
-    // paint = W^(-1) * (world - P)
+    // paint = W^(-1) * (world - P)   — maps world to canvas-local space
     float ia = d * invDet, ib = -b * invDet;
     float ic = -c * invDet, id = a * invDet;
-    mat[0] = ia;
-    mat[1] = ib;
-    mat[2] = -(ia * cx + ib * cy);
-    mat[3] = ic;
-    mat[4] = id;
-    mat[5] = -(ic * cx + id * cy);
+    float tx = -(ia * cx + ib * cy);
+    float ty = -(ic * cx + id * cy);
+    // Scale from canvas-local to texture pixels so the entire world region
+    // (ww,wh) maps to the full output texture (outW,outH).
+    float sx = (rx->ww > 0.0f) ? (float)outW / rx->ww : 1.0f;
+    float sy = (rx->wh > 0.0f) ? (float)outH / rx->wh : 1.0f;
+    mat[0] = ia * sx; mat[1] = ib * sx; mat[2] = tx * sx;
+    mat[3] = ic * sy; mat[4] = id * sy; mat[5] = ty * sy;
 }
 
 void ApplyCanvasWindow(Document* doc) {
@@ -76,12 +77,19 @@ void ApplyCanvasWindow(Document* doc) {
     LayerStack_SetCanvasView(idCv);
 
     // Reset window: no rotation, pivot at origin, same pixel extent.
-    // Texture size (LayerStack_RenderW/H) is NOT changed here — the
-    // viewport clips the composite source to min(texSize, ww/wh) so any
-    // extra texture area beyond the crop rect is never shown on screen.
+    // Texture size stays independent — canvasView will scale so the
+    // entire world region (ww,wh) maps to the full canvas RT pixels.
     doc->window.mat[0] = 1; doc->window.mat[1] = 0;
     doc->window.mat[2] = 0;
     doc->window.mat[3] = 0; doc->window.mat[4] = 1;
     doc->window.mat[5] = 0;
     doc->window.ww = ww; doc->window.wh = wh;
+
+    // Recompute canvasView with the reset window and current canvas RT size
+    int cw = LayerStack_RenderW(), ch = LayerStack_RenderH();
+    if (cw > 0 && ch > 0) {
+        float cv[6];
+        ComputeCanvasMatrix(&doc->window, cw, ch, cv);
+        LayerStack_SetCanvasView(cv);
+    }
 }

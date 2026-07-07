@@ -25,7 +25,7 @@ static void ExitCropMode(AppState* state, bool accept) {
         };
     } else {
         state->doc.window = g_entryWindow;
-        LayerStack_SetRenderWindow(g_origTexW, g_origTexH);
+        LayerStack_ResizeCanvas(g_origTexW, g_origTexH);
         float cv[6]; ComputeCanvasMatrix(&state->doc.window, g_origTexW, g_origTexH, cv);
         LayerStack_SetCanvasView(cv);
     }
@@ -143,11 +143,11 @@ void CanvasXformModule::DrawGUI(const DrawRect& rect) {
         if (wDeact) {
             int newW = g_cropPixelW < 1 ? 1 : g_cropPixelW;
             int newH = fmaxf(1, (int)(newW / aspect + 0.5f));
-            LayerStack_SetRenderWindow(newW, newH);
+            LayerStack_ResizeCanvas(newW, newH);
         } else {
             int newH = g_cropPixelH < 1 ? 1 : g_cropPixelH;
             int newW = fmaxf(1, (int)(newH * aspect + 0.5f));
-            LayerStack_SetRenderWindow(newW, newH);
+            LayerStack_ResizeCanvas(newW, newH);
         }
         // Sync display fields back (LayerStack may have clamped minimal sizes)
         g_cropPixelW = LayerStack_RenderW();
