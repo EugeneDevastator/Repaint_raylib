@@ -67,6 +67,7 @@ ModulatedBrushConfig ResolveModulatedConfig(const UserBrushConfig& cfg, int tool
     out.useTexLumAsAlpha = cfg.useTexLumAsAlpha;
     out.bmidx          = cfg.bmidx;
     out.preserveop     = cfg.preserveop;
+    out.eraseMode      = cfg.eraseMode;
     out.userTexOriginX = cfg.userTexOriginX;
     out.userTexOriginY = cfg.userTexOriginY;
     out.userTexDirection = cfg.userTexDirection;
@@ -168,6 +169,18 @@ void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex, bool us
     g_modPars.Pars[csLenpx]  = 1.0f;
     g_modPars.Pars[csRelang] = 0.5f;
     g_modPars.Pars[csPressure] = 1.0f;
+
+    cfg.bmidx          = baseBrush->bmidx;
+    cfg.texBlendMode   = baseBrush->texBlendMode;
+    cfg.texNoisemode   = baseBrush->texNoisemode;
+    cfg.texColorMode   = baseBrush->texColorMode;
+    cfg.useTexLumAsAlpha = baseBrush->useTexLumAsAlpha;
+    cfg.preserveop     = baseBrush->preserveop;
+    cfg.eraseMode      = baseBrush->eraseMode;
+    cfg.userTexOriginX = baseBrush->userTexOriginX;
+    cfg.userTexOriginY = baseBrush->userTexOriginY;
+    cfg.userTexDirection = baseBrush->userTexDirection;
+    cfg.baseSeed       = baseBrush->seed;
 
     cfg.size.jitter = 0;
     cfg.hardness.jitter = 0;

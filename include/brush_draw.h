@@ -43,6 +43,7 @@ struct UserBrushConfig {
     bool  useTexLumAsAlpha;
     int   bmidx;
     uint8_t preserveop;
+    uint8_t eraseMode;
     float userTexOriginX;
     float userTexOriginY;
     float userTexDirection;

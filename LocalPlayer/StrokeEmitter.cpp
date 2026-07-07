@@ -28,6 +28,11 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
     m_config.useTexLumAsAlpha = m_brushFrom.useTexLumAsAlpha;
     m_config.preserveop     = m_brushFrom.preserveop;
     m_config.texBlendMode   = m_brushFrom.texBlendMode;
+    m_config.eraseMode      = m_brushFrom.eraseMode;
+    m_config.baseSeed       = m_brushFrom.seed;
+    m_config.userTexOriginX = m_brushFrom.userTexOriginX;
+    m_config.userTexOriginY = m_brushFrom.userTexOriginY;
+    m_config.userTexDirection = m_brushFrom.userTexDirection;
     m_emittedAny = false;
     m_seed = e.brush.seed;
     m_initAngle = e.initAngle;
