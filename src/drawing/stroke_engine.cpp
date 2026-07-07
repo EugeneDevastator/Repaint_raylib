@@ -153,23 +153,8 @@ int StrokeEngine_GeneratePreviewDabs(const d_RealBrush* baseBrush, int toolMode,
 
     float radOut = baseBrush->rad_out * WORLD_UNIT_PX;
     float segLen = fmaxf(radOut * 2.0f, 80.0f);
-
-    float dirX = 1.0f, dirY = -1.0f;
-    float dirLen = sqrtf(dirX * dirX + dirY * dirY);
-    dirX /= dirLen; dirY /= dirLen;
-    float dirAng = AtanXY(dirX, dirY);
-
-    float savedPars[csSTOP];
-    memcpy(savedPars, g_modPars.Pars, sizeof(float) * csSTOP);
-    g_modPars.Pars[csDir]    = RngConv(dirAng, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
-    g_modPars.Pars[csIdir]   = g_modPars.Pars[csDir];
-    g_modPars.Pars[csCrv]    = 0.5f;
-    g_modPars.Pars[csAcc]    = 1.0f;
-    g_modPars.Pars[csHVdir]  = fabsf(dirX);
-    g_modPars.Pars[csVel]    = 1.0f;
-    g_modPars.Pars[csLenpx]  = 1.0f;
-    g_modPars.Pars[csRelang] = 0.5f;
-    g_modPars.Pars[csPressure] = 1.0f;
+    float dirAng = initialAngle;
+    float dirX = cosf(dirAng), dirY = -sinf(dirAng);
 
     cfg.bmidx          = baseBrush->bmidx;
     cfg.texBlendMode   = baseBrush->texBlendMode;
@@ -183,26 +168,11 @@ int StrokeEngine_GeneratePreviewDabs(const d_RealBrush* baseBrush, int toolMode,
     cfg.userTexDirection = baseBrush->userTexDirection;
     cfg.baseSeed       = baseBrush->seed;
 
-    cfg.size.jitter = 0;
-    cfg.hardness.jitter = 0;
-    cfg.curvature.jitter = 0;
-    cfg.opacity.jitter = 0;
-    cfg.angle.jitter = 0;
-    cfg.scaleRel.jitter = 0;
-    cfg.hue.jitter = cfg.sat.jitter = cfg.lit.jitter = 0;
-    cfg.cloneOpacity.jitter = 0;
-    cfg.focalOffset.jitter = 0;
-
     ModulatedBrushConfig mod = ResolveModulatedConfig(cfg, toolMode, initialAngle, g_modPars.Pars);
     float spacingVal = mod.spacing;
     mod.radOut *= WORLD_UNIT_PX;
-
-    mod.jitRadOut = mod.jitRadIn = mod.jitOpacity = mod.jitCrv = mod.jitX2y = 0;
-    mod.jitHue = mod.jitSat = mod.jitLit = mod.jitCloneOp = mod.jitFocal = 0;
-    mod.baseSeed = 0;
+    mod.jitRadOut *= WORLD_UNIT_PX;
     mod.spacing = spacingVal;
-
-    memcpy(g_modPars.Pars, savedPars, sizeof(float) * csSTOP);
 
     DabBrush cbFull = MakeDabBrush(mod, mod.radOut);
 

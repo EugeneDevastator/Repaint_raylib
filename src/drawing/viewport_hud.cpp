@@ -206,6 +206,7 @@ void ViewportHUD_Draw(AppState* state) {
         static int g_previewCount = 0;
         static int g_previewRendered = 0;
         static int g_previewBudget = 50000;
+        static uint16_t g_previewBaseSeed = 0;
         UserBrushConfig cfg;
         CaptureBrushConfig(&cfg);
         cfg.toolMode = state->mode;
@@ -214,6 +215,8 @@ void ViewportHUD_Draw(AppState* state) {
 
         if (paramsChanged || g_lastPreviewHash == 0) {
             d_RealBrush zoomBrush = state->currentBrush.Realb;
+            if (g_lastPreviewHash == 0) g_previewBaseSeed = zoomBrush.seed;
+            zoomBrush.seed = g_previewBaseSeed;
 
             // Clear RT and draw canvas background
             BeginTextureMode(g_previewRT);
