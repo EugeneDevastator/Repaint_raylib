@@ -231,7 +231,7 @@ void BrushBlend_ApplyStamp(
     float y0 = stampY - stampSizePx * 0.5f;
 
     // -------- Pass 2a: blend to intermediate --------
-    RenderTexture2D* intermediateRT = AllocPoolRT(intermediatePool, bucket, false);
+    RenderTexture2D* intermediateRT = AllocPoolRT(intermediatePool, bucket, true);
 
     float drawBboxHalf = (float)drawSz * 0.5f;
     float size = radOutForGeo / drawBboxHalf;
