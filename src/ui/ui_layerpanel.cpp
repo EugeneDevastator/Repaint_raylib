@@ -193,11 +193,6 @@ void LayerPanel_Draw(AppState* state) {
     ImGui::Spacing();
 
     {
-        char idxBuf[64];
-        snprintf(idxBuf, sizeof(idxBuf), "Layer %d / %d", state->activeLayer + 1, LayerStack_Count());
-        ImGui::Text("%s", idxBuf);
-    }
-    {
         const char* frameLabel = (state->framingMode == FRAME_CROP) ? "Framing: Crop" : "Framing: Canvas";
         if (ImGui::Button(frameLabel, ImVec2(-1, 0))) {
             bool enteringCrop = (state->framingMode == FRAME_DEFAULT);
@@ -314,7 +309,7 @@ void LayerPanel_Draw(AppState* state) {
     float btnAw = ImGui::GetContentRegionAvail().x;
     float btnW2 = (btnAw - 8.0f) / 3.0f;
     // Row 1: Add, Dup, Inst
-    if (ImGui::Button("+Add", ImVec2(btnW2, 30))) {
+    if (ImGui::Button("+Lyr", ImVec2(btnW2, 30))) {
         d_LAction lact = {};
         lact.ActID = laAdd;
         lact.layer = (int16_t)(state->activeLayer + 1);
@@ -361,6 +356,7 @@ void LayerPanel_Draw(AppState* state) {
     }
 
     // ── User texture section ──
+    ImGui::Text("Brush Textures");
     ImGui::Separator();
 
     ImGui::PushID("tex");
@@ -405,11 +401,11 @@ void LayerPanel_Draw(AppState* state) {
         }
         ImGui::EndChild();
 
-        // Texture action buttons after the list
+        // Texture action buttons after the list — same height as layer buttons (30px)
         float texAw = ImGui::GetContentRegionAvail().x;
         float texBtnW = (texAw - ImGui::GetStyle().ItemSpacing.x * 2) / 3.0f;
         if (texBtnW < 30.0f) texBtnW = 30.0f;
-        if (ImGui::Button("+Tex", ImVec2(texBtnW, 24))) {
+        if (ImGui::Button("+Tex", ImVec2(texBtnW, 30))) {
             char name[64];
             snprintf(name, sizeof(name), "Texture %d", TM_Count(TM_BUCKET_USER) + 1);
             TexSlotID id = BrushTex_Add(state, name, 512, 512);
@@ -420,7 +416,7 @@ void LayerPanel_Draw(AppState* state) {
             }
         }
         ImGui::SameLine();
-        if (ImGui::Button("Dup", ImVec2(texBtnW, 24))) {
+        if (ImGui::Button("Dup", ImVec2(texBtnW, 30))) {
             if (g_layerTexSelected >= 0) {
                 TexSlotID srcId = {TM_BUCKET_USER, (uint8_t)g_layerTexSelected};
                 TexSlot* srcTs = TM_Get(srcId);
@@ -447,7 +443,7 @@ void LayerPanel_Draw(AppState* state) {
             }
         }
         ImGui::SameLine();
-        if (ImGui::Button("Del", ImVec2(texBtnW, 24))) {
+        if (ImGui::Button("Del", ImVec2(texBtnW, 30))) {
             if (g_layerTexSelected >= 0) {
                 TexSlotID id = {TM_BUCKET_USER, (uint8_t)g_layerTexSelected};
                 TexSlot* ts = TM_Get(id);

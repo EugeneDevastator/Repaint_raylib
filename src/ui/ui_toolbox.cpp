@@ -1,9 +1,9 @@
 #include "repaint.h"
 #include "imgui.h"
 
-#define GIZMO_TOOL_N 6
-static const char* gizmoToolLabels[GIZMO_TOOL_N] = {"Br","Sm","Po","Er","Di","Co"};
-static const int gizmoToolModes[GIZMO_TOOL_N] = {eBrush, eSmudge, ePolyStripe, eBrush, eDistort, eContrast};
+#define GIZMO_TOOL_N 3
+static const char* gizmoToolLabels[] = {"Br","Sm","Li"};
+static const int gizmoToolModes[] = {eBrush, eSmudge, ePolyStripe};
 
 #define TOOL_ICON_N 6
 static Texture2D toolIconTex[TOOL_ICON_N];
@@ -31,8 +31,8 @@ void ToolBox_Shutdown(void) {
 }
 
 void ToolBox_Draw(AppState* state, Rectangle vp) {
-    static const int toolIconIdx[GIZMO_TOOL_N] = {0, 1, 2, 4, 3, 4};
-    int cols = 3, rows = 2;
+    static const int toolIconIdx[GIZMO_TOOL_N] = {0, 1, 2};
+    int cols = 3, rows = 1;
     int btnSz = 42;
     int gap = 4;
     int winW = cols * btnSz + (cols - 1) * gap + 12;
@@ -57,26 +57,12 @@ void ToolBox_Draw(AppState* state, Rectangle vp) {
         ImTextureID tid = hasIcon ? (ImTextureID)(intptr_t)toolIconTex[ii].id : 0;
 
         auto handleClick = [&]() {
-            if (i == 0) DisplayInfoText("Painting");
-            if (i == 3) {
-                state->mode = eBrush;
-                if (state->eraseMode == eEraseNone) {
-                    state->eraseMode = eEraseAlpha;
-                } else {
-                    ImGui::OpenPopup("##eraseModePopup");
-                }
-            } else {
-                state->mode = gizmoToolModes[i];
-                state->eraseMode = eEraseNone;
-                state->currentBrush.Realb.col.a = 255;
-            }
+            state->mode = gizmoToolModes[i];
+            state->eraseMode = eEraseNone;
+            state->currentBrush.Realb.col.a = 255;
         };
 
-        bool isActive = false;
-        if (i == 3)
-            isActive = (state->eraseMode != eEraseNone);
-        else
-            isActive = (state->mode == gizmoToolModes[i]);
+        bool isActive = (state->mode == gizmoToolModes[i]);
 
         if (isActive) {
             ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.2f, 0.6f, 1.0f, 1.0f));
@@ -94,6 +80,7 @@ void ToolBox_Draw(AppState* state, Rectangle vp) {
         ImGui::PopID();
     }
 
+    /*
     if (ImGui::BeginPopup("##eraseModePopup", ImGuiWindowFlags_NoScrollbar)) {
         static const char* eraseNames[] = {"Alpha Erase", "Color Erase"};
         static const int eraseModes[] = {eEraseAlpha, eEraseColor};
@@ -110,6 +97,7 @@ void ToolBox_Draw(AppState* state, Rectangle vp) {
         }
         ImGui::EndPopup();
     }
+    */
 
     ImGui::End();
     ImGui::PopStyleVar(2);

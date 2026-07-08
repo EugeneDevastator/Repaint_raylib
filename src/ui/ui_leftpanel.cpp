@@ -72,7 +72,8 @@ void LeftPanel_Draw(AppState* state) {
     ImGui::SetNextWindowSize(ImVec2((float)uiPanelWidth, (float)GetScreenHeight()), ImGuiCond_Always);
     ImGui::Begin("Tools", NULL,
         ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
+        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar |
+        ImGuiWindowFlags_NoScrollbar);
 
     ImGui::Separator();
     ImGui::Text("Presets");
@@ -161,7 +162,6 @@ void LeftPanel_Draw(AppState* state) {
 
     ImGui::Spacing();
     ImGui::Separator();
-    ImGui::Text("Blend Mode");
     ImGui::Spacing();
 
     // Blend mode (selectable list, immediate highlight on mouse down)
@@ -222,18 +222,15 @@ void LeftPanel_Draw(AppState* state) {
     ImGui::Spacing();
 
     // ── Test broker ──
-    extern bool g_useTestBroker;
-    ImGui::Checkbox("Test Broker (+200px X)", &g_useTestBroker);
+    //extern bool g_useTestBroker;
+    //ImGui::Checkbox("Test Broker (+200px X)", &g_useTestBroker);
 
-    // Zoom and mode info
-    {
+    // Zoom info
+    /*{
         char zoomInfo[32];
         sprintf(zoomInfo, "Zoom: %.0f%%", state->camera.zoom * 100.0f);
         ImGui::Text("%s", zoomInfo);
-
-        const char* modeNames[] = {"Brush", "Smudge", "PolyStripe", "Distort", "Contrast", "Single"};
-        ImGui::Text("%s", modeNames[state->mode > 5 ? 0 : state->mode]);
-    }
+    }*/
 
     if (ImGui::Button("Reload Shaders", ImVec2(-1, 0))) {
         BrushBlend_Shutdown();
@@ -241,9 +238,9 @@ void LeftPanel_Draw(AppState* state) {
         ViewportManager_ReloadShader();
     }
 
-    if (ImGui::Button("Changelog", ImVec2(-1, 0))) {
+    /*if (ImGui::Button("Changelog", ImVec2(-1, 0))) {
         Changelog_Toggle();
-    }
+    }*/
 
     // Separator + resize handle at right edge (drawn inside ImGui for proper z-order)
     {

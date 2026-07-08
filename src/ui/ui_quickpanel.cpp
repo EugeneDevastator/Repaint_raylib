@@ -56,8 +56,8 @@ void QuickPanel_DrawUI(AppState* state) {
         ImGui::SetCursorScreenPos(ImVec2(panelX, penBtnY - 14));
         ImGui::BeginChild("##sliders", ImVec2((float)panelW, (float)totalColH), true, ImGuiWindowFlags_NoScrollbar);
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6, 5));
-        BParam* hbps[] = {&bpSize, &bpSizeMul, &bpHardness, &bpCurvature, &bpAngle, &bpScaleRel, &bpCloneOpacity, &bpPower, &bpPerspective, &bpFocalOffset};
-        for (int i = 0; i < 10; i++)
+        BParam* hbps[] = {&bpSize, &bpSizeMul, &bpHardness, &bpCurvature, &bpAngle, &bpScaleRel, &bpCloneOpacity, &bpPerspective, &bpFocalOffset};
+        for (int i = 0; i < 9; i++)
             DrawSlider(hbps[i], 0);
         ImGui::PopStyleVar();
         ImGui::EndChild();
