@@ -211,6 +211,7 @@ Document Doc_New(int w, int h);
 void app_new_document(int w, int h, Color fill);
 
 // Canvas window matrix — pure function, maps document coords → output pixel coords
+// todo - this probably can be removed because layer compositor handles layer merges gracefully already
 void ComputeCanvasMatrix(const RectXform* rx, int outW, int outH, float mat[6]);
 
 // Commit the canvas window: bake the window transform into all layers,
