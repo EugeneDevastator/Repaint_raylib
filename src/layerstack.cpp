@@ -72,6 +72,10 @@ static void InitLayerSlot(int idx, int w, int h) {
     LS.prop[idx].blendmode=bmGamma;
     // Layer xform matches the canvas world-region, not the pixel size of the RT
     LS.prop[idx].xform = LS.canvasXform;
+    if (LS.canvasXform.ww <= 0.0f || LS.canvasXform.wh <= 0.0f) {
+        LS.prop[idx].xform.ww = (float)w;
+        LS.prop[idx].xform.wh = (float)h;
+    }
     LS.prop[idx].xform.mat[0]=1; LS.prop[idx].xform.mat[1]=0;
     LS.prop[idx].xform.mat[2]=0; LS.prop[idx].xform.mat[3]=0;
     LS.prop[idx].xform.mat[4]=1; LS.prop[idx].xform.mat[5]=0;
@@ -90,7 +94,6 @@ static void RemoveLayerSlot(int idx) {
 // ── Init / shutdown ──────────────────────────────────────────────────
 void LayerStack_Init(void) {
     LS = {0}; LS.canvasView[0]=1; LS.canvasView[4]=1;
-    LS.canvasXform.ww=512; LS.canvasXform.wh=512;
 }
 
 void LayerStack_Shutdown(void) {
