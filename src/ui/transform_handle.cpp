@@ -393,10 +393,42 @@ bool TransformHandle_Input(RectXform* xform,
             if (fabsf(xform->wh) < 1.0f) xform->wh = (xform->wh < 0) ? -1.0f : 1.0f;
             if (lockAspect) {
                 float ratio = sw / sh;
-                if (fabsf(nw - sw) > fabsf(nh - sh))
-                    xform->wh = xform->ww / ratio;
-                else
-                    xform->ww = xform->wh * ratio;
+                // Keep the aspect ratio AND the opposite corner fixed.
+                // Recompute ww/wh so they satisfy the ratio, then update the
+                // translation to keep the opposite corner at its world position.
+                if (fabsf(nw - sw) > fabsf(nh - sh)) {
+                    nh = xform->ww / ratio;
+                    switch (s_dragCorner) {
+                    case 0: // TL, opp BR at (sw,sh)
+                        ttx = stx + sa*sw + sb*sh - sa*xform->ww - sb*nh;
+                        tty = sty + sc_*sw + sd*sh - sc_*xform->ww - sd*nh;
+                        break;
+                    case 1: // TR, opp BL at (0,sh)
+                        ttx = stx + sb*(sh - nh);
+                        tty = sty + sd*(sh - nh);
+                        break;
+                    case 2: case 3: break; // TL origin → no translation change
+                    }
+                } else {
+                    nw = xform->wh * ratio;
+                    switch (s_dragCorner) {
+                    case 0: // TL, opp BR at (sw,sh)
+                        ttx = stx + sa*sw + sb*sh - sa*nw - sb*xform->wh;
+                        tty = sty + sc_*sw + sd*sh - sc_*nw - sd*xform->wh;
+                        break;
+                    case 1: // TR, opp BL at (0,sh)
+                        ttx = stx + sb*(sh - xform->wh);
+                        tty = sty + sd*(sh - xform->wh);
+                        break;
+                    case 3: // BL, opp TR at (sw,0)
+                        ttx = stx + sa*(sw - nw);
+                        tty = sty + sc_*(sw - nw);
+                        break;
+                    case 2: break; // TL origin → no translation change
+                    }
+                }
+                xform->ww = nw; xform->wh = nh;
+                xform->mat[2] = ttx; xform->mat[5] = tty;
             }
         } else {
             // Layer mode — scale maps to ww/wh, matrix columns stay unit.
