@@ -76,7 +76,7 @@ void LeftPanel_Draw(AppState* state) {
         ImGuiWindowFlags_NoScrollbar);
 
     ImGui::Separator();
-    ImGui::Text("Presets");
+    ImGui::Text("Brush Presets");
     ImGui::Spacing();
 
     // ── Brush presets panel ──
@@ -199,6 +199,7 @@ void LeftPanel_Draw(AppState* state) {
     ImGui::Checkbox("Preserve Layer Alpha", (bool*)&preserve);
     state->currentBrush.Realb.preserveop = (uint8_t)preserve;
 
+    ImGui::Spacing();
     extern bool g_pixelPerfect;
     ImGui::Checkbox("Pixel Perfect", &g_pixelPerfect);
 

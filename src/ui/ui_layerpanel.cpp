@@ -356,8 +356,8 @@ void LayerPanel_Draw(AppState* state) {
     }
 
     // ── User texture section ──
-    ImGui::Text("Brush Textures");
     ImGui::Separator();
+    ImGui::Text("Brush Textures");
 
     ImGui::PushID("tex");
     {

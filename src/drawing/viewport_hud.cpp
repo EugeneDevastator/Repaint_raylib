@@ -15,6 +15,7 @@ extern bool g_seamlessPreview;
 
 static RenderTexture2D g_previewRT = {0};   // brush preview (strokes on transparent bg)
 static unsigned int g_lastPreviewHash = 0;
+static int g_lastActiveHud = HUD_NONE;        // force preview redraw on HUD activation
 
 // Cached checkerboard texture for edit-texture backdrop.
 // Created on demand, reused across frames — avoids creating + destroying
@@ -229,6 +230,14 @@ void ViewportHUD_Draw(AppState* state) {
             cfg.userTexDirection = br.userTexDirection;
             cfg.baseSeed       = br.seed;
         }
+        // Force redraw when HUD_QUICK becomes active (canvas content may have changed)
+        if (g_activeHud == HUD_QUICK && g_lastActiveHud != HUD_QUICK) {
+            g_lastPreviewHash = 0;
+            g_previewRendered = 0;
+            g_previewCount = 0;
+        }
+        g_lastActiveHud = g_activeHud;
+
         unsigned int currentHash = ComputeBrushHash(cfg, state->brushTexSlot, state->initialAngle);
         bool paramsChanged = (currentHash != g_lastPreviewHash);
 

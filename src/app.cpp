@@ -358,7 +358,7 @@ static void OnOpenResult(DialogResult r) {
                 memcpy(g_currentFilePath, r.output, len + 1);
             g_state->activeLayer = 0;
             SyncCanvasFromDoc(&g_state->doc, NULL, NULL);
-            g_state->camera.target = Vector2{0, 0};
+            g_state->camera.target = Vector2{g_state->doc.window.ww * 0.5f, g_state->doc.window.wh * 0.5f};
             layersDirty = true;
         } else {
             // Try as a standard image (PNG, JPEG, BMP, GIF, etc.)
@@ -373,7 +373,7 @@ static void OnOpenResult(DialogResult r) {
                 g_state->doc = Doc_New(w, h);
                 g_state->activeLayer = 0;
                 SyncCanvasFromDoc(&g_state->doc, NULL, NULL);
-                g_state->camera.target = Vector2{0, 0};
+                g_state->camera.target = Vector2{g_state->doc.window.ww * 0.5f, g_state->doc.window.wh * 0.5f};
                 g_state->camera.zoom = 1.0f;
                 int idx = LayerStack_Add(w, h);
                 LayerStack_UploadToGPU(idx, img);
@@ -386,7 +386,7 @@ static void OnOpenResult(DialogResult r) {
                 g_state->doc = Doc_New(w, h);
                 g_state->activeLayer = 0;
                 SyncCanvasFromDoc(&g_state->doc, NULL, NULL);
-                g_state->camera.target = Vector2{0, 0};
+                g_state->camera.target = Vector2{g_state->doc.window.ww * 0.5f, g_state->doc.window.wh * 0.5f};
                 g_state->camera.zoom = 1.0f;
                 int idx = LayerStack_Add(w, h);
                 Image fillImg = GenImageColor(w, h, WHITE);
@@ -424,7 +424,7 @@ void app_new_document(int w, int h, Color fill) {
     g_state->doc = Doc_New(w, h);
     g_state->activeLayer = 0;
     SyncCanvasFromDoc(&g_state->doc, NULL, NULL);
-    g_state->camera.target = Vector2{0, 0};
+    g_state->camera.target = Vector2{(float)w * 0.5f, (float)h * 0.5f};
     int idx = LayerStack_Add(w, h);
     RenderTexture2D rt = LayerStack_GetRT(idx);
     BeginTextureMode(rt);
@@ -486,7 +486,7 @@ void App_FileReload(void) {
     if (LoadRePaint(g_currentFilePath, &g_state->doc, g_state)) {
         g_state->activeLayer = 0;
         SyncCanvasFromDoc(&g_state->doc, NULL, NULL);
-        g_state->camera.target = Vector2{0, 0};
+        g_state->camera.target = Vector2{g_state->doc.window.ww * 0.5f, g_state->doc.window.wh * 0.5f};
         layersDirty = true;
     }
 }
@@ -722,7 +722,7 @@ void App_Init(AppState* state) {
         if (LoadRePaint(closePath, &state->doc, state)) {
             state->activeLayer = 0;
             SyncCanvasFromDoc(&state->doc, NULL, NULL);
-            state->camera.target = Vector2{0, 0};
+            state->camera.target = Vector2{state->doc.window.ww * 0.5f, state->doc.window.wh * 0.5f};
             if (g_recorder) g_recorder->Reset(DocOutPxW(&state->doc), DocOutPxH(&state->doc));
             layersDirty = true;
         } else {
