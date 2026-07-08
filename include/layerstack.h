@@ -16,6 +16,7 @@ void LayerStack_ReloadShader(void);
 // Its pixel size is the canvas resolution (independent of world-region ww/wh).
 // Created via LayerStack_InitCanvas, resized via LayerStack_ResizeCanvas.
 void LayerStack_InitCanvas(int w, int h);
+void LayerStack_SetCanvasXform(const RectXform* xf);
 void LayerStack_ResizeCanvas(int newW, int newH);
 RenderTexture2D LayerStack_GetCanvasRT(void);
 RenderTexture2D* LayerStack_GetCanvasRTPtr(void);

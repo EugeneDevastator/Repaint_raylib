@@ -16,6 +16,7 @@ static struct {
     int count;
     RenderTexture2D canvasRT;
     TexSlotID       canvasSlot;
+    RectXform       canvasXform;  // world-region xform for new layers
     float canvasView[6];
 } LS;
 
@@ -68,7 +69,12 @@ static void InitLayerSlot(int idx, int w, int h) {
     SetTextureFilter(LS.rt[idx].texture, TEXTURE_FILTER_BILINEAR);
     BeginTextureMode(LS.rt[idx]); ClearBackground(BLANK); EndTextureMode();
     LS.prop[idx]={}; LS.prop[idx].op=1; LS.prop[idx].visible=true;
-    LS.prop[idx].blendmode=bmGamma; LS.prop[idx].xform = RectXform_Pivot(0, 0, (float)w, (float)h, 0);
+    LS.prop[idx].blendmode=bmGamma;
+    // Layer xform matches the canvas world-region, not the pixel size of the RT
+    LS.prop[idx].xform = LS.canvasXform;
+    LS.prop[idx].xform.mat[0]=1; LS.prop[idx].xform.mat[1]=0;
+    LS.prop[idx].xform.mat[2]=0; LS.prop[idx].xform.mat[3]=0;
+    LS.prop[idx].xform.mat[4]=1; LS.prop[idx].xform.mat[5]=0;
     LS.prop[idx].threshold=0; LS.prop[idx].feather=1;
     char name[64]; snprintf(name, sizeof(name), "Layer %d", idx);
     LS.slotID[idx]=TM_Register(TM_BUCKET_LAYER, LS.rt[idx], name, false, w, h);
@@ -84,6 +90,7 @@ static void RemoveLayerSlot(int idx) {
 // ── Init / shutdown ──────────────────────────────────────────────────
 void LayerStack_Init(void) {
     LS = {0}; LS.canvasView[0]=1; LS.canvasView[4]=1;
+    LS.canvasXform.ww=512; LS.canvasXform.wh=512;
 }
 
 void LayerStack_Shutdown(void) {
@@ -99,6 +106,10 @@ void LayerStack_InitCanvas(int w, int h) {
     LS.canvasRT=Load16BitRT(w,h);
     if(LS.canvasRT.id>0)
         LS.canvasSlot=TM_Register(TM_BUCKET_LAYER, LS.canvasRT, "Canvas", true, w, h);
+}
+
+void LayerStack_SetCanvasXform(const RectXform* xf) {
+    if (xf) LS.canvasXform = *xf;
 }
 
 void LayerStack_ResizeCanvas(int newW, int newH) {

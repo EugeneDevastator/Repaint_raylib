@@ -92,4 +92,5 @@ void ApplyCanvasWindow(Document* doc) {
         ComputeCanvasMatrix(&doc->window, cw, ch, cv);
         LayerStack_SetCanvasView(cv);
     }
+    LayerStack_SetCanvasXform(&doc->window);
 }

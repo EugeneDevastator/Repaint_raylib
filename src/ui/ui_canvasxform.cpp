@@ -15,6 +15,11 @@ static int      g_cropPixelW = 0;      // resolution text fields (pixels)
 static int      g_cropPixelH = 0;
 static int      g_origTexW = 0;        // texture size on crop entry (for discard restore)
 static int      g_origTexH = 0;
+static int      g_dragTexW = 0;        // texture size at drag start (for proportional adj)
+static int      g_dragTexH = 0;
+static float    g_dragWw = 0;          // ww/wh at drag start
+static float    g_dragWh = 0;
+static bool     g_dragging = false;
 
 static void ExitCropMode(AppState* state, bool accept) {
     if (accept) {
@@ -26,6 +31,7 @@ static void ExitCropMode(AppState* state, bool accept) {
     } else {
         state->doc.window = g_entryWindow;
         LayerStack_ResizeCanvas(g_origTexW, g_origTexH);
+        LayerStack_SetCanvasXform(&state->doc.window);
         float cv[6]; ComputeCanvasMatrix(&state->doc.window, g_origTexW, g_origTexH, cv);
         LayerStack_SetCanvasView(cv);
     }
@@ -95,6 +101,34 @@ bool CanvasXformModule::HandleInput(InputState& input, const DrawRect& rect) {
         input.MousePressed(MOUSE_RIGHT_BUTTON),
         &rect);
 
+    // On first change of a drag: save the starting ww/wh and texture size
+    if (changed && !g_dragging) {
+        g_dragWw = state->doc.window.ww;
+        g_dragWh = state->doc.window.wh;
+        g_dragTexW = LayerStack_RenderW();
+        g_dragTexH = LayerStack_RenderH();
+        g_dragging = true;
+    }
+
+    // While dragging: proportionally adjust texture size.
+    // tex = savedTex * (savedWw / currentWw), etc.
+    if (g_dragging) {
+        float curWw = state->doc.window.ww;
+        float curWh = state->doc.window.wh;
+        if (curWw > 0.5f && curWh > 0.5f) {
+            float deltaW = curWw/g_dragWw;
+            float deltaH = curWh/g_dragWh;
+            int newW = fmaxf(1, (int)(g_dragTexW * deltaW + 0.5f));
+            int newH = fmaxf(1, (int)(g_dragTexH * deltaH + 0.5f));
+            LayerStack_ResizeCanvas(newW, newH);
+            layersDirty = true;
+        }
+    }
+
+    // On mouse release: finalize drag
+    if (!input.MouseDown(MOUSE_LEFT_BUTTON) && !input.MouseDown(MOUSE_RIGHT_BUTTON))
+        g_dragging = false;
+
     return changed;
 }
 
@@ -110,7 +144,7 @@ void CanvasXformModule::DrawGUI(const DrawRect& rect) {
 
     float bx = rect.x + 6;
     float by = rect.y + 6;
-    float bw = 140;
+    float bw = 200;
     ImGui::SetNextWindowPos(ImVec2(bx, by), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(bw, 0), ImGuiCond_Always);
     ImGui::Begin("##canvasOps", NULL,
@@ -126,30 +160,31 @@ void CanvasXformModule::DrawGUI(const DrawRect& rect) {
         g_cropPixelH = LayerStack_RenderH();
     }
     ImGui::Text("Res (px)");
-    ImGui::SetNextItemWidth(70);
+    ImGui::SetNextItemWidth(80);
     bool wEdited = ImGui::InputInt("##cw", &g_cropPixelW, 0, 0);
-    bool wDeact = ImGui::IsItemDeactivatedAfterEdit();
     if (wEdited && g_cropPixelW < 1) g_cropPixelW = 1;
+    if (wEdited) {
+        int newW = g_cropPixelW < 1 ? 1 : g_cropPixelW;
+        float aspect = state->doc.window.ww / state->doc.window.wh;
+        int newH = fmaxf(1, (int)(newW / aspect + 0.5f));
+        g_cropPixelH = newH;
+        LayerStack_ResizeCanvas(newW, newH);
+        g_cropPixelW = LayerStack_RenderW();
+        g_cropPixelH = LayerStack_RenderH();
+        layersDirty = true;
+    }
     ImGui::SameLine();
     ImGui::Text("x");
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(70);
+    ImGui::SetNextItemWidth(80);
     bool hEdited = ImGui::InputInt("##ch", &g_cropPixelH, 0, 0);
-    bool hDeact = ImGui::IsItemDeactivatedAfterEdit();
     if (hEdited && g_cropPixelH < 1) g_cropPixelH = 1;
-    if (wDeact || hDeact) {
-        // Texture must maintain the same aspect ratio as the world region (ww/wh).
+    if (hEdited) {
+        int newH = g_cropPixelH < 1 ? 1 : g_cropPixelH;
         float aspect = state->doc.window.ww / state->doc.window.wh;
-        if (wDeact) {
-            int newW = g_cropPixelW < 1 ? 1 : g_cropPixelW;
-            int newH = fmaxf(1, (int)(newW / aspect + 0.5f));
-            LayerStack_ResizeCanvas(newW, newH);
-        } else {
-            int newH = g_cropPixelH < 1 ? 1 : g_cropPixelH;
-            int newW = fmaxf(1, (int)(newH * aspect + 0.5f));
-            LayerStack_ResizeCanvas(newW, newH);
-        }
-        // Sync display fields back (LayerStack may have clamped minimal sizes)
+        int newW = fmaxf(1, (int)(newH * aspect + 0.5f));
+        g_cropPixelW = newW;
+        LayerStack_ResizeCanvas(newW, newH);
         g_cropPixelW = LayerStack_RenderW();
         g_cropPixelH = LayerStack_RenderH();
         layersDirty = true;
