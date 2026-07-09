@@ -181,6 +181,7 @@ void UpdateUI(AppState* state) {
             bool enteringCrop = (state->framingMode == FRAME_DEFAULT);
             if (enteringCrop) {
                 HudSetActive(state, HUD_CANVAS_XFORM);
+                DisplayInfoText("Crop Canvas");
                 state->cropEntryWindow = state->doc.window;
                 state->framingMode = FRAME_CROP;
             } else {

@@ -368,7 +368,7 @@ static void RecalcTop() {
 bool WarpHudModule::HandleInput(InputState& input, const DrawRect& rect) {
     if(!ImGui::IsAnyItemActive()&&input.KeyPressed(KEY_FIVE)){
         if(g_activeHud==HUD_WARP)HudSetActive(state,HUD_NONE);
-        else{g_needReset=true;HudSetActive(state,HUD_WARP);}
+        else{g_needReset=true;HudSetActive(state,HUD_WARP);DisplayInfoText("Perspective Rectification");}
         return true;
     }
     if(g_activeHud!=HUD_WARP)return false;

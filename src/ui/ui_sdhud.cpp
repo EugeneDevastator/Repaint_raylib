@@ -128,6 +128,7 @@ bool SDHudModule::HandleInput(InputState& input, const DrawRect& rect) {
         } else {
             TransformHandle_ResetState();
             HudSetActive(state, HUD_SD);
+            DisplayInfoText("Stable Diffusion and upscaler");
         }
         return true;
     }

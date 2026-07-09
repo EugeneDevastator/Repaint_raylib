@@ -213,6 +213,7 @@ bool NNHudModule::HandleInput(InputState& input, const DrawRect& rect) {
             HudSetActive(state, HUD_NONE);
         } else {
             HudSetActive(state, HUD_NN);
+            DisplayInfoText("Matte Extraction");
         }
         return true;
     }
