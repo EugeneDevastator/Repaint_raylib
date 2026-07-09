@@ -160,7 +160,7 @@ void main() {
         if (texNoisemode == 0) {
             stUV = (canvasFragUV - 0.5) * canvasSize / 256.0 * texScale + userTexOrigin;
         } else if (texNoisemode == 1) {
-            stUV = quadUV * texScale + texOffset;
+            stUV = (quadUV - 0.5) * texScale + userTexOrigin + texOffset;
         } else {
             stUV = (quadUV - 0.5) * texScale + userTexOrigin;
         }
