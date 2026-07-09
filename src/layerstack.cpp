@@ -13,10 +13,10 @@ static struct {
     sLayerProps* prop;
     RenderTexture2D* rt;
     TexSlotID* slotID;
+    Quad* quads;          // xform + rt as one unit (mirrors prop/rt)
     int count;
-    RenderTexture2D canvasRT;
+    Quad canvas;          // canvas as first-class Quad (xform + rt)
     TexSlotID       canvasSlot;
-    RectXform       canvasXform;  // world-region xform for new layers
     float canvasView[6];
 } LS;
 
@@ -51,6 +51,7 @@ static void ShiftLayersUp(int from, int to) {
         LS.prop[i]=LS.prop[i-1];
         LS.rt[i]=LS.rt[i-1];
         LS.slotID[i]=LS.slotID[i-1];
+        LS.quads[i]=LS.quads[i-1];
     }
 }
 
@@ -60,6 +61,7 @@ static void ShiftLayersDown(int from, int to) {
         LS.prop[i]=LS.prop[i+1];
         LS.rt[i]=LS.rt[i+1];
         LS.slotID[i]=LS.slotID[i+1];
+        LS.quads[i]=LS.quads[i+1];
     }
 }
 
@@ -70,15 +72,14 @@ static void InitLayerSlot(int idx, int w, int h) {
     BeginTextureMode(LS.rt[idx]); ClearBackground(BLANK); EndTextureMode();
     LS.prop[idx]={}; LS.prop[idx].op=1; LS.prop[idx].visible=true;
     LS.prop[idx].blendmode=bmGamma;
-    // Layer xform matches the canvas world-region, not the pixel size of the RT
-    LS.prop[idx].xform = LS.canvasXform;
-    if (LS.canvasXform.ww <= 0.0f || LS.canvasXform.wh <= 0.0f) {
-        LS.prop[idx].xform.ww = (float)w;
-        LS.prop[idx].xform.wh = (float)h;
-    }
-    LS.prop[idx].xform.mat[0]=1; LS.prop[idx].xform.mat[1]=0;
-    LS.prop[idx].xform.mat[2]=0; LS.prop[idx].xform.mat[3]=0;
-    LS.prop[idx].xform.mat[4]=1; LS.prop[idx].xform.mat[5]=0;
+    // Quad — xform mirrors canvas, RT is the layer texture
+    LS.quads[idx].xform = LS.canvas.xform;
+    LS.quads[idx].xform.mat[0]=1; LS.quads[idx].xform.mat[1]=0;
+    LS.quads[idx].xform.mat[2]=0; LS.quads[idx].xform.mat[3]=0;
+    LS.quads[idx].xform.mat[4]=1; LS.quads[idx].xform.mat[5]=0;
+    LS.quads[idx].rt = LS.rt[idx];
+    // Backward compat: prop.xform mirrors quad.xform
+    LS.prop[idx].xform = LS.quads[idx].xform;
     LS.prop[idx].threshold=0; LS.prop[idx].feather=1;
     char name[64]; snprintf(name, sizeof(name), "Layer %d", idx);
     LS.slotID[idx]=TM_Register(TM_BUCKET_LAYER, LS.rt[idx], name, false, w, h);
@@ -98,44 +99,46 @@ void LayerStack_Init(void) {
 
 void LayerStack_Shutdown(void) {
     for(int i=0;i<LS.count;i++) UnloadLayerSlotResources(i);
-    free(LS.prop); free(LS.rt); free(LS.slotID);
-    if(LS.canvasRT.id>0) UnloadRenderTexture(LS.canvasRT);
-    LS.canvasRT={0}; LS.canvasSlot=TM_INVALID_SLOT;
+    free(LS.prop); free(LS.rt); free(LS.slotID); free(LS.quads);
+    if(LS.canvas.rt.id>0) UnloadRenderTexture(LS.canvas.rt);
+    LS.canvas.rt={0}; LS.canvasSlot=TM_INVALID_SLOT;
     LS={0};
 }
 
 void LayerStack_InitCanvas(int w, int h) {
-    if(LS.canvasRT.id>0) UnloadRenderTexture(LS.canvasRT);
-    LS.canvasRT=Load16BitRT(w,h);
-    if(LS.canvasRT.id>0)
-        LS.canvasSlot=TM_Register(TM_BUCKET_LAYER, LS.canvasRT, "Canvas", true, w, h);
+    if(LS.canvas.rt.id>0) UnloadRenderTexture(LS.canvas.rt);
+    LS.canvas.rt=Load16BitRT(w,h);
+    if(LS.canvas.rt.id>0)
+        LS.canvasSlot=TM_Register(TM_BUCKET_LAYER, LS.canvas.rt, "Canvas", true, w, h);
 }
 
 void LayerStack_SetCanvasXform(const RectXform* xf) {
-    if (xf) LS.canvasXform = *xf;
+    if (xf) LS.canvas.xform = *xf;
 }
 
 void LayerStack_ResizeCanvas(int newW, int newH) {
-    if(LS.canvasRT.id==0||newW<1||newH<1) return;
-    int oldW=(int)LS.canvasRT.texture.width, oldH=(int)LS.canvasRT.texture.height;
+    if(LS.canvas.rt.id==0||newW<1||newH<1) return;
+    int oldW=(int)LS.canvas.rt.texture.width, oldH=(int)LS.canvas.rt.texture.height;
     if(oldW==newW&&oldH==newH) return;
     RenderTexture2D newRT=Load16BitRT(newW,newH);
     if(newRT.id==0) return;
     BeginTextureMode(newRT); ClearBackground(BLANK);
     rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE,RL_ZERO,RL_FUNC_ADD);
-    DrawTexturePro(LS.canvasRT.texture, Rectangle{0,0,(float)oldW,(float)-oldH},
+    DrawTexturePro(LS.canvas.rt.texture, Rectangle{0,0,(float)oldW,(float)-oldH},
         Rectangle{0,0,(float)newW,(float)newH}, Vector2{0,0}, 0.0f, WHITE);
     rlSetBlendMode(RL_BLEND_ALPHA); EndTextureMode();
     if(TM_IsValid(LS.canvasSlot)) TM_Remove(LS.canvasSlot);
-    UnloadRenderTexture(LS.canvasRT);
-    LS.canvasRT=newRT;
-    LS.canvasSlot=TM_Register(TM_BUCKET_LAYER, LS.canvasRT, "Canvas", true, newW, newH);
+    UnloadRenderTexture(LS.canvas.rt);
+    LS.canvas.rt=newRT;
+    LS.canvasSlot=TM_Register(TM_BUCKET_LAYER, LS.canvas.rt, "Canvas", true, newW, newH);
 }
 
-RenderTexture2D LayerStack_GetCanvasRT(void) { return LS.canvasRT; }
-RenderTexture2D* LayerStack_GetCanvasRTPtr(void) { return &LS.canvasRT; }
-int LayerStack_RenderW(void) { return LS.canvasRT.id>0?(int)LS.canvasRT.texture.width:0; }
-int LayerStack_RenderH(void) { return LS.canvasRT.id>0?(int)LS.canvasRT.texture.height:0; }
+Quad* LayerStack_GetCanvasQuadPtr(void) { return &LS.canvas; }
+Quad* LayerStack_GetQuadPtr(int i)         { return (i>=0&&i<LS.count)?&LS.quads[i]:NULL; }
+RenderTexture2D LayerStack_GetCanvasRT(void) { return LS.canvas.rt; }
+RenderTexture2D* LayerStack_GetCanvasRTPtr(void) { return &LS.canvas.rt; }
+int LayerStack_RenderW(void) { return LS.canvas.rt.id>0?(int)LS.canvas.rt.texture.width:0; }
+int LayerStack_RenderH(void) { return LS.canvas.rt.id>0?(int)LS.canvas.rt.texture.height:0; }
 
 void LayerStack_SetCanvasView(const float mat[6]) {
     memcpy(LS.canvasView, mat, 6*sizeof(float));
@@ -160,6 +163,7 @@ static void ReallocArrays(int n) {
     LS.prop=(sLayerProps*)realloc(LS.prop,n*sizeof(sLayerProps));
     LS.rt=(RenderTexture2D*)realloc(LS.rt,n*sizeof(RenderTexture2D));
     LS.slotID=(TexSlotID*)realloc(LS.slotID,n*sizeof(TexSlotID));
+    LS.quads=(Quad*)realloc(LS.quads,n*sizeof(Quad));
     if(n>LS.count){
         memset(&LS.rt[LS.count],0,(n-LS.count)*sizeof(RenderTexture2D));
         for(int i=LS.count;i<n;i++) LS.slotID[i]=TM_INVALID_SLOT;
@@ -193,6 +197,8 @@ void LayerStack_DuplicateLayer(int idx) {
     int di=idx+1; LS.prop[di]=LS.prop[idx];
     int lw=GetLayerWpx(idx), lh=GetLayerHpx(idx);
     LS.rt[di]=Load16BitRT(lw,lh);
+    LS.quads[di].xform = LS.quads[idx].xform;
+    LS.quads[di].rt = LS.rt[di];
     BeginTextureMode(LS.rt[di]);
     rlSetBlendMode(RL_BLEND_CUSTOM); rlSetBlendFactors(RL_ONE,RL_ZERO,RL_FUNC_ADD);
     ClearBackground(BLANK);
@@ -211,15 +217,16 @@ void LayerStack_DuplicateAsInstance(int idx) {
     LS.prop[di].instanced=true;
     snprintf(LS.prop[di].layerName, sizeof(LS.prop[di].layerName), "%s(INST)", LS.prop[idx].layerName);
     LS.rt[di]=LS.rt[idx];
+    LS.quads[di]=LS.quads[idx];
     LS.slotID[di]=LS.slotID[idx]; TM_AddRef(LS.slotID[idx]);
     LS.count++;
 }
 
 void LayerStack_MoveLayer(int from, int to) {
     if(from<0||from>=LS.count||to<0||to>=LS.count||from==to) return;
-    RenderTexture2D mvRT=LS.rt[from]; sLayerProps mvProp=LS.prop[from]; TexSlotID mvSlot=LS.slotID[from];
+    Quad mvQuad=LS.quads[from]; sLayerProps mvProp=LS.prop[from]; TexSlotID mvSlot=LS.slotID[from];
     if(from<to) ShiftLayersDown(from,to); else ShiftLayersUp(from,to);
-    LS.prop[to]=mvProp; LS.rt[to]=mvRT; LS.slotID[to]=mvSlot;
+    LS.prop[to]=mvProp; LS.rt[to]=mvQuad.rt; LS.quads[to]=mvQuad; LS.slotID[to]=mvSlot;
 }
 
 // ── GPU ↔ CPU transfer ────────────────────────────────────────────────
@@ -280,6 +287,7 @@ void LayerStack_BakeCanvasWindow(const Document* doc) {
         if(LS.rt[i].id==0) continue;
         float cmb[6]; Xform_Mul(cmb, LS.canvasView, LS.prop[i].xform.mat);
         memcpy(LS.prop[i].xform.mat, cmb, 6*sizeof(float));
+        LS.quads[i].xform = LS.prop[i].xform;  // sync quad
     }
     Xform_Identity(LS.canvasView);
 }
@@ -312,6 +320,7 @@ void LayerStack_ResizeLayer(int idx, int newW, int newH) {
             TM_Remove(LS.slotID[idx]);
             RenderTexture2D oldRT = LS.rt[idx];
             LS.rt[idx] = newRT;
+            LS.quads[idx].rt = newRT;  // sync quad
             LS.slotID[idx] = newSlot;
             UnloadRenderTexture(oldRT);
         } else {

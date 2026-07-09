@@ -18,6 +18,10 @@ void LayerStack_ReloadShader(void);
 void LayerStack_InitCanvas(int w, int h);
 void LayerStack_SetCanvasXform(const RectXform* xf);
 void LayerStack_ResizeCanvas(int newW, int newH);
+// Canvas Quad — xform + RT as a first-class object.
+// Use LayerStack_GetCanvasQuadPtr() to get a pointer to live storage.
+Quad* LayerStack_GetCanvasQuadPtr(void);
+Quad* LayerStack_GetQuadPtr(int idx);
 RenderTexture2D LayerStack_GetCanvasRT(void);
 RenderTexture2D* LayerStack_GetCanvasRTPtr(void);
 int             LayerStack_RenderW(void);

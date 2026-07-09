@@ -28,67 +28,65 @@ void ViewportManager_SetDirty(void) { VM.dirty = true; }
 // ── Composite onto the canvas RT ─────────────────────────────────────
 static Rectangle FullRect(int w, int h) { return Rectangle{0,0,(float)w,(float)-h}; }
 RenderTexture2D* ViewportManager_Composite(void) {
-    RenderTexture2D* canvasRTPtr = LayerStack_GetCanvasRTPtr();
-    if(!canvasRTPtr||canvasRTPtr->id==0) return NULL;
-    int cw = (int)canvasRTPtr->texture.width, ch = (int)canvasRTPtr->texture.height;
+    Quad* canvas = LayerStack_GetCanvasQuadPtr();
+    if(!canvas || canvas->rt.id==0) return NULL;
+    int cw = (int)canvas->rt.texture.width, ch = (int)canvas->rt.texture.height;
     if(cw<1||ch<1) return NULL;
 
-    if(!(VM.dirty||layersDirty)) { rlSetBlendMode(RL_BLEND_ALPHA); return canvasRTPtr; }
+    if(!(VM.dirty||layersDirty)) { rlSetBlendMode(RL_BLEND_ALPHA); return &canvas->rt; }
     VM.dirty=false; layersDirty=false;
 
     // Clear canvas with checker background
     Compositor_EnsureChecker(cw, ch);
-    BeginTextureMode(*canvasRTPtr); ClearBackground(BLANK);
+    BeginTextureMode(canvas->rt); ClearBackground(BLANK);
     Texture2D ck = Compositor_GetCheckerTex();
     if(ck.id>0) DrawTexture(ck,0,0,WHITE);
     EndTextureMode();
 
-    // Blit each visible layer onto the canvas
-    RectXform viewXform;
-    const float* cv = LayerStack_GetCanvasView();
-    memcpy(viewXform.mat, cv, 6*sizeof(float));
-    viewXform.ww=0; viewXform.wh=0;
-
+    // Blit each visible layer onto the canvas via QuadApply
     int count = LayerStack_Count();
     for(int i=0;i<count;i++){
         sLayerProps* p = LayerStack_GetProps(i);
         if(!p||!p->visible) continue;
-        RenderTexture2D rt = LayerStack_GetRT(i);
-        if(rt.id==0) continue;
+        Quad* layerQ = LayerStack_GetQuadPtr(i);
+        if(!layerQ || layerQ->rt.id==0) continue;
+        Quad src = *layerQ;               // copy RT from Quad
+        src.xform = p->xform;              // use live xform from props
         CompositorBlendParams bp;
         bp.opacity=p->op; bp.blendMode=p->blendmode;
         bp.threshold=p->threshold; bp.feather=p->feather;
         bp.seamless=p->seamless;
-        Compositor_BlitLayerOnto(rt.texture, &p->xform, &bp, &viewXform,
-            *canvasRTPtr, Rectangle{0,0,(float)cw,(float)ch});
+        Compositor_QuadApply(&src, &bp, canvas);
     }
     rlSetBlendMode(RL_BLEND_ALPHA);
-    return canvasRTPtr;
+    return &canvas->rt;
 }
 
 Image ViewportManager_CompositeWithDither(void) {
     int cw=LayerStack_RenderW(),ch=LayerStack_RenderH(); if(cw<1||ch<1) return (Image){0};
-    // Render all layers into a fresh RT
+    // Render all layers into a fresh RT using the canvas as the view Quad
     RenderTexture2D a=Load16BitRT(cw,ch), b=Load16BitRT(cw,ch);
     if(a.id==0||b.id==0){ if(a.id>0)UnloadRenderTexture(a); if(b.id>0)UnloadRenderTexture(b); return (Image){0}; }
     BeginTextureMode(a); ClearBackground(BLANK); EndTextureMode();
-    RectXform viewXform;
-    const float* cv = LayerStack_GetCanvasView();
-    memcpy(viewXform.mat, cv, 6*sizeof(float));
-    viewXform.ww=0; viewXform.wh=0;
+
+    // Use canvas xform as the view; build a temp destination Quad for blitting
+    Quad* canvas = LayerStack_GetCanvasQuadPtr();
+    Quad dst = *canvas;
+    dst.rt = a;
 
     int count = LayerStack_Count();
     for(int i=0;i<count;i++){
         sLayerProps* p = LayerStack_GetProps(i);
         if(!p||!p->visible) continue;
-        RenderTexture2D rt = LayerStack_GetRT(i);
-        if(rt.id==0) continue;
+        Quad* layerQ = LayerStack_GetQuadPtr(i);
+        if(!layerQ || layerQ->rt.id==0) continue;
+        Quad src = *layerQ;
+        src.xform = p->xform;
         CompositorBlendParams bp;
         bp.opacity=p->op; bp.blendMode=p->blendmode;
         bp.threshold=p->threshold; bp.feather=p->feather;
         bp.seamless=p->seamless;
-        Compositor_BlitLayerOnto(rt.texture, &p->xform, &bp, &viewXform,
-            a, Rectangle{0,0,(float)cw,(float)ch});
+        Compositor_QuadApply(&src, &bp, &dst);
     }
 
     // Apply dither via present shader

@@ -44,6 +44,14 @@ static inline void RectXform_GetCenter(const RectXform* rx, float* cx, float* cy
 // Rotation angle = angle of mat's x-axis in world space
 float RectXform_GetRot(const RectXform* rx);
 
+// ── Quad — xform + render texture pair for compositing ───────────────
+// First-class operational object: carries both spatial context and pixel
+// data. Constructed in-place, passed by pointer, modifications persist.
+struct Quad {
+    RectXform       xform;
+    RenderTexture2D rt;
+};
+
 // ── World-space helpers ──────────────────────────────────────────
 
 // Axis-aligned bounding box of an oriented rectangle in world space

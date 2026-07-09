@@ -311,6 +311,25 @@ void Compositor_ApplyLayerToLayer(
         bottomRT, Rectangle{0,0,(float)bw,(float)bh});
 }
 
+// ── Quad Apply — universal compositing between two Quad objects ──────
+void Compositor_QuadApply(const Quad* src, const CompositorBlendParams* bp, const Quad* dst) {
+    if(!src||!dst||src->rt.id==0||dst->rt.id==0) return;
+    int cw=(int)dst->rt.texture.width, ch=(int)dst->rt.texture.height;
+    if(cw<1||ch<1) return;
+
+    // Compute view matrix: world → dst pixel, scaling so the entire
+    // world region (xform.ww, xform.wh) maps to the full texture.
+    float viewMat[6];
+    ComputeCanvasMatrix(&dst->xform, cw, ch, viewMat);
+
+    RectXform viewXf;
+    memcpy(viewXf.mat, viewMat, sizeof(viewMat));
+    viewXf.ww=0; viewXf.wh=0;
+
+    Compositor_BlitLayerOnto(src->rt.texture, &src->xform, bp, &viewXf,
+        dst->rt, Rectangle{0,0,(float)cw,(float)ch});
+}
+
 bool Compositor_PresentInited(void) { return CS.presentInited; }
 Shader Compositor_GetPresentShader(void) { return CS.presentShader; }
 void Compositor_SetPresentTexSize(int w, int h) {

@@ -30,6 +30,12 @@ void Compositor_ApplyLayerToLayer(
     const CompositorBlendParams* params,
     RenderTexture2D bottomRT, const RectXform* bottomXform);
 
+// Quad apply — the universal compositing operation.
+// Applies src Quad onto dst Quad using src->xform as world-transform
+// and inverse(dst->xform) as the view matrix. Everything else is
+// derived automatically (pixel size, blending).
+void Compositor_QuadApply(const Quad* src, const CompositorBlendParams* bp, const Quad* dst);
+
 // Present shader access
 bool     Compositor_PresentInited(void);
 Shader   Compositor_GetPresentShader(void);
