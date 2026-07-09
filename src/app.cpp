@@ -224,22 +224,23 @@ void UpdateUI(AppState* state) {
                         RenderTexture2D rt = Load16BitRT(cw, ch);
                         if (rt.id > 0) {
                             BeginTextureMode(rt); ClearBackground(BLANK); EndTextureMode();
-                            const float* cv = LayerStack_GetCanvasView();
-                            RectXform viewXform;
-                            memcpy(viewXform.mat, cv, sizeof(float) * 6);
-                            viewXform.ww = 0; viewXform.wh = 0;
+                            Quad dstQ;
+                            dstQ.xform.ww = (float)cw; dstQ.xform.wh = (float)ch;
+                            Xform_Identity(dstQ.xform.mat);
+                            dstQ.rt = rt;
                             int cnt = LayerStack_Count();
                             for (int i = 0; i < cnt; i++) {
                                 sLayerProps* p = LayerStack_GetProps(i);
                                 if (!p || !p->visible) continue;
-                                RenderTexture2D lrt = LayerStack_GetRT(i);
-                                if (lrt.id == 0) continue;
+                                Quad* lq = LayerStack_GetQuadPtr(i);
+                                if (!lq || lq->rt.id == 0) continue;
+                                Quad src = *lq;
+                                src.xform = p->xform;
                                 CompositorBlendParams bp;
                                 bp.opacity = p->op; bp.blendMode = p->blendmode;
                                 bp.threshold = p->threshold; bp.feather = p->feather;
                                 bp.seamless = p->seamless;
-                                Compositor_BlitLayerOnto(lrt.texture, &p->xform, &bp, &viewXform,
-                                    rt, Rectangle{0, 0, (float)cw, (float)ch});
+                                Compositor_QuadApply(&src, &bp, &dstQ);
                             }
                             rlSetBlendMode(RL_BLEND_ALPHA);
                             Clipboard_CopyRT16(rt);
@@ -630,10 +631,7 @@ void App_Init(AppState* state) {
     g_recorder->Reset(DocOutPxW(&state->doc), DocOutPxH(&state->doc));
 
     state->camera = Camera2D{};
-    state->camera.target = Vector2{
-        state->doc.window.mat[0]*state->doc.window.ww*0.5f + state->doc.window.mat[1]*state->doc.window.wh*0.5f + state->doc.window.mat[2],
-        state->doc.window.mat[3]*state->doc.window.ww*0.5f + state->doc.window.mat[4]*state->doc.window.wh*0.5f + state->doc.window.mat[5]
-    };
+    state->camera.target = RectXform_GetExtentCenter(&state->doc.window);
     state->camera.offset = Vector2{viewportBounds.x + viewportBounds.width * 0.5f, viewportBounds.y + viewportBounds.height * 0.5f};
 
     // ── Module stack ──

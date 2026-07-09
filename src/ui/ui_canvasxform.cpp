@@ -26,10 +26,7 @@ static bool     g_fixTexSize = false;
 static void ExitCropMode(AppState* state, bool accept) {
     if (accept) {
         ApplyCanvasWindow(&state->doc);
-        state->camera.target = Vector2{
-            state->doc.window.mat[0]*state->doc.window.ww*0.5f + state->doc.window.mat[1]*state->doc.window.wh*0.5f + state->doc.window.mat[2],
-            state->doc.window.mat[3]*state->doc.window.ww*0.5f + state->doc.window.mat[4]*state->doc.window.wh*0.5f + state->doc.window.mat[5]
-        };
+        state->camera.target = RectXform_GetExtentCenter(&state->doc.window);
     } else {
         state->doc.window = g_entryWindow;
         LayerStack_ResizeCanvas(g_origTexW, g_origTexH);
@@ -61,10 +58,7 @@ bool CanvasXformModule::HandleInput(InputState& input, const DrawRect& rect) {
         g_origTexH = LayerStack_RenderH();
         g_entrySaved = true;
         // Init crop cursor to window center
-        float* m = state->doc.window.mat;
-        float w = state->doc.window.ww, h = state->doc.window.wh;
-        g_cropCursor.x = m[2] + (m[0]*w + m[1]*h) * 0.5f;
-        g_cropCursor.y = m[5] + (m[3]*w + m[4]*h) * 0.5f;
+        g_cropCursor = RectXform_GetExtentCenter(&state->doc.window);
     }
 
     // Block transform interaction while editing ImGui text fields

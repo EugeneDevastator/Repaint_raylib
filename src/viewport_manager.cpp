@@ -125,18 +125,28 @@ void ViewportManager_CompositeViewInto(RenderTexture2D dst, const RectXform* vie
 
     EndTextureMode();
 
+    // Build a destination Quad whose inverse xform produces viewXform
+    float idMat[6] = {1,0,0,0,1,0};
+    float invVxf[6];
+    Xform_MulInv(invVxf, idMat, viewXform->mat);
+    Quad dstQ;
+    memcpy(dstQ.xform.mat, invVxf, sizeof(invVxf));
+    dstQ.xform.ww = (float)w; dstQ.xform.wh = (float)h;
+    dstQ.rt = dst;
+
     int count = LayerStack_Count();
     for(int i=0;i<count;i++){
         sLayerProps* p = LayerStack_GetProps(i);
         if(!p||!p->visible) continue;
-        RenderTexture2D rt = LayerStack_GetRT(i);
-        if(rt.id==0) continue;
+        Quad* lq = LayerStack_GetQuadPtr(i);
+        if(!lq || lq->rt.id==0) continue;
+        Quad src = *lq;
+        src.xform = p->xform;
         CompositorBlendParams bp;
         bp.opacity=p->op; bp.blendMode=p->blendmode;
         bp.threshold=p->threshold; bp.feather=p->feather;
         bp.seamless=p->seamless;
-        Compositor_BlitLayerOnto(rt.texture, &p->xform, &bp, viewXform,
-            dst, Rectangle{0,0,(float)w,(float)h});
+        Compositor_QuadApply(&src, &bp, &dstQ);
     }
     rlSetBlendMode(RL_BLEND_ALPHA);
 }

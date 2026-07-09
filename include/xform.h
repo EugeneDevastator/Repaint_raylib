@@ -41,6 +41,14 @@ static inline void RectXform_GetCenter(const RectXform* rx, float* cx, float* cy
     *cx = rx->mat[2]; *cy = rx->mat[5];
 }
 
+// World-space centre of the rectangle: mat * (ww/2, wh/2) + mat[2,5]
+static inline Vector2 RectXform_GetExtentCenter(const RectXform* rx) {
+    return Vector2{
+        rx->mat[0]*rx->ww*0.5f + rx->mat[1]*rx->wh*0.5f + rx->mat[2],
+        rx->mat[3]*rx->ww*0.5f + rx->mat[4]*rx->wh*0.5f + rx->mat[5]
+    };
+}
+
 // Rotation angle = angle of mat's x-axis in world space
 float RectXform_GetRot(const RectXform* rx);
 
