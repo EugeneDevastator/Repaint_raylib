@@ -142,6 +142,12 @@ void ViewportHUD_Draw(AppState* state) {
 
     bool usePresent = Compositor_PresentInited();
     RenderTexture2D* docBlendTex = NULL;
+
+    // Force composite rebuild before capture when HUD has just opened,
+    // so the brush preview sees the latest canvas state.
+    if (g_activeHud == HUD_QUICK && g_lastActiveHud != HUD_QUICK)
+        ViewportManager_SetDirty();
+
     if (!state->editTexMode) {
 
         if (state->framingMode == FRAME_CROP) {
@@ -264,7 +270,6 @@ void ViewportHUD_Draw(AppState* state) {
             g_previewRendered = 0;
             g_previewCount = 0;
         }
-        g_lastActiveHud = g_activeHud;
 
         unsigned int currentHash = ComputeBrushHash(cfg, state->brushTexSlot, state->initialAngle);
         bool paramsChanged = (currentHash != g_lastPreviewHash);
@@ -386,6 +391,7 @@ void ViewportHUD_Draw(AppState* state) {
             Rectangle{px, py, dispSz, dispSz},
             Vector2{0, 0}, 0.0f, WHITE);
     }
+    g_lastActiveHud = g_activeHud;
     rlSetBlendMode(RL_BLEND_ALPHA);
     Viewport_DrawDebugOverlays(&viewport, state);
 }
