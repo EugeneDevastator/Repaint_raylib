@@ -290,9 +290,9 @@ void ViewportHUD_Draw(AppState* state) {
             previewQuad.xform = GetXformFromScreenCorners(pX, pY, pX + pScrSz, pY + pScrSz, state->camera);
             previewQuad.rt = g_previewRT;
 
-            // Fill with opaque black, then blit canvas composite on top.
+            // Blit canvas composite as background.
             BeginTextureMode(g_previewRT);
-            ClearBackground((Color){0,0,0,255});
+            ClearBackground((Color){255,255,255,0});
             if (state->framingMode != FRAME_CROP && docBlendTex) {
                 // Compute world region of the preview (from screen corners)
                 Vector2 wTL = GetScreenToWorld2D({pX, pY}, state->camera);
