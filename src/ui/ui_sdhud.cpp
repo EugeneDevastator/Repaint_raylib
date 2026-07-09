@@ -252,7 +252,7 @@ void SDHudModule::DrawGUI(const DrawRect& rect) {
 
     // ── Resolution slider (above bottom panels, full width) ──────────
     float by = ry + rh - bottomRowH - margin;
-    float resSliderY = by - 42;
+    float resSliderY = by - 55;
     ImGui::SetNextWindowPos(ImVec2(rx + margin, resSliderY));
     ImGui::SetNextWindowSize(ImVec2(rw - margin * 2, 0));
     ImGui::Begin("##sdRes", NULL,
@@ -262,7 +262,6 @@ void SDHudModule::DrawGUI(const DrawRect& rect) {
     {
         ImGui::Text("Resolution");
         ImGui::SameLine();
-        if (g_lockSquare) g_resolution = 512;
         int res = g_resolution;
         ImGui::SetNextItemWidth(-1);
         ImGui::PushStyleColor(ImGuiCol_SliderGrab, (ImVec4)ImColor(80,150,255,255));
@@ -320,10 +319,20 @@ void SDHudModule::DrawGUI(const DrawRect& rect) {
         ImGuiWindowFlags_NoScrollbar);
     {
         ImGui::BeginGroup();
-        ImGui::Checkbox("512x512", &g_lockSquare);
+        if (ImGui::Button("Set 512x512")) g_resolution = 512;
         int outH = g_lockSquare ? g_resolution
                   : (int)(g_resolution * (g_sdXform.wh / g_sdXform.ww) + 0.5f);
         ImGui::Text("Output: %d x %d", g_resolution, outH);
+        {
+            RenderTexture2D rt = LayerStack_GetRT(state->activeLayer);
+            int lw = rt.texture.width, lh = rt.texture.height;
+            if (lw > 0 && lh > 0) {
+                ImGui::SameLine();
+                float lwStr = ImGui::CalcTextSize("Layer: 0000 x 0000").x;
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - lwStr);
+                ImGui::TextDisabled("Layer: %d x %d", lw, lh);
+            }
+        }
         ImGui::Separator();
 
         float bw = (ImGui::GetContentRegionAvail().x - 4) * 0.5f;
