@@ -74,6 +74,10 @@ static void InitLayerSlot(int idx, int w, int h) {
     LS.prop[idx].blendmode=bmGamma;
     // Quad — xform mirrors canvas, RT is the layer texture
     LS.quads[idx].xform = LS.canvas.xform;
+    if (LS.canvas.xform.ww <= 0.0f || LS.canvas.xform.wh <= 0.0f) {
+        LS.quads[idx].xform.ww = (float)w;
+        LS.quads[idx].xform.wh = (float)h;
+    }
     LS.quads[idx].xform.mat[0]=1; LS.quads[idx].xform.mat[1]=0;
     LS.quads[idx].xform.mat[2]=0; LS.quads[idx].xform.mat[3]=0;
     LS.quads[idx].xform.mat[4]=1; LS.quads[idx].xform.mat[5]=0;

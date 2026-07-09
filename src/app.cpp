@@ -225,23 +225,10 @@ void UpdateUI(AppState* state) {
                         if (rt.id > 0) {
                             BeginTextureMode(rt); ClearBackground(BLANK); EndTextureMode();
                             Quad dstQ;
-                            dstQ.xform.ww = (float)cw; dstQ.xform.wh = (float)ch;
                             Xform_Identity(dstQ.xform.mat);
+                            dstQ.xform.ww = (float)cw; dstQ.xform.wh = (float)ch;
                             dstQ.rt = rt;
-                            int cnt = LayerStack_Count();
-                            for (int i = 0; i < cnt; i++) {
-                                sLayerProps* p = LayerStack_GetProps(i);
-                                if (!p || !p->visible) continue;
-                                Quad* lq = LayerStack_GetQuadPtr(i);
-                                if (!lq || lq->rt.id == 0) continue;
-                                Quad src = *lq;
-                                src.xform = p->xform;
-                                CompositorBlendParams bp;
-                                bp.opacity = p->op; bp.blendMode = p->blendmode;
-                                bp.threshold = p->threshold; bp.feather = p->feather;
-                                bp.seamless = p->seamless;
-                                Compositor_QuadApply(&src, &bp, &dstQ);
-                            }
+                            ViewportManager_CompositeLayersOntoQuad(&dstQ);
                             rlSetBlendMode(RL_BLEND_ALPHA);
                             Clipboard_CopyRT16(rt);
                             UnloadRenderTexture(rt);
