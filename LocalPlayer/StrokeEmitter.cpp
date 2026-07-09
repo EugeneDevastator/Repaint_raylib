@@ -26,6 +26,7 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
     m_config.bmidx          = m_brushFrom.bmidx;
     m_config.texColorMode   = m_brushFrom.texColorMode;
     m_config.texNoisemode   = m_brushFrom.texNoisemode;
+    m_config.texTiling      = m_brushFrom.texTiling;
     m_config.useTexLumAsAlpha = m_brushFrom.useTexLumAsAlpha;
     m_config.preserveop     = m_brushFrom.preserveop;
     m_config.texBlendMode   = m_brushFrom.texBlendMode;
