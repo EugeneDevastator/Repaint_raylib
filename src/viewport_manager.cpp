@@ -108,34 +108,10 @@ Image ViewportManager_CompositeWithDither(void) {
     return result;
 }
 
-void ViewportManager_CompositeViewInto(RenderTexture2D dst, const RectXform* viewXform, int w, int h, const Rectangle* checkerRect) {
-    if(w<1||h<1||dst.id==0) return;
-    int cw=LayerStack_RenderW(), ch=LayerStack_RenderH();
-
-    BeginTextureMode(dst); ClearBackground(BLANK);
-
-    // Draw checker in crop region area of viewport
-    if(checkerRect && checkerRect->width>0 && checkerRect->height>0 && cw>0 && ch>0) {
-        Compositor_EnsureChecker(cw, ch);
-        Texture2D ck = Compositor_GetCheckerTex();
-        if(ck.id>0)
-            DrawTexturePro(ck, Rectangle{0,0,(float)cw,(float)ch},
-                *checkerRect, Vector2{0,0}, 0, WHITE);
-    }
-
-    EndTextureMode();
-
-    // Build a destination Quad whose inverse xform produces viewXform
-    float idMat[6] = {1,0,0,0,1,0};
-    float invVxf[6];
-    Xform_MulInv(invVxf, idMat, viewXform->mat);
-    Quad dstQ;
-    memcpy(dstQ.xform.mat, invVxf, sizeof(invVxf));
-    dstQ.xform.ww = (float)w; dstQ.xform.wh = (float)h;
-    dstQ.rt = dst;
-
-    int count = LayerStack_Count();
-    for(int i=0;i<count;i++){
+// ── Apply all visible layers onto a destination Quad ───────────────────
+void ViewportManager_CompositeLayersOntoQuad(const Quad* dst) {
+    int n = LayerStack_Count();
+    for(int i=0;i<n;i++){
         sLayerProps* p = LayerStack_GetProps(i);
         if(!p||!p->visible) continue;
         Quad* lq = LayerStack_GetQuadPtr(i);
@@ -146,7 +122,7 @@ void ViewportManager_CompositeViewInto(RenderTexture2D dst, const RectXform* vie
         bp.opacity=p->op; bp.blendMode=p->blendmode;
         bp.threshold=p->threshold; bp.feather=p->feather;
         bp.seamless=p->seamless;
-        Compositor_QuadApply(&src, &bp, &dstQ);
+        Compositor_QuadApply(&src, &bp, dst);
     }
     rlSetBlendMode(RL_BLEND_ALPHA);
 }
@@ -210,7 +186,15 @@ int ViewportManager_AcceptMatte(int srcIdx, Image matteImage) {
 
 RenderTexture2D ViewportManager_GetMergedTexture(const RectXform* xform, int w, int h) {
     RenderTexture2D rt = LoadRenderTexture(w, h);
-    ViewportManager_CompositeViewInto(rt, xform, w, h);
+    float idMat[6] = {1,0,0,0,1,0};
+    float invXf[6];
+    Xform_MulInv(invXf, idMat, xform->mat);
+    Quad dstQ;
+    memcpy(dstQ.xform.mat, invXf, sizeof(invXf));
+    dstQ.xform.ww = (float)w; dstQ.xform.wh = (float)h;
+    dstQ.rt = rt;
+    BeginTextureMode(rt); ClearBackground(BLANK); EndTextureMode();
+    ViewportManager_CompositeLayersOntoQuad(&dstQ);
     return rt;
 }
 

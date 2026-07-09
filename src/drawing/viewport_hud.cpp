@@ -167,7 +167,24 @@ void ViewportHUD_Draw(AppState* state) {
                     float b = vXf.mat[3]*(cropAABB.x+cropAABB.width) + vXf.mat[4]*(cropAABB.y+cropAABB.height) + vXf.mat[5];
                     if(r>l&&b>t) checkerRect = {l,t,r-l,b-t};
                 }
-                ViewportManager_CompositeViewInto(g_viewResRT, &vXf, vpW, vpH, &checkerRect);
+                // Build dst Quad from viewXform, draw checker, composite layers
+                float idMat[6] = {1,0,0,0,1,0};
+                float invVxf[6];
+                Xform_MulInv(invVxf, idMat, vXf.mat);
+                Quad dstQ;
+                memcpy(dstQ.xform.mat, invVxf, sizeof(invVxf));
+                dstQ.xform.ww = (float)vpW; dstQ.xform.wh = (float)vpH;
+                dstQ.rt = g_viewResRT;
+                BeginTextureMode(g_viewResRT); ClearBackground(BLANK);
+                if(checkerRect.width>0 && checkerRect.height>0) {
+                    int cw = LayerStack_RenderW(), ch = LayerStack_RenderH();
+                    Compositor_EnsureChecker(cw, ch);
+                    Texture2D ck = Compositor_GetCheckerTex();
+                    if(ck.id>0) DrawTexturePro(ck, Rectangle{0,0,(float)cw,(float)ch},
+                        checkerRect, Vector2{0,0}, 0, WHITE);
+                }
+                EndTextureMode();
+                ViewportManager_CompositeLayersOntoQuad(&dstQ);
                 if (usePresent) { BeginShaderMode(Compositor_GetPresentShader()); Compositor_SetPresentTexSize(vpW, vpH); Compositor_SetPresentDither(true); Compositor_SetPresentNearest(true); }
                 DrawTextureRec(g_viewResRT.texture,
                     Rectangle{0, 0, (float)vpW, (float)-vpH},

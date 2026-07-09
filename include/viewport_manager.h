@@ -15,9 +15,11 @@ void ViewportManager_ReloadShader(void);
 // Canvas-resolution cached composite
 RenderTexture2D* ViewportManager_Composite(void);
 Image ViewportManager_CompositeWithDither(void);
-void ViewportManager_CompositeViewInto(RenderTexture2D dst, const RectXform* viewXform, int w, int h, const Rectangle* checkerRect = NULL);
 
 void ViewportManager_SetDirty(void);
+
+// Composite all visible layers into a destination Quad.
+void ViewportManager_CompositeLayersOntoQuad(const Quad* dst);
 
 // Merge-down: blends top into bottom RT, handles RT replacement + layer delete + undo
 void ViewportManager_MergeDown(int idx);

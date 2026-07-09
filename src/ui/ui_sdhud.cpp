@@ -220,7 +220,15 @@ void SDHudModule::DrawGUI(const DrawRect& rect) {
             if (g_inputPreview.id) UnloadRenderTexture(g_inputPreview);
             g_inputPreview = LoadRenderTexture(pw, ph);
             RectXform viewXf = BuildCropViewXform(pw, ph);
-            ViewportManager_CompositeViewInto(g_inputPreview, &viewXf, pw, ph);
+            float idMat[6] = {1,0,0,0,1,0};
+            float invXf[6];
+            Xform_MulInv(invXf, idMat, viewXf.mat);
+            Quad dstQ;
+            memcpy(dstQ.xform.mat, invXf, sizeof(invXf));
+            dstQ.xform.ww = (float)pw; dstQ.xform.wh = (float)ph;
+            dstQ.rt = g_inputPreview;
+            BeginTextureMode(g_inputPreview); ClearBackground(BLANK); EndTextureMode();
+            ViewportManager_CompositeLayersOntoQuad(&dstQ);
             g_previewDirty = false;
         }
 
@@ -327,8 +335,12 @@ void SDHudModule::DrawGUI(const DrawRect& rect) {
             int pw = g_resolution, ph = g_lockSquare ? pw : (int)(pw * (g_sdXform.wh / g_sdXform.ww) + 0.5f);
             if (pw < 16) pw = 16; if (ph < 16) ph = 16;
             RenderTexture2D rt = LoadRenderTexture(pw, ph);
-            RectXform viewXf = BuildCropViewXform(pw, ph);
-            ViewportManager_CompositeViewInto(rt, &viewXf, pw, ph);
+            {   RectXform vxf = BuildCropViewXform(pw, ph);
+                float idM[6]={1,0,0,0,1,0}, invXf[6]; Xform_MulInv(invXf, idM, vxf.mat);
+                Quad dstQ; memcpy(dstQ.xform.mat, invXf, sizeof(invXf));
+                dstQ.xform.ww=(float)pw; dstQ.xform.wh=(float)ph; dstQ.rt=rt;
+                BeginTextureMode(rt); ClearBackground(BLANK); EndTextureMode();
+                ViewportManager_CompositeLayersOntoQuad(&dstQ); }
             Image img = LoadImageFromTexture(rt.texture); ImageFlipVertical(&img); UnloadRenderTexture(rt);
             if (img.data) { g_running = true; g_threadDone = false; g_progressMsg[0] = '\0';
                 std::thread t(upscale_worker, img); t.detach(); }
@@ -360,8 +372,12 @@ void SDHudModule::DrawGUI(const DrawRect& rect) {
             int pw = g_resolution, ph = g_lockSquare ? pw : (int)(pw * (g_sdXform.wh / g_sdXform.ww) + 0.5f);
             if (pw < 16) pw = 16; if (ph < 16) ph = 16;
             RenderTexture2D rt = LoadRenderTexture(pw, ph);
-            RectXform viewXf = BuildCropViewXform(pw, ph);
-            ViewportManager_CompositeViewInto(rt, &viewXf, pw, ph);
+            {   RectXform vxf = BuildCropViewXform(pw, ph);
+                float idM[6]={1,0,0,0,1,0}, invXf[6]; Xform_MulInv(invXf, idM, vxf.mat);
+                Quad dstQ; memcpy(dstQ.xform.mat, invXf, sizeof(invXf));
+                dstQ.xform.ww=(float)pw; dstQ.xform.wh=(float)ph; dstQ.rt=rt;
+                BeginTextureMode(rt); ClearBackground(BLANK); EndTextureMode();
+                ViewportManager_CompositeLayersOntoQuad(&dstQ); }
             Image cap = LoadImageFromTexture(rt.texture); ImageFlipVertical(&cap); UnloadRenderTexture(rt);
             int tmp_size = 0;
             uint8_t* src_png_data = ExportImageToMemory(cap, ".png", &tmp_size);
