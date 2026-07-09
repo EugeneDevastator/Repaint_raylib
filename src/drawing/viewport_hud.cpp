@@ -87,6 +87,17 @@ static void EnsurePreviewRTs(void) {
         g_previewRT = Load16BitRT(PREVIEW_SZ, PREVIEW_SZ);
 }
 
+// Construct a non-rotated RectXform from two screen-space corners.
+// Converts to world coordinates via the camera, so the returned xform
+// covers the same world region as the screen rectangle.
+static RectXform GetXformFromScreenCorners(float sx1, float sy1, float sx2, float sy2, const Camera2D& cam) {
+    Vector2 w1 = GetScreenToWorld2D({sx1, sy1}, cam);
+    Vector2 w2 = GetScreenToWorld2D({sx2, sy2}, cam);
+    float x = fminf(w1.x, w2.x), y = fminf(w1.y, w2.y);
+    float w = fabsf(w2.x - w1.x), h = fabsf(w2.y - w1.y);
+    return RectXform_Pivot(x, y, w, h, 0);
+}
+
 void ViewportHUD_Draw(AppState* state) {
     int cw = DocOutPxW(&state->doc);
     int ch = DocOutPxH(&state->doc);
@@ -246,21 +257,28 @@ void ViewportHUD_Draw(AppState* state) {
             if (g_lastPreviewHash == 0) g_previewBaseSeed = zoomBrush.seed;
             zoomBrush.seed = g_previewBaseSeed;
 
-            // Clear RT and draw canvas background
+            // Build preview Quad: world region matching the preview quad's
+            // screen position. QuadApply maps the canvas composite into it.
+            float pScrSz = (float)PREVIEW_SZ * state->camera.zoom;
+            float pX = vpBounds.x + vpBounds.width  * 0.5f - pScrSz * 0.5f;
+            float pY = vpBounds.y + vpBounds.height * 0.5f - pScrSz * 0.5f;
+            Quad previewQuad;
+            previewQuad.xform = GetXformFromScreenCorners(pX, pY, pX + pScrSz, pY + pScrSz, state->camera);
+            previewQuad.rt = g_previewRT;
+
+            // Clear RT
             BeginTextureMode(g_previewRT);
             ClearBackground(BLANK);
-            if (state->framingMode != FRAME_CROP && docBlendTex) {
-                float texTX = state->camera.target.x;
-                float texTY = state->camera.target.y;
-                float drawX = PREVIEW_SZ * 0.5f - texTX;
-                float drawY = PREVIEW_SZ * 0.5f - texTY;
-                rlSetBlendMode(RL_BLEND_CUSTOM);
-                rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
-                DrawTextureRec(docBlendTex->texture,
-                    Rectangle{0, 0, (float)docBlendTex->texture.width, (float)-docBlendTex->texture.height},
-                    Vector2{drawX, drawY}, WHITE);
-            }
             EndTextureMode();
+
+            // Blit canvas composite onto preview as background
+            if (state->framingMode != FRAME_CROP && docBlendTex) {
+                Quad canvasQuad;
+                canvasQuad.xform = state->doc.window;
+                canvasQuad.rt = *docBlendTex;
+                CompositorBlendParams bp = {};
+                Compositor_QuadApply(&canvasQuad, &bp, &previewQuad);
+            }
 
             // Generate dab points (no rendering)
             g_previewCount = StrokeEngine_GeneratePreviewDabs(&zoomBrush, state->mode,
