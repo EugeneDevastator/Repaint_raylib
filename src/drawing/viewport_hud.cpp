@@ -286,22 +286,33 @@ void ViewportHUD_Draw(AppState* state) {
             previewQuad.rt = g_previewRT;
 
             // Fill with opaque black, then blit canvas composite on top.
-            // The black provides an opaque underlay where the canvas doesn't reach,
-            // so brush blend modes have something to blend against everywhere.
             BeginTextureMode(g_previewRT);
             ClearBackground((Color){0,0,0,255});
-            EndTextureMode();
-
-            // Blit canvas composite onto preview as background
             if (state->framingMode != FRAME_CROP && docBlendTex) {
-                Quad canvasQuad;
-                canvasQuad.xform = state->doc.window;
-                canvasQuad.rt = *docBlendTex;
-                CompositorBlendParams bp;
-                bp.opacity = 1.0f;
-                bp.blendMode = bmGamma;
-                Compositor_QuadApply(&canvasQuad, &bp, &previewQuad);
+                // Compute world region of the preview (from screen corners)
+                Vector2 wTL = GetScreenToWorld2D({pX, pY}, state->camera);
+                Vector2 wBR = GetScreenToWorld2D({pX + pScrSz, pY + pScrSz}, state->camera);
+                float wx = fminf(wTL.x, wBR.x), wy = fminf(wTL.y, wBR.y);
+                float ww = fabsf(wBR.x - wTL.x), wh = fabsf(wBR.y - wTL.y);
+                // Set camera to show this world region centered in the preview
+                Camera2D pcam = { 0 };
+                pcam.target = (Vector2){wx + ww*0.5f, wy + wh*0.5f};
+                pcam.offset = (Vector2){(float)PREVIEW_SZ*0.5f, (float)PREVIEW_SZ*0.5f};
+                pcam.zoom   = (float)PREVIEW_SZ / fmaxf(ww, wh);
+                BeginMode2D(pcam);
+                float cw = (float)docBlendTex->texture.width;
+                float ch = (float)docBlendTex->texture.height;
+                float docW = state->doc.window.ww, docH = state->doc.window.wh;
+                rlSetBlendMode(RL_BLEND_CUSTOM);
+                rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+                DrawTexturePro(docBlendTex->texture,
+                    Rectangle{0, 0, cw, -ch},
+                    Rectangle{0, 0, docW, docH},
+                    Vector2{0, 0}, 0.0f, WHITE);
+                rlSetBlendMode(RL_BLEND_ALPHA);
+                EndMode2D();
             }
+            EndTextureMode();
 
             // Generate dab points (no rendering)
             g_previewCount = StrokeEngine_GeneratePreviewDabs(&zoomBrush, state->mode,
