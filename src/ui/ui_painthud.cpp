@@ -4,9 +4,22 @@
 #include <math.h>
 
 void PaintHudModule::DrawGL(const DrawRect& rect) {
-    if ((state->mode != eBrush && state->mode != eSmudge) || g_activeHud != HUD_NONE) return;
-
+    if (g_activeHud != HUD_NONE) return;
     Vector2 mp = GetMousePosition();
+
+    // ── Line tool XOR preview ──────────────────────────────────────
+    if (state->mode == ePolyStripe && viewport.wasMouseDown) {
+        Vector2 startScr = GetWorldToScreen2D(viewport.lineStartPos, state->camera);
+        rlDrawRenderBatchActive();
+        glEnable(GL_COLOR_LOGIC_OP);
+        glLogicOp(GL_XOR);
+        DrawLineEx(startScr, mp, 2.0f, WHITE);
+        rlDrawRenderBatchActive();
+        glDisable(GL_COLOR_LOGIC_OP);
+    }
+
+    if (state->mode != eBrush && state->mode != eSmudge && state->mode != ePolyStripe) return;
+
     float radPx = state->currentBrush.Realb.rad_out * WORLD_UNIT_PX * state->camera.zoom;
 
     // ── XOR overlay ────────────────────────────────────────────────

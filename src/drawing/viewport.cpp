@@ -251,7 +251,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             }
         }
         layersDirty = true;
-    } else if (!leftDown && vp->wasMouseDown) {
+    } else if (!leftDown && vp->wasMouseDown && state->mode != ePolyStripe) {
         InputEntry ee; memset(&ee, 0, sizeof(ee));
         ee.type = InputEntry::End;
         g_inputQueue.AddEntry(ee);
@@ -265,38 +265,57 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         vp->strokeLen = 0;
     }
 
-    // Line tool
-    if (state->mode == ePolyStripe && vp->inBounds && leftDown && active >= 0 && active < LayerStack_Count() && LayerStack_GetRT(active).id > 0) {
-        if (!vp->wasMouseDown) {
-            vp->lineLastDabPos = paintPos;
+    // ── Line tool (ePolyStripe): feed fake Catmull-Rom points into the engine ──
+    // Press → Begin(start_canvas). Release → interpolated Point entries + End.
+    // Enough points so the Catmull-Rom loop (seg <= N-3) covers the full line.
+    if (state->mode == ePolyStripe && vp->inBounds && active >= 0 && active < LayerStack_Count() && LayerStack_GetRT(active).id > 0) {
+        if (leftDown && !vp->wasMouseDown) {
+            vp->lineStartPos = canvasPos;  // canvas-space start for XOR preview + fakes
+            if (state->undo) state->undo->Snapshot(state, targetSlot);
+            float origRad = state->currentBrush.Realb.rad_out;
+            state->currentBrush.Realb.rad_out *= worldToTexPx;
+            InputEntry be;
+            memset(&be, 0, sizeof(be));
+            be.type = InputEntry::Begin;
+            be.x = canvasPos.x; be.y = canvasPos.y;
+            be.brush = state->currentBrush.Realb;
+            be.initAngle = adjustedAngle;
+            be.toolMode  = ePolyStripe;
+            be.targetSlot = targetSlot;
+            be.worldToTexPx = worldToTexPx;
+            be.timestamp = GetTime();
+            be.destXform = destXform;
+            be.userTexBucket = 0xFF;
+            be.userTexSlot   = 0xFF;
+            g_inputQueue.AddEntry(be);
+            state->currentBrush.Realb.rad_out = origRad;
             vp->wasMouseDown = true;
-        } else {
-            UserBrushConfig cfg;
-            CaptureBrushConfig(&cfg);
-            float spacing = fmaxf(state->currentBrush.Realb.rad_out * worldToTexPx * 2.0f * ResolveModulatedConfig(cfg, state->mode, 0.0f, g_modPars.Pars).spacing, 2.0f);
-            if (Dist2D(vp->lineLastDabPos, paintPos) > spacing) {
-                float segLen = Dist2D(vp->lineLastDabPos, paintPos);
-                int steps = (int)(segLen / spacing) + 1;
-                if (steps < 1) steps = 1;
-                for (int s = 0; s <= steps; s++) {
-                    float t = (float)s / (float)steps;
-                    Vector2 pos = {vp->lineLastDabPos.x + (paintPos.x - vp->lineLastDabPos.x) * t,
-                                   vp->lineLastDabPos.y + (paintPos.y - vp->lineLastDabPos.y) * t};
-                    if (vp->broker) {
-                        BrushDab ev = {pos.x, pos.y, pos.x, pos.y, state->currentBrush.Realb};
-                        PushDabSegment(vp->broker, ev.x, ev.y, ev.srcX, ev.srcY, ev.brush, state->mode);
-                    }
-                }
-                vp->lineLastDabPos = paintPos;
-            }
         }
-    } else if (state->mode != ePolyStripe && !leftDown) {
-        if (vp->wasMouseDown) {
+        if (!leftDown && vp->wasMouseDown) {
+            // Push Point(end) + 2 dummies → seg=0 fires emitSegment(start, end).
+            // N = Begin(1) + 3 Points = 4 ≥ 4 → Catmull-Rom loop runs seg=0.
+            // seg=0 special case: p1=pts[0]=start, p2=pts[1]=end → one segment covering the full line.
+            Vector2 end = canvasPos;
+            const float ep = 0.6f; // tiny offset so dummies pass threshold (>0.5px)
+            Vector2 pts[3] = {end, {end.x+ep, end.y}, {end.x+ep*2, end.y}};
+            for (int i = 0; i < 3; i++) {
+                InputEntry pe;
+                memset(&pe, 0, sizeof(pe));
+                pe.type = InputEntry::Point;
+                pe.x = pts[i].x; pe.y = pts[i].y;
+                pe.pressure = 1.0f; pe.rotation = 0.5f;
+                pe.timestamp = GetTime();
+                g_inputQueue.AddEntry(pe);
+            }
+            InputEntry ee;
+            memset(&ee, 0, sizeof(ee));
+            ee.type = InputEntry::End;
+            g_inputQueue.AddEntry(ee);
             vp->strokeEnded = true;
             vp->endLayer = active;
+            layersDirty = true;
+            vp->wasMouseDown = false;
         }
-        layersDirty = true;
-        vp->wasMouseDown = false;
     }
 }
 

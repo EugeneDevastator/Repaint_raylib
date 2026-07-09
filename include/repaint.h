@@ -180,7 +180,7 @@ typedef struct {
     bool wasMouseDown, debugShowStamps, rightMouseDown;
     Vector2 lastMousePos; bool inBounds, strokeEnded, spaceHeldPrev; int endLayer;
     ICommandBroker* broker; InputFilter inputFilter;
-    Vector2 lineLastDabPos;
+    Vector2 lineStartPos, lineLastDabPos;
     Vector2 m_distortLastDabPos;
 } Viewport;
 
