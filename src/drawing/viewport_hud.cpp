@@ -274,8 +274,10 @@ void ViewportHUD_Draw(AppState* state) {
             if (g_lastPreviewHash == 0) g_previewBaseSeed = zoomBrush.seed;
             zoomBrush.seed = g_previewBaseSeed;
 
-            // Build preview Quad: world region matching the preview quad's
-            // screen position. QuadApply maps the canvas composite into it.
+            // Build preview Quad: zoom-dependent screen corners so the world region
+            // stays at PREVIEW_SZ units regardless of zoom. This matches the canvas
+            // density — the brush dabs at canvas-pixel size (WORLD_UNIT_PX) line up
+            // 1:1 with the canvas background in the preview.
             float pScrSz = (float)PREVIEW_SZ * state->camera.zoom;
             float pX = vpBounds.x + vpBounds.width  * 0.5f - pScrSz * 0.5f;
             float pY = vpBounds.y + vpBounds.height * 0.5f - pScrSz * 0.5f;
@@ -283,9 +285,11 @@ void ViewportHUD_Draw(AppState* state) {
             previewQuad.xform = GetXformFromScreenCorners(pX, pY, pX + pScrSz, pY + pScrSz, state->camera);
             previewQuad.rt = g_previewRT;
 
-            // Clear RT
+            // Fill with opaque black, then blit canvas composite on top.
+            // The black provides an opaque underlay where the canvas doesn't reach,
+            // so brush blend modes have something to blend against everywhere.
             BeginTextureMode(g_previewRT);
-            ClearBackground(BLANK);
+            ClearBackground((Color){0,0,0,255});
             EndTextureMode();
 
             // Blit canvas composite onto preview as background
@@ -293,7 +297,9 @@ void ViewportHUD_Draw(AppState* state) {
                 Quad canvasQuad;
                 canvasQuad.xform = state->doc.window;
                 canvasQuad.rt = *docBlendTex;
-                CompositorBlendParams bp = {};
+                CompositorBlendParams bp;
+                bp.opacity = 1.0f;
+                bp.blendMode = bmGamma;
                 Compositor_QuadApply(&canvasQuad, &bp, &previewQuad);
             }
 
@@ -301,6 +307,10 @@ void ViewportHUD_Draw(AppState* state) {
             g_previewCount = StrokeEngine_GeneratePreviewDabs(&zoomBrush, state->mode,
                 state->initialAngle, PREVIEW_SZ * 0.5f, PREVIEW_SZ * 0.5f,
                 g_previewDabs, 4096);
+            // The dab radius is in canvas-pixel space (WORLD_UNIT_PX). The preview
+            // displays the RT at PREVIEW_SZ × zoom screen pixels, so the effective
+            // canvas→screen scale is zoom.  Keep the dabs at canvas-pixel size so
+            // they match the brush mark already in the composite / canvas texture.
             g_previewRendered = 0;
             g_previewBudget = 50000;
 
@@ -353,17 +363,18 @@ void ViewportHUD_Draw(AppState* state) {
             }
         }
 
-        // Display the preview quad — scale by zoom so brush size matches viewport canvas
-        float previewScreenSz = (float)PREVIEW_SZ * state->camera.zoom;
-        float hh = previewScreenSz * 0.5f;
+        // Display the preview quad — scale by zoom so brush size matches viewport canvas.
+        // The zoom cancels GetXformFromScreenCorners' zoom scaling, giving the preview
+        // the same world→screen pixel ratio as the canvas viewport.
+        float hh = (float)PREVIEW_SZ * state->camera.zoom * 0.5f;
         float px = vpBounds.x + vpBounds.width * 0.5f - hh;
         float py = vpBounds.y + vpBounds.height * 0.5f - hh;
+        float dispSz = (float)PREVIEW_SZ * state->camera.zoom;
         DrawTexturePro(g_previewRT.texture,
             Rectangle{0, 0, (float)PREVIEW_SZ, (float)-PREVIEW_SZ},
-            Rectangle{px, py, previewScreenSz, previewScreenSz},
+            Rectangle{px, py, dispSz, dispSz},
             Vector2{0, 0}, 0.0f, WHITE);
     }
-
     rlSetBlendMode(RL_BLEND_ALPHA);
     Viewport_DrawDebugOverlays(&viewport, state);
 }
