@@ -9,6 +9,31 @@
 #include "tablet_platform.h"
 #include "network_broker.h"
 
+// ── Shared brush Begin entry builder ─────────────────────────────────
+static void FillBeginEntry(InputEntry& be, AppState* state, int toolMode,
+                           Vector2 canvasPos, float adjustedAngle,
+                           TexSlotID targetSlot, float worldToTexPx,
+                           const RectXform& destXform)
+{
+    memset(&be, 0, sizeof(be));
+    be.type = InputEntry::Begin;
+    be.x = canvasPos.x; be.y = canvasPos.y;
+    be.brush = state->currentBrush.Realb;
+    be.initAngle = adjustedAngle;
+    be.toolMode  = toolMode;
+    be.targetSlot = targetSlot;
+    be.worldToTexPx = worldToTexPx;
+    be.timestamp = GetTime();
+    be.destXform = destXform;
+    if (TM_IsValid(state->brushTexSlot)) {
+        be.userTexBucket = TM_BUCKET_USER;
+        be.userTexSlot   = state->brushTexSlot.slot;
+    } else {
+        be.userTexBucket = 0xFF;
+        be.userTexSlot   = 0xFF;
+    }
+}
+
 static void PushDabSegment(ICommandBroker* b, float x, float y, float srcX, float srcY, const d_RealBrush& brush, int toolMode) {
     UserBrushConfig cfg;
     CaptureBrushConfig(&cfg);
@@ -184,23 +209,8 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
 
         if (isBrushSmudge) {
             InputEntry be;
-            memset(&be, 0, sizeof(be));
-            be.type = InputEntry::Begin;
-            be.x = canvasPos.x; be.y = canvasPos.y;
-            be.brush = state->currentBrush.Realb;
-            be.initAngle = adjustedAngle;
-            be.toolMode  = state->mode;
-            be.targetSlot = targetSlot;
-            be.worldToTexPx = worldToTexPx;
-            be.timestamp = GetTime();
-            be.destXform = destXform;
-            if (TM_IsValid(state->brushTexSlot)) {
-                be.userTexBucket = TM_BUCKET_USER;
-                be.userTexSlot   = state->brushTexSlot.slot;
-            } else {
-                be.userTexBucket = 0xFF;
-                be.userTexSlot   = 0xFF;
-            }
+            FillBeginEntry(be, state, state->mode, canvasPos, adjustedAngle,
+                           targetSlot, worldToTexPx, destXform);
             g_inputQueue.AddEntry(be);
         }
 
@@ -275,18 +285,8 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             float origRad = state->currentBrush.Realb.rad_out;
             state->currentBrush.Realb.rad_out *= worldToTexPx;
             InputEntry be;
-            memset(&be, 0, sizeof(be));
-            be.type = InputEntry::Begin;
-            be.x = canvasPos.x; be.y = canvasPos.y;
-            be.brush = state->currentBrush.Realb;
-            be.initAngle = adjustedAngle;
-            be.toolMode  = ePolyStripe;
-            be.targetSlot = targetSlot;
-            be.worldToTexPx = worldToTexPx;
-            be.timestamp = GetTime();
-            be.destXform = destXform;
-            be.userTexBucket = 0xFF;
-            be.userTexSlot   = 0xFF;
+            FillBeginEntry(be, state, ePolyStripe, canvasPos, adjustedAngle,
+                           targetSlot, worldToTexPx, destXform);
             g_inputQueue.AddEntry(be);
             state->currentBrush.Realb.rad_out = origRad;
             vp->wasMouseDown = true;
