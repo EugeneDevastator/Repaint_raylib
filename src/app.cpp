@@ -770,7 +770,7 @@ void App_Draw(AppState* state) {
     g_emitter->ProcessInputQueue();
 
     // Unpack + render dabs with per-frame pixel budget
-    if (g_throttle) g_throttle->DrawPending(state);
+    if (g_throttle && g_throttle->DrawPending(state) > 0) layersDirty = true;
 
     if (viewport.broker) viewport.broker->poll(state);
     if (g_recorder) g_recorder->poll(state);
