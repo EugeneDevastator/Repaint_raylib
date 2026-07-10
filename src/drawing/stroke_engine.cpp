@@ -59,8 +59,8 @@ ModulatedBrushConfig ResolveModulatedConfig(const UserBrushConfig& cfg, int tool
     out.texBlendVal  = ModulateConfigVal(cfg.texBlendVal, modValues);
 
     out.focalOffset  = ModulateConfigVal(cfg.focalOffset, modValues);
-    out.spacing      = ConfigRawVal(cfg.spacing);
-    out.scatter      = ConfigRawVal(cfg.scatter);
+    out.spacing      = ModulateConfigVal(cfg.spacing, modValues);
+    out.scatter      = ModulateConfigVal(cfg.scatter, modValues);
 
     out.texBlendMode   = cfg.texBlendMode;
     out.texNoisemode   = cfg.texNoisemode;
