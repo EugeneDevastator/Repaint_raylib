@@ -9,6 +9,31 @@
 #include "tablet_platform.h"
 #include "network_broker.h"
 
+// ── Shared brush Begin entry builder ─────────────────────────────────
+static void FillBeginEntry(InputEntry& be, AppState* state, int toolMode,
+                           Vector2 canvasPos, float adjustedAngle,
+                           TexSlotID targetSlot, float worldToTexPx,
+                           const RectXform& destXform)
+{
+    memset(&be, 0, sizeof(be));
+    be.type = InputEntry::Begin;
+    be.x = canvasPos.x; be.y = canvasPos.y;
+    be.brush = state->currentBrush.Realb;
+    be.initAngle = adjustedAngle;
+    be.toolMode  = toolMode;
+    be.targetSlot = targetSlot;
+    be.worldToTexPx = worldToTexPx;
+    be.timestamp = GetTime();
+    be.destXform = destXform;
+    if (TM_IsValid(state->brushTexSlot)) {
+        be.userTexBucket = TM_BUCKET_USER;
+        be.userTexSlot   = state->brushTexSlot.slot;
+    } else {
+        be.userTexBucket = 0xFF;
+        be.userTexSlot   = 0xFF;
+    }
+}
+
 static void PushDabSegment(ICommandBroker* b, float x, float y, float srcX, float srcY, const d_RealBrush& brush, int toolMode) {
     UserBrushConfig cfg;
     CaptureBrushConfig(&cfg);
@@ -49,7 +74,7 @@ void Viewport_SetBounds(Viewport* vp, Rectangle bounds) {
 
 void Viewport_HandleInput(Viewport* vp, AppState* state) {
 
-    if (IsKeyPressed(KEY_F1)) vp->debugShowStamps = !vp->debugShowStamps;
+    if (IsKeyPressed(KEY_F3)) vp->debugShowStamps = !vp->debugShowStamps;
 
     Vector2 mousePos = GetMousePosition();
 
@@ -109,49 +134,49 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
     // Adjust brush rotation so stamps appear upright in world space
     float adjustedAngle = state->initialAngle;
 
-    // Inverse layer-transform helper — converts world-space coords to paint-space
-    auto toPaintSpace = [&](Vector2 worldPt) -> Vector2 {
-        if (state->editTexMode || active < 0 || active >= LayerStack_Count())
-            return worldPt;
-        sLayerProps* lp = LayerStack_GetProps(active);
-        float a = lp->xform.mat[0], b = lp->xform.mat[1], tx = lp->xform.mat[2];
-        float c = lp->xform.mat[3], d = lp->xform.mat[4], ty = lp->xform.mat[5];
-        float det = a * d - b * c;
-        if (fabsf(det) <= 0.0001f) return worldPt;
-        float invDet = 1.0f / det;
-        float ia = d * invDet, ib = -b * invDet, itx = (b * ty - d * tx) * invDet;
-        float ic = -c * invDet, id = a * invDet, ity = (c * tx - a * ty) * invDet;
-        Vector2 pt;
-        // Local UV in world units, then convert to texture pixels
-        float u = worldPt.x * ia + worldPt.y * ib + itx;
-        float v = worldPt.x * ic + worldPt.y * id + ity;
-        int texW = GetLayerWpx(active), texH = GetLayerHpx(active);
-        pt.x = (lp->xform.ww > 0.0f) ? u * texW / lp->xform.ww : u;
-        pt.y = (lp->xform.wh > 0.0f) ? v * texH / lp->xform.wh : v;
-        return pt;
-    };
-
-    // Transform brush position if the active layer has a transform
-    Vector2 paintPos = toPaintSpace(canvasPos);
-
-    // Subtract layer rotation so brush stamps appear upright in world space
-    if (!state->editTexMode && active >= 0 && active < LayerStack_Count()) {
-        sLayerProps* lp = LayerStack_GetProps(active);
-        float layerRot = atan2f(lp->xform.mat[3], lp->xform.mat[0]) * (180.0f / (float)M_PI);
-        adjustedAngle -= layerRot;
+    // Compute destination transform (world → destPixel) and radius scaling
+    RectXform destXform = {};
+    Xform_Identity(destXform.mat);
+    float worldToTexPx   = WORLD_UNIT_PX;
+    TexSlotID targetSlot;
+    bool  isTexMode = (state->editTexMode && TM_IsValid(state->editTexSlot));
+    if (!isTexMode) {
+        targetSlot  = LayerStack_GetSlotID(active);
+        if (active >= 0 && active < LayerStack_Count()) {
+            sLayerProps* lp = LayerStack_GetProps(active);
+            // Inverse layer transform → world→paint affine matrix
+            float a = lp->xform.mat[0], b = lp->xform.mat[1], ttx = lp->xform.mat[2];
+            float c = lp->xform.mat[3], d = lp->xform.mat[4], tty = lp->xform.mat[5];
+            float det = a * d - b * c;
+            if (fabsf(det) > 0.0001f) {
+                float invDet = 1.0f / det;
+                float ia = d * invDet, ib = -b * invDet, itx = (b * tty - d * ttx) * invDet;
+                float ic = -c * invDet, id = a * invDet, ity = (c * ttx - a * tty) * invDet;
+                int texW = GetLayerWpx(active), texH = GetLayerHpx(active);
+                float sx = (lp->xform.ww > 0.0f) ? texW / lp->xform.ww : 1.0f;
+                float sy = (lp->xform.wh > 0.0f) ? texH / lp->xform.wh : 1.0f;
+                destXform.mat[0]=ia*sx; destXform.mat[1]=ib*sx; destXform.mat[2]=itx*sx;
+                destXform.mat[3]=ic*sy; destXform.mat[4]=id*sy; destXform.mat[5]=ity*sy;
+            }
+            // worldToTexPx from layer scale
+            int texW = GetLayerWpx(active), texH = GetLayerHpx(active);
+            float avgDiv = 0.0f;
+            if (lp->xform.ww > 0.0f) avgDiv += lp->xform.ww / texW;
+            if (lp->xform.wh > 0.0f) avgDiv += lp->xform.wh / texH;
+            if (avgDiv > 0.001f) worldToTexPx = WORLD_UNIT_PX / (avgDiv * 0.5f);
+            // Subtrack layer rotation so stamps stay upright in world space
+            float layerRot = atan2f(lp->xform.mat[3], lp->xform.mat[0]) * (180.0f / (float)M_PI);
+            adjustedAngle -= layerRot;
+        }
+    } else {
+        // User texture: fake identity transform at world (0,0) → texel coords
+        targetSlot = state->editTexSlot;
     }
 
-    // Compute world-to-texture-pixel conversion for brush radius.
-    // rad_out is in world units; multiply by worldToTexPx to get texture pixels.
-    float worldToTexPx = WORLD_UNIT_PX;
-    if (!state->editTexMode && active >= 0 && active < LayerStack_Count()) {
-        sLayerProps* lp = LayerStack_GetProps(active);
-        int texW = GetLayerWpx(active), texH = GetLayerHpx(active);
-        float avgDiv = 0.0f;
-        if (lp->xform.ww > 0.0f) avgDiv += lp->xform.ww / texW;
-        if (lp->xform.wh > 0.0f) avgDiv += lp->xform.wh / texH;
-        if (avgDiv > 0.001f) worldToTexPx = WORLD_UNIT_PX / (avgDiv * 0.5f);
-    }
+    // Paint-space position (for debug recording and distortion)
+    float* m = destXform.mat;
+    Vector2 paintPos = {canvasPos.x*m[0] + canvasPos.y*m[1] + m[2],
+                        canvasPos.x*m[3] + canvasPos.y*m[4] + m[5]};
 
     // Record raw input positions for debug (during active stroke)
     if (leftDown && !vp->wasMouseDown)
@@ -159,167 +184,89 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
     if ((vp->wasMouseDown || leftDown) && vp->inputLen < MAX_STROKE_PTS)
         vp->inputPts[vp->inputLen++] = paintPos;
 
-    // ── Texture editing mode ──────────────────────────────────────────
-    if (state->editTexMode && TM_IsValid(state->editTexSlot)) {
+    // Determine if painting is allowed in current mode
+    bool canPaintBrush = false;
+    if (!isTexMode && (vp->inBounds || vp->wasMouseDown) && leftDown &&
+        (state->mode == eBrush || state->mode == eSmudge || state->mode == eDistort || state->mode == eContrast)) {
+        if (active >= 0 && active < LayerStack_Count() && LayerStack_GetRT(active).id > 0)
+            canPaintBrush = true;
+    }
+    if (isTexMode && (vp->inBounds || vp->wasMouseDown) && leftDown) {
         TexSlot* bt = TM_Get(state->editTexSlot);
-        if (bt && !bt->builtIn && bt->rt.id > 0 && (state->mode == eBrush || state->mode == eSmudge)) {
-            float dstX = -state->camera.target.x * state->camera.zoom + state->camera.offset.x;
-            float dstY = -state->camera.target.y * state->camera.zoom + state->camera.offset.y;
-            float dstW = bt->w * state->camera.zoom;
-            float dstH = bt->h * state->camera.zoom;
-            float tx = (mousePos.x - dstX) / dstW * bt->w;
-            float ty = (mousePos.y - dstY) / dstH * bt->h;
-
-            if (!vp->wasMouseDown) {
-                if (vp->inBounds && leftDown) {
-                    Modulators_SnapRunState();
-                    if (state->undo) state->undo->Snapshot(state, state->editTexSlot);
-
-                    InputEntry be;
-                    be.type = InputEntry::Begin;
-                    be.x = tx; be.y = ty;
-                    be.brush = state->currentBrush.Realb;
-                    be.initAngle = state->initialAngle;
-                    be.toolMode = state->mode;
-                    be.targetSlot = state->editTexSlot;
-                    if (TM_IsValid(state->brushTexSlot)) {
-                        be.userTexBucket = TM_BUCKET_USER;
-                        be.userTexSlot = state->brushTexSlot.slot;
-                    } else {
-                        be.userTexBucket = 0xFF;
-                        be.userTexSlot = 0xFF;
-                    }
-                    be.worldToTexPx = WORLD_UNIT_PX;
-                    be.timestamp = GetTime();
-                    g_inputQueue.AddEntry(be);
-
-                    vp->wasMouseDown = true;
-                }
-            } else if (leftDown) {
-                double now = GetTime();
-                StrokePoint sp = vp->inputFilter.Feed(tx, ty, now);
-                InputEntry e;
-                e.type = InputEntry::Point;
-                e.x = sp.x; e.y = sp.y;
-                e.pressure = 1.0f; e.rotation = 0.5f;
-                e.tiltX = 0; e.tiltY = 0; e.velocity = sp.velocity; e.timestamp = now;
-                g_inputQueue.AddEntry(e);
-            }
-
-            if (!leftDown && vp->wasMouseDown) {
-                InputEntry ee; ee.type = InputEntry::End;
-                g_inputQueue.AddEntry(ee);
-                vp->wasMouseDown = false;
-            }
-        }
-        layersDirty = true;
+        if (bt && !bt->builtIn && bt->rt.id > 0 && (state->mode == eBrush || state->mode == eSmudge))
+            canPaintBrush = true;
     }
 
-    // ── Normal layer painting ────────────────────────────────────────
-    if (!state->editTexMode && (vp->inBounds || vp->wasMouseDown) && leftDown &&
-        (state->mode == eBrush || state->mode == eSmudge || state->mode == eDistort || state->mode == eContrast))
-    {
-        if (active >= 0 && active < LayerStack_Count() && LayerStack_GetRT(active).id > 0) {
-            if (state->mode == eBrush || state->mode == eSmudge) {
-                if (!vp->wasMouseDown) {
-                    Modulators_SnapRunState();
-                    if (state->undo) state->undo->Snapshot(state, LayerStack_GetSlotID(active));
+    // ── Unified input processing (world space) ───────────────────────
+    bool isBrushSmudge = (state->mode == eBrush || state->mode == eSmudge);
+    if (canPaintBrush && !vp->wasMouseDown) {
+        Modulators_SnapRunState();
+        if (state->undo) state->undo->Snapshot(state, targetSlot);
 
-                    float origRad = state->currentBrush.Realb.rad_out;
-                    state->currentBrush.Realb.rad_out *= worldToTexPx;
-                    TabletPlatform_ClearMousePos();
+        float origRad = state->currentBrush.Realb.rad_out;
+        state->currentBrush.Realb.rad_out *= worldToTexPx;
+        TabletPlatform_ClearMousePos();
 
-                    InputEntry be;
-                    be.type = InputEntry::Begin;
-                    be.x = paintPos.x; be.y = paintPos.y;
-                    be.brush = state->currentBrush.Realb;
-                    be.initAngle = adjustedAngle;
-                    be.toolMode = state->mode;
-                    be.targetSlot = LayerStack_GetSlotID(active);
-                    if (TM_IsValid(state->brushTexSlot)) {
-                        be.userTexBucket = TM_BUCKET_USER;
-                        be.userTexSlot = state->brushTexSlot.slot;
-                    } else {
-                        be.userTexBucket = 0xFF;
-                        be.userTexSlot = 0xFF;
-                    }
-                    be.worldToTexPx = worldToTexPx;
-                    be.timestamp = GetTime();
-                    g_inputQueue.AddEntry(be);
+        if (isBrushSmudge) {
+            InputEntry be;
+            FillBeginEntry(be, state, state->mode, canvasPos, adjustedAngle,
+                           targetSlot, worldToTexPx, destXform);
+            g_inputQueue.AddEntry(be);
+        }
 
-                    state->currentBrush.Realb.rad_out = origRad;
-                    vp->wasMouseDown = true;
-                    if (vp->strokeLen < MAX_STROKE_PTS)
-                        vp->strokePts[vp->strokeLen++] = paintPos;
-                } else {
-                    float origRad = state->currentBrush.Realb.rad_out;
-                    state->currentBrush.Realb.rad_out *= worldToTexPx;
-
-                    float mouseBuf[1024];
-                    int n = TabletPlatform_DrainMousePos(mouseBuf, 512);
-                    for (int i = 0; i < n; i++) {
-                        Vector2 screenPos = {mouseBuf[i*2], mouseBuf[i*2+1]};
-                        Vector2 worldPos = GetScreenToWorld2D(screenPos, state->camera);
-                        Vector2 paintPt = toPaintSpace(worldPos);
-                        StrokePoint sp = vp->inputFilter.Feed(paintPt.x, paintPt.y, GetTime());
-                        InputEntry e;
-                        e.type = InputEntry::Point;
-                        e.x = sp.x; e.y = sp.y;
-                        e.pressure = g_modPars.Pars[csPressure];
-                        e.tiltX = g_modPars.Pars[csTilt];
-                        e.tiltY = g_modPars.Pars[csVtilt];
-                        e.rotation = g_modPars.Pars[csRot];
-                        e.velocity = sp.velocity;
-                        e.timestamp = GetTime();
-                        g_inputQueue.AddEntry(e);
-                    }
-                    state->currentBrush.Realb.rad_out = origRad;
-                }
-            } else {
-                // Distort / Contrast
-                UserBrushConfig cfg;
-                CaptureBrushConfig(&cfg);
-                float sv = ResolveModulatedConfig(cfg, state->mode, 0.0f, g_modPars.Pars).spacing;
-                float scaledRad = state->currentBrush.Realb.rad_out * worldToTexPx;
-                float spacing = scaledRad * 2.0f * sv;
-                if (spacing < 2.0f) spacing = 2.0f;
-                if (!vp->wasMouseDown) {
-                    if (vp->broker) {
-                        d_RealBrush scaled = state->currentBrush.Realb;
-                        scaled.rad_out = scaledRad;
-                        BrushDab ev = {paintPos.x, paintPos.y, paintPos.x, paintPos.y, scaled};
-                        PushDabSegment(vp->broker, ev.x, ev.y, ev.srcX, ev.srcY, ev.brush, state->mode);
-                    }
-                    vp->wasMouseDown = true;
-                } else {
-                if (Dist2D(vp->m_distortLastDabPos, paintPos) >= spacing) {
-                    if (vp->broker) {
-                        d_RealBrush scaled = state->currentBrush.Realb;
-                        scaled.rad_out = scaledRad;
-                        BrushDab ev = {paintPos.x, paintPos.y, paintPos.x, paintPos.y, scaled};
-                        PushDabSegment(vp->broker, ev.x, ev.y, ev.srcX, ev.srcY, ev.brush, state->mode);
-                    }
-                    vp->m_distortLastDabPos = paintPos;
-                    }
-                }
+        state->currentBrush.Realb.rad_out = origRad;
+        vp->wasMouseDown = true;
+        if (vp->strokeLen < MAX_STROKE_PTS)
+            vp->strokePts[vp->strokeLen++] = paintPos;
+    } else if (canPaintBrush && vp->wasMouseDown) {
+        if (isBrushSmudge) {
+            float mouseBuf[1024];
+            int tabletN = TabletPlatform_DrainMousePos(mouseBuf, 512);
+            bool  hasTablet = (tabletN > 0);
+            int n = hasTablet ? tabletN : 1;
+            if (!hasTablet) { mouseBuf[0] = mousePos.x; mouseBuf[1] = mousePos.y; }
+            float origRad = state->currentBrush.Realb.rad_out;
+            state->currentBrush.Realb.rad_out *= worldToTexPx;
+            for (int i = 0; i < n; i++) {
+                Vector2 screenPos = {mouseBuf[i*2], mouseBuf[i*2+1]};
+                Vector2 worldPos = GetScreenToWorld2D(screenPos, state->camera);
+                StrokePoint sp = vp->inputFilter.Feed(worldPos.x, worldPos.y, GetTime());
+                InputEntry e;
+                memset(&e, 0, sizeof(e));
+                e.type = InputEntry::Point;
+                e.x = sp.x; e.y = sp.y;
+                e.pressure  = hasTablet ? g_modPars.Pars[csPressure] : 1.0f;
+                e.rotation  = hasTablet ? g_modPars.Pars[csRot]      : 0.5f;
+                e.tiltX     = g_modPars.Pars[csTilt];
+                e.tiltY     = g_modPars.Pars[csVtilt];
+                e.velocity  = sp.velocity;
+                e.timestamp = GetTime();
+                g_inputQueue.AddEntry(e);
+            }
+            state->currentBrush.Realb.rad_out = origRad;
+        } else {
+            // Distort / Contrast (existing logic, unchanged)
+            UserBrushConfig cfg;
+            CaptureBrushConfig(&cfg);
+            float sv = ResolveModulatedConfig(cfg, state->mode, 0.0f, g_modPars.Pars).spacing;
+            float scaledRad = state->currentBrush.Realb.rad_out * worldToTexPx;
+            float spacing = scaledRad * 2.0f * sv;
+            if (spacing < 2.0f) spacing = 2.0f;
+            if (vp->broker) {
+                d_RealBrush scaled = state->currentBrush.Realb;
+                scaled.rad_out = scaledRad;
+                BrushDab ev = {paintPos.x, paintPos.y, paintPos.x, paintPos.y, scaled};
+                PushDabSegment(vp->broker, ev.x, ev.y, ev.srcX, ev.srcY, ev.brush, state->mode);
+                vp->m_distortLastDabPos = paintPos;
             }
         }
         layersDirty = true;
-    } else if (!state->editTexMode) {
-        if (vp->strokeLen > 0) {
-            vp->strokeEnded = true;
-            vp->endLayer = active;
-            vp->strokeLen = 0;
-        }
-        if (vp->wasMouseDown) {
-            float origRad = state->currentBrush.Realb.rad_out;
-            state->currentBrush.Realb.rad_out *= worldToTexPx;
-            InputEntry ee; ee.type = InputEntry::End;
-            g_inputQueue.AddEntry(ee);
-            state->currentBrush.Realb.rad_out = origRad;
-            vp->strokeEnded = true;
-            vp->endLayer = active;
-        }
+    } else if (!leftDown && vp->wasMouseDown && state->mode != ePolyStripe) {
+        InputEntry ee; memset(&ee, 0, sizeof(ee));
+        ee.type = InputEntry::End;
+        g_inputQueue.AddEntry(ee);
+        vp->strokeEnded = true;
+        vp->endLayer = active;
         layersDirty = true;
         vp->wasMouseDown = false;
     }
@@ -328,38 +275,57 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         vp->strokeLen = 0;
     }
 
-    // Line tool
-    if (state->mode == ePolyStripe && vp->inBounds && leftDown && active >= 0 && active < LayerStack_Count() && LayerStack_GetRT(active).id > 0) {
-        if (!vp->wasMouseDown) {
-            vp->lineLastDabPos = paintPos;
+    // ── Line tool (ePolyStripe): click → single dab, drag → line ──
+    // Press: no Begin entry, just record state. Release: submit entries.
+    // Click: Begin+End → handleEnd creates single stamp at start.
+    // Drag:  Begin+End (first dab at start) + Begin+Point*3+End (line segment start→end).
+    if (state->mode == ePolyStripe && vp->inBounds && active >= 0 && active < LayerStack_Count() && LayerStack_GetRT(active).id > 0) {
+        if (leftDown && !vp->wasMouseDown) {
+            vp->lineStartPos = canvasPos;
+            if (state->undo) state->undo->Snapshot(state, targetSlot);
             vp->wasMouseDown = true;
-        } else {
-            UserBrushConfig cfg;
-            CaptureBrushConfig(&cfg);
-            float spacing = fmaxf(state->currentBrush.Realb.rad_out * worldToTexPx * 2.0f * ResolveModulatedConfig(cfg, state->mode, 0.0f, g_modPars.Pars).spacing, 2.0f);
-            if (Dist2D(vp->lineLastDabPos, paintPos) > spacing) {
-                float segLen = Dist2D(vp->lineLastDabPos, paintPos);
-                int steps = (int)(segLen / spacing) + 1;
-                if (steps < 1) steps = 1;
-                for (int s = 0; s <= steps; s++) {
-                    float t = (float)s / (float)steps;
-                    Vector2 pos = {vp->lineLastDabPos.x + (paintPos.x - vp->lineLastDabPos.x) * t,
-                                   vp->lineLastDabPos.y + (paintPos.y - vp->lineLastDabPos.y) * t};
-                    if (vp->broker) {
-                        BrushDab ev = {pos.x, pos.y, pos.x, pos.y, state->currentBrush.Realb};
-                        PushDabSegment(vp->broker, ev.x, ev.y, ev.srcX, ev.srcY, ev.brush, state->mode);
-                    }
-                }
-                vp->lineLastDabPos = paintPos;
-            }
         }
-    } else if (state->mode != ePolyStripe && !leftDown) {
-        if (vp->wasMouseDown) {
+        if (!leftDown && vp->wasMouseDown) {
+            Vector2 start = vp->lineStartPos;
+            Vector2 end   = canvasPos;
+            float origRad = state->currentBrush.Realb.rad_out;
+            state->currentBrush.Realb.rad_out *= worldToTexPx;
+
+            // First dab: Begin+End → handleEnd !m_emittedAny pushes single stamp
+            InputEntry be;
+            FillBeginEntry(be, state, ePolyStripe, start, adjustedAngle,
+                           targetSlot, worldToTexPx, destXform);
+            g_inputQueue.AddEntry(be);
+            InputEntry ee;
+            memset(&ee, 0, sizeof(ee)); ee.type = InputEntry::End;
+            g_inputQueue.AddEntry(ee);
+
+            if (Dist2D(start, end) > 1.0f) {
+                // Drag: push second Begin+Point*3+End for the line segment
+                FillBeginEntry(be, state, ePolyStripe, start, adjustedAngle,
+                               targetSlot, worldToTexPx, destXform);
+                g_inputQueue.AddEntry(be);
+                const float ep = 0.6f;
+                Vector2 pts[3] = {end, {end.x+ep, end.y}, {end.x+ep*2, end.y}};
+                for (int i = 0; i < 3; i++) {
+                    InputEntry pe;
+                    memset(&pe, 0, sizeof(pe));
+                    pe.type = InputEntry::Point;
+                    pe.x = pts[i].x; pe.y = pts[i].y;
+                    pe.pressure = 1.0f; pe.rotation = 0.5f;
+                    pe.timestamp = GetTime();
+                    g_inputQueue.AddEntry(pe);
+                }
+                memset(&ee, 0, sizeof(ee)); ee.type = InputEntry::End;
+                g_inputQueue.AddEntry(ee);
+            }
+
+            state->currentBrush.Realb.rad_out = origRad;
             vp->strokeEnded = true;
             vp->endLayer = active;
+            layersDirty = true;
+            vp->wasMouseDown = false;
         }
-        layersDirty = true;
-        vp->wasMouseDown = false;
     }
 }
 

@@ -21,7 +21,7 @@ static int locUserTexOrigin = -1;
 static int locHasTexture = -1;
 static int locTexFeather = -1, locTexThresh = -1;
 static int locUseLumAsAlpha = -1, locTexColorMode = -1;
-static int locTexNoisemode = -1;
+static int locTexNoisemode = -1, locTexTiling = -1;
 static int locDstTex = -1, locBrushTex = -1;
 static int locStampCenter = -1;
 static int locCanvasSize = -1;
@@ -129,6 +129,7 @@ void BrushBlend_Init(void) {
     locUseLumAsAlpha  = GetShaderLocation(brushBlendShader, "useLumAsAlpha");
     locTexColorMode   = GetShaderLocation(brushBlendShader, "texColorMode");
     locTexNoisemode   = GetShaderLocation(brushBlendShader, "texNoisemode");
+    locTexTiling      = GetShaderLocation(brushBlendShader, "texTiling");
     locDstTex         = GetShaderLocation(brushBlendShader, "dstTex");
     locBrushTex       = GetShaderLocation(brushBlendShader, "brushTex");
     locStampCenter    = GetShaderLocation(brushBlendShader, "stampCenter");
@@ -231,7 +232,7 @@ void BrushBlend_ApplyStamp(
     float y0 = stampY - stampSizePx * 0.5f;
 
     // -------- Pass 2a: blend to intermediate --------
-    RenderTexture2D* intermediateRT = AllocPoolRT(intermediatePool, bucket, false);
+    RenderTexture2D* intermediateRT = AllocPoolRT(intermediatePool, bucket, true);
 
     float drawBboxHalf = (float)drawSz * 0.5f;
     float size = radOutForGeo / drawBboxHalf;
@@ -269,8 +270,8 @@ void BrushBlend_ApplyStamp(
     float ts  = brush.texScale;
     float texOff[2] = {0.0f, 0.0f};
     if (brush.texNoisemode == 1) {
-        texOff[0] = ((float)rand()/(float)RAND_MAX - 0.5f) * 0.3f;
-        texOff[1] = ((float)rand()/(float)RAND_MAX - 0.5f) * 0.3f;
+        texOff[0] = ((float)rand()/(float)RAND_MAX - 0.5f) * 1.0f;
+        texOff[1] = ((float)rand()/(float)RAND_MAX - 0.5f) * 1.0f;
     }
     int useLum = brush.useTexLumAsAlpha ? 1 : 0;
     int cm  = (int)brush.texColorMode;
@@ -306,6 +307,8 @@ void BrushBlend_ApplyStamp(
     SetShaderValue(brushBlendShader, locUseLumAsAlpha,  &useLum,     SHADER_UNIFORM_INT);
     SetShaderValue(brushBlendShader, locTexColorMode,   &cm,         SHADER_UNIFORM_INT);
     SetShaderValue(brushBlendShader, locTexNoisemode,   &tnm,        SHADER_UNIFORM_INT);
+    int tiling = (int)brush.texTiling;
+    SetShaderValue(brushBlendShader, locTexTiling,      &tiling,     SHADER_UNIFORM_INT);
     SetShaderValue(brushBlendShader, locStampCenter,    sc,          SHADER_UNIFORM_VEC2);
 
     float csz[2] = { (float)W, (float)H };

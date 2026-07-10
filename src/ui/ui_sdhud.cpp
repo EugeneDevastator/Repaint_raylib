@@ -128,6 +128,7 @@ bool SDHudModule::HandleInput(InputState& input, const DrawRect& rect) {
         } else {
             TransformHandle_ResetState();
             HudSetActive(state, HUD_SD);
+            DisplayInfoText("Stable Diffusion and upscaler");
         }
         return true;
     }
@@ -220,7 +221,15 @@ void SDHudModule::DrawGUI(const DrawRect& rect) {
             if (g_inputPreview.id) UnloadRenderTexture(g_inputPreview);
             g_inputPreview = LoadRenderTexture(pw, ph);
             RectXform viewXf = BuildCropViewXform(pw, ph);
-            ViewportManager_CompositeViewInto(g_inputPreview, &viewXf, pw, ph);
+            float idMat[6] = {1,0,0,0,1,0};
+            float invXf[6];
+            Xform_MulInv(invXf, idMat, viewXf.mat);
+            Quad dstQ;
+            memcpy(dstQ.xform.mat, invXf, sizeof(invXf));
+            dstQ.xform.ww = (float)pw; dstQ.xform.wh = (float)ph;
+            dstQ.rt = g_inputPreview;
+            BeginTextureMode(g_inputPreview); ClearBackground(BLANK); EndTextureMode();
+            ViewportManager_CompositeLayersOntoQuad(&dstQ);
             g_previewDirty = false;
         }
 
@@ -243,7 +252,7 @@ void SDHudModule::DrawGUI(const DrawRect& rect) {
 
     // ── Resolution slider (above bottom panels, full width) ──────────
     float by = ry + rh - bottomRowH - margin;
-    float resSliderY = by - 42;
+    float resSliderY = by - 55;
     ImGui::SetNextWindowPos(ImVec2(rx + margin, resSliderY));
     ImGui::SetNextWindowSize(ImVec2(rw - margin * 2, 0));
     ImGui::Begin("##sdRes", NULL,
@@ -253,7 +262,6 @@ void SDHudModule::DrawGUI(const DrawRect& rect) {
     {
         ImGui::Text("Resolution");
         ImGui::SameLine();
-        if (g_lockSquare) g_resolution = 512;
         int res = g_resolution;
         ImGui::SetNextItemWidth(-1);
         ImGui::PushStyleColor(ImGuiCol_SliderGrab, (ImVec4)ImColor(80,150,255,255));
@@ -311,10 +319,20 @@ void SDHudModule::DrawGUI(const DrawRect& rect) {
         ImGuiWindowFlags_NoScrollbar);
     {
         ImGui::BeginGroup();
-        ImGui::Checkbox("512x512", &g_lockSquare);
+        if (ImGui::Button("Set 512x512")) g_resolution = 512;
         int outH = g_lockSquare ? g_resolution
                   : (int)(g_resolution * (g_sdXform.wh / g_sdXform.ww) + 0.5f);
         ImGui::Text("Output: %d x %d", g_resolution, outH);
+        {
+            RenderTexture2D rt = LayerStack_GetRT(state->activeLayer);
+            int lw = rt.texture.width, lh = rt.texture.height;
+            if (lw > 0 && lh > 0) {
+                ImGui::SameLine();
+                float lwStr = ImGui::CalcTextSize("Layer: 0000 x 0000").x;
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - lwStr);
+                ImGui::TextDisabled("Layer: %d x %d", lw, lh);
+            }
+        }
         ImGui::Separator();
 
         float bw = (ImGui::GetContentRegionAvail().x - 4) * 0.5f;
@@ -327,8 +345,12 @@ void SDHudModule::DrawGUI(const DrawRect& rect) {
             int pw = g_resolution, ph = g_lockSquare ? pw : (int)(pw * (g_sdXform.wh / g_sdXform.ww) + 0.5f);
             if (pw < 16) pw = 16; if (ph < 16) ph = 16;
             RenderTexture2D rt = LoadRenderTexture(pw, ph);
-            RectXform viewXf = BuildCropViewXform(pw, ph);
-            ViewportManager_CompositeViewInto(rt, &viewXf, pw, ph);
+            {   RectXform vxf = BuildCropViewXform(pw, ph);
+                float idM[6]={1,0,0,0,1,0}, invXf[6]; Xform_MulInv(invXf, idM, vxf.mat);
+                Quad dstQ; memcpy(dstQ.xform.mat, invXf, sizeof(invXf));
+                dstQ.xform.ww=(float)pw; dstQ.xform.wh=(float)ph; dstQ.rt=rt;
+                BeginTextureMode(rt); ClearBackground(BLANK); EndTextureMode();
+                ViewportManager_CompositeLayersOntoQuad(&dstQ); }
             Image img = LoadImageFromTexture(rt.texture); ImageFlipVertical(&img); UnloadRenderTexture(rt);
             if (img.data) { g_running = true; g_threadDone = false; g_progressMsg[0] = '\0';
                 std::thread t(upscale_worker, img); t.detach(); }
@@ -360,8 +382,12 @@ void SDHudModule::DrawGUI(const DrawRect& rect) {
             int pw = g_resolution, ph = g_lockSquare ? pw : (int)(pw * (g_sdXform.wh / g_sdXform.ww) + 0.5f);
             if (pw < 16) pw = 16; if (ph < 16) ph = 16;
             RenderTexture2D rt = LoadRenderTexture(pw, ph);
-            RectXform viewXf = BuildCropViewXform(pw, ph);
-            ViewportManager_CompositeViewInto(rt, &viewXf, pw, ph);
+            {   RectXform vxf = BuildCropViewXform(pw, ph);
+                float idM[6]={1,0,0,0,1,0}, invXf[6]; Xform_MulInv(invXf, idM, vxf.mat);
+                Quad dstQ; memcpy(dstQ.xform.mat, invXf, sizeof(invXf));
+                dstQ.xform.ww=(float)pw; dstQ.xform.wh=(float)ph; dstQ.rt=rt;
+                BeginTextureMode(rt); ClearBackground(BLANK); EndTextureMode();
+                ViewportManager_CompositeLayersOntoQuad(&dstQ); }
             Image cap = LoadImageFromTexture(rt.texture); ImageFlipVertical(&cap); UnloadRenderTexture(rt);
             int tmp_size = 0;
             uint8_t* src_png_data = ExportImageToMemory(cap, ".png", &tmp_size);

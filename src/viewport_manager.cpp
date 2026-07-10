@@ -9,34 +9,14 @@
 
 // ── Internal state ────────────────────────────────────────────────────
 static struct {
-    RenderTexture2D accumA, accumB;
-    bool accumInited;
-    int curW, curH;
-    RenderTexture2D* finalAcc;
     bool dirty;
 } VM;
 
 bool layersDirty = true;
 
-static int CW(void) { return LayerStack_RenderW(); }
-static int CH(void) { return LayerStack_RenderH(); }
-
-static Rectangle FullRect(int w, int h) { return Rectangle{0,0,(float)w,(float)-h}; }
-
-static void EnsureAccumulators(int w, int h) {
-    if(VM.accumInited&&VM.curW==w&&VM.curH==h) return;
-    if(VM.accumInited){ UnloadRenderTexture(VM.accumA); UnloadRenderTexture(VM.accumB); }
-    VM.accumA=Load16BitRT(w,h); VM.accumB=Load16BitRT(w,h);
-    VM.curW=w; VM.curH=h; VM.accumInited=true; VM.finalAcc=NULL; VM.dirty=true;
-}
-
 // ── Init / shutdown ──────────────────────────────────────────────────
 void ViewportManager_Init(void) { VM = {0}; }
-
-void ViewportManager_Shutdown(void) {
-    if(VM.accumInited){ UnloadRenderTexture(VM.accumA); UnloadRenderTexture(VM.accumB); VM.accumInited=false; }
-    VM={0};
-}
+void ViewportManager_Shutdown(void) { VM = {0}; }
 
 void ViewportManager_ReloadShader(void) {
     Compositor_ReloadShader();
@@ -45,68 +25,68 @@ void ViewportManager_ReloadShader(void) {
 
 void ViewportManager_SetDirty(void) { VM.dirty = true; }
 
-// ── Composite helpers ────────────────────────────────────────────────
+// ── Composite onto the canvas RT ─────────────────────────────────────
+static Rectangle FullRect(int w, int h) { return Rectangle{0,0,(float)w,(float)-h}; }
 RenderTexture2D* ViewportManager_Composite(void) {
-    int cw=CW(),ch=CH(); if(cw<1||ch<1) return NULL;
-    EnsureAccumulators(cw,ch);
-    if(!(VM.dirty||layersDirty)){ rlSetBlendMode(RL_BLEND_ALPHA); return (VM.accumInited&&VM.finalAcc)?VM.finalAcc:NULL; }
+    Quad* canvas = LayerStack_GetCanvasQuadPtr();
+    if(!canvas || canvas->rt.id==0) return NULL;
+    int cw = (int)canvas->rt.texture.width, ch = (int)canvas->rt.texture.height;
+    if(cw<1||ch<1) return NULL;
+
+    if(!(VM.dirty||layersDirty)) { rlSetBlendMode(RL_BLEND_ALPHA); return &canvas->rt; }
     VM.dirty=false; layersDirty=false;
 
-    // Seed with checker
+    // Clear canvas with checker background
     Compositor_EnsureChecker(cw, ch);
-    BeginTextureMode(VM.accumA); ClearBackground(BLANK);
+    BeginTextureMode(canvas->rt); ClearBackground(BLANK);
     Texture2D ck = Compositor_GetCheckerTex();
     if(ck.id>0) DrawTexture(ck,0,0,WHITE);
     EndTextureMode();
 
-    // Composite each visible layer via Compositor_BlitLayerOnto
-    RectXform viewXform;
-    const float* cv = LayerStack_GetCanvasView();
-    memcpy(viewXform.mat, cv, 6*sizeof(float));
-    viewXform.ww=0; viewXform.wh=0;
-
+    // Blit each visible layer onto the canvas via QuadApply
     int count = LayerStack_Count();
     for(int i=0;i<count;i++){
         sLayerProps* p = LayerStack_GetProps(i);
         if(!p||!p->visible) continue;
-        RenderTexture2D rt = LayerStack_GetRT(i);
-        if(rt.id==0) continue;
+        Quad* layerQ = LayerStack_GetQuadPtr(i);
+        if(!layerQ || layerQ->rt.id==0) continue;
+        Quad src = *layerQ;               // copy RT from Quad
+        src.xform = p->xform;              // use live xform from props
         CompositorBlendParams bp;
         bp.opacity=p->op; bp.blendMode=p->blendmode;
         bp.threshold=p->threshold; bp.feather=p->feather;
         bp.seamless=p->seamless;
-
-        Compositor_BlitLayerOnto(rt.texture, &p->xform, &bp, &viewXform,
-            VM.accumA, Rectangle{0,0,(float)cw,(float)ch});
+        Compositor_QuadApply(&src, &bp, canvas);
     }
-    VM.finalAcc = &VM.accumA;
     rlSetBlendMode(RL_BLEND_ALPHA);
-    return (VM.accumInited&&VM.finalAcc)?VM.finalAcc:NULL;
+    return &canvas->rt;
 }
 
 Image ViewportManager_CompositeWithDither(void) {
-    int cw=CW(),ch=CH(); if(cw<1||ch<1) return (Image){0};
-    // Render all layers into a fresh RT
+    int cw=LayerStack_RenderW(),ch=LayerStack_RenderH(); if(cw<1||ch<1) return (Image){0};
+    // Render all layers into a fresh RT using the canvas as the view Quad
     RenderTexture2D a=Load16BitRT(cw,ch), b=Load16BitRT(cw,ch);
     if(a.id==0||b.id==0){ if(a.id>0)UnloadRenderTexture(a); if(b.id>0)UnloadRenderTexture(b); return (Image){0}; }
     BeginTextureMode(a); ClearBackground(BLANK); EndTextureMode();
-    RectXform viewXform;
-    const float* cv = LayerStack_GetCanvasView();
-    memcpy(viewXform.mat, cv, 6*sizeof(float));
-    viewXform.ww=0; viewXform.wh=0;
+
+    // Use canvas xform as the view; build a temp destination Quad for blitting
+    Quad* canvas = LayerStack_GetCanvasQuadPtr();
+    Quad dst = *canvas;
+    dst.rt = a;
 
     int count = LayerStack_Count();
     for(int i=0;i<count;i++){
         sLayerProps* p = LayerStack_GetProps(i);
         if(!p||!p->visible) continue;
-        RenderTexture2D rt = LayerStack_GetRT(i);
-        if(rt.id==0) continue;
+        Quad* layerQ = LayerStack_GetQuadPtr(i);
+        if(!layerQ || layerQ->rt.id==0) continue;
+        Quad src = *layerQ;
+        src.xform = p->xform;
         CompositorBlendParams bp;
         bp.opacity=p->op; bp.blendMode=p->blendmode;
         bp.threshold=p->threshold; bp.feather=p->feather;
         bp.seamless=p->seamless;
-        Compositor_BlitLayerOnto(rt.texture, &p->xform, &bp, &viewXform,
-            a, Rectangle{0,0,(float)cw,(float)ch});
+        Compositor_QuadApply(&src, &bp, &dst);
     }
 
     // Apply dither via present shader
@@ -128,35 +108,21 @@ Image ViewportManager_CompositeWithDither(void) {
     return result;
 }
 
-void ViewportManager_CompositeViewInto(RenderTexture2D dst, const RectXform* viewXform, int w, int h, const Rectangle* checkerRect) {
-    if(w<1||h<1||dst.id==0) return;
-    int cw=LayerStack_RenderW(), ch=LayerStack_RenderH();
-
-    BeginTextureMode(dst); ClearBackground(BLANK);
-
-    // Draw checker in crop region area of viewport
-    if(checkerRect && checkerRect->width>0 && checkerRect->height>0 && cw>0 && ch>0) {
-        Compositor_EnsureChecker(cw, ch);
-        Texture2D ck = Compositor_GetCheckerTex();
-        if(ck.id>0)
-            DrawTexturePro(ck, Rectangle{0,0,(float)cw,(float)ch},
-                *checkerRect, Vector2{0,0}, 0, WHITE);
-    }
-
-    EndTextureMode();
-
-    int count = LayerStack_Count();
-    for(int i=0;i<count;i++){
+// ── Apply all visible layers onto a destination Quad ───────────────────
+void ViewportManager_CompositeLayersOntoQuad(const Quad* dst) {
+    int n = LayerStack_Count();
+    for(int i=0;i<n;i++){
         sLayerProps* p = LayerStack_GetProps(i);
         if(!p||!p->visible) continue;
-        RenderTexture2D rt = LayerStack_GetRT(i);
-        if(rt.id==0) continue;
+        Quad* lq = LayerStack_GetQuadPtr(i);
+        if(!lq || lq->rt.id==0) continue;
+        Quad src = *lq;
+        src.xform = p->xform;
         CompositorBlendParams bp;
         bp.opacity=p->op; bp.blendMode=p->blendmode;
         bp.threshold=p->threshold; bp.feather=p->feather;
         bp.seamless=p->seamless;
-        Compositor_BlitLayerOnto(rt.texture, &p->xform, &bp, viewXform,
-            dst, Rectangle{0,0,(float)w,(float)h});
+        Compositor_QuadApply(&src, &bp, dst);
     }
     rlSetBlendMode(RL_BLEND_ALPHA);
 }
@@ -216,12 +182,6 @@ int ViewportManager_AcceptMatte(int srcIdx, Image matteImage) {
     LayerStack_UploadToGPU(newIdx, matteImage);
     ViewportManager_SetDirty();
     return newIdx;
-}
-
-RenderTexture2D ViewportManager_GetMergedTexture(const RectXform* xform, int w, int h) {
-    RenderTexture2D rt = LoadRenderTexture(w, h);
-    ViewportManager_CompositeViewInto(rt, xform, w, h);
-    return rt;
 }
 
 int ViewportManager_CreateLayerFromImage(Image img) {

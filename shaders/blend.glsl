@@ -223,9 +223,10 @@ claude formulas
         outRGB = dst.rgb + 2.0*srcRGB - 1.0;
         outRGB = mix(outRGB, dst.rgb, 1.0-srcA);
         outA   = srcA + dst.a*(1.0 - srcA);
-    } else if (mode == MODE_BURN) { // burn
-        outRGB = dst.rgb + srcPremul/(1.0 - dst.rgb);
-        outA   = min(1.0, dst.a + srcA);
+    } else if (mode == MODE_BURN) { // color burn
+        outRGB = 1.0 - (1.0 - dst.rgb) / max(srcRGB, vec3(0.0001));
+        outRGB = mix(outRGB, dst.rgb, 1.0 - srcA);
+        outA   = srcA + dst.a*(1.0 - srcA);
     } else if (mode == MODE_MULT) {
         outRGB = dst.rgb * mix(vec3(1.0), srcRGB, srcA);
         outA   = dst.a;

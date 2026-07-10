@@ -108,9 +108,11 @@ set(SOURCES
     src/ui/ui_layerpanel.cpp
     src/ui/ui_leftpanel.cpp
     src/ui/ui_changelog.cpp
+    src/ui/ui_helpscreen.cpp
     src/ui/ui_quickhud.cpp
     src/ui/ui_nnhud.cpp
     src/ui/ui_sdhud.cpp
+    src/ui/ui_warphud.cpp
     src/ui/ui_painthud.cpp
     src/ui/ui_layerxform.cpp
     src/ui/ui_canvasxform.cpp
@@ -159,15 +161,13 @@ set(SOURCES
 # Generate icon.ico from icon.png at configure time
 set(PNG_SRC "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon.png")
 set(ICO_DST "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon.ico")
-if(EXISTS ${PNG_SRC} AND NOT EXISTS ${ICO_DST})
-    find_program(PYTHON python3)
-    if(NOT PYTHON)
-        find_program(PYTHON python)
-    endif()
-    if(PYTHON)
-        execute_process(COMMAND ${PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/tools/png2ico.py" ${PNG_SRC} ${ICO_DST}
-            OUTPUT_QUIET ERROR_QUIET)
-    endif()
+find_program(PYTHON python3)
+if(NOT PYTHON)
+    find_program(PYTHON python)
+endif()
+if(EXISTS ${PNG_SRC} AND PYTHON)
+    execute_process(COMMAND ${PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/tools/png2ico.py" ${PNG_SRC} ${ICO_DST}
+        OUTPUT_QUIET ERROR_QUIET)
 endif()
 
 # ── GUI targets ──────────────────────────────────────────────────────────────
@@ -176,7 +176,16 @@ if(BUILD_GUI)
 add_executable(repaint ${SOURCES})
 
 if(WIN32)
-    if(EXISTS ${ICO_DST})
+    if(PYTHON AND EXISTS ${PNG_SRC})
+        # Regenerate icon.ico whenever icon.png changes (build-time dependency)
+        add_custom_command(
+            OUTPUT ${ICO_DST}
+            COMMAND ${PYTHON} "${CMAKE_CURRENT_SOURCE_DIR}/tools/png2ico.py" ${PNG_SRC} ${ICO_DST}
+            DEPENDS ${PNG_SRC}
+            COMMENT "Generating icon.ico from icon.png..."
+        )
+        add_custom_target(icon_ico DEPENDS ${ICO_DST})
+        add_dependencies(repaint icon_ico)
         target_sources(repaint PRIVATE resources/icon.rc)
     endif()
     target_sources(repaint PRIVATE src/sensors/tablet_win.cpp src/sensors/platform_utils_win.cpp src/sensors/clipboard_win.cpp)

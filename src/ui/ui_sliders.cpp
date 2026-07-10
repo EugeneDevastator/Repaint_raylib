@@ -251,26 +251,30 @@ static void SliderInteraction(const ImRect& bb, int orient, BParam* bp) {
                              mperp >= bbMinP && mperp <= bbMaxP);
             if (inside2d) {
                 v = (mside - bbMinS) / bs;
+                if (flip) v = 1.0f - v;
             } else if (mperp < bbMinP) {
                 // snap side: expand section upward, then snap to 10%
                 float dist = bbMinP - mperp;
                 float extA = bbMinS - dist * 0.5f;
                 float extB = bbMaxS + dist * 0.5f;
-                v = roundf((mside - extA) / (extB - extA) * 10.0f) / 10.0f;
+                float snappv = roundf((mside - extA) / (extB - extA) * 20.0f) / 20.0f;
+                if (flip) snappv = 1.0f - snappv;
+                // Snap: compute linear value from mouse, snap, solve clipmaxF = (snapped/range)^(1/power)
+                v = powf(snappv, 1.0f / bp->power);
+                float ret = powf(v,bp->power);
+
             } else {
                 // precise side: expand section downward
                 float dist = mperp - bbMaxP;
                 float extA = bbMinS - dist * 0.5f;
                 float extB = bbMaxS + dist * 0.5f;
                 v = (mside - extA) / (extB - extA);
+                if (flip) v = 1.0f - v;
             }
         } else {
             v = (mside - bbMinS) / bs;
+            if (flip) v = 1.0f - v;
         }
-
-        if (flip) v = 1.0f - v;
-
-
 
         v = fminf(fmaxf(v, 0.0f), 1.0f);
         if (ImGui::IsMouseDown(0))

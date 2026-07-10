@@ -104,6 +104,7 @@ typedef struct {
     int texNoisemode; float texScale, texFeather, texThresh;
     bool useTexLumAsAlpha, texUseRGB;
     int texColorMode;
+    int texTiling;
     int eraseMode;
     float perspective;
     Color col;
@@ -116,7 +117,10 @@ typedef struct { uint8_t ToolID; d_Brush Brush; uint8_t startseed, Noisemode; d_
 typedef struct { d_Stroke Stroke; d_Brush BrushFrom, Brush; uint8_t BrushID,NoiseID,Noisemode,ToolID,startseed,layer; float spacing; uint8_t scatter,rRadout,rRadrel,rScale,rScaleRel,rAngle,rSpacing,rSpread,rOp,rSol,rSol2,rCrv,rCop,rPwr,rHue,rSat,rLit; } d_Section;
 typedef struct { uint8_t ActID; int16_t layer, layerto; uint8_t bm; float op; bool vis; Rectangle rect; } d_LAction;
 
-// Document — canvas window framing (all in pixel units)
+// Document — canvas window framing (all in pixel units).
+// Default: 1 world unit = 1 pixel. Texture size (LayerStack_RenderW/H)
+// and world size (ww/wh) must not be affected by texture size.
+// The texture is always fitted into the world-space region defined by ww/wh.
 typedef struct {
     RectXform window; // framing rectangle in document space
 } Document;
@@ -176,7 +180,7 @@ typedef struct {
     bool wasMouseDown, debugShowStamps, rightMouseDown;
     Vector2 lastMousePos; bool inBounds, strokeEnded, spaceHeldPrev; int endLayer;
     ICommandBroker* broker; InputFilter inputFilter;
-    Vector2 lineLastDabPos;
+    Vector2 lineStartPos, lineLastDabPos;
     Vector2 m_distortLastDabPos;
 } Viewport;
 
@@ -207,6 +211,7 @@ Document Doc_New(int w, int h);
 void app_new_document(int w, int h, Color fill);
 
 // Canvas window matrix — pure function, maps document coords → output pixel coords
+// todo - this probably can be removed because layer compositor handles layer merges gracefully already
 void ComputeCanvasMatrix(const RectXform* rx, int outW, int outH, float mat[6]);
 
 // Commit the canvas window: bake the window transform into all layers,
@@ -248,6 +253,7 @@ extern int g_texPanelAreaY; // y-coordinate for the texture panel in the Quick H
 #define HUD_CANVAS_XFORM 3
 #define HUD_NN 4
 #define HUD_SD 5
+#define HUD_WARP 6
 extern int g_activeHud;
 #include "info_text.h"
 
@@ -416,6 +422,16 @@ struct SDHudModule : IModule {
     bool HandleInput(InputState& input, const DrawRect& rect) override;
     void DrawGL(const DrawRect& rect) override;
     void DrawGUI(const DrawRect& rect) override;
+};
+
+struct WarpHudModule : IModule {
+    AppState* state;
+    explicit WarpHudModule(AppState* s) : state(s) {}
+    const char* Name() const override { return "WarpHud"; }
+    bool HandleInput(InputState& input, const DrawRect& rect) override;
+    void DrawGL(const DrawRect& rect) override;
+    void DrawGUI(const DrawRect& rect) override;
+    void OnExit() override;
 };
 
 struct PaintHudModule : IModule {

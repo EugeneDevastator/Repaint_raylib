@@ -15,6 +15,7 @@ StrokeEmitter::StrokeEmitter(StrokeThrottle* throttle)
     m_initDirSet = false;
     m_prevSegLen = 0;
     memset(&m_modulated, 0, sizeof(m_modulated));
+    Xform_Identity(m_destXform.mat);
 }
 
 void StrokeEmitter::handleBegin(const InputEntry& e) {
@@ -22,7 +23,18 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
     m_brushFrom = e.brush;
     CaptureBrushConfig(&m_config);
     m_config.toolMode = e.toolMode;
-    m_config.bmidx = m_brushFrom.bmidx;
+    m_config.bmidx          = m_brushFrom.bmidx;
+    m_config.texColorMode   = m_brushFrom.texColorMode;
+    m_config.texNoisemode   = m_brushFrom.texNoisemode;
+    m_config.texTiling      = m_brushFrom.texTiling;
+    m_config.useTexLumAsAlpha = m_brushFrom.useTexLumAsAlpha;
+    m_config.preserveop     = m_brushFrom.preserveop;
+    m_config.texBlendMode   = m_brushFrom.texBlendMode;
+    m_config.eraseMode      = m_brushFrom.eraseMode;
+    m_config.baseSeed       = m_brushFrom.seed;
+    m_config.userTexOriginX = m_brushFrom.userTexOriginX;
+    m_config.userTexOriginY = m_brushFrom.userTexOriginY;
+    m_config.userTexDirection = m_brushFrom.userTexDirection;
     m_emittedAny = false;
     m_seed = e.brush.seed;
     m_initAngle = e.initAngle;
@@ -31,8 +43,11 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
     m_userTexBucket = e.userTexBucket;
     m_userTexSlot = e.userTexSlot;
     m_worldToTexPx = e.worldToTexPx;
+    m_destXform = e.destXform;
 
-    Vector2 start = {e.x, e.y};
+    float* m = m_destXform.mat;
+    Vector2 start = {e.x * m[0] + e.y * m[1] + m[2],
+                     e.x * m[3] + e.y * m[4] + m[5]};
     m_lastDabPos = start;
     m_lastDabRad = 0;
     m_prevSegPos = start;
@@ -177,7 +192,9 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
 void StrokeEmitter::handlePoint(const InputEntry& e) {
     if (!m_active) return;
 
-    Vector2 pos = {e.x, e.y};
+    float* m = m_destXform.mat;
+    Vector2 pos = {e.x * m[0] + e.y * m[1] + m[2],
+                   e.x * m[3] + e.y * m[4] + m[5]};
     g_modPars.Pars[csPressure] = e.pressure;
     g_modPars.Pars[csRot]      = e.rotation;
     g_modPars.Pars[csTilt]     = e.tiltX;
@@ -192,6 +209,10 @@ void StrokeEmitter::handlePoint(const InputEntry& e) {
 
     if (g_strokeSmoothingMode == SMOOTH_MODE_LINEAR) {
         float lineLen = Dist2D(m_lastDabPos, pos);
+        float threshold = (g_strokeThrottle > 0.0f) ? fmaxf(g_strokeThrottle, 0.5f)
+                           : modNow.radOut * 0.5f * m_worldToTexPx;
+        if (threshold < 0.5f) threshold = 0.5f;
+        if (lineLen < threshold) return;
         float hLen = lineLen * 0.33f;
         Vector2 dir = {pos.x - m_lastDabPos.x, pos.y - m_lastDabPos.y};
         if (lineLen > 0.001f) { dir.x /= lineLen; dir.y /= lineLen; }

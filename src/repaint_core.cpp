@@ -29,22 +29,23 @@ Document Doc_New(int w, int h) {
 }
 
 void ComputeCanvasMatrix(const RectXform* rx, int outW, int outH, float mat[6]) {
-    (void)outW; (void)outH;
     float cx = rx->mat[2], cy = rx->mat[5];
     float a = rx->mat[0], b = rx->mat[1];
     float c = rx->mat[3], d = rx->mat[4];
     float det = a * d - b * c;
     if (fabsf(det) < 0.0001f) { Xform_Identity(mat); return; }
     float invDet = 1.0f / det;
-    // paint = W^(-1) * (world - P)
+    // paint = W^(-1) * (world - P)   — maps world to canvas-local space
     float ia = d * invDet, ib = -b * invDet;
     float ic = -c * invDet, id = a * invDet;
-    mat[0] = ia;
-    mat[1] = ib;
-    mat[2] = -(ia * cx + ib * cy);
-    mat[3] = ic;
-    mat[4] = id;
-    mat[5] = -(ic * cx + id * cy);
+    float tx = -(ia * cx + ib * cy);
+    float ty = -(ic * cx + id * cy);
+    // Scale from canvas-local to texture pixels so the entire world region
+    // (ww,wh) maps to the full output texture (outW,outH).
+    float sx = (rx->ww > 0.0f) ? (float)outW / rx->ww : 1.0f;
+    float sy = (rx->wh > 0.0f) ? (float)outH / rx->wh : 1.0f;
+    mat[0] = ia * sx; mat[1] = ib * sx; mat[2] = tx * sx;
+    mat[3] = ic * sy; mat[4] = id * sy; mat[5] = ty * sy;
 }
 
 void ApplyCanvasWindow(Document* doc) {
@@ -53,16 +54,21 @@ void ApplyCanvasWindow(Document* doc) {
     float c = doc->window.mat[3], d = doc->window.mat[4];
     float ww = doc->window.ww, wh = doc->window.wh;
 
-    // Full 2×2 inverse of the window matrix (supports rotation).
-    // Maps old-world content to new-world origin so that baking into layers
-    // preserves the visual output.
-    float det = a*d - b*c;
-    float invDet = (fabsf(det) < 0.0001f) ? 0.0f : 1.0f / det;
-    float C[6] = {
-        d*invDet, -b*invDet, (-d*cx + b*cy)*invDet,
-        -c*invDet,  a*invDet, ( c*cx - a*cy)*invDet
-    };
-    if (fabsf(det) < 0.0001f) { Xform_Identity(C); }
+    // Decompose rotation + translation from the window matrix (remove scale).
+    // Layers are only rotated and moved, not rescaled.
+    float sx = sqrtf(a*a + c*c);
+    float sy = sqrtf(b*b + d*d);
+    float C[6];
+    if (sx < 0.0001f || sy < 0.0001f) {
+        Xform_Identity(C);
+    } else {
+        // Normalised rotation columns
+        float na = a/sx, nb = b/sy;
+        float nc = c/sx, nd = d/sy;
+        // Inverse of rotation-only matrix = transpose (orthogonal rotation)
+        C[0] = na;  C[1] = nc;  C[2] = -(na*cx + nc*cy);
+        C[3] = nb;  C[4] = nd;  C[5] = -(nb*cx + nd*cy);
+    }
     LayerStack_SetCanvasView(C);
     LayerStack_BakeCanvasWindow(doc);   // bakes C into layers, resets canvasView to identity
 
@@ -70,12 +76,21 @@ void ApplyCanvasWindow(Document* doc) {
     float idCv[6] = {1, 0, 0, 0, 1, 0};
     LayerStack_SetCanvasView(idCv);
 
-    // Reset window: no rotation, pivot at origin, same pixel extent
+    // Reset window: no rotation, pivot at origin, same pixel extent.
+    // Texture size stays independent — canvasView will scale so the
+    // entire world region (ww,wh) maps to the full canvas RT pixels.
     doc->window.mat[0] = 1; doc->window.mat[1] = 0;
     doc->window.mat[2] = 0;
     doc->window.mat[3] = 0; doc->window.mat[4] = 1;
     doc->window.mat[5] = 0;
     doc->window.ww = ww; doc->window.wh = wh;
 
-    LayerStack_SetRenderWindow((int)(fabsf(ww) + 0.5f), (int)(fabsf(wh) + 0.5f));
+    // Recompute canvasView with the reset window and current canvas RT size
+    int cw = LayerStack_RenderW(), ch = LayerStack_RenderH();
+    if (cw > 0 && ch > 0) {
+        float cv[6];
+        ComputeCanvasMatrix(&doc->window, cw, ch, cv);
+        LayerStack_SetCanvasView(cv);
+    }
+    LayerStack_SetCanvasXform(&doc->window);
 }

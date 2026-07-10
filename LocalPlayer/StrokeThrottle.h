@@ -27,6 +27,8 @@ private:
 
     float m_lastSegEndAngle = 0.0f;
     bool  m_hasPrevAngle = false;
+    float m_prevSmudgeSrcX = 0.0f, m_prevSmudgeSrcY = 0.0f;
+    bool  m_hasPrevSmudge = false;
     int m_dynamicBudget = 2 * 1024 * 1024;
     int m_minBudget = 10000;
     int m_maxBudget = 8 * 1024 * 1024;

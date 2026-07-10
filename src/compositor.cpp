@@ -170,7 +170,8 @@ void Compositor_ReloadShader(void) {
     LoadBlendShader();
 }
 
-void Compositor_BlitLayerOnto(
+// ── Core blit (internal — only called by QuadApply) ──────────────────
+static void Compositor_BlitLayerOnto(
     Texture2D srcTex, const RectXform* xform,
     const CompositorBlendParams* params,
     const RectXform* viewXform,
@@ -275,40 +276,28 @@ void Compositor_ApplyLayerToLayer(
     RenderTexture2D bottomRT, const RectXform* bottomXform)
 {
     if(topTex.id==0||bottomRT.id==0) return;
-    int bw=bottomRT.texture.width, bh=bottomRT.texture.height;
-    if(bw<1||bh<1) return;
+    Quad top   = { *topXform,   RenderTexture2D{0, topTex, {0}} };
+    Quad bot   = { *bottomXform, bottomRT };
+    Compositor_QuadApply(&top, params, &bot);
+}
 
-    // Compute relative transform: top-local → bottom-RT-pixel
-    float relMat[6];
-    float invBottom[6];
-    float idMat[6] = {1,0,0,0,1,0};
-    Xform_MulInv(invBottom, idMat, bottomXform->mat);
-    Xform_Mul(relMat, invBottom, topXform->mat);
-    // Embed top layer's extent into matrix columns
-    int tw = topTex.width, th = topTex.height;
-    float topUS = (tw > 0) ? topXform->ww / tw : 1.0f;
-    float topVS = (th > 0) ? topXform->wh / th : 1.0f;
-    relMat[0] *= topUS; relMat[3] *= topUS;
-    relMat[1] *= topVS; relMat[4] *= topVS;
-    // Apply bottom's pixel-to-world-unit ratio
-    float btmUS = (fabsf(bottomXform->ww) > 0.0001f) ? bw / bottomXform->ww : 1.0f;
-    float btmVS = (fabsf(bottomXform->wh) > 0.0001f) ? bh / bottomXform->wh : 1.0f;
-    relMat[0] *= btmUS; relMat[3] *= btmVS;
-    relMat[1] *= btmUS; relMat[4] *= btmVS;
-    relMat[2] *= btmUS; relMat[5] *= btmVS;
+// ── Quad Apply — universal compositing between two Quad objects ──────
+void Compositor_QuadApply(const Quad* src, const CompositorBlendParams* bp, const Quad* dst) {
+    if(!src||!dst||src->rt.id==0||dst->rt.id==0) return;
+    int cw=(int)dst->rt.texture.width, ch=(int)dst->rt.texture.height;
+    if(cw<1||ch<1) return;
 
-    // Build viewXform from relMat
+    // Compute view matrix: world → dst pixel, scaling so the entire
+    // world region (xform.ww, xform.wh) maps to the full texture.
+    float viewMat[6];
+    ComputeCanvasMatrix(&dst->xform, cw, ch, viewMat);
+
     RectXform viewXf;
-    memcpy(viewXf.mat, relMat, sizeof(relMat));
-    viewXf.ww = topXform->ww;
-    viewXf.wh = topXform->wh;
+    memcpy(viewXf.mat, viewMat, sizeof(viewMat));
+    viewXf.ww=0; viewXf.wh=0;
 
-    // Identity layer xform — the viewXform already incorporates both
-    RectXform identity = {};
-    Xform_Identity(identity.mat);
-
-    Compositor_BlitLayerOnto(topTex, &identity, params, &viewXf,
-        bottomRT, Rectangle{0,0,(float)bw,(float)bh});
+    Compositor_BlitLayerOnto(src->rt.texture, &src->xform, bp, &viewXf,
+        dst->rt, Rectangle{0,0,(float)cw,(float)ch});
 }
 
 bool Compositor_PresentInited(void) { return CS.presentInited; }

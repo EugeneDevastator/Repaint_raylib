@@ -10,8 +10,9 @@ ModulatedBrushConfig ResolveModulatedConfigMax(const UserBrushConfig& cfg, int t
                                                float initAngle);
 DabBrush MakeDabBrush(const ModulatedBrushConfig& mod, const float rad_out_px_override = 0.0f);
 
-void StrokeEngine_DrawPreview(RenderTexture2D dstRT, Texture2D brushTex, bool useTexture,
-                              const d_RealBrush* baseBrush, int toolMode,
-                              float initialAngle, float cx, float cy);
+// Generate dab points only (no rendering) — caller renders incrementally
+int StrokeEngine_GeneratePreviewDabs(const d_RealBrush* baseBrush, int toolMode,
+                                     float initialAngle, float cx, float cy,
+                                     DabPoint* outBuf, int maxOut);
 
 #endif

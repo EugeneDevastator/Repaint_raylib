@@ -319,6 +319,8 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
             sLayerProps* lp = LayerStack_GetProps(idx);
             lp->op = 1; lp->visible = true; lp->blendmode = bmGamma;
             lp->xform.mat[0] = 1; lp->xform.mat[4] = 1;
+            lp->xform.ww = (float)w; lp->xform.wh = (float)h;
+            { Quad* q = LayerStack_GetQuadPtr(idx); if (q) q->xform = lp->xform; }
             LayerStack_UploadToGPU(idx, preview);
         }
     } else {
@@ -369,6 +371,7 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
 
             int idx = LayerStack_Add(pixelW, pixelH);
             *LayerStack_GetProps(idx) = tempProps;
+            { Quad* q = LayerStack_GetQuadPtr(idx); if (q) q->xform = tempProps.xform; }
             LayerStack_UploadToGPU(idx, layerImg);
         }
     }

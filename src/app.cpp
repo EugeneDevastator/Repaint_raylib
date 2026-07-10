@@ -37,6 +37,7 @@ Viewport viewport;
 ModuleStack g_moduleStack;
 
 #include "info_text.h"
+#include "ui_helpscreen.h"
 
 void DisplayInfoText(const char* text) { InfoText_Show(text); }
 
@@ -80,6 +81,7 @@ void HudSetActive(AppState* state, int newHud) {
         case HUD_QUICK:        name = "QuickHud";    break;
         case HUD_NN:           name = "NNHud";       break;
         case HUD_SD:           name = "SDHud";       break;
+        case HUD_WARP:         name = "WarpHud";     break;
     }
     if (name) {
         IModule* mod = g_moduleStack.Find(name);
@@ -106,7 +108,7 @@ static void SyncCanvasFromDoc(const Document* doc, int* outW, int* outH) {
     float cv[6];
     ComputeCanvasMatrix(&doc->window, cw, ch, cv);
     LayerStack_SetCanvasView(cv);
-    LayerStack_SetRenderWindow(cw, ch);
+    LayerStack_InitCanvas(cw, ch);
 }
 
 static void DrawSplash(const char* msg) {
@@ -167,19 +169,23 @@ void UpdateUI(AppState* state) {
             quickPanelMouseMode = 0;
 
 
+        if (IsKeyPressed(KEY_F1)) {
+            Help_Toggle();
+        }
         if (IsKeyPressed(KEY_TWO)) {
             state->mode = eBrush;
             HudSetActive(state, HUD_NONE);
             InfoText_Show("Painting");
         }
         if (IsKeyPressed(KEY_SIX)) state->mode = ePolyStripe;
-        if (IsKeyPressed(KEY_FIVE)) state->mode = eContrast;
+        if (IsKeyPressed(KEY_SEVEN)) state->mode = eContrast;
 
         // Toggle framing mode (C key — "crop" framing, not with Ctrl)
         if (!IsKeyDown(KEY_LEFT_CONTROL) && IsKeyPressed(KEY_C)) {
             bool enteringCrop = (state->framingMode == FRAME_DEFAULT);
             if (enteringCrop) {
                 HudSetActive(state, HUD_CANVAS_XFORM);
+                DisplayInfoText("Crop Canvas");
                 state->cropEntryWindow = state->doc.window;
                 state->framingMode = FRAME_CROP;
             } else {
@@ -223,23 +229,11 @@ void UpdateUI(AppState* state) {
                         RenderTexture2D rt = Load16BitRT(cw, ch);
                         if (rt.id > 0) {
                             BeginTextureMode(rt); ClearBackground(BLANK); EndTextureMode();
-                            const float* cv = LayerStack_GetCanvasView();
-                            RectXform viewXform;
-                            memcpy(viewXform.mat, cv, sizeof(float) * 6);
-                            viewXform.ww = 0; viewXform.wh = 0;
-                            int cnt = LayerStack_Count();
-                            for (int i = 0; i < cnt; i++) {
-                                sLayerProps* p = LayerStack_GetProps(i);
-                                if (!p || !p->visible) continue;
-                                RenderTexture2D lrt = LayerStack_GetRT(i);
-                                if (lrt.id == 0) continue;
-                                CompositorBlendParams bp;
-                                bp.opacity = p->op; bp.blendMode = p->blendmode;
-                                bp.threshold = p->threshold; bp.feather = p->feather;
-                                bp.seamless = p->seamless;
-                                Compositor_BlitLayerOnto(lrt.texture, &p->xform, &bp, &viewXform,
-                                    rt, Rectangle{0, 0, (float)cw, (float)ch});
-                            }
+                            Quad dstQ;
+                            Xform_Identity(dstQ.xform.mat);
+                            dstQ.xform.ww = (float)cw; dstQ.xform.wh = (float)ch;
+                            dstQ.rt = rt;
+                            ViewportManager_CompositeLayersOntoQuad(&dstQ);
                             rlSetBlendMode(RL_BLEND_ALPHA);
                             Clipboard_CopyRT16(rt);
                             UnloadRenderTexture(rt);
@@ -357,7 +351,7 @@ static void OnOpenResult(DialogResult r) {
                 memcpy(g_currentFilePath, r.output, len + 1);
             g_state->activeLayer = 0;
             SyncCanvasFromDoc(&g_state->doc, NULL, NULL);
-            g_state->camera.target = Vector2{0, 0};
+            g_state->camera.target = Vector2{g_state->doc.window.ww * 0.5f, g_state->doc.window.wh * 0.5f};
             layersDirty = true;
         } else {
             // Try as a standard image (PNG, JPEG, BMP, GIF, etc.)
@@ -372,7 +366,7 @@ static void OnOpenResult(DialogResult r) {
                 g_state->doc = Doc_New(w, h);
                 g_state->activeLayer = 0;
                 SyncCanvasFromDoc(&g_state->doc, NULL, NULL);
-                g_state->camera.target = Vector2{0, 0};
+                g_state->camera.target = Vector2{g_state->doc.window.ww * 0.5f, g_state->doc.window.wh * 0.5f};
                 g_state->camera.zoom = 1.0f;
                 int idx = LayerStack_Add(w, h);
                 LayerStack_UploadToGPU(idx, img);
@@ -385,7 +379,7 @@ static void OnOpenResult(DialogResult r) {
                 g_state->doc = Doc_New(w, h);
                 g_state->activeLayer = 0;
                 SyncCanvasFromDoc(&g_state->doc, NULL, NULL);
-                g_state->camera.target = Vector2{0, 0};
+                g_state->camera.target = Vector2{g_state->doc.window.ww * 0.5f, g_state->doc.window.wh * 0.5f};
                 g_state->camera.zoom = 1.0f;
                 int idx = LayerStack_Add(w, h);
                 Image fillImg = GenImageColor(w, h, WHITE);
@@ -423,7 +417,7 @@ void app_new_document(int w, int h, Color fill) {
     g_state->doc = Doc_New(w, h);
     g_state->activeLayer = 0;
     SyncCanvasFromDoc(&g_state->doc, NULL, NULL);
-    g_state->camera.target = Vector2{0, 0};
+    g_state->camera.target = Vector2{(float)w * 0.5f, (float)h * 0.5f};
     int idx = LayerStack_Add(w, h);
     RenderTexture2D rt = LayerStack_GetRT(idx);
     BeginTextureMode(rt);
@@ -485,7 +479,7 @@ void App_FileReload(void) {
     if (LoadRePaint(g_currentFilePath, &g_state->doc, g_state)) {
         g_state->activeLayer = 0;
         SyncCanvasFromDoc(&g_state->doc, NULL, NULL);
-        g_state->camera.target = Vector2{0, 0};
+        g_state->camera.target = Vector2{g_state->doc.window.ww * 0.5f, g_state->doc.window.wh * 0.5f};
         layersDirty = true;
     }
 }
@@ -629,10 +623,7 @@ void App_Init(AppState* state) {
     g_recorder->Reset(DocOutPxW(&state->doc), DocOutPxH(&state->doc));
 
     state->camera = Camera2D{};
-    state->camera.target = Vector2{
-        state->doc.window.mat[0]*state->doc.window.ww*0.5f + state->doc.window.mat[1]*state->doc.window.wh*0.5f + state->doc.window.mat[2],
-        state->doc.window.mat[3]*state->doc.window.ww*0.5f + state->doc.window.mat[4]*state->doc.window.wh*0.5f + state->doc.window.mat[5]
-    };
+    state->camera.target = RectXform_GetExtentCenter(&state->doc.window);
     state->camera.offset = Vector2{viewportBounds.x + viewportBounds.width * 0.5f, viewportBounds.y + viewportBounds.height * 0.5f};
 
     // ── Module stack ──
@@ -645,6 +636,7 @@ void App_Init(AppState* state) {
     g_moduleStack.Add(std::unique_ptr<IModule>(new CanvasXformModule(state)), vpRect);
     g_moduleStack.Add(std::unique_ptr<IModule>(new NNHudModule(state)), vpRect);
     g_moduleStack.Add(std::unique_ptr<IModule>(new SDHudModule(state)), vpRect);
+    g_moduleStack.Add(std::unique_ptr<IModule>(new WarpHudModule(state)), vpRect);
     g_moduleStack.Add(std::unique_ptr<IModule>(new PaintHudModule(state)), vpRect);
     g_moduleStack.Add(std::unique_ptr<IModule>(new RightPanelModule(state)),
         DrawRect{(float)(sw - RIGHT_PANEL_WIDTH), 0, (float)RIGHT_PANEL_WIDTH, (float)sh});
@@ -682,6 +674,7 @@ void App_Init(AppState* state) {
     state->currentBrush.Realb.texBlendMode = 2;
     state->currentBrush.Realb.texNoisemode = 2;
     state->currentBrush.Realb.texColorMode = 0;
+    state->currentBrush.Realb.texTiling = 0;
     state->currentBrush.Realb.col = BLACK;
     state->currentBrush.Realb.userTexOriginX = 0.5f;
     state->currentBrush.Realb.userTexOriginY = 0.5f;
@@ -719,7 +712,7 @@ void App_Init(AppState* state) {
         if (LoadRePaint(closePath, &state->doc, state)) {
             state->activeLayer = 0;
             SyncCanvasFromDoc(&state->doc, NULL, NULL);
-            state->camera.target = Vector2{0, 0};
+            state->camera.target = Vector2{state->doc.window.ww * 0.5f, state->doc.window.wh * 0.5f};
             if (g_recorder) g_recorder->Reset(DocOutPxW(&state->doc), DocOutPxH(&state->doc));
             layersDirty = true;
         } else {
@@ -753,6 +746,7 @@ void App_Draw(AppState* state) {
     g_moduleStack.SetRect("CanvasXform", vpRect);
     g_moduleStack.SetRect("NNHud",       vpRect);
     g_moduleStack.SetRect("SDHud",       vpRect);
+    g_moduleStack.SetRect("WarpHud",     vpRect);
     g_moduleStack.SetRect("RightPanel",  rightRect);
 
     BeginDrawing();
@@ -781,7 +775,7 @@ void App_Draw(AppState* state) {
     g_emitter->ProcessInputQueue();
 
     // Unpack + render dabs with per-frame pixel budget
-    if (g_throttle) g_throttle->DrawPending(state);
+    if (g_throttle && g_throttle->DrawPending(state) > 0) layersDirty = true;
 
     if (viewport.broker) viewport.broker->poll(state);
     if (g_recorder) g_recorder->poll(state);
@@ -846,6 +840,7 @@ void App_Draw(AppState* state) {
     g_moduleStack.DrawGUI();
 
     rlSetBlendMode(RL_BLEND_ALPHA);
+    Help_Draw(state);
     Changelog_Draw();
 
     // ── Color picker 3×3 magnifier ──────────────────────────────────

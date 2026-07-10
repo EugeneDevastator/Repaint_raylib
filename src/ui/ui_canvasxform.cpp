@@ -13,19 +13,26 @@ static bool     g_entrySaved = false;
 static Vector2  g_cropCursor = {0, 0}; // independent rotation center
 static int      g_cropPixelW = 0;      // resolution text fields (pixels)
 static int      g_cropPixelH = 0;
+static int      g_origTexW = 0;        // texture size on crop entry (for discard restore)
+static int      g_origTexH = 0;
+static int      g_dragTexW = 0;        // texture size at drag start (for proportional adj)
+static int      g_dragTexH = 0;
+static float    g_dragWw = 0;          // ww/wh at drag start
+static float    g_dragWh = 0;
+static bool     g_dragging = false;
+static bool     g_fixAspect  = true;
+static bool     g_fixTexSize = false;
 
 static void ExitCropMode(AppState* state, bool accept) {
     if (accept) {
         ApplyCanvasWindow(&state->doc);
-        state->camera.target = Vector2{
-            state->doc.window.mat[0]*state->doc.window.ww*0.5f + state->doc.window.mat[1]*state->doc.window.wh*0.5f + state->doc.window.mat[2],
-            state->doc.window.mat[3]*state->doc.window.ww*0.5f + state->doc.window.mat[4]*state->doc.window.wh*0.5f + state->doc.window.mat[5]
-        };
+        state->camera.target = RectXform_GetExtentCenter(&state->doc.window);
     } else {
         state->doc.window = g_entryWindow;
-        int cw = DocOutPxW(&state->doc), ch = DocOutPxH(&state->doc);
-        float cv[6]; ComputeCanvasMatrix(&state->doc.window, cw, ch, cv);
-        LayerStack_SetCanvasView(cv); LayerStack_SetRenderWindow(cw, ch);
+        LayerStack_ResizeCanvas(g_origTexW, g_origTexH);
+        LayerStack_SetCanvasXform(&state->doc.window);
+        float cv[6]; ComputeCanvasMatrix(&state->doc.window, g_origTexW, g_origTexH, cv);
+        LayerStack_SetCanvasView(cv);
     }
     state->framingMode = FRAME_DEFAULT;
     g_activeHud = HUD_NONE;
@@ -44,15 +51,14 @@ bool CanvasXformModule::HandleInput(InputState& input, const DrawRect& rect) {
         return false;
     }
 
-    // Save initial canvas window on first frame after entering crop mode
+    // Save initial canvas window + texture size on first frame after entering crop mode
     if (!g_entrySaved) {
         g_entryWindow = state->doc.window;
+        g_origTexW = LayerStack_RenderW();
+        g_origTexH = LayerStack_RenderH();
         g_entrySaved = true;
         // Init crop cursor to window center
-        float* m = state->doc.window.mat;
-        float w = state->doc.window.ww, h = state->doc.window.wh;
-        g_cropCursor.x = m[2] + (m[0]*w + m[1]*h) * 0.5f;
-        g_cropCursor.y = m[5] + (m[3]*w + m[4]*h) * 0.5f;
+        g_cropCursor = RectXform_GetExtentCenter(&state->doc.window);
     }
 
     // Block transform interaction while editing ImGui text fields
@@ -83,13 +89,47 @@ bool CanvasXformModule::HandleInput(InputState& input, const DrawRect& rect) {
 
     bool changed = TransformHandle_Input(&state->doc.window, &g_cropCursor,
         false,  // scaleProportionalToCursor=false → corner-extent (crop)
-        false,  // lockAspect=false
+        g_fixAspect,  // lockAspect
         &state->camera, input.MousePos(),
         input.MouseDown(MOUSE_LEFT_BUTTON),
         input.MousePressed(MOUSE_LEFT_BUTTON),
         input.MouseDown(MOUSE_RIGHT_BUTTON),
         input.MousePressed(MOUSE_RIGHT_BUTTON),
         &rect);
+
+    // On first change of a drag: save the starting ww/wh and texture size
+    if (changed && !g_dragging) {
+        g_dragWw = state->doc.window.ww;
+        g_dragWh = state->doc.window.wh;
+        g_dragTexW = LayerStack_RenderW();
+        g_dragTexH = LayerStack_RenderH();
+        g_dragging = true;
+    }
+
+    // While dragging: proportionally adjust texture size (unless Fix Tex Size)
+    if (g_dragging && !g_fixTexSize) {
+        float curWw = state->doc.window.ww;
+        float curWh = state->doc.window.wh;
+        if (curWw > 0.5f && curWh > 0.5f) {
+            float deltaW = curWw/g_dragWw;
+            float deltaH = curWh/g_dragWh;
+            int newW = fmaxf(1, (int)(g_dragTexW * deltaW + 0.5f));
+            int newH = fmaxf(1, (int)(g_dragTexH * deltaH + 0.5f));
+            LayerStack_ResizeCanvas(newW, newH);
+            layersDirty = true;
+        }
+    }
+
+    // On mouse release: finalize drag
+    if (!input.MouseDown(MOUSE_LEFT_BUTTON) && !input.MouseDown(MOUSE_RIGHT_BUTTON)) {
+        if (g_dragging && g_fixAspect) {
+            // Ensure ww/wh matches texture aspect after drag
+            float texAspect = (float)LayerStack_RenderW() / (float)LayerStack_RenderH();
+            state->doc.window.wh = state->doc.window.ww / texAspect;
+            layersDirty = true;
+        }
+        g_dragging = false;
+    }
 
     return changed;
 }
@@ -106,9 +146,8 @@ void CanvasXformModule::DrawGUI(const DrawRect& rect) {
 
     float bx = rect.x + 6;
     float by = rect.y + 6;
-    float bw = 140;
     ImGui::SetNextWindowPos(ImVec2(bx, by), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(bw, 0), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(0, 0), ImGuiCond_Always);
     ImGui::Begin("##canvasOps", NULL,
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar);
@@ -116,28 +155,68 @@ void CanvasXformModule::DrawGUI(const DrawRect& rect) {
     ImGui::Text("Canvas Window");
     ImGui::Separator();
 
-    // Pixel-resolution text fields — sync from doc when not actively editing
+    // Pixel-resolution text fields — sync from actual texture size, not ww/wh
     if (!ImGui::IsAnyItemActive()) {
-        g_cropPixelW = DocOutPxW(&state->doc);
-        g_cropPixelH = DocOutPxH(&state->doc);
+        g_cropPixelW = LayerStack_RenderW();
+        g_cropPixelH = LayerStack_RenderH();
     }
     ImGui::Text("Res (px)");
-    ImGui::SetNextItemWidth(70);
+    ImGui::SetNextItemWidth(80);
     bool wEdited = ImGui::InputInt("##cw", &g_cropPixelW, 0, 0);
-    bool wDeact = ImGui::IsItemDeactivatedAfterEdit();
     if (wEdited && g_cropPixelW < 1) g_cropPixelW = 1;
+    if (wEdited) {
+        int newW = g_cropPixelW < 1 ? 1 : g_cropPixelW;
+        int newH;
+        if (g_fixAspect) {
+            float aspect = state->doc.window.ww / state->doc.window.wh;
+            newH = fmaxf(1, (int)(newW / aspect + 0.5f));
+        } else {
+            newH = g_cropPixelH < 1 ? 1 : g_cropPixelH;
+        }
+        g_cropPixelH = newH;
+        LayerStack_ResizeCanvas(newW, newH);
+        // Keep xform ww, adjust wh to match new texture aspect ratio
+        float texAspect = (float)LayerStack_RenderW() / (float)LayerStack_RenderH();
+        state->doc.window.wh = state->doc.window.ww / texAspect;
+        g_cropPixelW = LayerStack_RenderW();
+        g_cropPixelH = LayerStack_RenderH();
+        layersDirty = true;
+    }
     ImGui::SameLine();
     ImGui::Text("x");
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(70);
+    ImGui::SetNextItemWidth(80);
     bool hEdited = ImGui::InputInt("##ch", &g_cropPixelH, 0, 0);
-    bool hDeact = ImGui::IsItemDeactivatedAfterEdit();
     if (hEdited && g_cropPixelH < 1) g_cropPixelH = 1;
-    if (wDeact || hDeact) {
-        state->doc.window.ww = (float)g_cropPixelW;
-        state->doc.window.wh = (float)g_cropPixelH;
+    if (hEdited) {
+        int newH = g_cropPixelH < 1 ? 1 : g_cropPixelH;
+        int newW;
+        if (g_fixAspect) {
+            float aspect = state->doc.window.ww / state->doc.window.wh;
+            newW = fmaxf(1, (int)(newH * aspect + 0.5f));
+        } else {
+            newW = g_cropPixelW < 1 ? 1 : g_cropPixelW;
+        }
+        g_cropPixelW = newW;
+        LayerStack_ResizeCanvas(newW, newH);
+        // Keep xform wh, adjust ww to match new texture aspect ratio
+        float texAspect = (float)LayerStack_RenderW() / (float)LayerStack_RenderH();
+        state->doc.window.ww = state->doc.window.wh * texAspect;
+        g_cropPixelW = LayerStack_RenderW();
+        g_cropPixelH = LayerStack_RenderH();
+        layersDirty = true;
     }
 
+    ImGui::Text("Xform: %.0f x %.0f", state->doc.window.ww, state->doc.window.wh);
+    if (ImGui::Checkbox("Fix Aspect", &g_fixAspect)) {
+        if (g_fixAspect) {
+            // Just turned ON — constrain xform ww/wh to match texture aspect
+            float texAspect = (float)LayerStack_RenderW() / (float)LayerStack_RenderH();
+            state->doc.window.wh = state->doc.window.ww / texAspect;
+            layersDirty = true;
+        }
+    }
+    ImGui::Checkbox("Fix Tex Size", &g_fixTexSize);
     ImGui::Text("rot: %.1f", RectXform_GetRot(&state->doc.window) * 180.0f / (float)M_PI);
     ImGui::Separator();
     if (ImGui::Button("Accept (E)", ImVec2(-1, 0))) {

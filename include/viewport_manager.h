@@ -15,9 +15,11 @@ void ViewportManager_ReloadShader(void);
 // Canvas-resolution cached composite
 RenderTexture2D* ViewportManager_Composite(void);
 Image ViewportManager_CompositeWithDither(void);
-void ViewportManager_CompositeViewInto(RenderTexture2D dst, const RectXform* viewXform, int w, int h, const Rectangle* checkerRect = NULL);
 
 void ViewportManager_SetDirty(void);
+
+// Composite all visible layers into a destination Quad.
+void ViewportManager_CompositeLayersOntoQuad(const Quad* dst);
 
 // Merge-down: blends top into bottom RT, handles RT replacement + layer delete + undo
 void ViewportManager_MergeDown(int idx);
@@ -31,11 +33,6 @@ int ViewportManager_AcceptMatte(int srcIdx, Image matteImage);
 
 // Render all visible layers within the xform bounds to a new RenderTexture2D.
 // Caller must UnloadRenderTexture the result.
-RenderTexture2D ViewportManager_GetMergedTexture(const RectXform* xform, int w, int h);
-
-// Create a new layer from an Image at the top of the stack.
-// Sets the layer's xform w/h to match the image dimensions.
-// Returns new layer index, or -1 on failure.
 int ViewportManager_CreateLayerFromImage(Image img);
 
 #endif
