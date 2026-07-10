@@ -209,14 +209,11 @@ void LeftPanel_Draw(AppState* state) {
     ImGui::RadioButton("Linear", &g_strokeSmoothingMode, SMOOTH_MODE_LINEAR); ImGui::SameLine();
     ImGui::RadioButton("Smooth", &g_strokeSmoothingMode, SMOOTH_MODE_SMOOTH);
 
-    if (g_strokeSmoothingMode == SMOOTH_MODE_SMOOTH) {
-        ImGui::Indent(10);
-        ImGui::SetNextItemWidth(-15);
-        ImGui::SliderFloat("Throttle", &g_strokeThrottle, 0.0f, 100.0f, "%.0f");
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Higher values = fewer segment endpoints = smoother curved strokes");
-        ImGui::Unindent(10);
-    }
+    ImGui::Text("Throttle");
+    ImGui::SetNextItemWidth(-15);
+    ImGui::SliderFloat("##thr", &g_strokeThrottle, 0.0f, 100.0f, "%.0f");
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Higher values = fewer segment endpoints = smoother curved strokes");
 
     ImGui::Separator();
     ImGui::Text("Debug");

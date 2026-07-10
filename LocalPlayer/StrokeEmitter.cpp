@@ -209,6 +209,10 @@ void StrokeEmitter::handlePoint(const InputEntry& e) {
 
     if (g_strokeSmoothingMode == SMOOTH_MODE_LINEAR) {
         float lineLen = Dist2D(m_lastDabPos, pos);
+        float threshold = (g_strokeThrottle > 0.0f) ? fmaxf(g_strokeThrottle, 0.5f)
+                           : modNow.radOut * 0.5f * m_worldToTexPx;
+        if (threshold < 0.5f) threshold = 0.5f;
+        if (lineLen < threshold) return;
         float hLen = lineLen * 0.33f;
         Vector2 dir = {pos.x - m_lastDabPos.x, pos.y - m_lastDabPos.y};
         if (lineLen > 0.001f) { dir.x /= lineLen; dir.y /= lineLen; }
