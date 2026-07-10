@@ -212,7 +212,7 @@ void TexPanelModule::DrawGUI(const DrawRect& rect) {
     bool isNoTex = !TM_IsValid(state->brushTexSlot);
     if (isNoTex) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.4f, 0.55f, 0.7f, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.35f, 0.5f, 0.65f, 1.0f));
-    if (ImGui::Button("No\nTexture", ImVec2((float)texSz, 0))) {
+    if (ImGui::Button("No\nTexture", ImVec2((float)(texSz + 2 * framePx), (float)(texSz + 2 * framePx)))) {
         state->brushTexSlot = TM_INVALID_SLOT;
     }
     ImGui::PopStyleColor(isNoTex ? 2 : 1);
@@ -225,12 +225,13 @@ void TexPanelModule::DrawGUI(const DrawRect& rect) {
         TexSlotID id = {TM_BUCKET_USER, (uint8_t)s};
         TexSlot* ts = TM_Get(id);
         if (!ts) continue;
+        Texture2D thumb = BrushTex_GetThumb(state, id);
+        if (thumb.id == 0) continue;
         if (col % texCols != 0) ImGui::SameLine(0, texGap);
         col++; ImGui::PushID(700 + s);
-        Texture2D thumb = BrushTex_GetThumb(state, id);
         bool isSel = TM_IsValid(state->brushTexSlot) && state->brushTexSlot == id;
         if (isSel) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.35f, 0.55f, 0.8f, 1.0f));
-        if (thumb.id > 0 && ImGui::ImageButton("##t", (ImTextureID)(intptr_t)thumb.id, ImVec2((float)texSz, (float)texSz), ImVec2(0,1), ImVec2(1,0))) {
+        if (ImGui::ImageButton("##t", (ImTextureID)(intptr_t)thumb.id, ImVec2((float)texSz, (float)texSz), ImVec2(0,1), ImVec2(1,0))) {
             state->brushTexSlot = id;
         }
         if (isSel) ImGui::PopStyleColor();
