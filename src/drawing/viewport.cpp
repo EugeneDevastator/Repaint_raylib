@@ -275,42 +275,52 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         vp->strokeLen = 0;
     }
 
-    // ── Line tool (ePolyStripe): feed fake Catmull-Rom points into the engine ──
-    // Press → Begin(start_canvas). Release → interpolated Point entries + End.
-    // Enough points so the Catmull-Rom loop (seg <= N-3) covers the full line.
+    // ── Line tool (ePolyStripe): click → single dab, drag → line ──
+    // Press: no Begin entry, just record state. Release: submit entries.
+    // Click: Begin+End → handleEnd creates single stamp at start.
+    // Drag:  Begin+End (first dab at start) + Begin+Point*3+End (line segment start→end).
     if (state->mode == ePolyStripe && vp->inBounds && active >= 0 && active < LayerStack_Count() && LayerStack_GetRT(active).id > 0) {
         if (leftDown && !vp->wasMouseDown) {
-            vp->lineStartPos = canvasPos;  // canvas-space start for XOR preview + fakes
+            vp->lineStartPos = canvasPos;
             if (state->undo) state->undo->Snapshot(state, targetSlot);
-            float origRad = state->currentBrush.Realb.rad_out;
-            state->currentBrush.Realb.rad_out *= worldToTexPx;
-            InputEntry be;
-            FillBeginEntry(be, state, ePolyStripe, canvasPos, adjustedAngle,
-                           targetSlot, worldToTexPx, destXform);
-            g_inputQueue.AddEntry(be);
-            state->currentBrush.Realb.rad_out = origRad;
             vp->wasMouseDown = true;
         }
         if (!leftDown && vp->wasMouseDown) {
-            // Push Point(end) + 2 dummies → seg=0 fires emitSegment(start, end).
-            // N = Begin(1) + 3 Points = 4 ≥ 4 → Catmull-Rom loop runs seg=0.
-            // seg=0 special case: p1=pts[0]=start, p2=pts[1]=end → one segment covering the full line.
-            Vector2 end = canvasPos;
-            const float ep = 0.6f; // tiny offset so dummies pass threshold (>0.5px)
-            Vector2 pts[3] = {end, {end.x+ep, end.y}, {end.x+ep*2, end.y}};
-            for (int i = 0; i < 3; i++) {
-                InputEntry pe;
-                memset(&pe, 0, sizeof(pe));
-                pe.type = InputEntry::Point;
-                pe.x = pts[i].x; pe.y = pts[i].y;
-                pe.pressure = 1.0f; pe.rotation = 0.5f;
-                pe.timestamp = GetTime();
-                g_inputQueue.AddEntry(pe);
-            }
+            Vector2 start = vp->lineStartPos;
+            Vector2 end   = canvasPos;
+            float origRad = state->currentBrush.Realb.rad_out;
+            state->currentBrush.Realb.rad_out *= worldToTexPx;
+
+            // First dab: Begin+End → handleEnd !m_emittedAny pushes single stamp
+            InputEntry be;
+            FillBeginEntry(be, state, ePolyStripe, start, adjustedAngle,
+                           targetSlot, worldToTexPx, destXform);
+            g_inputQueue.AddEntry(be);
             InputEntry ee;
-            memset(&ee, 0, sizeof(ee));
-            ee.type = InputEntry::End;
+            memset(&ee, 0, sizeof(ee)); ee.type = InputEntry::End;
             g_inputQueue.AddEntry(ee);
+
+            if (Dist2D(start, end) > 1.0f) {
+                // Drag: push second Begin+Point*3+End for the line segment
+                FillBeginEntry(be, state, ePolyStripe, start, adjustedAngle,
+                               targetSlot, worldToTexPx, destXform);
+                g_inputQueue.AddEntry(be);
+                const float ep = 0.6f;
+                Vector2 pts[3] = {end, {end.x+ep, end.y}, {end.x+ep*2, end.y}};
+                for (int i = 0; i < 3; i++) {
+                    InputEntry pe;
+                    memset(&pe, 0, sizeof(pe));
+                    pe.type = InputEntry::Point;
+                    pe.x = pts[i].x; pe.y = pts[i].y;
+                    pe.pressure = 1.0f; pe.rotation = 0.5f;
+                    pe.timestamp = GetTime();
+                    g_inputQueue.AddEntry(pe);
+                }
+                memset(&ee, 0, sizeof(ee)); ee.type = InputEntry::End;
+                g_inputQueue.AddEntry(ee);
+            }
+
+            state->currentBrush.Realb.rad_out = origRad;
             vp->strokeEnded = true;
             vp->endLayer = active;
             layersDirty = true;
