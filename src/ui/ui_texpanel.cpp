@@ -201,10 +201,11 @@ void TexPanelModule::DrawGUI(const DrawRect& rect) {
     float gridAvailX = ImGui::GetContentRegionAvail().x;
     int texGap = 2;
     int texCols = 6;
-    int texSz = (int)((gridAvailX - (texCols - 1) * texGap) / texCols);
+    int framePx = 4; // ImGuiStyleVar_FramePadding value
+    int texSz = (int)((gridAvailX - texCols * 2 * framePx - (texCols - 1) * texGap) / texCols);
     if (texSz < 32) texSz = 32;
     ImGui::BeginChild("##texGrid", ImVec2(0, gridH), ImGuiChildFlags_Borders);
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 4));
     {
     // "No Brush" button (always first, part of all textures)
     ImGui::PushID("texNone");
