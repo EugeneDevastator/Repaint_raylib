@@ -74,7 +74,7 @@ void Viewport_SetBounds(Viewport* vp, Rectangle bounds) {
 
 void Viewport_HandleInput(Viewport* vp, AppState* state) {
 
-    if (IsKeyPressed(KEY_F1)) vp->debugShowStamps = !vp->debugShowStamps;
+    if (IsKeyPressed(KEY_F3)) vp->debugShowStamps = !vp->debugShowStamps;
 
     Vector2 mousePos = GetMousePosition();
 

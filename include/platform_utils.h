@@ -6,4 +6,7 @@
 // On Linux: returns NULL (unused for tablet).
 void* Platform_GetNativeWindowHandle(void);
 
+// Open a URL in the default browser (platform-specific).
+void Platform_OpenURL(const char* url);
+
 #endif

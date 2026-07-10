@@ -37,6 +37,7 @@ Viewport viewport;
 ModuleStack g_moduleStack;
 
 #include "info_text.h"
+#include "ui_helpscreen.h"
 
 void DisplayInfoText(const char* text) { InfoText_Show(text); }
 
@@ -168,6 +169,9 @@ void UpdateUI(AppState* state) {
             quickPanelMouseMode = 0;
 
 
+        if (IsKeyPressed(KEY_F1)) {
+            Help_Toggle();
+        }
         if (IsKeyPressed(KEY_TWO)) {
             state->mode = eBrush;
             HudSetActive(state, HUD_NONE);
@@ -836,6 +840,7 @@ void App_Draw(AppState* state) {
     g_moduleStack.DrawGUI();
 
     rlSetBlendMode(RL_BLEND_ALPHA);
+    Help_Draw(state);
     Changelog_Draw();
 
     // ── Color picker 3×3 magnifier ──────────────────────────────────

@@ -68,25 +68,25 @@ void QuickHudModule::DrawGUI(const DrawRect& rect) {
     XORgizmo_HandleInput(state);
 
     // ── Debug overlay (red squares = screen corners, green circles = xform backprojection) ──
-    if (g_activeHud == HUD_QUICK) {
-        // Static screen corners — independent of zoom/pan, purely fixed pixel positions
-        float sx = vp.x + 100.0f, sy = vp.y + 100.0f;
-        float sz = 200.0f;  // 200×200 pixel region
-        ImDrawList* dl = ImGui::GetForegroundDrawList();
-        // Screen corners — red filled squares
-        dl->AddRectFilled(ImVec2(sx-3, sy-3), ImVec2(sx+3, sy+3), IM_COL32(255,0,0,255));
-        dl->AddRectFilled(ImVec2(sx+sz-3, sy-3), ImVec2(sx+sz+3, sy+3), IM_COL32(255,0,0,255));
-        dl->AddRectFilled(ImVec2(sx+sz-3, sy+sz-3), ImVec2(sx+sz+3, sy+sz+3), IM_COL32(255,0,0,255));
-        dl->AddRectFilled(ImVec2(sx-3, sy+sz-3), ImVec2(sx+3, sy+sz+3), IM_COL32(255,0,0,255));
-        // World corners → screen (green circles)
-        Vector2 wTL = GetScreenToWorld2D({sx, sy}, state->camera);
-        Vector2 wBR = GetScreenToWorld2D({sx+sz, sy+sz}, state->camera);
-        float wcx = fminf(wTL.x,wBR.x), wcy = fminf(wTL.y,wBR.y);
-        float ww = fabsf(wBR.x-wTL.x), wh = fabsf(wBR.y-wTL.y);
-        Vector2 wc[4] = {{wcx,wcy},{wcx+ww,wcy},{wcx+ww,wcy+wh},{wcx,wcy+wh}};
-        for(int i=0;i<4;i++){
-            Vector2 s = GetWorldToScreen2D(wc[i], state->camera);
-            dl->AddCircleFilled(ImVec2(s.x,s.y), 5, IM_COL32(0,255,0,255));
-        }
-    }
+   // if (g_activeHud == HUD_QUICK) {
+   //     // Static screen corners — independent of zoom/pan, purely fixed pixel positions
+   //     float sx = vp.x + 100.0f, sy = vp.y + 100.0f;
+   //     float sz = 200.0f;  // 200×200 pixel region
+   //     ImDrawList* dl = ImGui::GetForegroundDrawList();
+   //     // Screen corners — red filled squares
+   //     dl->AddRectFilled(ImVec2(sx-3, sy-3), ImVec2(sx+3, sy+3), IM_COL32(255,0,0,255));
+   //     dl->AddRectFilled(ImVec2(sx+sz-3, sy-3), ImVec2(sx+sz+3, sy+3), IM_COL32(255,0,0,255));
+   //     dl->AddRectFilled(ImVec2(sx+sz-3, sy+sz-3), ImVec2(sx+sz+3, sy+sz+3), IM_COL32(255,0,0,255));
+   //     dl->AddRectFilled(ImVec2(sx-3, sy+sz-3), ImVec2(sx+3, sy+sz+3), IM_COL32(255,0,0,255));
+   //     // World corners → screen (green circles)
+   //     Vector2 wTL = GetScreenToWorld2D({sx, sy}, state->camera);
+   //     Vector2 wBR = GetScreenToWorld2D({sx+sz, sy+sz}, state->camera);
+   //     float wcx = fminf(wTL.x,wBR.x), wcy = fminf(wTL.y,wBR.y);
+   //     float ww = fabsf(wBR.x-wTL.x), wh = fabsf(wBR.y-wTL.y);
+   //     Vector2 wc[4] = {{wcx,wcy},{wcx+ww,wcy},{wcx+ww,wcy+wh},{wcx,wcy+wh}};
+   //     for(int i=0;i<4;i++){
+   //         Vector2 s = GetWorldToScreen2D(wc[i], state->camera);
+   //         dl->AddCircleFilled(ImVec2(s.x,s.y), 5, IM_COL32(0,255,0,255));
+   //     }
+   // }
 }
