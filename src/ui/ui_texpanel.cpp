@@ -192,30 +192,34 @@ void TexPanelModule::DrawGUI(const DrawRect& rect) {
     ImGui::EndChild();
     ImGui::PopStyleColor();
 
-    // ── Right panel: texture grid (1/3 width) ──
+    // ── Right panel: texture grid (1/3 width, 6 columns) ──
     ImGui::PushStyleColor(ImGuiCol_ChildBg, bg);
     ImGui::SetCursorScreenPos(ImVec2(rect.x + (pW + gap) * 2.0f, yPos));
     ImGui::BeginChild("##texGridPanel", ImVec2(pW, 0), ImGuiChildFlags_Borders);
     float gridH = ImGui::GetContentRegionAvail().y;
     if (gridH < 20) gridH = 20;
-    int texSz = 72, texGap = 1;
-    int texCols = (int)(ImGui::GetContentRegionAvail().x) / (texSz + texGap);
-    if (texCols < 2) texCols = 2;
+    float gridAvailX = ImGui::GetContentRegionAvail().x;
+    int texGap = 2;
+    int texCols = 6;
+    int texSz = (int)((gridAvailX - (texCols - 1) * texGap) / texCols);
+    if (texSz < 32) texSz = 32;
     ImGui::BeginChild("##texGrid", ImVec2(0, gridH), ImGuiChildFlags_Borders);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
     {
-    // "No Tex" button
+    // "No Brush" button (always first, part of all textures)
     ImGui::PushID("texNone");
     bool isNoTex = !TM_IsValid(state->brushTexSlot);
-    if (isNoTex) ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(1,1,1,1));
-    if (ImGui::ImageButton("##tn", (ImTextureID)0, ImVec2(texSz, texSz))) {
+    if (isNoTex) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.4f, 0.55f, 0.7f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.35f, 0.5f, 0.65f, 1.0f));
+    if (ImGui::Button("No\nTexture", ImVec2((float)texSz, 0))) {
         state->brushTexSlot = TM_INVALID_SLOT;
     }
-    if (isNoTex) ImGui::PopStyleColor();
+    ImGui::PopStyleColor(isNoTex ? 2 : 1);
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("No Texture");
     ImGui::PopID();
 
-    // All textures in one grid (no built-in/user split)
-    int col = 0;
+    // All textures in a 6-column grid
+    int col = 1;
     for (int s = 0; s < TM_SLOTS_PER_BUCKET; s++) {
         TexSlotID id = {TM_BUCKET_USER, (uint8_t)s};
         TexSlot* ts = TM_Get(id);
@@ -224,8 +228,8 @@ void TexPanelModule::DrawGUI(const DrawRect& rect) {
         col++; ImGui::PushID(700 + s);
         Texture2D thumb = BrushTex_GetThumb(state, id);
         bool isSel = TM_IsValid(state->brushTexSlot) && state->brushTexSlot == id;
-        if (isSel) ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.3f, 0.7f, 1.0f, 1.0f));
-        if (thumb.id > 0 && ImGui::ImageButton("##t", (ImTextureID)(intptr_t)thumb.id, ImVec2(texSz, texSz), ImVec2(0,1), ImVec2(1,0))) {
+        if (isSel) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.35f, 0.55f, 0.8f, 1.0f));
+        if (thumb.id > 0 && ImGui::ImageButton("##t", (ImTextureID)(intptr_t)thumb.id, ImVec2((float)texSz, (float)texSz), ImVec2(0,1), ImVec2(1,0))) {
             state->brushTexSlot = id;
         }
         if (isSel) ImGui::PopStyleColor();
@@ -233,6 +237,7 @@ void TexPanelModule::DrawGUI(const DrawRect& rect) {
         ImGui::PopID();
     }
     }
+    ImGui::PopStyleVar();
     ImGui::EndChild();
 
     state->currentBrush.Realb.useTexLumAsAlpha = (mm == 0);
