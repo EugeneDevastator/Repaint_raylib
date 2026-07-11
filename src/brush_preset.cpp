@@ -7,6 +7,7 @@ enum {
     BI_POWER, BI_PERSPECTIVE,
     BI_QUICKHUE, BI_QUICKSAT, BI_QUICKLIT,
     BI_TEXSCALE, BI_TEXFEATHER, BI_TEXTHRESH, BI_TEXBLENDVAL,
+    BI_FOCALOFFSET,
     BI_COUNT
 };
 
@@ -19,7 +20,7 @@ static void _ensureBPs(void) {
     extern BParam bpOpacity, bpSize, bpHardness, bpSpacing, bpCurvature, bpScatter;
     extern BParam bpCloneOpacity, bpQuickHue, bpQuickSat, bpQuickLit;
     extern BParam bpTexScale, bpTexFeather, bpTexThresh, bpTexBlendVal;
-    extern BParam bpAngle, bpScaleRel, bpSizeMul, bpPower, bpPerspective;
+    extern BParam bpAngle, bpScaleRel, bpSizeMul, bpPower, bpPerspective, bpFocalOffset;
     _bps[BI_SIZE]        = &bpSize;
     _bps[BI_SIZEMUL]     = &bpSizeMul;
     _bps[BI_HARDNESS]    = &bpHardness;
@@ -39,6 +40,7 @@ static void _ensureBPs(void) {
     _bps[BI_TEXFEATHER]  = &bpTexFeather;
     _bps[BI_TEXTHRESH]   = &bpTexThresh;
     _bps[BI_TEXBLENDVAL] = &bpTexBlendVal;
+    _bps[BI_FOCALOFFSET] = &bpFocalOffset;
 }
 
 void Preset_CaptureFromCurrent(BrushPreset* p, AppState* state) {
@@ -50,6 +52,8 @@ void Preset_CaptureFromCurrent(BrushPreset* p, AppState* state) {
 
     for (int i = 0; i < BI_COUNT; i++) {
         p->bp[i].val = _bps[i]->user.clipmaxF;
+        p->bp[i].clipmin = _bps[i]->user.clipminF;
+        p->bp[i].jitter = _bps[i]->user.jitter;
         p->bp[i].penMode = _bps[i]->penMode;
     }
 
@@ -75,10 +79,6 @@ void Preset_CaptureFromCurrent(BrushPreset* p, AppState* state) {
     extern float g_strokeThrottle;
     p->strokeSmoothingMode = g_strokeSmoothingMode;
     p->strokeThrottle = g_strokeThrottle;
-
-    extern BParam bpFocalOffset;
-    p->focalOffsetVal = bpFocalOffset.user.clipmaxF;
-    p->focalOffsetPenMode = bpFocalOffset.penMode;
 }
 
 // ── Validation ────────────────────────────────────────────────────────
@@ -105,8 +105,9 @@ void Preset_ApplyToCurrent(const BrushPreset* p, AppState* state) {
     state->eraseMode = p->eraseMode;
 
     for (int i = 0; i < BI_COUNT; i++) {
-        if (i == BI_QUICKHUE || i == BI_QUICKSAT || i == BI_QUICKLIT) continue;
         _bps[i]->user.clipmaxF = p->bp[i].val;
+        _bps[i]->user.clipminF = p->bp[i].clipmin;
+        _bps[i]->user.jitter = p->bp[i].jitter;
         _bps[i]->penMode = p->bp[i].penMode;
     }
 
@@ -141,15 +142,11 @@ void Preset_ApplyToCurrent(const BrushPreset* p, AppState* state) {
     extern float g_strokeThrottle;
     g_strokeSmoothingMode = p->strokeSmoothingMode;
     g_strokeThrottle = p->strokeThrottle;
-
-    extern BParam bpFocalOffset;
-    bpFocalOffset.user.clipmaxF = p->focalOffsetVal;
-    bpFocalOffset.penMode = p->focalOffsetPenMode;
 }
 
 // ── File I/O ──
 
-// Old struct for version-1 files (exact layout as originally written)
+// Version-1: splineMinDist + splineAngleThreshold, old bp[19]{float,int}, no focalOffset
 struct PresetV1 {
     char name[64];
     int mode, eraseMode;
@@ -163,12 +160,9 @@ struct PresetV1 {
     float splineMinDist;
     float splineAngleThreshold;
 };
-// Verify the old struct has the same size as originally written
-// (4 bytes of padding between the bools and the final fields)
-static_assert(sizeof(PresetV1) == sizeof(BrushPreset) - 4,
-              "PresetV1 layout mismatch — check alignment");
+static_assert(sizeof(PresetV1) == 324, "PresetV1 layout mismatch");
 
-// Struct for version-2 files (current BrushPreset before V3 focalOffset addition)
+// Version-2: strokeThrottle, no splineAngle, old bp[19]{float,int}, no focalOffset
 struct PresetV2 {
     char name[64];
     int mode, eraseMode;
@@ -181,8 +175,40 @@ struct PresetV2 {
     int strokeSmoothingMode;
     float strokeThrottle;
 };
-static_assert(sizeof(PresetV2) == sizeof(BrushPreset) - 8,
-              "PresetV2 layout mismatch — check alignment");
+static_assert(sizeof(PresetV2) == 320, "PresetV2 layout mismatch");
+
+// Version-3: old bp[19]{float,int} + focalOffsetVal/penMode at end
+struct PresetV3 {
+    char name[64];
+    int mode, eraseMode;
+    struct { float val; int penMode; } bp[19];
+    int texBlendMode, texNoisemode, texColorMode;
+    bool useTexLumAsAlpha, texUseRGB;
+    char texName[64];
+    int bmidx;
+    bool preserveop, seamlessPaint;
+    int strokeSmoothingMode;
+    float strokeThrottle;
+    float focalOffsetVal;
+    int focalOffsetPenMode;
+};
+static_assert(sizeof(PresetV3) == 328, "PresetV3 layout mismatch");
+
+// Version-4: new bp[19]{val,clipmin,jitter,penMode} + focalOffsetVal/penMode at end
+struct PresetV4 {
+    char name[64];
+    int mode, eraseMode;
+    struct { float val, clipmin, jitter; int penMode; } bp[19];
+    int texBlendMode, texNoisemode, texColorMode;
+    bool useTexLumAsAlpha, texUseRGB;
+    char texName[64];
+    int bmidx;
+    bool preserveop, seamlessPaint;
+    int strokeSmoothingMode;
+    float strokeThrottle;
+    float focalOffsetVal;
+    int focalOffsetPenMode;
+};
 
 static int _loadFile(const char* path, BrushPreset* out, int maxCount) {
     FILE* f = fopen(path, "rb");
@@ -193,7 +219,6 @@ static int _loadFile(const char* path, BrushPreset* out, int maxCount) {
         fclose(f); return 0;
     }
 
-    // Read version (ignored — we detect format from file size)
     unsigned char verBuf[4];
     if (fread(verBuf, 1, 4, f) != 4) { fclose(f); return 0; }
 
@@ -202,10 +227,9 @@ static int _loadFile(const char* path, BrushPreset* out, int maxCount) {
     int count = countBuf[0] | (countBuf[1] << 8) | (countBuf[2] << 16) | (countBuf[3] << 24);
     if (count < 0 || count > maxCount) { fclose(f); return 0; }
 
-    // Detect entry size from file size to handle format changes
     fseek(f, 0, SEEK_END);
     long fileSize = ftell(f);
-    fseek(f, 16, SEEK_SET); // back to start of data
+    fseek(f, 16, SEEK_SET);
 
     long dataSize = fileSize - 16;
     int entrySize = (count > 0) ? (int)(dataSize / count) : 0;
@@ -213,32 +237,42 @@ static int _loadFile(const char* path, BrushPreset* out, int maxCount) {
 
     int loaded = 0;
 
+    // Seed clipmin/jitter/penMode for all bp entries from live BParams
+    // so old-format files that lack those fields keep the user's live values.
+    _ensureBPs();
+    for (int i = 0; i < count && i < maxCount; i++) {
+        BrushPreset* p = &out[i];
+        memset(p, 0, sizeof(*p));
+        for (int j = 0; j < BI_COUNT; j++) {
+            p->bp[j].clipmin = _bps[j]->user.clipminF;
+            p->bp[j].jitter  = _bps[j]->user.jitter;
+            p->bp[j].penMode = _bps[j]->penMode;
+        }
+    }
+
     if (entrySize == sizeof(BrushPreset)) {
-        // V3 format — read directly
+        // V5 format — read directly
         size_t readSz = fread(out, sizeof(BrushPreset), count, f);
         loaded = (int)readSz;
-    } else if (entrySize == sizeof(PresetV2)) {
-        // V2 format — read old struct, zero new focalOffset fields
+    } else if (entrySize == sizeof(PresetV4)) {
+        // V4 format — read, collapse separate focalOffset into bp[19]
         for (int i = 0; i < count && i < maxCount; i++) {
-            PresetV2 old;
-            if (fread(&old, sizeof(PresetV2), 1, f) != 1) break;
-            BrushPreset* p = &out[loaded];
-            memcpy(p, &old, sizeof(old));
-            p->focalOffsetVal = 0.0f;
-            p->focalOffsetPenMode = 0;
-            if (_presetIsValid(p))
-                loaded++;
-        }
-    } else if (entrySize == sizeof(PresetV1)) {
-        // Version 1 format — read old struct and convert
-        for (int i = 0; i < count && i < maxCount; i++) {
-            PresetV1 old;
-            if (fread(&old, sizeof(PresetV1), 1, f) != 1) break;
+            PresetV4 old;
+            if (fread(&old, sizeof(PresetV4), 1, f) != 1) break;
             BrushPreset* p = &out[loaded];
             memcpy(p->name, old.name, sizeof(p->name));
             p->mode = old.mode;
             p->eraseMode = old.eraseMode;
-            memcpy(p->bp, old.bp, sizeof(p->bp));
+            for (int j = 0; j < 19; j++) {
+                p->bp[j].val     = old.bp[j].val;
+                p->bp[j].clipmin = old.bp[j].clipmin;
+                p->bp[j].jitter  = old.bp[j].jitter;
+                p->bp[j].penMode = old.bp[j].penMode;
+                // (already seeded from live, overwrite val only)
+            }
+            // Focal offset pre-V5 stored as separate fields — put into bp[19]
+            p->bp[19].val     = old.focalOffsetVal;
+            p->bp[19].penMode = old.focalOffsetPenMode;
             p->texBlendMode = old.texBlendMode;
             p->texNoisemode = old.texNoisemode;
             p->texColorMode = old.texColorMode;
@@ -249,12 +283,91 @@ static int _loadFile(const char* path, BrushPreset* out, int maxCount) {
             p->preserveop = old.preserveop;
             p->seamlessPaint = old.seamlessPaint;
             p->strokeSmoothingMode = old.strokeSmoothingMode;
-            p->strokeThrottle = old.splineMinDist; // map old min-dist to throttle
+            p->strokeThrottle = old.strokeThrottle;
+            if (_presetIsValid(p))
+                loaded++;
+        }
+    } else if (entrySize == sizeof(PresetV3)) {
+        // V3 format — old bp[19]{float,int}, focalOffset as separate fields
+        for (int i = 0; i < count && i < maxCount; i++) {
+            PresetV3 old;
+            if (fread(&old, sizeof(PresetV3), 1, f) != 1) break;
+            BrushPreset* p = &out[loaded];
+            memcpy(p->name, old.name, sizeof(p->name));
+            p->mode = old.mode;
+            p->eraseMode = old.eraseMode;
+            for (int j = 0; j < 19; j++) {
+                p->bp[j].val = old.bp[j].val;
+                // clipmin/jitter/penMode kept from seed
+            }
+            p->bp[19].val     = old.focalOffsetVal;
+            p->bp[19].penMode = old.focalOffsetPenMode;
+            p->texBlendMode = old.texBlendMode;
+            p->texNoisemode = old.texNoisemode;
+            p->texColorMode = old.texColorMode;
+            p->useTexLumAsAlpha = old.useTexLumAsAlpha;
+            p->texUseRGB = old.texUseRGB;
+            memcpy(p->texName, old.texName, sizeof(p->texName));
+            p->bmidx = old.bmidx;
+            p->preserveop = old.preserveop;
+            p->seamlessPaint = old.seamlessPaint;
+            p->strokeSmoothingMode = old.strokeSmoothingMode;
+            p->strokeThrottle = old.strokeThrottle;
+            if (_presetIsValid(p))
+                loaded++;
+        }
+    } else if (entrySize == sizeof(PresetV2)) {
+        for (int i = 0; i < count && i < maxCount; i++) {
+            PresetV2 old;
+            if (fread(&old, sizeof(PresetV2), 1, f) != 1) break;
+            BrushPreset* p = &out[loaded];
+            memcpy(p->name, old.name, sizeof(p->name));
+            p->mode = old.mode;
+            p->eraseMode = old.eraseMode;
+            for (int j = 0; j < 19; j++) {
+                p->bp[j].val = old.bp[j].val;
+            }
+            p->texBlendMode = old.texBlendMode;
+            p->texNoisemode = old.texNoisemode;
+            p->texColorMode = old.texColorMode;
+            p->useTexLumAsAlpha = old.useTexLumAsAlpha;
+            p->texUseRGB = old.texUseRGB;
+            memcpy(p->texName, old.texName, sizeof(p->texName));
+            p->bmidx = old.bmidx;
+            p->preserveop = old.preserveop;
+            p->seamlessPaint = old.seamlessPaint;
+            p->strokeSmoothingMode = old.strokeSmoothingMode;
+            p->strokeThrottle = old.strokeThrottle;
+            // focalOffset (bp[19]) kept from seed
+            if (_presetIsValid(p))
+                loaded++;
+        }
+    } else if (entrySize == sizeof(PresetV1)) {
+        for (int i = 0; i < count && i < maxCount; i++) {
+            PresetV1 old;
+            if (fread(&old, sizeof(PresetV1), 1, f) != 1) break;
+            BrushPreset* p = &out[loaded];
+            memcpy(p->name, old.name, sizeof(p->name));
+            p->mode = old.mode;
+            p->eraseMode = old.eraseMode;
+            for (int j = 0; j < 19; j++) {
+                p->bp[j].val = old.bp[j].val;
+            }
+            p->texBlendMode = old.texBlendMode;
+            p->texNoisemode = old.texNoisemode;
+            p->texColorMode = old.texColorMode;
+            p->useTexLumAsAlpha = old.useTexLumAsAlpha;
+            p->texUseRGB = old.texUseRGB;
+            memcpy(p->texName, old.texName, sizeof(p->texName));
+            p->bmidx = old.bmidx;
+            p->preserveop = old.preserveop;
+            p->seamlessPaint = old.seamlessPaint;
+            p->strokeSmoothingMode = old.strokeSmoothingMode;
+            p->strokeThrottle = old.splineMinDist;
             if (_presetIsValid(p))
                 loaded++;
         }
     } else {
-        // Unknown format — skip (file might be corrupted)
         fclose(f); return 0;
     }
 
@@ -274,7 +387,7 @@ int Preset_LoadUser(BrushPreset* out, int maxCount) {
     char path[1024];
     snprintf(path, sizeof(path), "%sSaves/user_presets.dat", ad);
     int n = _loadFile(path, out, maxCount);
-    if (n == 0) return Preset_LoadDefault(out, maxCount); // fall back to defaults
+    if (n == 0) return Preset_LoadDefault(out, maxCount);
     return n;
 }
 
@@ -287,7 +400,6 @@ void Preset_ApplyDefault(AppState* state) {
             return;
         }
     }
-    // Not found in user — try bundled
     n = Preset_LoadDefault(buf, 256);
     for (int i = 0; i < n; i++) {
         if (strcasecmp(buf[i].name, "default") == 0) {
