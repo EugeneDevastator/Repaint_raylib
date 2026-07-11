@@ -1,6 +1,7 @@
 #include "repaint.h"
 #include "texture_manager.h"
 #include "rlgl.h"
+#include "external/glad.h"
 #include <math.h>
 #include <string.h>
 #include <dirent.h>
@@ -52,12 +53,23 @@ void BrushTex_Init(AppState* state) {
                     Texture2D tmp = LoadTextureFromImage(img);
                     BeginTextureMode(ts->rt);
                     ClearBackground(BLANK);
-                    rlSetBlendMode(RL_BLEND_CUSTOM);
-                    rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+                    glEnable(GL_BLEND);
+                    glBlendEquation(GL_FUNC_ADD);
+                    glBlendFunc(GL_ONE, GL_ZERO);   // bypass raylib's tracking entirely
                     DrawTexture(tmp, 0, 0, WHITE);
-                    rlSetBlendMode(RL_BLEND_ALPHA);
+                    rlDrawRenderBatchActive();
+                    rlSetBlendMode(RL_BLEND_ALPHA); // restore raylib's tracking
                     EndTextureMode();
-                    UnloadTexture(tmp);
+
+                    // doesnt wwork for first texture, must be called twice.
+                    //   BeginTextureMode(rt);
+                    //   ClearBackground(BLANK);
+                    //   rlSetBlendMode(RL_BLEND_CUSTOM);
+                    //   rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+                    //   DrawTexture(tmp, 0, 0, WHITE);
+                    //   rlSetBlendMode(RL_BLEND_ALPHA);
+                    //   EndTextureMode();
+                    //   UnloadTexture(tmp);
                 }
             }
             UnloadImage(img);
