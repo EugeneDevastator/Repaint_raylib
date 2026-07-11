@@ -1,6 +1,7 @@
 #include "repaint.h"
 #include "texture_manager.h"
 #include "rlgl.h"
+#include "external/glad.h"
 #include <math.h>
 #include <string.h>
 #include <dirent.h>
@@ -12,7 +13,7 @@ static bool hasSuffix(const char* str, const char* suffix) {
     if (slen < suflen) return false;
     return strcasecmp(str + slen - suflen, suffix) == 0;
 }
-
+static bool useFirstLoadFix = true;
 void BrushTex_Init(AppState* state) {
     TM_Init();
     state->brushTexSlot = TM_INVALID_SLOT;
@@ -50,6 +51,19 @@ void BrushTex_Init(AppState* state) {
                 if (ts) {
                     ts->builtIn = true;
                     Texture2D tmp = LoadTextureFromImage(img);
+                  // this approach works but then breaks loading textures from file. need good texture loader wrapper.
+                  // BeginTextureMode(ts->rt);
+                  // ClearBackground(BLANK);
+                  // glEnable(GL_BLEND);
+                  // glBlendEquation(GL_FUNC_ADD);
+                  // glBlendFunc(GL_ONE, GL_ZERO);   // bypass raylib's tracking entirely
+                  // DrawTexture(tmp, 0, 0, WHITE);
+                  // rlDrawRenderBatchActive();
+                  // rlSetBlendMode(RL_BLEND_ALPHA); // restore raylib's tracking
+                  // EndTextureMode();
+                  // UnloadTexture(tmp);
+
+                    // doesnt wwork for first texture, must be called twice.
                     BeginTextureMode(ts->rt);
                     ClearBackground(BLANK);
                     rlSetBlendMode(RL_BLEND_CUSTOM);
@@ -57,6 +71,18 @@ void BrushTex_Init(AppState* state) {
                     DrawTexture(tmp, 0, 0, WHITE);
                     rlSetBlendMode(RL_BLEND_ALPHA);
                     EndTextureMode();
+
+                    if (useFirstLoadFix) {
+                        //do same stuff again
+                        BeginTextureMode(ts->rt);
+                        ClearBackground(BLANK);
+                        rlSetBlendMode(RL_BLEND_CUSTOM);
+                        rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+                        DrawTexture(tmp, 0, 0, WHITE);
+                        rlSetBlendMode(RL_BLEND_ALPHA);
+                        EndTextureMode();
+                        useFirstLoadFix = false;
+                    }
                     UnloadTexture(tmp);
                 }
             }

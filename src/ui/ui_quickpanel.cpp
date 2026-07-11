@@ -146,6 +146,16 @@ void QuickPanel_DrawUI(AppState* state) {
         }
     }
 
+    // ── Toggle button for texture panel (bottom-aligned with color sliders) ──
+    static bool s_showTex = true;
+    int texBtnX = sliderRightX + 3 * (dCtrl + dGap);
+    ImGui::SetCursorScreenPos(ImVec2((float)texBtnX, (float)iconY));
+    if (ImGui::Button(s_showTex ? "Brush Textures" : "Brush Textures", ImVec2((float)(dCtrl * 2 + dGap *2), (float)dCtrl))) {
+        s_showTex = !s_showTex;
+    }
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip(s_showTex ? "Hide Texture Panel" : "Show Texture Panel");
+
     // TexPanelModule draws the texture panel after this, inside ##qpui
-    g_texPanelAreaY = iconY + dCtrl + 14;
+    g_texPanelAreaY = s_showTex ? (iconY + dCtrl + 14) : 0;
 }
