@@ -38,6 +38,7 @@ ModuleStack g_moduleStack;
 
 #include "info_text.h"
 #include "ui_helpscreen.h"
+#include "ui_tmexplorer.h"
 
 void DisplayInfoText(const char* text) { InfoText_Show(text); }
 
@@ -171,6 +172,9 @@ void UpdateUI(AppState* state) {
 
         if (IsKeyPressed(KEY_F1)) {
             Help_Toggle();
+        }
+        if (IsKeyPressed(KEY_F2)) {
+            TMExplorer_Toggle();
         }
         if (IsKeyPressed(KEY_TWO)) {
             state->mode = eBrush;
@@ -841,6 +845,7 @@ void App_Draw(AppState* state) {
 
     rlSetBlendMode(RL_BLEND_ALPHA);
     Help_Draw(state);
+    TMExplorer_Draw();
     Changelog_Draw();
 
     // ── Color picker 3×3 magnifier ──────────────────────────────────

@@ -42,6 +42,10 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
     m_targetSlot = e.targetSlot;
     m_userTexBucket = e.userTexBucket;
     m_userTexSlot = e.userTexSlot;
+    static int hbDbg = 0;
+    if (hbDbg++ < 10)
+        printf("[TEX-HBEGIN] tool=%d userTexBucket=%d userTexSlot=%d\n",
+               m_toolMode, m_userTexBucket, m_userTexSlot);
     m_worldToTexPx = e.worldToTexPx;
     m_destXform = e.destXform;
 
@@ -163,6 +167,11 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
     dseg.targetSlot = m_targetSlot;
     dseg.userTexBucket = m_userTexBucket;
         dseg.userTexSlot = m_userTexSlot;
+        static int segDbg = 0;
+        if (segDbg++ < 10)
+            printf("[TEX-SEG] pos1=(%.0f,%.0f) pos2=(%.0f,%.0f) bucket=%d slot=%d\n",
+                   dseg.pos1.x, dseg.pos1.y, dseg.pos2.x, dseg.pos2.y,
+                   dseg.userTexBucket, dseg.userTexSlot);
         dseg.dabOffset  = 0;
         dseg.initAngle  = initAngle;
 

@@ -41,6 +41,9 @@ TexSlotID TM_Add(uint8_t bucket, int w, int h, const char* name, bool builtIn) {
 
     // Create GPU render target and initialise to transparent
     ts->rt = Load16BitRT(w, h);
+    if (slot == 0 && bucket == 0)
+        printf("[TM-ADD] slot=0 w=%d h=%d rt.id=%u tex.id=%u\n",
+               w, h, ts->rt.id, ts->rt.texture.id);
     if (ts->rt.id > 0) {
         BeginTextureMode(ts->rt);
         ClearBackground(BLANK);
@@ -106,6 +109,11 @@ TexSlot* TM_Get(TexSlotID id) {
     if (id.bucket >= TM_BUCKETS || id.slot >= TM_SLOTS_PER_BUCKET) return NULL;
     TexSlot* ts = &TM.slots[id.bucket][id.slot];
     return ts->used ? ts : NULL;
+}
+
+TexSlot* TM_GetRaw(TexSlotID id) {
+    if (id.bucket >= TM_BUCKETS || id.slot >= TM_SLOTS_PER_BUCKET) return NULL;
+    return &TM.slots[id.bucket][id.slot];
 }
 
 int TM_Count(uint8_t bucket) {

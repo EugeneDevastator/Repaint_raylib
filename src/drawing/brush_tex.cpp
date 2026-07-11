@@ -41,6 +41,8 @@ void BrushTex_Init(AppState* state) {
             snprintf(path, sizeof(path), "%s/%s", noiseDir, entry->d_name);
 
             Image img = LoadImage(path);
+            if (!img.data) { printf("[BRUSHTEX] FAILED to load '%s'\n", path); continue; }
+            printf("[BRUSHTEX] loaded '%s': %dx%d\n", texName, img.width, img.height);
             ImageResize(&img, TEX_DIM, TEX_DIM);
             ImageFormat(&img, PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
 
@@ -50,6 +52,9 @@ void BrushTex_Init(AppState* state) {
                 if (ts) {
                     ts->builtIn = true;
                     Texture2D tmp = LoadTextureFromImage(img);
+                    if (id.slot == 0 && id.bucket == 0)
+                        printf("[BRUSHTEX-RENDER] slot=0 tmp.id=%u texW=%d texH=%d\n",
+                               tmp.id, tmp.width, tmp.height);
                     BeginTextureMode(ts->rt);
                     ClearBackground(BLANK);
                     rlSetBlendMode(RL_BLEND_CUSTOM);

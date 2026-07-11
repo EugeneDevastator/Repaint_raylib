@@ -109,6 +109,7 @@ set(SOURCES
     src/ui/ui_leftpanel.cpp
     src/ui/ui_changelog.cpp
     src/ui/ui_helpscreen.cpp
+    src/ui/ui_tmexplorer.cpp
     src/ui/ui_quickhud.cpp
     src/ui/ui_nnhud.cpp
     src/ui/ui_sdhud.cpp

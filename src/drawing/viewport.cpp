@@ -28,6 +28,11 @@ static void FillBeginEntry(InputEntry& be, AppState* state, int toolMode,
     if (TM_IsValid(state->brushTexSlot)) {
         be.userTexBucket = TM_BUCKET_USER;
         be.userTexSlot   = state->brushTexSlot.slot;
+        static int fillDbg = 0;
+        if (fillDbg++ < 10)
+            printf("[TEX-FILL] brushTexSlot={%d,%d} → userTexBucket=%d userTexSlot=%d\n",
+                   state->brushTexSlot.bucket, state->brushTexSlot.slot,
+                   be.userTexBucket, be.userTexSlot);
     } else {
         be.userTexBucket = 0xFF;
         be.userTexSlot   = 0xFF;

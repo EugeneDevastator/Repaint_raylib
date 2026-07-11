@@ -220,24 +220,31 @@ void TexPanelModule::DrawGUI(const DrawRect& rect) {
     ImGui::PopID();
 
     // All textures in a 6-column grid
-    int col = 1;
-    for (int s = 0; s < TM_SLOTS_PER_BUCKET; s++) {
-        TexSlotID id = {TM_BUCKET_USER, (uint8_t)s};
-        TexSlot* ts = TM_Get(id);
-        if (!ts) continue;
-        Texture2D thumb = BrushTex_GetThumb(state, id);
-        if (thumb.id == 0) continue;
-        if (col % texCols != 0) ImGui::SameLine(0, texGap);
-        col++; ImGui::PushID(700 + s);
-        bool isSel = TM_IsValid(state->brushTexSlot) && state->brushTexSlot == id;
-        if (isSel) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.35f, 0.55f, 0.8f, 1.0f));
-        if (ImGui::ImageButton("##t", (ImTextureID)(intptr_t)thumb.id, ImVec2((float)texSz, (float)texSz), ImVec2(0,1), ImVec2(1,0))) {
-            state->brushTexSlot = id;
+
+        int col = 0; // 0 = "No Texture" already placed
+        for (int s = 0; s < TM_SLOTS_PER_BUCKET; s++) {
+            TexSlotID id = {TM_BUCKET_USER, (uint8_t)s};
+            TexSlot* ts = TM_Get(id);
+            if (!ts) continue;
+            Texture2D thumb = BrushTex_GetThumb(state, id);
+
+            if (col % texCols != 0) ImGui::SameLine(0, texGap);
+
+            ImGui::PushID(700 + s);
+            bool isSel = TM_IsValid(state->brushTexSlot) && state->brushTexSlot == id;
+            if (isSel) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.35f, 0.55f, 0.8f, 1.0f));
+            if (ImGui::ImageButton("##t", (ImTextureID)(intptr_t)thumb.id,
+                    ImVec2((float)texSz, (float)texSz), ImVec2(0,1), ImVec2(1,0))) {
+                state->brushTexSlot = id;
+                    }
+            if (isSel) ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", ts->name);
+            ImGui::PopID();
+
+            col++;
         }
-        if (isSel) ImGui::PopStyleColor();
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", ts->name);
-        ImGui::PopID();
-    }
+
+
     }
     ImGui::PopStyleVar();
     ImGui::EndChild();

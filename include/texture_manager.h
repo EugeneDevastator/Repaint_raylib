@@ -43,6 +43,7 @@ TexSlotID TM_Register(uint8_t bucket, RenderTexture2D rt,
 void      TM_AddRef(TexSlotID id);
 void      TM_Remove(TexSlotID id);
 TexSlot*  TM_Get(TexSlotID id);
+TexSlot*  TM_GetRaw(TexSlotID id);
 
 int       TM_Count(uint8_t bucket);
 bool      TM_IsValid(TexSlotID id);

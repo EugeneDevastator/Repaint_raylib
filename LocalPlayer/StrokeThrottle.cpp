@@ -72,6 +72,11 @@ int StrokeThrottle::DrawPending(AppState* state) {
                 rt = ts->rt;
                 TexSlotID btId = {m_userTexBucket, m_userTexSlot};
                 TexSlot* bts = TM_Get(btId);
+                static int thrDbg = 0;
+                if (thrDbg++ < 10)
+                    printf("[TEX-DRAW] btId={%d,%d} rt.id=%u\n",
+                           btId.bucket, btId.slot,
+                           bts ? bts->rt.id : 0);
                 if (bts) {
                     brushTex = bts->rt.texture;
                     useTexture = true;
