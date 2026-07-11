@@ -261,8 +261,6 @@ static void SliderInteraction(const ImRect& bb, int orient, BParam* bp) {
                 if (flip) snappv = 1.0f - snappv;
                 // Snap: compute linear value from mouse, snap, solve clipmaxF = (snapped/range)^(1/power)
                 v = powf(snappv, 1.0f / bp->power);
-                float ret = powf(v,bp->power);
-
             } else {
                 // precise side: expand section downward
                 float dist = mperp - bbMaxP;

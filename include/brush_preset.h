@@ -8,7 +8,7 @@
 #define BRUSH_PRESET_NAME_MAX 64
 #define BRUSH_PRESET_MAX 256
 #define PRESET_FILE_MAGIC "REPRESET"
-#define PRESET_FILE_VER 2
+#define PRESET_FILE_VER 3
 
 typedef struct {
     char name[BRUSH_PRESET_NAME_MAX];
@@ -29,6 +29,10 @@ typedef struct {
     bool preserveop, seamlessPaint;
     int strokeSmoothingMode;
     float strokeThrottle;
+
+    /* Focal offset (added in V3) */
+    float focalOffsetVal;
+    int focalOffsetPenMode;
 } BrushPreset;
 
 /* ── File I/O ── */

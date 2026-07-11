@@ -75,6 +75,10 @@ void Preset_CaptureFromCurrent(BrushPreset* p, AppState* state) {
     extern float g_strokeThrottle;
     p->strokeSmoothingMode = g_strokeSmoothingMode;
     p->strokeThrottle = g_strokeThrottle;
+
+    extern BParam bpFocalOffset;
+    p->focalOffsetVal = bpFocalOffset.user.clipmaxF;
+    p->focalOffsetPenMode = bpFocalOffset.penMode;
 }
 
 // ── Validation ────────────────────────────────────────────────────────
@@ -137,6 +141,10 @@ void Preset_ApplyToCurrent(const BrushPreset* p, AppState* state) {
     extern float g_strokeThrottle;
     g_strokeSmoothingMode = p->strokeSmoothingMode;
     g_strokeThrottle = p->strokeThrottle;
+
+    extern BParam bpFocalOffset;
+    bpFocalOffset.user.clipmaxF = p->focalOffsetVal;
+    bpFocalOffset.penMode = p->focalOffsetPenMode;
 }
 
 // ── File I/O ──
@@ -157,8 +165,24 @@ struct PresetV1 {
 };
 // Verify the old struct has the same size as originally written
 // (4 bytes of padding between the bools and the final fields)
-static_assert(sizeof(PresetV1) == sizeof(BrushPreset) + 4,
+static_assert(sizeof(PresetV1) == sizeof(BrushPreset) - 4,
               "PresetV1 layout mismatch — check alignment");
+
+// Struct for version-2 files (current BrushPreset before V3 focalOffset addition)
+struct PresetV2 {
+    char name[64];
+    int mode, eraseMode;
+    struct { float val; int penMode; } bp[19];
+    int texBlendMode, texNoisemode, texColorMode;
+    bool useTexLumAsAlpha, texUseRGB;
+    char texName[64];
+    int bmidx;
+    bool preserveop, seamlessPaint;
+    int strokeSmoothingMode;
+    float strokeThrottle;
+};
+static_assert(sizeof(PresetV2) == sizeof(BrushPreset) - 8,
+              "PresetV2 layout mismatch — check alignment");
 
 static int _loadFile(const char* path, BrushPreset* out, int maxCount) {
     FILE* f = fopen(path, "rb");
@@ -190,9 +214,21 @@ static int _loadFile(const char* path, BrushPreset* out, int maxCount) {
     int loaded = 0;
 
     if (entrySize == sizeof(BrushPreset)) {
-        // Current format — read directly
+        // V3 format — read directly
         size_t readSz = fread(out, sizeof(BrushPreset), count, f);
         loaded = (int)readSz;
+    } else if (entrySize == sizeof(PresetV2)) {
+        // V2 format — read old struct, zero new focalOffset fields
+        for (int i = 0; i < count && i < maxCount; i++) {
+            PresetV2 old;
+            if (fread(&old, sizeof(PresetV2), 1, f) != 1) break;
+            BrushPreset* p = &out[loaded];
+            memcpy(p, &old, sizeof(old));
+            p->focalOffsetVal = 0.0f;
+            p->focalOffsetPenMode = 0;
+            if (_presetIsValid(p))
+                loaded++;
+        }
     } else if (entrySize == sizeof(PresetV1)) {
         // Version 1 format — read old struct and convert
         for (int i = 0; i < count && i < maxCount; i++) {
