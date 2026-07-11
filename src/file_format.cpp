@@ -260,6 +260,9 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
     if (memcmp(p, MAGIC, MAGIC_LEN) != 0) { UnloadFileData(fileData); return false; }
     p += MAGIC_LEN;
 
+    // Purge existing non-built-in user textures before loading new ones
+    TM_PurgeNonBuiltIn(TM_BUCKET_USER);
+
     uint32_t ver = _ru32(&p);
 
     // ── Parse header (version-dependent layout) ─────────────────────
@@ -402,25 +405,22 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
             uint32_t tw = _ru32(&p);
             uint32_t th = _ru32(&p);
             uint32_t tsz = _ru32(&p);
-            TexSlotID id = BrushTex_Add(state, name, (int)tw, (int)th);
-            if (TM_IsValid(id) && tsz > 0 && (int)(p - fileData) + (int)tsz <= fileSz) {
+            if (tsz > 0 && (int)(p - fileData) + (int)tsz <= fileSz) {
                 Image timg = LoadImageFromMemory(".png", p, (int)tsz);
                 p += tsz;
                 if (timg.data) {
                     ImageFormat(&timg, PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
-                    TexSlot* ts = TM_Get(id);
-                    if (ts) {
-                        Texture2D tmp = LoadTextureFromImage(timg);
-                        BeginTextureMode(ts->rt);
-                        ClearBackground(BLANK);
-                        rlSetBlendMode(RL_BLEND_CUSTOM);
-                        rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
-                        DrawTexture(tmp, 0, 0, WHITE);
-                        rlSetBlendMode(RL_BLEND_ALPHA);
-                        EndTextureMode();
-                        UnloadTexture(tmp);
-                    }
-                    UnloadImage(timg);
+                    Texture2D tmp = LoadTextureFromImage(timg);
+                    RenderTexture2D rt = Load16BitRT((int)tw, (int)th);
+                    BeginTextureMode(rt);
+                    ClearBackground(BLANK);
+                    rlSetBlendMode(RL_BLEND_CUSTOM);
+                    rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+                    DrawTexture(tmp, 0, 0, WHITE);
+                    rlSetBlendMode(RL_BLEND_ALPHA);
+                    EndTextureMode();
+                    UnloadTexture(tmp);
+                    TM_Register(TM_BUCKET_USER, rt, name, false, (int)tw, (int)th);
                 }
             } else {
                 p += tsz;

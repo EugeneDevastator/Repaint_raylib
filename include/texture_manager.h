@@ -34,10 +34,10 @@ struct TexSlot {
 // ── Core API ──
 void      TM_Init(void);
 
-// Add a new texture: creates RT + CPU image (full ownership)
-TexSlotID TM_Add(uint8_t bucket, int w, int h, const char* name, bool builtIn);
+// Purge all non-built-in slots from a bucket
+void      TM_PurgeNonBuiltIn(uint8_t bucket);
 
-// Register existing resources (layers that manage their own lifecycle)
+// Register existing RT (caller owns RT creation)
 TexSlotID TM_Register(uint8_t bucket, RenderTexture2D rt,
                       const char* name, bool builtIn, int w, int h);
 void      TM_AddRef(TexSlotID id);

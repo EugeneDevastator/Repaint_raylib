@@ -36,6 +36,26 @@ Viewport viewport;
 
 ModuleStack g_moduleStack;
 
+// ── Slot-0 diagnostic ──────────────────────────────────────────────
+static void DumpSlot0(const char* label) {
+    TexSlotID id = {0, 0};
+    TexSlot* ts = TM_GetRaw(id);
+    if (!ts || ts->rt.id == 0) {
+        printf("[SLOT0] %s: no RT\n", label);
+        return;
+    }
+    unsigned short px[6]; // 3 pixels x RGBA16 = 12 bytes + check
+    rlEnableFramebuffer(ts->rt.id);
+    glReadPixels(0, 0, 3, 1, GL_RGBA, GL_UNSIGNED_SHORT, px);
+    rlDisableFramebuffer();
+    bool allZero = true;
+    for (int i = 0; i < 6; i++) if (px[i]) { allZero = false; break; }
+    printf("[SLOT0] %s: rt.id=%u %04X %04X %04X %04X %04X %04X %s\n",
+           label, ts->rt.id,
+           px[0], px[1], px[2], px[3], px[4], px[5],
+           allZero ? "◄ ALL ZERO" : "◄ HAS DATA");
+}
+
 #include "info_text.h"
 #include "ui_helpscreen.h"
 #include "ui_tmexplorer.h"
@@ -293,9 +313,10 @@ void UpdateUI(AppState* state) {
                         if (TM_IsValid(id)) { state->editTexSlot = id; break; }
                     }
                 }
-            }
         }
     }
+    DumpSlot0("end of App_Init");
+}
 
     UserBrushConfig brushCfg;
     CaptureBrushConfig(&brushCfg);
@@ -585,9 +606,9 @@ void App_Init(AppState* state) {
 
     BrushBlend_Init();
     LoadPenIcons();
-    BrushTex_Init(state);
-    UserTexture_Init();
-    QuickPanel_Init();
+    BrushTex_Init(state);    DumpSlot0("after BrushTex_Init"); // happens first
+    UserTexture_Init();       DumpSlot0("after UserTexture_Init");
+    QuickPanel_Init();        DumpSlot0("after QuickPanel_Init");
     DrawSplash("Starting network...");
 
     networkBroker.appState = state;
@@ -596,14 +617,14 @@ void App_Init(AppState* state) {
     // load persistent config
     networkBroker.LoadConfig("repaint.ini");
 
-    Modulators_Init();
+    Modulators_Init();        DumpSlot0("after Modulators_Init");
     Changelog_Init();
     DrawSplash("Creating canvas...");
 
-    ViewportManager_Init();
-    Compositor_Init();
-    LayerStack_Init();
-    app_new_document(1024, 768, WHITE);
+    ViewportManager_Init();   DumpSlot0("after ViewportMgr_Init");
+    Compositor_Init();        DumpSlot0("after Compositor_Init");
+    LayerStack_Init();        DumpSlot0("after LayerStack_Init");
+    app_new_document(1024, 768, WHITE); DumpSlot0("after app_new_doc");
 
     Rectangle viewportBounds = {
         (float)uiPanelWidth, 0,

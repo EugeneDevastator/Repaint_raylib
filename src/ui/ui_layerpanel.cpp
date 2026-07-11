@@ -409,7 +409,8 @@ void LayerPanel_Draw(AppState* state) {
         if (ImGui::Button("+Tex", ImVec2(texBtnW, 30))) {
             char name[64];
             snprintf(name, sizeof(name), "Texture %d", TM_Count(TM_BUCKET_USER) + 1);
-            TexSlotID id = BrushTex_Add(state, name, 512, 512);
+            RenderTexture2D rt = Load16BitRT(512, 512);
+            TexSlotID id = TM_Register(TM_BUCKET_USER, rt, name, false, 512, 512);
             if (TM_IsValid(id)) {
                 g_layerTexSelected = id.slot;
                 state->editTexMode = 1;
@@ -422,23 +423,21 @@ void LayerPanel_Draw(AppState* state) {
                 TexSlotID srcId = {TM_BUCKET_USER, (uint8_t)g_layerTexSelected};
                 TexSlot* srcTs = TM_Get(srcId);
                 if (srcTs && TM_IsValid(srcId)) {
-                    TexSlotID di = BrushTex_Add(state, srcTs->name, srcTs->w, srcTs->h);
+                    RenderTexture2D rt = Load16BitRT(srcTs->w, srcTs->h);
+                    BeginTextureMode(rt);
+                    ClearBackground(BLANK);
+                    rlSetBlendMode(RL_BLEND_CUSTOM);
+                    rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+                    DrawTextureRec(srcTs->rt.texture,
+                        Rectangle{0, 0, (float)srcTs->w, (float)-srcTs->h},
+                        Vector2{0, 0}, WHITE);
+                    rlSetBlendMode(RL_BLEND_ALPHA);
+                    EndTextureMode();
+                    TexSlotID di = TM_Register(TM_BUCKET_USER, rt, srcTs->name, false, srcTs->w, srcTs->h);
                     if (TM_IsValid(di)) {
-                        TexSlot* dstTs = TM_Get(di);
-                        if (dstTs) {
-                            BeginTextureMode(dstTs->rt);
-                            ClearBackground(BLANK);
-                            rlSetBlendMode(RL_BLEND_CUSTOM);
-                            rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
-                            DrawTextureRec(srcTs->rt.texture,
-                                Rectangle{0, 0, (float)srcTs->w, (float)-srcTs->h},
-                                Vector2{0, 0}, WHITE);
-                            rlSetBlendMode(RL_BLEND_ALPHA);
-                            EndTextureMode();
-                            g_layerTexSelected = di.slot;
-                            state->editTexMode = 1;
-                            state->editTexSlot = di;
-                        }
+                        g_layerTexSelected = di.slot;
+                        state->editTexMode = 1;
+                        state->editTexSlot = di;
                     }
                 }
             }

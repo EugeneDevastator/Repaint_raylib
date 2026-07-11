@@ -1,6 +1,8 @@
 #include "texture_manager.h"
 #include "render_utils.h"
 #include "raylib.h"
+#include "rlgl.h"
+#include "external/glad.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -14,45 +16,15 @@ void TM_Init(void) {
     // nextFree starts at 0 for each bucket
 }
 
-TexSlotID TM_Add(uint8_t bucket, int w, int h, const char* name, bool builtIn) {
-    if (bucket >= TM_BUCKETS) return TM_INVALID_SLOT;
-
-    // Scan from hint
-    uint8_t* hint = &TM.nextFree[bucket];
-    uint8_t slot = *hint;
-    for (int i = 0; i < TM_SLOTS_PER_BUCKET; i++) {
-        uint8_t s = (uint8_t)((slot + i) % TM_SLOTS_PER_BUCKET);
-        if (!TM.slots[bucket][s].used) {
-            slot = s;
-            break;
-        }
+void TM_PurgeNonBuiltIn(uint8_t bucket) {
+    if (bucket >= TM_BUCKETS) return;
+    for (int s = 0; s < TM_SLOTS_PER_BUCKET; s++) {
+        TexSlot* ts = &TM.slots[bucket][s];
+        if (!ts->used || ts->builtIn) continue;
+        if (ts->ownsResources && ts->rt.id > 0)
+            UnloadRenderTexture(ts->rt);
+        memset(ts, 0, sizeof(*ts));
     }
-    if (TM.slots[bucket][slot].used) return TM_INVALID_SLOT; // full
-
-    TexSlot* ts = &TM.slots[bucket][slot];
-    memset(ts, 0, sizeof(*ts));
-    ts->used = true;
-    ts->builtIn = builtIn;
-    ts->w = w;
-    ts->h = h;
-    ts->refCount = 1;
-    ts->ownsResources = true;
-    if (name) snprintf(ts->name, sizeof(ts->name), "%s", name);
-
-    // Create GPU render target and initialise to transparent
-    ts->rt = Load16BitRT(w, h);
-    if (slot == 0 && bucket == 0)
-        printf("[TM-ADD] slot=0 w=%d h=%d rt.id=%u tex.id=%u\n",
-               w, h, ts->rt.id, ts->rt.texture.id);
-    if (ts->rt.id > 0) {
-        BeginTextureMode(ts->rt);
-        ClearBackground(BLANK);
-        EndTextureMode();
-    }
-
-    // Advance hint past this slot
-    *hint = (uint8_t)((slot + 1) % TM_SLOTS_PER_BUCKET);
-    return TexSlotID{bucket, slot};
 }
 
 TexSlotID TM_Register(uint8_t bucket, RenderTexture2D rt,
@@ -78,10 +50,26 @@ TexSlotID TM_Register(uint8_t bucket, RenderTexture2D rt,
     ts->h = h;
     ts->rt = rt;
     ts->refCount = 1;
-    ts->ownsResources = false;  // caller owns lifecycle
+    ts->ownsResources = false;
     if (name) snprintf(ts->name, sizeof(ts->name), "%s", name);
 
     *hint = (uint8_t)((slot + 1) % TM_SLOTS_PER_BUCKET);
+
+    // Debug: dump first 12 bytes of registered texture
+     {
+        unsigned short px[6] = {0};
+        rlEnableFramebuffer(rt.id);
+        glReadPixels(0, 0, 3, 1, GL_RGBA, GL_UNSIGNED_SHORT, px);
+        rlDisableFramebuffer();
+        bool zero = true;
+        for (int i = 0; i < 6; i++) if (px[i]) { zero = false; break; }
+        printf("[TM-REG] slot=0 rt.id=%u tex.id=%u name='%s' builtIn=%d w=%d h=%d\n",
+               rt.id, rt.texture.id, name ? name : "(null)", builtIn, w, h);
+        printf("[TM-REG]   pixels: %04X %04X %04X %04X %04X %04X%s\n",
+               px[0], px[1], px[2], px[3], px[4], px[5],
+               zero ? " ◄ ALL ZERO" : " ◄ HAS DATA");
+    }
+
     return TexSlotID{bucket, slot};
 }
 
