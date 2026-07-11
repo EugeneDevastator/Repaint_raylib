@@ -1,6 +1,7 @@
 #include "repaint.h"
 #include "texture_manager.h"
 #include "rlgl.h"
+#include "external/glad.h"
 #include <math.h>
 #include <string.h>
 #include <dirent.h>
@@ -27,6 +28,7 @@ void BrushTex_Init(AppState* state) {
     DIR* d = opendir(noiseDir);
     if (d) {
         struct dirent* entry;
+
         while ((entry = readdir(d)) != NULL) {
             if (!hasSuffix(entry->d_name, ".png")) continue;
 
@@ -46,34 +48,39 @@ void BrushTex_Init(AppState* state) {
             ImageResize(&img, TEX_DIM, TEX_DIM);
             ImageFormat(&img, PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
 
-            TexSlotID id = BrushTex_Add(state, texName, img.width, img.height);
-            if (TM_IsValid(id)) {
-                TexSlot* ts = TM_Get(id);
-                if (ts) {
-                    ts->builtIn = true;
-                    Texture2D tmp = LoadTextureFromImage(img);
-                    if (id.slot == 0 && id.bucket == 0)
-                        printf("[BRUSHTEX-RENDER] slot=0 tmp.id=%u texW=%d texH=%d\n",
-                               tmp.id, tmp.width, tmp.height);
-                    BeginTextureMode(ts->rt);
-                    ClearBackground(BLANK);
-                    rlSetBlendMode(RL_BLEND_CUSTOM);
-                    rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
-                    DrawTexture(tmp, 0, 0, WHITE);
-                    rlSetBlendMode(RL_BLEND_ALPHA);
-                    EndTextureMode();
-                    UnloadTexture(tmp);
-                }
-            }
+            // Create RT, render image, register permanently
+            Texture2D tmp = LoadTextureFromImage(img);
+            RenderTexture2D rt = Load16BitRT(img.width, img.height);
+
+// working
+            BeginTextureMode(rt);
+            ClearBackground(BLANK);
+            glEnable(GL_BLEND);
+            glBlendEquation(GL_FUNC_ADD);
+            glBlendFunc(GL_ONE, GL_ZERO);   // bypass raylib's tracking entirely
+            DrawTexture(tmp, 0, 0, WHITE);
+            rlDrawRenderBatchActive();
+            rlSetBlendMode(RL_BLEND_ALPHA); // restore raylib's tracking
+            EndTextureMode();
+
+            // doesnt wwork for first texture, must be called twice.
+         //   BeginTextureMode(rt);
+         //   ClearBackground(BLANK);
+         //   rlSetBlendMode(RL_BLEND_CUSTOM);
+         //   rlSetBlendFactors(RL_ONE, RL_ZERO, RL_FUNC_ADD);
+         //   DrawTexture(tmp, 0, 0, WHITE);
+         //   rlSetBlendMode(RL_BLEND_ALPHA);
+         //   EndTextureMode();
+         //   UnloadTexture(tmp);
+
+            UnloadTexture(tmp);
+
+
+            TM_Register(TM_BUCKET_USER, rt, texName, true, img.width, img.height);
             UnloadImage(img);
         }
         closedir(d);
     }
-}
-
-TexSlotID BrushTex_Add(AppState* state, const char* name, int w, int h) {
-    (void)state;
-    return TM_Add(TM_BUCKET_USER, w, h, name, false);
 }
 
 void BrushTex_Delete(AppState* state, TexSlotID id) {
