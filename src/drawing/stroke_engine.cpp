@@ -18,10 +18,10 @@ static float ConfigRawVal(const BPConfig& cfg) {
 static float ModulateConfigVal(const BPConfig& cfg, const float modValues[csSTOP]) {
     float cpar = (cfg.modulatorId >= 0 && cfg.modulatorId < csSTOP)
         ? modValues[cfg.modulatorId] : 1.0f;
-    float n = (cfg.power != 1.0f)
-        ? powf(cfg.userMax, cfg.power) : cfg.userMax;
-    float rng = cfg.userMax - cfg.userMin;
-    float respar = cpar * rng + cfg.userMin;
+    float minN = powf(cfg.userMin, cfg.power);
+    float maxN = powf(cfg.userMax, cfg.power);
+    float rng = maxN - minN;
+    float respar = cpar * rng + minN;
     float randm = (((float)rand() / (float)RAND_MAX) - 0.5f) * 2.0f * cfg.jitter;
     float res = fminf(fmaxf(respar + randm, 0.0f), 1.0f);
     return res * (cfg.outMax - cfg.outMin) + cfg.outMin;
