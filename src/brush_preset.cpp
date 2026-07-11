@@ -1,5 +1,5 @@
 #include "brush_preset.h"
-
+// TODO - can drop all backwards compat.
 // ── BParam index mapping ──────────────────────────────────────────────
 enum {
     BI_SIZE, BI_SIZEMUL, BI_HARDNESS, BI_CURVATURE, BI_SPACING,
@@ -60,6 +60,7 @@ void Preset_CaptureFromCurrent(BrushPreset* p, AppState* state) {
     p->texBlendMode    = state->currentBrush.Realb.texBlendMode;
     p->texNoisemode    = state->currentBrush.Realb.texNoisemode;
     p->texColorMode    = state->currentBrush.Realb.texColorMode;
+    p->texTiling       = state->currentBrush.Realb.texTiling;
     p->useTexLumAsAlpha = state->currentBrush.Realb.useTexLumAsAlpha;
     p->texUseRGB       = state->currentBrush.Realb.texUseRGB;
 
@@ -79,6 +80,7 @@ void Preset_CaptureFromCurrent(BrushPreset* p, AppState* state) {
     extern float g_strokeThrottle;
     p->strokeSmoothingMode = g_strokeSmoothingMode;
     p->strokeThrottle = g_strokeThrottle;
+    p->initialAngle = state->initialAngle;
 }
 
 // ── Validation ────────────────────────────────────────────────────────
@@ -114,6 +116,7 @@ void Preset_ApplyToCurrent(const BrushPreset* p, AppState* state) {
     state->currentBrush.Realb.texBlendMode    = p->texBlendMode;
     state->currentBrush.Realb.texNoisemode    = p->texNoisemode;
     state->currentBrush.Realb.texColorMode    = p->texColorMode;
+    state->currentBrush.Realb.texTiling       = p->texTiling;
     state->currentBrush.Realb.useTexLumAsAlpha = p->useTexLumAsAlpha;
     state->currentBrush.Realb.texUseRGB       = p->texUseRGB;
     state->currentBrush.Realb.bmidx           = p->bmidx;
@@ -142,6 +145,7 @@ void Preset_ApplyToCurrent(const BrushPreset* p, AppState* state) {
     extern float g_strokeThrottle;
     g_strokeSmoothingMode = p->strokeSmoothingMode;
     g_strokeThrottle = p->strokeThrottle;
+    state->initialAngle = p->initialAngle;
 }
 
 // ── File I/O ──

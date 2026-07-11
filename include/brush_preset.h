@@ -20,7 +20,7 @@ typedef struct {
     struct { float val, clipmin, jitter; int penMode; } bp[20];
 
     /* Texture options */
-    int texBlendMode, texNoisemode, texColorMode;
+    int texBlendMode, texNoisemode, texColorMode, texTiling;
     bool useTexLumAsAlpha, texUseRGB;
     char texName[64];
 
@@ -29,6 +29,9 @@ typedef struct {
     bool preserveop, seamlessPaint;
     int strokeSmoothingMode;
     float strokeThrottle;
+
+    /* Initial angle (added in V5) */
+    float initialAngle;
 } BrushPreset;
 
 /* ── File I/O ── */
