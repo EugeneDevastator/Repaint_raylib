@@ -134,10 +134,11 @@ void LayerPanel_Draw(AppState* state) {
     {
         int blend = LayerStack_GetProps(state->activeLayer)->blendmode;
         if (blend < 0 || blend >= g_blendModeCount) blend = 0;
-        if (g_blendIconLoaded)
-            ImGui::Image((ImTextureID)(intptr_t)g_blendModeIcon.id, ImVec2(24, 24));
-        else
-            ImGui::Dummy(ImVec2(24, 24));
+        if (g_blendIconLoaded) {
+            float fh = ImGui::GetFrameHeight();
+            ImGui::Image((ImTextureID)(intptr_t)g_blendModeIcon.id, ImVec2(fh, fh));
+        } else
+            ImGui::Dummy(ImVec2(ImGui::GetFrameHeight(), ImGui::GetFrameHeight()));
         ImGui::SameLine();
         ImGui::SetNextItemWidth(-1);
         if (ImGui::Combo("##blend", &blend, g_blendModeNames, g_blendModeCount, g_blendModeCount)) {

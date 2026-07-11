@@ -8,7 +8,7 @@
 #define BRUSH_PRESET_NAME_MAX 64
 #define BRUSH_PRESET_MAX 256
 #define PRESET_FILE_MAGIC "REPRESET"
-#define PRESET_FILE_VER 2
+#define PRESET_FILE_VER 5
 
 typedef struct {
     char name[BRUSH_PRESET_NAME_MAX];
@@ -16,11 +16,11 @@ typedef struct {
     /* Tool */
     int mode, eraseMode;
 
-    /* BParam slider values (clipmaxF) and pen modes */
-    struct { float val; int penMode; } bp[19];
+    /* BParam slider values (clipmaxF, clipminF, jitter) and pen modes */
+    struct { float val, clipmin, jitter; int penMode; } bp[20];
 
     /* Texture options */
-    int texBlendMode, texNoisemode, texColorMode;
+    int texBlendMode, texNoisemode, texColorMode, texTiling;
     bool useTexLumAsAlpha, texUseRGB;
     char texName[64];
 
@@ -29,6 +29,9 @@ typedef struct {
     bool preserveop, seamlessPaint;
     int strokeSmoothingMode;
     float strokeThrottle;
+
+    /* Initial angle (added in V5) */
+    float initialAngle;
 } BrushPreset;
 
 /* ── File I/O ── */

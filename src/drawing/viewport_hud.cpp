@@ -6,6 +6,7 @@
 #include "external/glad.h"
 #include "stroke_engine.h"
 #include "brush_blend.h"
+#include "../LocalPlayer/StrokeThrottle.h"
 #include <math.h>
 
 #define PREVIEW_SZ 512
@@ -279,13 +280,12 @@ void ViewportHUD_Draw(AppState* state) {
             if (g_lastPreviewHash == 0) g_previewBaseSeed = zoomBrush.seed;
             zoomBrush.seed = g_previewBaseSeed;
 
-            // Build preview Quad: zoom-dependent screen corners so the world region
-            // stays at PREVIEW_SZ units regardless of zoom. This matches the canvas
-            // density — the brush dabs at canvas-pixel size (WORLD_UNIT_PX) line up
-            // 1:1 with the canvas background in the preview.
-            float pScrSz = (float)PREVIEW_SZ * state->camera.zoom;
+            // Build preview Quad: use full viewport height as the square side.
+            // The xform maps this screen area to world-space via the camera,
+            // giving a consistent canvas-pixel density at any zoom.
+            float pScrSz = vpBounds.height;
             float pX = vpBounds.x + vpBounds.width  * 0.5f - pScrSz * 0.5f;
-            float pY = vpBounds.y + vpBounds.height * 0.5f - pScrSz * 0.5f;
+            float pY = vpBounds.y;
             Quad previewQuad;
             previewQuad.xform = GetXformFromScreenCorners(pX, pY, pX + pScrSz, pY + pScrSz, state->camera);
             previewQuad.rt = g_previewRT;
@@ -328,7 +328,9 @@ void ViewportHUD_Draw(AppState* state) {
             // canvas→screen scale is zoom.  Keep the dabs at canvas-pixel size so
             // they match the brush mark already in the composite / canvas texture.
             g_previewRendered = 0;
-            g_previewBudget = 50000;
+            // Seed preview budget from the stroke throttle's dynamic budget,
+            // so the preview starts at the same performance-adapted level.
+            if (g_throttle) g_previewBudget = g_throttle->GetBudget();
 
             g_lastPreviewHash = currentHash;
         }
@@ -368,24 +370,21 @@ void ViewportHUD_Draw(AppState* state) {
             EndTextureMode();
 
             // Adapt budget
-            if (!renderAll) {
+            if (!renderAll) {  // TODO: Could rely on dynamic budget
                 double elapsed = GetTime() - tStart;
                 if (elapsed > 0.008)
                     g_previewBudget = (int)(g_previewBudget * 0.85f);
                 else if (elapsed < 0.002)
                     g_previewBudget = (int)(g_previewBudget * 1.15f);
                 if (g_previewBudget < 10000) g_previewBudget = 10000;
-                if (g_previewBudget > 500000) g_previewBudget = 500000;
+                if (g_previewBudget > 8000000) g_previewBudget = 8000000;
             }
         }
 
-        // Display the preview quad — scale by zoom so brush size matches viewport canvas.
-        // The zoom cancels GetXformFromScreenCorners' zoom scaling, giving the preview
-        // the same world→screen pixel ratio as the canvas viewport.
-        float hh = (float)PREVIEW_SZ * state->camera.zoom * 0.5f;
-        float px = vpBounds.x + vpBounds.width * 0.5f - hh;
-        float py = vpBounds.y + vpBounds.height * 0.5f - hh;
-        float dispSz = (float)PREVIEW_SZ * state->camera.zoom;
+        // Display the preview — fills viewport height, centered horizontally.
+        float dispSz = vpBounds.height;
+        float px = vpBounds.x + vpBounds.width * 0.5f - dispSz * 0.5f;
+        float py = vpBounds.y;
         DrawTexturePro(g_previewRT.texture,
             Rectangle{0, 0, (float)PREVIEW_SZ, (float)-PREVIEW_SZ},
             Rectangle{px, py, dispSz, dispSz},

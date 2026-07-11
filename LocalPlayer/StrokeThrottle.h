@@ -12,6 +12,7 @@ public:
 
     void Push(const SegmentData& seg);
     int  DrawPending(AppState* state);
+    int  GetBudget() const { return m_dynamicBudget; }
 
 private:
     SegmentData m_segQ[SEG_CAP];
