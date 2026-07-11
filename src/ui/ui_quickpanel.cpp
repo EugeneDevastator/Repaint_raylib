@@ -150,7 +150,7 @@ void QuickPanel_DrawUI(AppState* state) {
     static bool s_showTex = true;
     int texBtnX = sliderRightX + 3 * (dCtrl + dGap);
     ImGui::SetCursorScreenPos(ImVec2((float)texBtnX, (float)iconY));
-    if (ImGui::Button(s_showTex ? "Brush Textures" : "Brush Textures", ImVec2((float)(dCtrl * 2 + dGap *2), (float)dCtrl))) {
+    if (ImGui::Button("Brush Textures", ImVec2(0, (float)dCtrl))) {
         s_showTex = !s_showTex;
     }
     if (ImGui::IsItemHovered())

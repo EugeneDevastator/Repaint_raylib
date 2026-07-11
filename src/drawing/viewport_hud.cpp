@@ -6,6 +6,7 @@
 #include "external/glad.h"
 #include "stroke_engine.h"
 #include "brush_blend.h"
+#include "../LocalPlayer/StrokeThrottle.h"
 #include <math.h>
 
 #define PREVIEW_SZ 512
@@ -328,7 +329,9 @@ void ViewportHUD_Draw(AppState* state) {
             // canvas→screen scale is zoom.  Keep the dabs at canvas-pixel size so
             // they match the brush mark already in the composite / canvas texture.
             g_previewRendered = 0;
-            g_previewBudget = 50000;
+            // Seed preview budget from the stroke throttle's dynamic budget,
+            // so the preview starts at the same performance-adapted level.
+            if (g_throttle) g_previewBudget = g_throttle->GetBudget();
 
             g_lastPreviewHash = currentHash;
         }
@@ -368,14 +371,14 @@ void ViewportHUD_Draw(AppState* state) {
             EndTextureMode();
 
             // Adapt budget
-            if (!renderAll) {
+            if (!renderAll) {  // TODO: Could rely on dynamic budget
                 double elapsed = GetTime() - tStart;
                 if (elapsed > 0.008)
                     g_previewBudget = (int)(g_previewBudget * 0.85f);
                 else if (elapsed < 0.002)
                     g_previewBudget = (int)(g_previewBudget * 1.15f);
                 if (g_previewBudget < 10000) g_previewBudget = 10000;
-                if (g_previewBudget > 500000) g_previewBudget = 500000;
+                if (g_previewBudget > 8000000) g_previewBudget = 8000000;
             }
         }
 
