@@ -5,7 +5,7 @@
 #include <stdio.h>
 
 #define RPL_MAGIC "RPLREP"
-#define RPL_VER 7
+#define RPL_VER 1
 
 void ReplayRecorder::on_segment(const SegmentData& seg) {
     if (m_playing) return;
@@ -106,8 +106,14 @@ bool ReplayRecorder::Save(const char* path) {
         fwrite(&seg.seamless, sizeof(uint8_t), 1, f);
         fwrite(&seg.pixelPerfect, sizeof(uint8_t), 1, f);
         fwrite(&seg.ppBias, sizeof(float), 1, f);
+        fwrite(&seg.isStrokeStart, sizeof(uint8_t), 1, f);
+        fwrite(&seg.dabOffset, sizeof(int), 1, f);
+        fwrite(&seg.initAngle, sizeof(float), 1, f);
         fwrite(&seg.smudgeSrcX, sizeof(float), 1, f);
         fwrite(&seg.smudgeSrcY, sizeof(float), 1, f);
+        fwrite(&seg.targetSlot, sizeof(TexSlotID), 1, f);
+        fwrite(&seg.userTexBucket, sizeof(uint8_t), 1, f);
+        fwrite(&seg.userTexSlot, sizeof(uint8_t), 1, f);
     }
     fclose(f);
     return true;
@@ -124,8 +130,8 @@ bool ReplayRecorder::Load(const char* path) {
         fclose(f); return false;
     }
     uint32_t ver;
-    if (fread(&ver, 4, 1, f) != 1 || ver < 5 || ver > RPL_VER) {
-        printf("[REPLAY] bad ver: %d\n", (int)ver); fflush(stdout);
+    if (fread(&ver, 4, 1, f) != 1 || ver != RPL_VER) {
+        printf("[REPLAY] bad ver: %d (expected %d)\n", (int)ver, RPL_VER); fflush(stdout);
         fclose(f); return false;
     }
     uint32_t w, h, count;
@@ -150,18 +156,16 @@ bool ReplayRecorder::Load(const char* path) {
         if (fread(&seg.seed, sizeof(uint16_t), 1, f) != 1) break;
         if (fread(&seg.tool, sizeof(uint8_t), 1, f) != 1) break;
         if (fread(&seg.seamless, sizeof(uint8_t), 1, f) != 1) break;
-        if (ver >= 6) {
-            if (fread(&seg.pixelPerfect, sizeof(uint8_t), 1, f) != 1) break;
-        } else {
-            seg.pixelPerfect = 0;
-        }
-        if (ver >= 7) {
-            if (fread(&seg.ppBias, sizeof(float), 1, f) != 1) break;
-        } else {
-            seg.ppBias = -1.0f;
-        }
+        if (fread(&seg.pixelPerfect, sizeof(uint8_t), 1, f) != 1) break;
+        if (fread(&seg.ppBias, sizeof(float), 1, f) != 1) break;
+        if (fread(&seg.isStrokeStart, sizeof(uint8_t), 1, f) != 1) break;
+        if (fread(&seg.dabOffset, sizeof(int), 1, f) != 1) break;
+        if (fread(&seg.initAngle, sizeof(float), 1, f) != 1) break;
         if (fread(&seg.smudgeSrcX, sizeof(float), 1, f) != 1) break;
         if (fread(&seg.smudgeSrcY, sizeof(float), 1, f) != 1) break;
+        if (fread(&seg.targetSlot, sizeof(TexSlotID), 1, f) != 1) break;
+        if (fread(&seg.userTexBucket, sizeof(uint8_t), 1, f) != 1) break;
+        if (fread(&seg.userTexSlot, sizeof(uint8_t), 1, f) != 1) break;
         printf("[RPLOAD] seg %d: p1=(%.1f,%.1f) p2=(%.1f,%.1f) rad=%.1f spacing=%.2f col=(%d,%d,%d)\n",
             (int)i, seg.pos1.x, seg.pos1.y, seg.pos2.x, seg.pos2.y,
             seg.brushFrom.rad_out_px, seg.brushFrom.spacing,
