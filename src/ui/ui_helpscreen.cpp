@@ -44,9 +44,8 @@ void Help_Draw(AppState* state) {
             {"Enter",   "Accept warp / transform"},
             {"Escape",  "Cancel / close HUD"},
             {"Space",   "Pan canvas"},
-            {"Scroll",  "Zoom in / out"},
+            {"Mouse Scroll",  "Zoom in / out"},
             {"F1",      "Toggle this help screen"},
-            {"F5",      "Toggle Warp HUD"},
             {"Ctrl+Z",  "Undo"},
             {"Ctrl+Shift+Z","Redo"},
             {"Ctrl+C",  "Copy Layer"},
@@ -83,7 +82,7 @@ void Help_Draw(AppState* state) {
         ImGui::Text("Misc");
         ImGui::Separator();
         ImGui::Spacing();
-        ImGui::TextWrapped("Repaint is a collaborative painting tool with built-in AI features.");
+        ImGui::TextWrapped("Repaint is free, open source, offline painting tool.");
         ImGui::Spacing();
         ImGui::TextWrapped("Active layer: %d", state->activeLayer);
         ImGui::TextWrapped("Canvas: %d x %d px", DocOutPxW(&state->doc), DocOutPxH(&state->doc));
