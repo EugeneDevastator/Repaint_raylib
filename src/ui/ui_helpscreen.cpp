@@ -35,24 +35,24 @@ void Help_Draw(AppState* state) {
         ImGui::Spacing();
         struct { const char* key; const char* desc; } keys[] = {
             {"Shift",       "Open Brush and File settings (your main menu)"},
+            {"Space",   "Pan canvas"},
+            {"ALT",   "Color picker"},
+            {"Mouse Scroll",  "Zoom in / out"},
             {"1",       "Layer Transform — move / scale / rotate"},
             {"2",       "Painting mode (default one)"},
             {"3",       "Matte Extraction"},
             {"4",       "Stable Diffusion HUD"},
             {"5",       "Perspective Warp HUD"},
             {"R",       "Repeat last transformation"},
-            {"Enter",   "Accept warp / transform"},
+            {"Enter/E",   "Accept warp / transform"},
             {"Escape",  "Cancel / close HUD"},
-            {"Space",   "Pan canvas"},
-            {"Mouse Scroll",  "Zoom in / out"},
             {"F1",      "Toggle this help screen"},
-            {"Ctrl+Z",  "Undo"},
-            {"Ctrl+Shift+Z","Redo"},
+            {"Ctrl+Z",  "Undo Painting"},
+            {"Ctrl+Shift+Z","Redo Painting"},
             {"Ctrl+C",  "Copy Layer"},
             {"Ctrl+C,C",  "Copy Merged. ctrl press, C, C, ctrl release"},
             {"Ctrl+C,F",  "Copy Merged as temporary file"},
             {"Ctrl+V",  "Paste"},
-            {"Alt+Click","Color picker"},
         };
         for (auto& k : keys) {
             ImGui::Text("  %s", k.key);
@@ -88,6 +88,12 @@ void Help_Draw(AppState* state) {
         ImGui::TextWrapped("Canvas: %d x %d px", DocOutPxW(&state->doc), DocOutPxH(&state->doc));
         ImGui::TextWrapped("Camera zoom: %.0f%%", state->camera.zoom * 100.0f);
         ImGui::Spacing();
+        if (ImGui::Button("Watch tutorials", ImVec2(ImGui::GetContentRegionAvail().x, 0))) {
+            Platform_OpenURL("https://www.youtube.com/playlist?list=PLbvqc9wW3qag");
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("https://www.youtube.com/playlist?list=PLbvqc9wW3qag");
+        ImGui::Spacing();
         ImGui::Separator();
         ImGui::Spacing();
         ImGui::Text("Support the project");
@@ -97,6 +103,8 @@ void Help_Draw(AppState* state) {
         }
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("https://ko-fi.com/daveastator");
+        ImGui::Spacing();
+
         ImGui::EndChild();
     }
     ImGui::End();

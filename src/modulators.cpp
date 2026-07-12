@@ -35,8 +35,8 @@ void Modulators_Init(void) {
     strncpy(bpSize.tooltip, "Outer radius of the brush tip in world units (256px per wu)", sizeof(bpSize.tooltip) - 1);
     BParam_SetIcon(&bpSize, "ctlrad");
 
-    BParam_Init(&bpHardness, 2, "Hardness", 0.0f, 1.0f, 0.5f);
-    strncpy(bpHardness.tooltip, "Transition sharpness from brush center to edge", sizeof(bpHardness.tooltip) - 1);
+    BParam_Init(&bpHardness, 2, "Inner Radius", 0.0f, 1.0f, 0.5f);
+    strncpy(bpHardness.tooltip, "Inner radius, as ratio", sizeof(bpHardness.tooltip) - 1);
     bpHardness.user.clipmaxF = 0.5f;
     BParam_SetIcon(&bpHardness, "ctlrrel");
 
@@ -45,11 +45,11 @@ void Modulators_Init(void) {
     bpSpacing.defClipmaxF = sqrtf((0.3f - 0.0f) / (2.0f - 0.0f));
     bpSpacing.user.clipmaxF = bpSpacing.defClipmaxF;
     bpSpacing.run.clipmaxF = bpSpacing.defClipmaxF;
-    strncpy(bpSpacing.tooltip, "Distance between successive dabs as fraction of brush diameter", sizeof(bpSpacing.tooltip) - 1);
+    strncpy(bpSpacing.tooltip, "Distance between dabs. 1 = dabs touch outer edge", sizeof(bpSpacing.tooltip) - 1);
     BParam_SetIcon(&bpSpacing, "ctlspc");
 
     BParam_Init(&bpCurvature, 4, "Curve", 0.0f, 1.0f, 0.0f);
-    strncpy(bpCurvature.tooltip, "Bias toward center (low) or edge (high) of the brush mask", sizeof(bpCurvature.tooltip) - 1);
+    strncpy(bpCurvature.tooltip, "Exponent/Curvature of the gradient ramp", sizeof(bpCurvature.tooltip) - 1);
     BParam_SetIcon(&bpCurvature, "ctlcrv");
 
     BParam_Init(&bpScatter, 5, "Scatter", 0.0f, 5.0f, 0.0f);
@@ -94,7 +94,7 @@ void Modulators_Init(void) {
     strncpy(bpTexBlendVal.tooltip, "How much brush color tints the texture (0=texture only, 1=texture*brush)", sizeof(bpTexBlendVal.tooltip) - 1);
 
     BParam_Init(&bpAngle, 40, "Angle", 0.0f, 360.0f, 360.0f);
-    strncpy(bpAngle.tooltip, "Modulated offset from base angle (deg). Default 360=no offset. Pen mode = Direction rotates brush along stroke.", sizeof(bpAngle.tooltip) - 1);
+    strncpy(bpAngle.tooltip, "Offset from base angle (deg). Default 360=no offset. Direction Modulation rotates brush along stroke.", sizeof(bpAngle.tooltip) - 1);
     BParam_SetIcon(&bpAngle, "ctlang");
 
     BParam_Init(&bpScaleRel, 41, "Proportion", 0.0f, 1.0f, 0.8f);
