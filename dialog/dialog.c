@@ -114,8 +114,18 @@ static int _sortPath(const void* a, const void* b) {
 static bool _matchExt(const char* path, const char* filter) {
     if (!filter || !filter[0]) return true;
     const char* name = GetFileName(path);
-    size_t nl = strlen(name), fl = strlen(filter);
-    return nl >= fl && strcmp(name + nl - fl, filter) == 0;
+    size_t nl = strlen(name);
+    // Handle multi-extension filters separated by '/'
+    const char* sep = filter;
+    while (*sep) {
+        const char* end = sep;
+        while (*end && *end != '/') end++;
+        size_t fl = (size_t)(end - sep);
+        if (fl > 0 && nl >= fl && strcmp(name + nl - fl, sep) == 0)
+            return true;
+        sep = *end ? end + 1 : end;
+    }
+    return false;
 }
 
 static bool _matchFilter(const char* path, const char* filter) {
@@ -126,6 +136,9 @@ static bool _matchFilter(const char* path, const char* filter) {
 
 static bool _itemVisible(int i) {
     if (DirectoryExists(g_dlg._files.paths[i])) return false;
+    if (g_dlg._filter[0] == '.' && g_dlg.type == 1  // open dialog: filter by extension
+        && !_matchExt(g_dlg._files.paths[i], g_dlg._filter))
+        return false;
     // Text input IS the filter — no separate extension matching
     return _matchFilter(g_dlg._files.paths[i], g_dlg._filterBuf);
 }
