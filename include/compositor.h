@@ -17,7 +17,7 @@ void Compositor_ReloadShader(void);
 
 // Merge top texture into bottom RT. Thin wrapper around QuadApply.
 void Compositor_ApplyLayerToLayer(
-    Texture2D topTex, const RectXform* topXform,
+    RenderTexture2D topRT, const RectXform* topXform,
     const CompositorBlendParams* params,
     RenderTexture2D bottomRT, const RectXform* bottomXform);
 

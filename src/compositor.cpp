@@ -271,12 +271,12 @@ static void Compositor_BlitLayerOnto(
 }
 
 void Compositor_ApplyLayerToLayer(
-    Texture2D topTex, const RectXform* topXform,
+    RenderTexture2D topRT, const RectXform* topXform,
     const CompositorBlendParams* params,
     RenderTexture2D bottomRT, const RectXform* bottomXform)
 {
-    if(topTex.id==0||bottomRT.id==0) return;
-    Quad top   = { *topXform,   RenderTexture2D{0, topTex, {0}} };
+    if(topRT.id==0||bottomRT.id==0) return;
+    Quad top   = { *topXform,   topRT };
     Quad bot   = { *bottomXform, bottomRT };
     Compositor_QuadApply(&top, params, &bot);
 }
