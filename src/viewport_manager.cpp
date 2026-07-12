@@ -151,7 +151,7 @@ void ViewportManager_BlitLayerToLayer(int idx) {
     bp.threshold=top->threshold; bp.feather=top->feather;
     bp.seamless=top->seamless;
 
-    Compositor_ApplyLayerToLayer(topRT.texture, &top->xform, &bp, botRT, &bot->xform);
+    Compositor_ApplyLayerToLayer(topRT, &top->xform, &bp, botRT, &bot->xform);
     ViewportManager_SetDirty();
 }
 
