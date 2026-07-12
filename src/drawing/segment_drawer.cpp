@@ -280,6 +280,18 @@ int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
     float rFrom = seg.brushFrom.rad_out_px;
     float rTo   = seg.brush.rad_out_px;
 
+    // Pixel-perfect: snap start/end radii to integer + parity bias
+    // so spacing is computed from locked diameters, not fractional radius.
+    if (seg.pixelPerfect && seg.ppBias >= 0.0f) {
+        auto snapRad = [&](float r) {
+            int ip = (int)fmaxf(0.5f, r);
+            if (seg.ppBias == 0.0f && ip < 1) ip = 1;
+            return (float)ip + seg.ppBias;
+        };
+        rFrom = snapRad(rFrom);
+        rTo   = snapRad(rTo);
+    }
+
     // Pre-compute curve polyline (65 points for 64 subdivisions)
     Vector2 curvePts[65];
     float totalLen = stdist;
