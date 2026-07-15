@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <time.h>
 #include <stdarg.h>
+#include <math.h>
 
 typedef struct {
     int type;
@@ -49,6 +50,8 @@ typedef struct {
     float repeatTimer;
     int _btnCount;
     char _btnLabels[8][64];
+    Texture2D _previewTex;
+    char _previewPath[DIALOG_PATH_MAX];
 } DialogState;
 
 static DialogState g_dlg = {0};
@@ -64,6 +67,7 @@ static DialogState g_dlg = {0};
 #define SCROLL_W    12
 #define LEFT_PANE  260
 #define DBLCK_TIME   0.3
+#define PREVIEW_W  180
 
 static Color _overlay = {  0,  0,  0,120};
 static Color _winBg   = {240,240,240,255};
@@ -160,7 +164,36 @@ static int _visCount(void) {
     return c;
 }
 
+static void _unloadPreview(void) {
+    if (g_dlg._previewTex.id > 0) { UnloadTexture(g_dlg._previewTex); g_dlg._previewTex = (Texture2D){0}; }
+    g_dlg._previewPath[0] = '\0';
+}
+
+static void _loadPreview(const char* path) {
+    _unloadPreview();
+    if (!path || !path[0]) return;
+    const char* ext = GetFileExtension(path);
+    if (!ext || strcmp(ext, ".png") != 0) return;
+
+    Image img = LoadImage(path);
+    if (!img.data) return;
+
+    int maxH = 300;
+    float scale = fminf(PREVIEW_W / (float)img.width, maxH / (float)img.height);
+    if (scale < 1.0f) {
+        int nw = (int)(img.width * scale);
+        int nh = (int)(img.height * scale);
+        if (nw < 1) nw = 1; if (nh < 1) nh = 1;
+        ImageResize(&img, nw, nh);
+    }
+
+    g_dlg._previewTex = LoadTextureFromImage(img);
+    UnloadImage(img);
+    g_dlg._previewPath[0] = '\0';
+}
+
 static void _loadDir(void) {
+    _unloadPreview();
     if (g_dlg._files.paths) { UnloadDirectoryFiles(g_dlg._files); g_dlg._files.paths = NULL; }
     g_dlg._files = LoadDirectoryFilesEx(g_dlg._currentDir, "*.*", false);
     _sortCol = g_dlg._sortColumn;
@@ -225,6 +258,7 @@ static DialogResult _makeResult(void) {
 }
 
 static void _closeOk(const char* path) {
+    _unloadPreview();
     DialogResult r = _makeResult(); r.success = true;
     snprintf(r.output, DIALOG_PATH_MAX, "%s", path);
     g_dlg.type = 0;
@@ -232,6 +266,7 @@ static void _closeOk(const char* path) {
 }
 
 static void _closeCancel(void) {
+    _unloadPreview();
     DialogResult r = _makeResult(); g_dlg.type = 0;
     if (g_dlg._callback) g_dlg._callback(r);
 }
@@ -503,12 +538,14 @@ static void _drawRightPane(Rectangle a) {
         if (IsKeyPressed(KEY_DOWN) && g_dlg._selectedIndex < tv-1) {
             g_dlg._selectedIndex++;
             _visPath(g_dlg._selectedIndex, g_dlg._pathPreview, DIALOG_PATH_MAX);
+            _loadPreview(g_dlg._pathPreview);
             int sy = g_dlg._selectedIndex * ITEM_H - g_dlg._scrollOffset;
             if (sy + ITEM_H > viewH) g_dlg._scrollOffset = g_dlg._selectedIndex * ITEM_H - viewH + ITEM_H;
         }
         if (IsKeyPressed(KEY_UP) && g_dlg._selectedIndex > 0) {
             g_dlg._selectedIndex--;
             _visPath(g_dlg._selectedIndex, g_dlg._pathPreview, DIALOG_PATH_MAX);
+            _loadPreview(g_dlg._pathPreview);
             int sy = g_dlg._selectedIndex * ITEM_H - g_dlg._scrollOffset;
             if (sy < 0) g_dlg._scrollOffset = g_dlg._selectedIndex * ITEM_H;
         }
@@ -547,6 +584,7 @@ static void _drawRightPane(Rectangle a) {
                 }
                 g_dlg._selectedIndex = vi;
                 _visPath(vi, g_dlg._pathPreview, DIALOG_PATH_MAX);
+                _loadPreview(g_dlg._pathPreview);
                 if (g_dlg.type == 2 && g_dlg._pathPreview[0]) {
                     snprintf(g_dlg._textInput, DIALOG_PATH_MAX, "%s",
                              GetFileName(g_dlg._pathPreview));
@@ -622,8 +660,28 @@ static void _drawFileDialog(void) {
     DrawLine(wx+LEFT_PANE, contentY, wx+LEFT_PANE, contentY+contentH, _border);
 
     Rectangle rightR = {(float)(wx+LEFT_PANE+1), (float)contentY,
-                        (float)(winW-LEFT_PANE-3), (float)contentH};
+                        (float)(winW-LEFT_PANE-3-PREVIEW_W), (float)contentH};
     _drawRightPane(rightR);
+
+    // Preview area on the right
+    float prevX = rightR.x + rightR.width + 1;
+    Rectangle prevR = {(float)prevX, (float)contentY, (float)(PREVIEW_W-2), (float)contentH};
+    DrawRectangleLinesEx(prevR, 1, _border);
+    if (g_dlg._previewTex.id > 0) {
+        float psx = (float)g_dlg._previewTex.width;
+        float psy = (float)g_dlg._previewTex.height;
+        float sc = fminf((prevR.width-4)/psx, (prevR.height-4)/psy);
+        float dw = psx * sc, dh = psy * sc;
+        float dx = prevR.x + (prevR.width-dw)*0.5f;
+        float dy = prevR.y + (prevR.height-dh)*0.5f;
+        DrawTexturePro(g_dlg._previewTex,
+            (Rectangle){0,0,psx,psy},
+            (Rectangle){dx,dy,dw,dh},
+            (Vector2){0,0}, 0, WHITE);
+    } else if (g_dlg._pathPreview[0]) {
+        _drawText(g_dlg._font, "No preview", (int)prevR.x+6, (int)(prevR.y+prevR.height*0.5f-g_dlg._fontSize*0.5f),
+                  g_dlg._fontSize, _textDim);
+    }
 
     int pathY = contentY + contentH + 2;
     DrawLine(wx, pathY, wx+winW, pathY, _border);
