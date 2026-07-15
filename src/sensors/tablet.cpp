@@ -8,7 +8,7 @@ static int  g_tabletButtons = 0;
 
 bool Tablet_Init(void* nativeWindow) {
     g_tabletOn = TabletPlatform_Init(nativeWindow);
-    g_modPars.Pars[csPressure] = 1.0f;
+    Modulator_Set(csPressure, 1.0f);
     return true;
 }
 
@@ -37,11 +37,11 @@ void Tablet_UpdateModulators(void) {
     g_tabletWasTouching = state.touching;
     g_tabletButtons = state.buttons;
 
-    g_modPars.Pars[csPressure] = state.pressure;
-    g_modPars.Pars[csRot]     = state.rotation;
-    g_modPars.Pars[csTilt]    = state.tiltX;
-    g_modPars.Pars[csHtilt]   = state.tiltX;
-    g_modPars.Pars[csVtilt]   = state.tiltY;
-    g_modPars.Pars[csXtilt]   = state.tiltX;
-    g_modPars.Pars[csYtilt]   = state.tiltY;
+    Modulator_Set(csPressure, state.pressure);
+    Modulator_Set(csRot, state.rotation);
+    Modulator_Set(csTilt, state.tiltX);
+    Modulator_Set(csHtilt, state.tiltX);
+    Modulator_Set(csVtilt, state.tiltY);
+    Modulator_Set(csXtilt, state.tiltX);
+    Modulator_Set(csYtilt, state.tiltY);
 }

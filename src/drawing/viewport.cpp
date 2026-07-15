@@ -37,7 +37,8 @@ static void FillBeginEntry(InputEntry& be, AppState* state, int toolMode,
 static void PushDabSegment(ICommandBroker* b, float x, float y, float srcX, float srcY, const d_RealBrush& brush, int toolMode) {
     UserBrushConfig cfg;
     CaptureBrushConfig(&cfg);
-    ModulatedBrushConfig mod = ResolveModulatedConfig(cfg, toolMode, 0.0f, g_modPars.Pars);
+    ModulatorTable mt; Modulator_GetTable(&mt);
+    ModulatedBrushConfig mod = ResolveModulatedConfig(cfg, toolMode, 0.0f, &mt);
     DabBrush cb = MakeDabBrush(mod, brush.rad_out);
     SegmentData s; memset(&s, 0, sizeof(s));
     s.pos1 = Vector2{x, y};
@@ -235,10 +236,10 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                 memset(&e, 0, sizeof(e));
                 e.type = InputEntry::Point;
                 e.x = sp.x; e.y = sp.y;
-                e.pressure  = hasTablet ? g_modPars.Pars[csPressure] : 1.0f;
-                e.rotation  = hasTablet ? g_modPars.Pars[csRot]      : 0.5f;
-                e.tiltX     = g_modPars.Pars[csTilt];
-                e.tiltY     = g_modPars.Pars[csVtilt];
+                e.pressure  = hasTablet ? Modulator_Get(csPressure) : 1.0f;
+                e.rotation  = hasTablet ? Modulator_Get(csRot)      : 0.5f;
+                e.tiltX     = Modulator_Get(csTilt);
+                e.tiltY     = Modulator_Get(csVtilt);
                 e.velocity  = sp.velocity;
                 e.timestamp = GetTime();
                 g_inputQueue.AddEntry(e);
@@ -248,7 +249,8 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             // Distort / Contrast (existing logic, unchanged)
             UserBrushConfig cfg;
             CaptureBrushConfig(&cfg);
-            float sv = ResolveModulatedConfig(cfg, state->mode, 0.0f, g_modPars.Pars).spacing;
+            ModulatorTable mt; Modulator_GetTable(&mt);
+            float sv = ResolveModulatedConfig(cfg, state->mode, 0.0f, &mt).spacing;
             float scaledRad = state->currentBrush.Realb.rad_out * worldToTexPx;
             float spacing = scaledRad * 2.0f * sv;
             if (spacing < 2.0f) spacing = 2.0f;
@@ -361,6 +363,15 @@ void Viewport_DrawDebugOverlays(Viewport* vp, AppState* state) {
         DrawCircle(vp->strokePts[i].x, vp->strokePts[i].y, 2, GREEN);
 
     DrawText("BLUE=raw input  RED=spline ctrl  YEL/ORG=segEnds  GREEN=dabs (F1 toggle)", 10, 10, 14, WHITE);
+
+    // Modulator debug
+    {
+        char buf[256];
+            snprintf(buf, sizeof(buf), "csDir=%.3f  csIdir=%.3f  csCrv=%.3f  csHVdir=%.3f",
+                Modulator_Get(csDir), Modulator_Get(csIdir),
+                Modulator_Get(csCrv), Modulator_Get(csHVdir));
+        DrawText(buf, 10, 28, 14, YELLOW);
+    }
     EndMode2D();
 }
 

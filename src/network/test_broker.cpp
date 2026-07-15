@@ -54,7 +54,8 @@ void TestBroker::poll(AppState* state) {
         if (rt.id > 0) {
             UserBrushConfig cfg;
             CaptureBrushConfig(&cfg);
-            ModulatedBrushConfig mod = ResolveModulatedConfig(cfg, eBrush, 0.0f, g_modPars.Pars);
+            ModulatorTable mt; Modulator_GetTable(&mt);
+            ModulatedBrushConfig mod = ResolveModulatedConfig(cfg, eBrush, 0.0f, &mt);
             DabBrush cb = MakeDabBrush(mod, d->brush.rad_out);
             Texture2D brushTex = {0};
             bool useTexture = false;

@@ -297,7 +297,8 @@ void UpdateUI(AppState* state) {
     CaptureBrushConfig(&brushCfg);
     brushCfg.toolMode = state->mode;
 
-    ModulatedBrushConfig mod = ResolveModulatedConfig(brushCfg, state->mode, state->initialAngle, g_modPars.Pars);
+    ModulatorTable mt; Modulator_GetTable(&mt);
+    ModulatedBrushConfig mod = ResolveModulatedConfig(brushCfg, state->mode, state->initialAngle, &mt);
 
     state->currentBrush.Realb.rad_out    = mod.radOut;
     state->currentBrush.Realb.radInRatio = mod.radInRatio;

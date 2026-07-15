@@ -5,7 +5,7 @@
 #include "brush_draw.h"
 
 ModulatedBrushConfig ResolveModulatedConfig(const UserBrushConfig& cfg, int toolMode,
-                                             float initAngle, const float modValues[csSTOP]);
+                                             float initAngle, const ModulatorTable* mods);
 ModulatedBrushConfig ResolveModulatedConfigMax(const UserBrushConfig& cfg, int toolMode,
                                                float initAngle);
 DabBrush MakeDabBrush(const ModulatedBrushConfig& mod, const float rad_out_px_override = 0.0f);

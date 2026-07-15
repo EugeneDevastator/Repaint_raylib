@@ -44,6 +44,13 @@ private:
     float m_prevSegLen;
     float m_initDir;
     bool  m_initDirSet;
+    // Direction smoothing: sin/cos EMA accumulator to prevent noise on tiny segments
+    float m_smoothDirSin = 0.0f;
+    float m_smoothDirCos = 1.0f;
+    bool  m_smoothDirValid = false;
+    // Root modulators from previous segment (for SegmentData.fromRoot)
+    RootModulators m_prevRoot;
+    bool m_hasPrevRoot;
 
     int m_processedCount;
 

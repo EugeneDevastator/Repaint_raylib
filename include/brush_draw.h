@@ -5,6 +5,21 @@
 #include "raylib.h"
 #include "texture_manager.h"
 
+// Pure sensor/input modulator values — not composed of anything else.
+// Stored in SegmentData endpoints for inspection and future per-dab use.
+typedef struct RootModulators {
+    float pressure, rotation;     // tablet: 0..1
+    float tiltX, tiltY;           // tablet: -1..1
+    float velocity;               // pen: 0..1
+    float dirX, dirY;             // segment direction (unit vector)
+} RootModulators;
+
+// Full modulation table — RootModulators + derived slots.
+// Built by the emitter per-segment and consumed by ResolveModulatedConfig.
+typedef struct ModulatorTable {
+    float val[25];
+} ModulatorTable;
+
 struct BPConfig {
     float userMax;
     float userMin;
@@ -123,6 +138,9 @@ struct SegmentData {
     uint8_t userTexSlot;
     int dabOffset;
     float initAngle;
+    // Modulation at segment endpoints (informational — DrawLinear does not read)
+    RootModulators fromRoot, toRoot;
+    uint8_t sliderMods[20];  // BParam index → csSlot (modulatorId)
 };
 
 int DrawSegment(const SegmentData& dseg, RenderTexture2D rt, Texture2D brushTex, bool useTexture, bool seamless, int dabOffset, bool pixelPerfect = false);
