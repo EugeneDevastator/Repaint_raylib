@@ -27,31 +27,12 @@ int StrokeThrottle::DrawPending(AppState* state) {
             m_userTexSlot = seg.userTexSlot;
             m_seamless = seg.seamless != 0;
             m_pixelPerfect = seg.pixelPerfect != 0;
-            if (seg.isStrokeStart) { m_hasPrevAngle = false; m_hasPrevSmudge = false; }
-            if (m_hasPrevAngle)
-                seg.brushFrom.resangle = m_lastSegEndAngle;
-
-            if (m_hasPrevSmudge) {
-                seg.smudgeSrcX = m_prevSmudgeSrcX;
-                seg.smudgeSrcY = m_prevSmudgeSrcY;
-            }
+            // Angle/smudge carry-over removed — the emitter already provides
+            // continuous per-segment resangle via m_modulated continuity.
 
             SegResult r;
             m_dabCount = DrawLinear(seg, 0, 0.0f, m_dabBuf, DAB_CAP, &r);
 
-            m_prevSmudgeSrcX = r.lastSmudgeSrc.x;
-            m_prevSmudgeSrcY = r.lastSmudgeSrc.y;
-            m_hasPrevSmudge = m_dabCount > 0;
-
-            if (m_dabCount > 0) {
-                if (!m_hasPrevAngle)
-                    m_dabBuf[0].srcAngle = m_dabBuf[0].brush.resangle;
-                m_lastSegEndAngle = m_dabBuf[m_dabCount - 1].brush.resangle;
-                m_hasPrevAngle = true;
-            }
-
-            if (m_dabCount >= DAB_CAP)
-                printf("[THR] WARNING: dabs hit DAB_CAP (%d)!\n", DAB_CAP);
             m_dabIdx = 0;
             m_segHead = (m_segHead + 1) % SEG_CAP;
         }

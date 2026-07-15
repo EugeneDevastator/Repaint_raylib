@@ -262,7 +262,7 @@ int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
             outPoints[0].srcRad = seg.brushFrom.rad_out_px;
             outPoints[0].srcAngle = seg.brushFrom.resangle;
             outPoints[0].brush = seg.brushFrom;
-            printf("DRAW singleStamp resangle=%.1f  brushFrom.resangle=%.1f\n", outPoints[0].srcAngle, seg.brushFrom.resangle);
+
         }
         res->lastDabPos = Vector2{from.x, from.y};
         res->lastSmudgeSrc = Vector2{from.x, from.y};
@@ -408,7 +408,7 @@ int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
             outPoints[count].srcRad = lastSrcRad;
             outPoints[count].srcAngle = lastSrcAngle;
             outPoints[count].brush = dabCB;
-            if (count == 0) printf("DRAW firstDab resangle=%.1f  brushFrom.resangle=%.1f  brush.resangle=%.1f\n", lastSrcAngle, seg.brushFrom.resangle, seg.brush.resangle);
+
         }
         lastSrcX = pos.x;
         lastSrcY = pos.y;
@@ -472,3 +472,4 @@ void SegDrawer_ComputeSegmentEnd(const SegmentData& seg, int dabOffset, float in
     *outLastPos = r.lastDabPos;
     *outLastRad = r.lastRadOut;
 }
+

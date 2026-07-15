@@ -65,7 +65,7 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
 
     ModulatorTable mt2; Modulator_GetTable(&mt2);
     m_modulated = ResolveModulatedConfig(m_config, e.toolMode, e.initAngle, &mt2);
-    printf("handleBegin csDir=%.4f\n", mt2.val[csDir]);
+
 
     // Pixel-perfect: lock radius parity for entire stroke
     m_ppBias = -1.0f;
@@ -274,7 +274,7 @@ void StrokeEmitter::handlePoint(const InputEntry& e) {
 
             // Flush pending first dab with the segment's direction
             if (m_hasPendingFirstDab) {
-                printf("flush firstDab csDir=%.4f (segment)\n", ft.val[csDir]);
+
                 DabBrush cb = MakeDabBrush(m_modulated, m_brushFrom.rad_out);
                 m_pendingFirstDabSeg.brushFrom = m_pendingFirstDabSeg.brush = cb;
                 m_throttle->Push(m_pendingFirstDabSeg);
@@ -357,7 +357,7 @@ void StrokeEmitter::handleEnd() {
     if (!m_emittedAny) {
         if (m_hasPendingFirstDab) {
             ModulatorTable _mt; Modulator_GetTable(&_mt);
-            printf("flush singleCk csDir=%.4f  initAngle=%.1f  resangle=%.1f\n", _mt.val[csDir], m_pendingFirstDabSeg.initAngle, m_pendingFirstDabSeg.brushFrom.resangle);
+
             m_throttle->Push(m_pendingFirstDabSeg);
             if (g_recorder) g_recorder->on_segment(m_pendingFirstDabSeg);
             if (g_broker)   g_broker->on_segment(m_pendingFirstDabSeg);
@@ -406,3 +406,4 @@ void StrokeEmitter::ProcessInputQueue() {
         }
     }
 }
+

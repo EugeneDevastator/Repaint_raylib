@@ -783,7 +783,6 @@ void App_Draw(AppState* state) {
     UserTexture_Update(state);
 
     // Process user input → segments
-    g_emitter->isFirstDabPainted = false;
     g_emitter->ProcessInputQueue();
 
     // Unpack + render dabs with per-frame pixel budget
