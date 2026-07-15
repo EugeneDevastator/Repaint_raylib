@@ -355,6 +355,14 @@ void Viewport_DrawDebugOverlays(Viewport* vp, AppState* state) {
             DrawCircle(p1.x, p1.y, 2, YELLOW);
             DrawCircle(p2.x, p2.y, 2, ORANGE);
             DrawLineV(p1, p2, (Color){255, 255, 0, 80});
+            // Single-sided tickmark at segment end to show direction
+            float dx = p2.x - p1.x, dy = p2.y - p1.y;
+            float len = sqrtf(dx*dx + dy*dy);
+            if (len > 0.5f) {
+                float tsz = 14.0f;
+                Vector2 tick = {p2.x - dy/len * tsz, p2.y + dx/len * tsz};
+                DrawLineV(p2, tick, MAGENTA);
+            }
         }
     }
 
@@ -362,16 +370,7 @@ void Viewport_DrawDebugOverlays(Viewport* vp, AppState* state) {
     for (int i = 0; i < vp->strokeLen && i < MAX_STROKE_PTS; i++)
         DrawCircle(vp->strokePts[i].x, vp->strokePts[i].y, 2, GREEN);
 
-    DrawText("BLUE=raw input  RED=spline ctrl  YEL/ORG=segEnds  GREEN=dabs (F1 toggle)", 10, 10, 14, WHITE);
-
-    // Modulator debug
-    {
-        char buf[256];
-            snprintf(buf, sizeof(buf), "csDir=%.3f  csIdir=%.3f  csCrv=%.3f  csHVdir=%.3f",
-                Modulator_Get(csDir), Modulator_Get(csIdir),
-                Modulator_Get(csCrv), Modulator_Get(csHVdir));
-        DrawText(buf, 10, 28, 14, YELLOW);
-    }
+    DrawText("BLUE=raw input  RED=spline  YEL/ORG=segment  GREEN=dabs  MAGENTA=perp (F3 toggle)", 10, 10, 14, WHITE);
     EndMode2D();
 }
 

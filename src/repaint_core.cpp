@@ -11,10 +11,7 @@ void PackedFloat_SetVal(PackedFloat* pf, double val) { pf->IntVal=(int16_t)floor
 float Dist2D(Vector2 pos1, Vector2 pos2) { float dx=pos1.x-pos2.x,dy=pos1.y-pos2.y; return sqrtf(dx*dx+dy*dy); }
 
 float AtanXY(float x, float y) {
-    double ang; int sg=-1; if(y>0)sg=1;
-    if(x==0&&y==0)ang=0; else if(x==0)ang=PI/2.0+(sg+1)/2.0*PI;
-    else if(x>0&&y<0)ang=2.0*PI+atanf(y/x); else if(x<0)ang=PI+atanf(y/x); else ang=atanf(y/x);
-    return (float)(ang-PI);
+    return atan2f(y, x);
 }
 
 float RngConv(float inval,float inmin,float inmax,float outmin,float outmax) {

@@ -13,7 +13,6 @@ StrokeEmitter::StrokeEmitter(StrokeThrottle* throttle)
     m_splineCount = 0;
     m_processedCount = 0;
     m_initDirSet = false;
-    m_smoothDirValid = false;
     m_hasPrevRoot = false;
     m_prevSegLen = 0;
     memset(&m_modulated, 0, sizeof(m_modulated));
@@ -57,7 +56,6 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
     m_prevSegLen = 0;
     Modulator_Set(csVel, 0.0f);
     m_initDirSet = false;
-    m_smoothDirValid = false;
     m_hasPrevRoot = false;
     m_splineCount = 1;
     m_processedCount = 0;
@@ -109,8 +107,8 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
 void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 ctrl3,
                                 const d_RealBrush& brush, float initAngle, int toolMode,
                                 const ModulatedBrushConfig& modFrom) {
-    float segDx = p2.x - m_lastDabPos.x;
-    float segDy = p2.y - m_lastDabPos.y;
+    float segDx = p2.x - p1.x;
+    float segDy = p2.y - p1.y;
     float segLen = sqrtf(segDx*segDx + segDy*segDy);
 
     // Build local modulator table — tablet/pen values from Modulator,
@@ -120,17 +118,6 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
 
     if (segLen > 0.5f) {
         float dirAng = AtanXY(segDx, segDy);
-        float alpha = fminf(1.0f, segLen * 0.1f);
-        float s = sinf(dirAng), c = cosf(dirAng);
-        if (!m_smoothDirValid) {
-            m_smoothDirSin = s; m_smoothDirCos = c; m_smoothDirValid = true;
-        } else {
-            m_smoothDirSin = m_smoothDirSin * (1.0f - alpha) + s * alpha;
-            m_smoothDirCos = m_smoothDirCos * (1.0f - alpha) + c * alpha;
-            float len = sqrtf(m_smoothDirSin*m_smoothDirSin + m_smoothDirCos*m_smoothDirCos);
-            if (len > 0.001f) { m_smoothDirSin /= len; m_smoothDirCos /= len; }
-        }
-        dirAng = atan2f(m_smoothDirSin, m_smoothDirCos);
         mt.val[csDir] = RngConv(dirAng, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
     }
     if (!m_initDirSet && segLen > 0.5f) { m_initDir = AtanXY(segDx, segDy); m_initDirSet = true; }
@@ -214,7 +201,7 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
         m_segEndpoints[m_segEpCount++] = dseg.pos1;
         m_segEndpoints[m_segEpCount++] = dseg.pos2;
     }
-    printf("segEnd csDir=%.4f\n", mt.val[csDir]);
+    printf("seg  csDir=%.4f  segDx=%.1f segDy=%.1f  atanXY=%.4f\n", mt.val[csDir], segDx, segDy, AtanXY(segDx, segDy));
 
     m_throttle->Push(dseg);
 
