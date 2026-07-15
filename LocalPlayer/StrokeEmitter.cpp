@@ -54,7 +54,6 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
     m_prevSegPos = start;
     m_prevSegDir = Vector2{0, 0};
     m_prevSegLen = 0;
-    Modulator_Set(csVel, 0.0f);
     m_initDirSet = false;
     m_hasPrevRoot = false;
     m_splineCount = 1;
@@ -101,7 +100,6 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
 
         m_emittedAny = true;
         m_lastDabRad = m_modulated.radOut;
-        printf("FIRST dab csDir=%.4f\n", Modulator_Get(csDir));
     }
 }
 
@@ -136,11 +134,11 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
 
     // Root modulators snapshot for this segment endpoint
     RootModulators root = {};
-    root.pressure = Modulator_Get(csPressure);
-    root.rotation = Modulator_Get(csRot);
-    root.tiltX    = Modulator_Get(csHtilt);
-    root.tiltY    = Modulator_Get(csVtilt);
-    root.velocity = Modulator_Get(csVel);
+    root.pressure = mt.val[csPressure];
+    root.rotation = mt.val[csRot];
+    root.tiltX    = mt.val[csHtilt];
+    root.tiltY    = mt.val[csVtilt];
+    root.velocity = mt.val[csVel];
     if (segLen > 0.001f) {
         root.dirX = segDx / segLen;
         root.dirY = segDy / segLen;
@@ -224,15 +222,6 @@ void StrokeEmitter::handlePoint(const InputEntry& e) {
     float* m = m_destXform.mat;
     Vector2 pos = {e.x * m[0] + e.y * m[1] + m[2],
                    e.x * m[3] + e.y * m[4] + m[5]};
-    Modulator_Set(csPressure, e.pressure);
-    Modulator_Set(csRot, e.rotation);
-    Modulator_Set(csTilt, e.tiltX);
-    Modulator_Set(csHtilt, e.tiltX);
-    Modulator_Set(csVtilt, e.tiltY);
-    Modulator_Set(csXtilt, e.tiltX);
-    Modulator_Set(csYtilt, e.tiltY);
-
-    Modulator_Set(csVel, e.velocity);
 
     ModulatorTable mt2; Modulator_GetTable(&mt2);
     ModulatedBrushConfig modNow = ResolveModulatedConfig(m_config, m_toolMode, m_initAngle, &mt2);
@@ -286,7 +275,6 @@ void StrokeEmitter::handlePoint(const InputEntry& e) {
             ft.val[csDir] = RngConv(dirAng, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
             ft.val[csIdir] = ft.val[csDir];
             m_modulated = ResolveModulatedConfig(m_config, m_toolMode, m_initAngle, &ft);
-            printf("FIRST seg  csDir=%.4f\n", ft.val[csDir]);
         }
     }
 

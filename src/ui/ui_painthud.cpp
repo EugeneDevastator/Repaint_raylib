@@ -1,6 +1,7 @@
 #include "repaint.h"
 #include "rlgl.h"
 #include "external/glad.h"
+#include "input_modulator.h"
 #include <math.h>
 
 void PaintHudModule::DrawGL(const DrawRect& rect) {
@@ -53,7 +54,8 @@ void PaintHudModule::DrawGL(const DrawRect& rect) {
         DrawCircleLinesV(cp, r, WHITE);
 
         // Direction indicator: "L" shape outward at the direction angle
-        float dirF = Modulator_Get(csDir);
+        ModulatorTable _mt; InputModulator_GetAllSnapshot(&_mt);
+        float dirF = _mt.val[csDir];
         float dirAng = dirF * (float)(M_PI * 2.0) - (float)M_PI;
         float cosA = cosf(dirAng), sinA = sinf(dirAng);
         float armExt = 10.0f;                       // extension past the ring

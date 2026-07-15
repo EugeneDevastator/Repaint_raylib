@@ -2,6 +2,7 @@
 #include "repaint.h"
 #include "replay_recorder.h"
 #include "stroke_engine.h"
+#include "input_modulator.h"
 #include <math.h>
 #include <string.h>
 
@@ -160,8 +161,6 @@ int StrokeEngine_GeneratePreviewDabs(const d_RealBrush* baseBrush, int toolMode,
     float dirLen = sqrtf(dirX * dirX + dirY * dirY);
     dirX /= dirLen; dirY /= dirLen;
 
-    ModulatorTable saved; Modulator_GetTable(&saved);
-
     cfg.bmidx          = baseBrush->bmidx;
     cfg.texBlendMode   = baseBrush->texBlendMode;
     cfg.texNoisemode   = baseBrush->texNoisemode;
@@ -188,9 +187,9 @@ int StrokeEngine_GeneratePreviewDabs(const d_RealBrush* baseBrush, int toolMode,
     float endDir   = DirAng(end.x - c3.x, end.y - c3.y);
 
     // Main brush (start of curve)
-    Modulator_Set(csDir, RngConv(startDir, -(float)M_PI, (float)M_PI, 0.0f, 1.0f));
-    Modulator_Set(csIdir, Modulator_Get(csDir));
-    ModulatorTable mt; Modulator_GetTable(&mt);
+    ModulatorTable mt; InputModulator_GetAllSnapshot(&mt);
+    mt.val[csDir] = RngConv(startDir, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
+    mt.val[csIdir] = mt.val[csDir];
     ModulatedBrushConfig mod = ResolveModulatedConfig(cfg, toolMode, initialAngle, &mt);
     float spacingVal = mod.spacing;
     mod.radOut *= WORLD_UNIT_PX;
@@ -199,10 +198,9 @@ int StrokeEngine_GeneratePreviewDabs(const d_RealBrush* baseBrush, int toolMode,
     DabBrush cbFull = MakeDabBrush(mod, mod.radOut);
 
     // End brush (1px, with end-direction angle)
-    Modulator_Set(csDir, RngConv(endDir, -(float)M_PI, (float)M_PI, 0.0f, 1.0f));
-    Modulator_Set(csIdir, Modulator_Get(csDir));
-    ModulatorTable mt2; Modulator_GetTable(&mt2);
-    ModulatedBrushConfig modEnd = ResolveModulatedConfig(cfg, toolMode, initialAngle, &mt2);
+    mt.val[csDir] = RngConv(endDir, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
+    mt.val[csIdir] = mt.val[csDir];
+    ModulatedBrushConfig modEnd = ResolveModulatedConfig(cfg, toolMode, initialAngle, &mt);
     modEnd.radOut = 1.0f;
     DabBrush cbTiny = MakeDabBrush(modEnd, 1.0f);
 
@@ -279,7 +277,6 @@ int StrokeEngine_GeneratePreviewDabs(const d_RealBrush* baseBrush, int toolMode,
         }
     }
 
-    Modulator_Restore(&saved);
     return total;
 }
 

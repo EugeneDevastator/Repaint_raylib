@@ -1,4 +1,7 @@
 #include "repaint.h"
+#include "input_modulator.h"
+#include "raylib.h"
+#include "brush_draw.h"
 #include "raylib.h"
 #include "brush_draw.h"
 
@@ -23,64 +26,21 @@ BParam bpPower;
 BParam bpPerspective;
 BParam bpFocalOffset;
 
-static ModulatorTable g_mods;
-
 void Modulator_Init(void) {
-    for (int i = 0; i < 25; i++) g_mods.val[i] = 1.0f;
-    g_mods.val[csDir]    = 0.5f;
-    g_mods.val[csIdir]   = 0.5f;
-    g_mods.val[csCrv]    = 1.0f;
-    g_mods.val[csAcc]    = 1.0f;
-    g_mods.val[csLenpx]  = 1.0f;
-    g_mods.val[csHVdir]  = 0.5f;
-    g_mods.val[csRot]    = 0.5f;
-    g_mods.val[csTilt]   = 0.5f;
-    g_mods.val[csRelang] = 0.5f;
-    g_mods.val[csHtilt]  = 0.5f;
-    g_mods.val[csVtilt]  = 0.5f;
-    g_mods.val[csXtilt]  = 0.5f;
-    g_mods.val[csYtilt]  = 0.5f;
-    g_mods.val[csPressure] = 1.0f;
-    g_mods.val[csHVrot]  = 0.5f;
-}
-
-void Modulator_Set(int slot, float val) {
-    g_mods.val[slot] = val;
-}
-
-float Modulator_Get(int slot) {
-    return g_mods.val[slot];
+    InputModulator_Init();
 }
 
 void Modulator_GetTable(ModulatorTable* out) {
-    memcpy(out->val, g_mods.val, sizeof(g_mods.val));
-}
-
-RootModulators Modulator_SnapRoot(void) {
-    RootModulators r = {};
-    r.pressure = g_mods.val[csPressure];
-    r.rotation = g_mods.val[csRot];
-    r.tiltX    = g_mods.val[csHtilt];
-    r.tiltY    = g_mods.val[csVtilt];
-    r.velocity = g_mods.val[csVel];
-    // dirX/dirY not stored globally — caller must provide
-    return r;
+    InputModulator_GetAllSnapshot(out);
 }
 
 void Modulator_ResetStroke(void) {
-    g_mods.val[csDir]    = 0.5f;
-    g_mods.val[csIdir]   = 0.5f;
-    g_mods.val[csCrv]    = 0.5f;
-    g_mods.val[csAcc]    = 1.0f;
-    g_mods.val[csLenpx]  = 1.0f;
-    g_mods.val[csHVdir]  = 0.5f;
-    g_mods.val[csRelang] = 0.5f;
-    g_mods.val[csVel]    = 1.0f;
-    g_mods.val[csPressure] = 1.0f;
+    // Derived slots only — root values are managed by InputModulator
 }
 
 void Modulator_Restore(const ModulatorTable* saved) {
-    memcpy(g_mods.val, saved->val, sizeof(g_mods.val));
+    // No-op: Modulator_GetTable now returns snapshots, not mutable global state
+    (void)saved;
 }
 
 void Modulators_Init(void) {

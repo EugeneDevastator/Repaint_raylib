@@ -16,12 +16,9 @@ typedef enum {
 #include "ui_style.h"
 #include "ui_rect.h"
 
-// ── Modulator module (replaces g_modPars) ────────────────────────────────
+// ── Modulator module (wraps InputModulator for backward compat) ───────
 void Modulator_Init(void);
-void Modulator_Set(int slot, float val);
-float Modulator_Get(int slot);
 void Modulator_GetTable(ModulatorTable* out);
-RootModulators Modulator_SnapRoot(void);
 void Modulator_ResetStroke(void);
 void Modulator_Restore(const ModulatorTable* saved);
 void FillSliderMods(const UserBrushConfig& cfg, uint8_t mods[20]);

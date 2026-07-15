@@ -4,6 +4,7 @@
 #include "layerstack.h"
 #include "rlgl.h"
 #include "stroke_engine.h"
+#include "input_modulator.h"
 #include "StrokeEmitter.h"
 #include "InputQueue.h"
 #include "tablet_platform.h"
@@ -126,6 +127,9 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
 
     Vector2 canvasPos = GetScreenToWorld2D(mousePos, state->camera);
 
+    // Feed current mouse position to InputModulator (direction/velocity tracking)
+    InputModulator_Update(canvasPos.x, canvasPos.y, GetTime());
+
     // Suppress normal painting while in layer transform mode, crop framing mode, or space-panning
     if (g_activeHud == HUD_LAYER_XFORM || state->framingMode == FRAME_CROP || spaceHeld) return;
 
@@ -231,16 +235,10 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             for (int i = 0; i < n; i++) {
                 Vector2 screenPos = {mouseBuf[i*2], mouseBuf[i*2+1]};
                 Vector2 worldPos = GetScreenToWorld2D(screenPos, state->camera);
-                StrokePoint sp = vp->inputFilter.Feed(worldPos.x, worldPos.y, GetTime());
                 InputEntry e;
                 memset(&e, 0, sizeof(e));
                 e.type = InputEntry::Point;
-                e.x = sp.x; e.y = sp.y;
-                e.pressure  = hasTablet ? Modulator_Get(csPressure) : 1.0f;
-                e.rotation  = hasTablet ? Modulator_Get(csRot)      : 0.5f;
-                e.tiltX     = Modulator_Get(csTilt);
-                e.tiltY     = Modulator_Get(csVtilt);
-                e.velocity  = sp.velocity;
+                e.x = worldPos.x; e.y = worldPos.y;
                 e.timestamp = GetTime();
                 g_inputQueue.AddEntry(e);
             }
@@ -314,7 +312,6 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     memset(&pe, 0, sizeof(pe));
                     pe.type = InputEntry::Point;
                     pe.x = pts[i].x; pe.y = pts[i].y;
-                    pe.pressure = 1.0f; pe.rotation = 0.5f;
                     pe.timestamp = GetTime();
                     g_inputQueue.AddEntry(pe);
                 }

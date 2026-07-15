@@ -6,14 +6,18 @@ static bool g_tabletOn = false;
 static bool g_tabletWasTouching = false;
 static int  g_tabletButtons = 0;
 
+// Last polled state — consumed by InputModulator
+static TabletState g_lastTabletState = {};
+
 bool Tablet_Init(void* nativeWindow) {
     g_tabletOn = TabletPlatform_Init(nativeWindow);
-    Modulator_Set(csPressure, 1.0f);
     return true;
 }
 
 bool Tablet_WasTouching(void) { return g_tabletWasTouching; }
 int  Tablet_GetButtons(void)  { return g_tabletButtons; }
+bool Tablet_IsOn(void)        { return g_tabletOn; }
+TabletState Tablet_GetLastState(void) { return g_lastTabletState; }
 
 void Tablet_Shutdown(void) {
     if (g_tabletOn)
@@ -36,12 +40,5 @@ void Tablet_UpdateModulators(void) {
 
     g_tabletWasTouching = state.touching;
     g_tabletButtons = state.buttons;
-
-    Modulator_Set(csPressure, state.pressure);
-    Modulator_Set(csRot, state.rotation);
-    Modulator_Set(csTilt, state.tiltX);
-    Modulator_Set(csHtilt, state.tiltX);
-    Modulator_Set(csVtilt, state.tiltY);
-    Modulator_Set(csXtilt, state.tiltX);
-    Modulator_Set(csYtilt, state.tiltY);
+    g_lastTabletState = state;
 }
