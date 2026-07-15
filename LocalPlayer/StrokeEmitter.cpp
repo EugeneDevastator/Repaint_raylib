@@ -101,6 +101,7 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
 
         m_emittedAny = true;
         m_lastDabRad = m_modulated.radOut;
+        printf("FIRST dab csDir=%.4f\n", Modulator_Get(csDir));
     }
 }
 
@@ -273,6 +274,22 @@ void StrokeEmitter::handlePoint(const InputEntry& e) {
     }
 
     int N = m_splineCount;
+
+    // First real segment: correct modFrom to prevent stale csDir propagation
+    if (m_processedCount == 0 && N >= 3) {
+        Vector2 firstDx = {m_splinePts[1].x - m_splinePts[0].x,
+                           m_splinePts[1].y - m_splinePts[0].y};
+        float firstLen = sqrtf(firstDx.x*firstDx.x + firstDx.y*firstDx.y);
+        if (firstLen > 0.5f) {
+            ModulatorTable ft; Modulator_GetTable(&ft);
+            float dirAng = DirAng(firstDx.x, firstDx.y);
+            ft.val[csDir] = RngConv(dirAng, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
+            ft.val[csIdir] = ft.val[csDir];
+            m_modulated = ResolveModulatedConfig(m_config, m_toolMode, m_initAngle, &ft);
+            printf("FIRST seg  csDir=%.4f\n", ft.val[csDir]);
+        }
+    }
+
     for (int seg = m_processedCount; seg <= N - 3; seg++) {
         Vector2 p0, p1, p2, p3;
         if (seg == 0) {
