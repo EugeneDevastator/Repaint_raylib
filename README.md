@@ -8,12 +8,9 @@ Repaint is free painting tool
 
 **It will remain such as long as i'm alive.**
 
-
-Please support me:
-
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/F1F61TNO40)
 ### [Join Discord Channel](https://discord.gg/HtCvjPKybhttps://discord.gg/HtCvjPKyb)
-
+### [Watch Tutorials](https://www.youtube.com/watch?v=qVigkCdcksU&list=PLbvqc9wW3qag)
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/F1F61TNO40)
 # Releases:
 Here are most recent working releases from the main.
 | Platform | Download |
