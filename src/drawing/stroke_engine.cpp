@@ -184,8 +184,8 @@ int StrokeEngine_GeneratePreviewDabs(const d_RealBrush* baseBrush, int toolMode,
     Vector2 c3 = {mid.x - perpX, mid.y - perpY};
 
     // Direction at curve start and end — so modulation (esp. angle) follows the stroke
-    float startDir = AtanXY(c0.x - start.x, c0.y - start.y);
-    float endDir   = AtanXY(end.x - c3.x, end.y - c3.y);
+    float startDir = DirAng(c0.x - start.x, c0.y - start.y);
+    float endDir   = DirAng(end.x - c3.x, end.y - c3.y);
 
     // Main brush (start of curve)
     Modulator_Set(csDir, RngConv(startDir, -(float)M_PI, (float)M_PI, 0.0f, 1.0f));
@@ -264,7 +264,7 @@ int StrokeEngine_GeneratePreviewDabs(const d_RealBrush* baseBrush, int toolMode,
         float dy = pt.y - outBuf[i-1].y;
         float len = sqrtf(dx*dx + dy*dy);
         if (len > 0.001f) {
-            float dirAng = AtanXY(dx, dy);
+            float dirAng = DirAng(dx, dy);
             float dirVal = RngConv(dirAng, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
             // Compute angle modulation using the same formula as ResolveModulatedConfig
             float cpar = (cfg.angle.modulatorId >= 0 && cfg.angle.modulatorId < csSTOP)

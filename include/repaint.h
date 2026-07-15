@@ -72,7 +72,6 @@ typedef enum {
 typedef struct { int16_t IntVal; uint8_t FVal; } PackedFloat;
 typedef struct { PackedFloat xpos, ypos; } d_PointF;
 typedef struct { d_PointF packpos1, packpos2; Vector2 pos1,pos2,pos3,pos4; } d_Stroke;
-typedef struct { float Pars[25]; } d_StrokePars;
 typedef struct { float basemax,basemin,clipmax,clipmin,crv,outmax,outmin; } cParam;
 
 typedef struct {
@@ -216,7 +215,7 @@ struct AppState {
 float PackedFloat_GetVal(PackedFloat* pf);
 void PackedFloat_SetVal(PackedFloat* pf, double val);
 float Dist2D(Vector2 pos1, Vector2 pos2);
-float AtanXY(float x, float y);
+float DirAng(float x, float y);
 float RngConv(float inval, float inmin, float inmax, float outmin, float outmax);
 
 // Document operations

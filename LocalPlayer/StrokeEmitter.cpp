@@ -117,10 +117,10 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
     Modulator_GetTable(&mt);
 
     if (segLen > 0.5f) {
-        float dirAng = AtanXY(segDx, segDy);
+        float dirAng = DirAng(segDx, segDy);
         mt.val[csDir] = RngConv(dirAng, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
     }
-    if (!m_initDirSet && segLen > 0.5f) { m_initDir = AtanXY(segDx, segDy); m_initDirSet = true; }
+    if (!m_initDirSet && segLen > 0.5f) { m_initDir = DirAng(segDx, segDy); m_initDirSet = true; }
     mt.val[csIdir] = RngConv(m_initDir, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
     if (m_prevSegLen > 0.5f && segLen > 0.5f) {
         float dot = (m_prevSegDir.x*segDx + m_prevSegDir.y*segDy) / (m_prevSegLen*segLen);
@@ -201,7 +201,6 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
         m_segEndpoints[m_segEpCount++] = dseg.pos1;
         m_segEndpoints[m_segEpCount++] = dseg.pos2;
     }
-    printf("seg  csDir=%.4f  segDx=%.1f segDy=%.1f  atanXY=%.4f\n", mt.val[csDir], segDx, segDy, AtanXY(segDx, segDy));
 
     m_throttle->Push(dseg);
 

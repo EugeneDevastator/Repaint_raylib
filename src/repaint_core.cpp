@@ -10,7 +10,7 @@ void PackedFloat_SetVal(PackedFloat* pf, double val) { pf->IntVal=(int16_t)floor
 
 float Dist2D(Vector2 pos1, Vector2 pos2) { float dx=pos1.x-pos2.x,dy=pos1.y-pos2.y; return sqrtf(dx*dx+dy*dy); }
 
-float AtanXY(float x, float y) {
+float DirAng(float x, float y) {
     return atan2f(y, x);
 }
 
