@@ -44,6 +44,9 @@ private:
     float m_prevSegLen;
     float m_initDir;
     bool  m_initDirSet;
+    // Pending first dab (deferred from handleBegin — direction resolved later)
+    bool m_hasPendingFirstDab;
+    SegmentData m_pendingFirstDabSeg;
     // Root modulators from previous segment (for SegmentData.fromRoot)
     RootModulators m_prevRoot;
     bool m_hasPrevRoot;

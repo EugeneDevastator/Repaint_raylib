@@ -55,6 +55,7 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
     m_prevSegDir = Vector2{0, 0};
     m_prevSegLen = 0;
     m_initDirSet = false;
+    m_hasPendingFirstDab = false;
     m_hasPrevRoot = false;
     m_splineCount = 1;
     m_processedCount = 0;
@@ -64,6 +65,7 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
 
     ModulatorTable mt2; Modulator_GetTable(&mt2);
     m_modulated = ResolveModulatedConfig(m_config, e.toolMode, e.initAngle, &mt2);
+    printf("handleBegin csDir=%.4f\n", mt2.val[csDir]);
 
     // Pixel-perfect: lock radius parity for entire stroke
     m_ppBias = -1.0f;
@@ -76,29 +78,23 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
 
     if (isFirstDabPainted) {
         DabBrush cb = MakeDabBrush(m_modulated, m_brushFrom.rad_out);
-        SegmentData dseg;
-        memset(&dseg, 0, sizeof(dseg));
-        dseg.pos1 = dseg.pos2 = start;
-        dseg.ctrl0 = dseg.ctrl3 = dseg.pos1;
-        dseg.brushFrom = dseg.brush = cb;
-        dseg.tool     = eSingleStamp;
-        dseg.seamless = g_seamlessPaint ? 1 : 0;
-        dseg.pixelPerfect = g_pixelPerfect ? 1 : 0;
-        dseg.ppBias   = m_ppBias;
-        dseg.seed     = e.brush.seed;
-        dseg.smudgeSrcX = start.x;
-        dseg.smudgeSrcY = start.y;
-        dseg.targetSlot = m_targetSlot;
-        dseg.userTexBucket = m_userTexBucket;
-        dseg.userTexSlot = m_userTexSlot;
-        dseg.dabOffset  = 0;
-        dseg.initAngle  = e.initAngle;
-
-        m_throttle->Push(dseg);
-        if (g_recorder) g_recorder->on_segment(dseg);
-        if (g_broker)   g_broker->on_segment(dseg);
-
-        m_emittedAny = true;
+        memset(&m_pendingFirstDabSeg, 0, sizeof(m_pendingFirstDabSeg));
+        m_pendingFirstDabSeg.pos1 = m_pendingFirstDabSeg.pos2 = start;
+        m_pendingFirstDabSeg.ctrl0 = m_pendingFirstDabSeg.ctrl3 = m_pendingFirstDabSeg.pos1;
+        m_pendingFirstDabSeg.brushFrom = m_pendingFirstDabSeg.brush = cb;
+        m_pendingFirstDabSeg.tool     = eSingleStamp;
+        m_pendingFirstDabSeg.seamless = g_seamlessPaint ? 1 : 0;
+        m_pendingFirstDabSeg.pixelPerfect = g_pixelPerfect ? 1 : 0;
+        m_pendingFirstDabSeg.ppBias   = m_ppBias;
+        m_pendingFirstDabSeg.seed     = e.brush.seed;
+        m_pendingFirstDabSeg.smudgeSrcX = start.x;
+        m_pendingFirstDabSeg.smudgeSrcY = start.y;
+        m_pendingFirstDabSeg.targetSlot = m_targetSlot;
+        m_pendingFirstDabSeg.userTexBucket = m_userTexBucket;
+        m_pendingFirstDabSeg.userTexSlot = m_userTexSlot;
+        m_pendingFirstDabSeg.dabOffset  = 0;
+        m_pendingFirstDabSeg.initAngle  = e.initAngle;
+        m_hasPendingFirstDab = true;
         m_lastDabRad = m_modulated.radOut;
     }
 }
@@ -264,7 +260,7 @@ void StrokeEmitter::handlePoint(const InputEntry& e) {
 
     int N = m_splineCount;
 
-    // First real segment: correct modFrom to prevent stale csDir propagation
+    // First real segment: correct modFrom and flush pending first dab
     if (m_processedCount == 0 && N >= 3) {
         Vector2 firstDx = {m_splinePts[1].x - m_splinePts[0].x,
                            m_splinePts[1].y - m_splinePts[0].y};
@@ -275,6 +271,18 @@ void StrokeEmitter::handlePoint(const InputEntry& e) {
             ft.val[csDir] = RngConv(dirAng, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
             ft.val[csIdir] = ft.val[csDir];
             m_modulated = ResolveModulatedConfig(m_config, m_toolMode, m_initAngle, &ft);
+
+            // Flush pending first dab with the segment's direction
+            if (m_hasPendingFirstDab) {
+                printf("flush firstDab csDir=%.4f (segment)\n", ft.val[csDir]);
+                DabBrush cb = MakeDabBrush(m_modulated, m_brushFrom.rad_out);
+                m_pendingFirstDabSeg.brushFrom = m_pendingFirstDabSeg.brush = cb;
+                m_throttle->Push(m_pendingFirstDabSeg);
+                if (g_recorder) g_recorder->on_segment(m_pendingFirstDabSeg);
+                if (g_broker)   g_broker->on_segment(m_pendingFirstDabSeg);
+                m_hasPendingFirstDab = false;
+                m_emittedAny = true;
+            }
         }
     }
 
@@ -347,28 +355,36 @@ void StrokeEmitter::handleEnd() {
     flushSmoothing(m_brushFrom, m_initAngle, m_toolMode);
 
     if (!m_emittedAny) {
-        DabBrush cb = MakeDabBrush(m_modulated, m_brushFrom.rad_out);
-    SegmentData dseg;
-        memset(&dseg, 0, sizeof(dseg));
-        dseg.pos1 = dseg.pos2 = m_lastDabPos;
-        dseg.ctrl0 = dseg.ctrl3 = dseg.pos1;
-        dseg.brushFrom = dseg.brush = cb;
-        dseg.tool = eSingleStamp;
-        dseg.seamless = g_seamlessPaint ? 1 : 0;
-        dseg.pixelPerfect = g_pixelPerfect ? 1 : 0;
-        dseg.ppBias   = m_ppBias;
-        dseg.seed = m_seed;
-        dseg.smudgeSrcX = m_lastDabPos.x;
-        dseg.smudgeSrcY = m_lastDabPos.y;
-        dseg.targetSlot = m_targetSlot;
-        dseg.userTexBucket = m_userTexBucket;
-        dseg.userTexSlot = m_userTexSlot;
-        dseg.dabOffset  = 0;
-        dseg.initAngle  = m_initAngle;
-
-        m_throttle->Push(dseg);
-        if (g_recorder) g_recorder->on_segment(dseg);
-        if (g_broker) g_broker->on_segment(dseg);
+        if (m_hasPendingFirstDab) {
+            ModulatorTable _mt; Modulator_GetTable(&_mt);
+            printf("flush singleCk csDir=%.4f  initAngle=%.1f  resangle=%.1f\n", _mt.val[csDir], m_pendingFirstDabSeg.initAngle, m_pendingFirstDabSeg.brushFrom.resangle);
+            m_throttle->Push(m_pendingFirstDabSeg);
+            if (g_recorder) g_recorder->on_segment(m_pendingFirstDabSeg);
+            if (g_broker)   g_broker->on_segment(m_pendingFirstDabSeg);
+            m_hasPendingFirstDab = false;
+        } else {
+            DabBrush cb = MakeDabBrush(m_modulated, m_brushFrom.rad_out);
+            SegmentData dseg;
+            memset(&dseg, 0, sizeof(dseg));
+            dseg.pos1 = dseg.pos2 = m_lastDabPos;
+            dseg.ctrl0 = dseg.ctrl3 = dseg.pos1;
+            dseg.brushFrom = dseg.brush = cb;
+            dseg.tool = eSingleStamp;
+            dseg.seamless = g_seamlessPaint ? 1 : 0;
+            dseg.pixelPerfect = g_pixelPerfect ? 1 : 0;
+            dseg.ppBias   = m_ppBias;
+            dseg.seed = m_seed;
+            dseg.smudgeSrcX = m_lastDabPos.x;
+            dseg.smudgeSrcY = m_lastDabPos.y;
+            dseg.targetSlot = m_targetSlot;
+            dseg.userTexBucket = m_userTexBucket;
+            dseg.userTexSlot = m_userTexSlot;
+            dseg.dabOffset  = 0;
+            dseg.initAngle  = m_initAngle;
+            m_throttle->Push(dseg);
+            if (g_recorder) g_recorder->on_segment(dseg);
+            if (g_broker) g_broker->on_segment(dseg);
+        }
     }
 
     Modulator_ResetStroke();
