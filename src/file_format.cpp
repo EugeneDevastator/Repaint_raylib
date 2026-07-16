@@ -7,7 +7,7 @@
 
 #define MAGIC      "REPAINT"
 #define MAGIC_LEN  8
-#define FILE_VER   7
+#define FILE_VER   8
 
 /* ── Write helpers ─────────────────────────────────────────────────────── */
 
@@ -223,6 +223,16 @@ bool SaveRePaint(const char* path, Document* doc, AppState* state) {
     }
     _wu32(&p, (uint32_t)state->mode);
 
+    // Save selected brush texture name (v8+)
+    const char* texName = "";
+    if (TM_IsValid(state->brushTexSlot)) {
+        TexSlot* ts = TM_Get(state->brushTexSlot);
+        if (ts) texName = ts->name;
+    }
+    uint32_t nlen = (uint32_t)strnlen(texName, 63);
+    _wu32(&p, nlen);
+    if (nlen > 0) _wcpy(&p, texName, nlen);
+
     bool ok = SaveFileData(path, buf, (int)totalSz);
 
     for (int i = 0; i < lc; i++) free(blobs[i].propsData);
@@ -262,70 +272,47 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
 
     uint32_t ver = _ru32(&p);
 
-    // ── Parse header (version-dependent layout) ─────────────────────
+    // ── v6 and below: load composite preview PNG as flat image ──
+    if (ver < 7) {
+        Image preview = LoadImageFromMemory(".png", fileData, (int)(offset + 12));
+        if (!preview.data) { UnloadFileData(fileData); return false; }
+        ImageFormat(&preview, PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
+        int w = preview.width, h = preview.height;
+        doc->window = RectXform_Pivot(w * 0.5f, h * 0.5f, (float)w, (float)h, 0);
+        if (state) {
+            state->brushTexSlot = TM_INVALID_SLOT;
+            state->brushTexActive = false;
+        }
+        int idx = LayerStack_Add(w, h);
+        sLayerProps* lp = LayerStack_GetProps(idx);
+        lp->op = 1; lp->visible = true; lp->blendmode = bmGamma;
+        lp->xform.mat[0] = 1; lp->xform.mat[4] = 1;
+        lp->xform.ww = (float)w; lp->xform.wh = (float)h;
+        { Quad* q = LayerStack_GetQuadPtr(idx); if (q) q->xform = lp->xform; }
+        LayerStack_UploadToGPU(idx, preview);
+        UnloadFileData(fileData);
+        return true;
+    }
+
+    // ── v7+ header ─────────────────────────────────────────
     float loadCx=0, loadCy=0, loadW=0, loadH=0, loadRot=0;
     uint32_t lc = 0;
     uint32_t pixelDepth = 0;
-    int oldFileW = 0, oldFileH = 0;  // used by v3/v4 fallback path
 
-    if (ver < 6) {
-        // v3-v5: w,h are pixel dimensions
-        uint32_t w = _ru32(&p), h = _ru32(&p);
-        if (w < 1 || w > 32768 || h < 1 || h > 32768) { UnloadFileData(fileData); return false; }
-        loadCx = w * 0.5f; loadCy = h * 0.5f;
-        loadW = (float)w; loadH = (float)h; loadRot = 0.0f;
-        oldFileW = (int)w; oldFileH = (int)h;
-        lc = _ru32(&p);
-        if (lc < 1 || lc > 256) { UnloadFileData(fileData); return false; }
-        if (ver >= 5) pixelDepth = _ru32(&p);
-    } else {
-        // v6+ : ppu (float, ignored) + CanvasWindow data
-        p += 4; // skip ppu
-        p += 4; // reserved (was height)
-        lc = _ru32(&p);
-        if (lc < 1 || lc > 256) { UnloadFileData(fileData); return false; }
-        pixelDepth = _ru32(&p);
-        memcpy(&loadCx, p, 4); p += 4;
-        memcpy(&loadCy, p, 4); p += 4;
-        memcpy(&loadW,  p, 4); p += 4;
-        memcpy(&loadH,  p, 4); p += 4;
-        memcpy(&loadRot, p, 4); p += 4;
-    }
+    p += 4; // skip ppu
+    p += 4; // reserved (was height)
+    lc = _ru32(&p);
+    if (lc < 1 || lc > 256) { UnloadFileData(fileData); return false; }
+    pixelDepth = _ru32(&p);
+    memcpy(&loadCx, p, 4); p += 4;
+    memcpy(&loadCy, p, 4); p += 4;
+    memcpy(&loadW,  p, 4); p += 4;
+    memcpy(&loadH,  p, 4); p += 4;
+    memcpy(&loadRot, p, 4); p += 4;
     doc->window = RectXform_Pivot(loadCx, loadCy, loadW, loadH, loadRot);
 
     // ── Load layers ──────────────────────────────────────────────────
-    if (ver < 5) {
-        // v3/v4: skip per-layer blobs, load composite preview as single layer
-        for (uint32_t i = 0; i < lc; i++) {
-            if ((int)(p - fileData) + 8 > fileSz) { UnloadFileData(fileData); return false; }
-            uint32_t propSz = _ru32(&p); if ((int)(p - fileData) + (int)propSz > fileSz) { UnloadFileData(fileData); return false; }
-            p += propSz;
-            uint32_t pngSz = _ru32(&p); if ((int)(p - fileData) + (int)pngSz > fileSz) { UnloadFileData(fileData); return false; }
-            p += pngSz;
-        }
-        int w = oldFileW, h = oldFileH;
-        Image preview = LoadImageFromMemory(".png", fileData, (int)(offset + 12));
-        if (preview.data) {
-            if (preview.width != w || preview.height != h) ImageResize(&preview, w, h);
-            int pxCount = preview.width * preview.height;
-            uint16_t* d16 = (uint16_t*)malloc(pxCount * 4 * sizeof(uint16_t));
-            uint8_t* s8 = (uint8_t*)preview.data;
-            for (int pi = 0; pi < pxCount; pi++) {
-                d16[pi*4] = (uint16_t)s8[pi*4]*257; d16[pi*4+1] = (uint16_t)s8[pi*4+1]*257;
-                d16[pi*4+2] = (uint16_t)s8[pi*4+2]*257; d16[pi*4+3] = (uint16_t)s8[pi*4+3]*257;
-            }
-            free(preview.data); preview.data = d16; preview.format = PIXELFORMAT_UNCOMPRESSED_R16G16B16A16;
-            int idx = LayerStack_Add(w, h);
-            sLayerProps* lp = LayerStack_GetProps(idx);
-            lp->op = 1; lp->visible = true; lp->blendmode = bmGamma;
-            lp->xform.mat[0] = 1; lp->xform.mat[4] = 1;
-            lp->xform.ww = (float)w; lp->xform.wh = (float)h;
-            { Quad* q = LayerStack_GetQuadPtr(idx); if (q) q->xform = lp->xform; }
-            LayerStack_UploadToGPU(idx, preview);
-        }
-    } else {
-        // v5+: load each layer at its native resolution
-        for (uint32_t i = 0; i < lc; i++) {
+    for (uint32_t i = 0; i < lc; i++) {
             if ((int)(p - fileData) + 8 > fileSz) { UnloadFileData(fileData); return false; }
             uint32_t propSz = _ru32(&p);
             if ((int)(p - fileData) + (int)propSz > fileSz) { UnloadFileData(fileData); return false; }
@@ -336,8 +323,8 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
             // Decompose scale from matrix columns (file stores scale in columns)
             int pixelW = (int)tempProps.xform.ww;
             int pixelH = (int)tempProps.xform.wh;
-            if (pixelW <= 0) pixelW = oldFileW;
-            if (pixelH <= 0) pixelH = oldFileH;
+            if (pixelW <= 0) pixelW = 1024;
+            if (pixelH <= 0) pixelH = 1024;
             float su = sqrtf(tempProps.xform.mat[0]*tempProps.xform.mat[0] + tempProps.xform.mat[3]*tempProps.xform.mat[3]);
             float sv = sqrtf(tempProps.xform.mat[1]*tempProps.xform.mat[1] + tempProps.xform.mat[4]*tempProps.xform.mat[4]);
             if (su > 0.0001f) { tempProps.xform.mat[0] /= su; tempProps.xform.mat[3] /= su; }
@@ -374,10 +361,9 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
             { Quad* q = LayerStack_GetQuadPtr(idx); if (q) q->xform = tempProps.xform; }
             LayerStack_UploadToGPU(idx, layerImg);
         }
-    }
 
-    // Load textures (v2+)
-    if (ver >= 2 && state != NULL) {
+    // Load textures (v7+)
+    if (state != NULL) {
         // Remove existing non-built-in user textures
         TexSlotID toRemove[256];
         int removeCount = 0;
@@ -455,8 +441,34 @@ bool LoadRePaint(const char* path, Document* doc, AppState* state) {
                 }
             }
         }
-        // Force tool to eBrush so preview can display correctly
-        state->mode = eBrush;
+        // Read saved mode
+        uint32_t savedMode = _ru32(&p);
+        state->mode = (int)savedMode;
+
+        // Read selected brush texture name (v8+)
+        if (ver >= 8) {
+            uint32_t tlen = _ru32(&p);
+            char texName[64] = {0};
+            if (tlen > 0 && tlen < 64) {
+                memcpy(texName, p, tlen); p += tlen;
+            }
+            state->brushTexSlot = TM_INVALID_SLOT;
+            state->brushTexActive = false;
+            if (texName[0]) {
+                for (int s = 0; s < TM_SLOTS_PER_BUCKET; s++) {
+                    TexSlotID id = {TM_BUCKET_USER, (uint8_t)s};
+                    TexSlot* ts = TM_Get(id);
+                    if (ts && strcmp(ts->name, texName) == 0) {
+                        state->brushTexSlot = id;
+                        state->brushTexActive = true;
+                        break;
+                    }
+                }
+            }
+        } else {
+            state->brushTexSlot = TM_INVALID_SLOT;
+            state->brushTexActive = false;
+        }
     }
 
     UnloadFileData(fileData);
