@@ -358,7 +358,10 @@ int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
         float jitFrac = seg.brushFrom.jitRadOut / fmaxf(0.001f, seg.brushFrom.rad_out_px);
         dabCB.jitRadOut = fmaxf(0.0f, dabCB.rad_out_px * jitFrac);
 
-        // Per-dab direction: update modulator for stroke direction
+        // Per-dab angle: drive brush rotation from curve tangent.
+        // Note: this does NOT update csDir — the stroke direction modulator
+        // is set from the segment chord by the emitter (via Modulator module),
+        // which is far more stable than a per-dab tangent sample.
         float tx = 0, ty = 0;
         {
             float t = nextArc / totalLen;
@@ -367,10 +370,6 @@ int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
             if (idx < 0) idx = 0; if (idx > 63) idx = 63;
             tx = curvePts[idx+1].x - curvePts[idx].x;
             ty = curvePts[idx+1].y - curvePts[idx].y;
-            if (tx != 0 || ty != 0) {
-                float dirAng = AtanXY(tx, ty);
-                g_modPars.Pars[csDir] = RngConv(dirAng, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
-            }
         }
 
         // Scatter: shift perpendicular to travel (before jitter — use unjittered radius)

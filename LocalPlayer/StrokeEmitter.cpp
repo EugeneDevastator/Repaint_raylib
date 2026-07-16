@@ -13,6 +13,7 @@ StrokeEmitter::StrokeEmitter(StrokeThrottle* throttle)
     m_splineCount = 0;
     m_processedCount = 0;
     m_initDirSet = false;
+    m_hasPrevRoot = false;
     m_prevSegLen = 0;
     memset(&m_modulated, 0, sizeof(m_modulated));
     Xform_Identity(m_destXform.mat);
@@ -53,15 +54,16 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
     m_prevSegPos = start;
     m_prevSegDir = Vector2{0, 0};
     m_prevSegLen = 0;
-    g_modPars.Pars[csVel] = 0.0f;
     m_initDirSet = false;
+    m_hasPrevRoot = false;
     m_splineCount = 1;
     m_processedCount = 0;
     memset(m_splinePts, 0, sizeof(m_splinePts));
     m_splinePts[0] = start;
     m_segEpCount = 0;
 
-    m_modulated = ResolveModulatedConfig(m_config, e.toolMode, e.initAngle, g_modPars.Pars);
+    ModulatorTable mt2; Modulator_GetTable(&mt2);
+    m_modulated = ResolveModulatedConfig(m_config, e.toolMode, e.initAngle, &mt2);
 
     // Pixel-perfect: lock radius parity for entire stroke
     m_ppBias = -1.0f;
@@ -104,25 +106,45 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
 void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 ctrl3,
                                 const d_RealBrush& brush, float initAngle, int toolMode,
                                 const ModulatedBrushConfig& modFrom) {
-    float segDx = p2.x - m_lastDabPos.x;
-    float segDy = p2.y - m_lastDabPos.y;
+    float segDx = p2.x - p1.x;
+    float segDy = p2.y - p1.y;
     float segLen = sqrtf(segDx*segDx + segDy*segDy);
-    float dirAng = AtanXY(segDx, segDy);
 
-    g_modPars.Pars[csDir] = RngConv(dirAng, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
-    if (!m_initDirSet && segLen > 0.5f) { m_initDir = dirAng; m_initDirSet = true; }
-    g_modPars.Pars[csIdir] = RngConv(m_initDir, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
+    // Build local modulator table — tablet/pen values from Modulator,
+    // direction/curvature computed locally.
+    ModulatorTable mt;
+    Modulator_GetTable(&mt);
+
+    if (segLen > 0.5f) {
+        float dirAng = DirAng(segDx, segDy);
+        mt.val[csDir] = RngConv(dirAng, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
+    }
+    if (!m_initDirSet && segLen > 0.5f) { m_initDir = DirAng(segDx, segDy); m_initDirSet = true; }
+    mt.val[csIdir] = RngConv(m_initDir, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
     if (m_prevSegLen > 0.5f && segLen > 0.5f) {
         float dot = (m_prevSegDir.x*segDx + m_prevSegDir.y*segDy) / (m_prevSegLen*segLen);
-        g_modPars.Pars[csCrv] = RngConv(dot, 0.8f, 1.0f, 0.0f, 1.0f);
+        mt.val[csCrv] = RngConv(dot, 0.8f, 1.0f, 0.0f, 1.0f);
     }
-    g_modPars.Pars[csAcc] = 1.0f;
-    if (segLen > 0.001f) g_modPars.Pars[csHVdir] = fabsf(segDx / segLen);
+    mt.val[csAcc] = 1.0f;
+    if (segLen > 0.001f) mt.val[csHVdir] = fabsf(segDx / segLen);
+
     m_prevSegPos = p2;
     m_prevSegDir = Vector2{segDx, segDy};
     m_prevSegLen = segLen;
 
-    ModulatedBrushConfig modTo = ResolveModulatedConfig(m_config, toolMode, initAngle, g_modPars.Pars);
+    // Root modulators snapshot for this segment endpoint
+    RootModulators root = {};
+    root.pressure = mt.val[csPressure];
+    root.rotation = mt.val[csRot];
+    root.tiltX    = mt.val[csHtilt];
+    root.tiltY    = mt.val[csVtilt];
+    root.velocity = mt.val[csVel];
+    if (segLen > 0.001f) {
+        root.dirX = segDx / segLen;
+        root.dirY = segDy / segLen;
+    }
+
+    ModulatedBrushConfig modTo = ResolveModulatedConfig(m_config, toolMode, initAngle, &mt);
     modTo.radOut *= m_worldToTexPx;
     modTo.jitRadOut *= m_worldToTexPx;
 
@@ -162,9 +184,14 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
     dseg.smudgeSrcY = m_lastDabPos.y;
     dseg.targetSlot = m_targetSlot;
     dseg.userTexBucket = m_userTexBucket;
-        dseg.userTexSlot = m_userTexSlot;
-        dseg.dabOffset  = 0;
-        dseg.initAngle  = initAngle;
+    dseg.userTexSlot = m_userTexSlot;
+    dseg.dabOffset  = 0;
+    dseg.initAngle  = initAngle;
+    dseg.fromRoot   = m_hasPrevRoot ? m_prevRoot : root;
+    dseg.toRoot     = root;
+    m_prevRoot      = root;
+    m_hasPrevRoot   = true;
+    FillSliderMods(m_config, dseg.sliderMods);
 
     SegDrawer_SetSegmentStart(m_lastDabRad, m_lastDabPos, &dseg);
     if (!m_emittedAny) dseg.isStrokeStart = 1;
@@ -195,17 +222,9 @@ void StrokeEmitter::handlePoint(const InputEntry& e) {
     float* m = m_destXform.mat;
     Vector2 pos = {e.x * m[0] + e.y * m[1] + m[2],
                    e.x * m[3] + e.y * m[4] + m[5]};
-    g_modPars.Pars[csPressure] = e.pressure;
-    g_modPars.Pars[csRot]      = e.rotation;
-    g_modPars.Pars[csTilt]     = e.tiltX;
-    g_modPars.Pars[csHtilt]    = e.tiltX;
-    g_modPars.Pars[csVtilt]    = e.tiltY;
-    g_modPars.Pars[csXtilt]    = e.tiltX;
-    g_modPars.Pars[csYtilt]    = e.tiltY;
 
-    g_modPars.Pars[csVel] = e.velocity;
-
-    ModulatedBrushConfig modNow = ResolveModulatedConfig(m_config, m_toolMode, m_initAngle, g_modPars.Pars);
+    ModulatorTable mt2; Modulator_GetTable(&mt2);
+    ModulatedBrushConfig modNow = ResolveModulatedConfig(m_config, m_toolMode, m_initAngle, &mt2);
 
     if (g_strokeSmoothingMode == SMOOTH_MODE_LINEAR) {
         float lineLen = Dist2D(m_lastDabPos, pos);
@@ -244,6 +263,21 @@ void StrokeEmitter::handlePoint(const InputEntry& e) {
     }
 
     int N = m_splineCount;
+
+    // First real segment: correct modFrom to prevent stale csDir propagation
+    if (m_processedCount == 0 && N >= 3) {
+        Vector2 firstDx = {m_splinePts[1].x - m_splinePts[0].x,
+                           m_splinePts[1].y - m_splinePts[0].y};
+        float firstLen = sqrtf(firstDx.x*firstDx.x + firstDx.y*firstDx.y);
+        if (firstLen > 0.5f) {
+            ModulatorTable ft; Modulator_GetTable(&ft);
+            float dirAng = DirAng(firstDx.x, firstDx.y);
+            ft.val[csDir] = RngConv(dirAng, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
+            ft.val[csIdir] = ft.val[csDir];
+            m_modulated = ResolveModulatedConfig(m_config, m_toolMode, m_initAngle, &ft);
+        }
+    }
+
     for (int seg = m_processedCount; seg <= N - 3; seg++) {
         Vector2 p0, p1, p2, p3;
         if (seg == 0) {
@@ -337,15 +371,7 @@ void StrokeEmitter::handleEnd() {
         if (g_broker) g_broker->on_segment(dseg);
     }
 
-    g_modPars.Pars[csDir]    = 0.5f;
-    g_modPars.Pars[csIdir]   = 0.5f;
-    g_modPars.Pars[csCrv]    = 0.5f;
-    g_modPars.Pars[csAcc]    = 1.0f;
-    g_modPars.Pars[csLenpx]  = 1.0f;
-    g_modPars.Pars[csHVdir]  = 0.5f;
-    g_modPars.Pars[csRelang] = 0.5f;
-    g_modPars.Pars[csVel]    = 1.0f;
-    g_modPars.Pars[csPressure] = 1.0f;
+    Modulator_ResetStroke();
 
     m_active = false;
     m_splineCount = 0;

@@ -96,6 +96,13 @@ void XORgizmo_DrawVisual(AppState* state) {
     glDisable(GL_COLOR_LOGIC_OP);
 }
 
+static float AtanXY(float x, float y) {
+    double ang; int sg=-1; if(y>0)sg=1;
+    if(x==0&&y==0)ang=0; else if(x==0)ang=PI/2.0+(sg+1)/2.0*PI;
+    else if(x>0&&y<0)ang=2.0*PI+atanf(y/x); else if(x<0)ang=PI+atanf(y/x); else ang=atanf(y/x);
+    return (float)(ang-PI);
+}
+
 void XORgizmo_HandleInput(AppState* state) {
     if (g_activeHud != HUD_QUICK) return;
 

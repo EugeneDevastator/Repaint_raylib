@@ -27,5 +27,7 @@ bool Tablet_WasTouching(void);
 
 // Returns the full button bitmask from the last poll (bit 0=tip, 1=BTN_STYLUS, 2=BTN_STYLUS2)
 int  Tablet_GetButtons(void);
+bool Tablet_IsOn(void);
+TabletState Tablet_GetLastState(void);
 
 #endif

@@ -3,9 +3,25 @@
 
 #include "raylib.h"
 #include "xform.h"
+#include <cstdint>
+
+// ── Modulator slot enum (needed by brush_draw.h for SegmentData) ──────
+typedef enum {
+    csNone, csPressure, csVel, csDir, csRot, csTilt, csRelang,
+    csHtilt, csVtilt, csLenpx, csAcc, csXtilt, csYtilt,
+    csSTOP, csCrv, csIdir, csHVdir, csHVrot
+} csParams;
+
 #include "brush_draw.h"
 #include "ui_style.h"
 #include "ui_rect.h"
+
+// ── Modulator module (wraps InputModulator for backward compat) ───────
+void Modulator_Init(void);
+void Modulator_GetTable(ModulatorTable* out);
+void Modulator_ResetStroke(void);
+void Modulator_Restore(const ModulatorTable* saved);
+void FillSliderMods(const UserBrushConfig& cfg, uint8_t mods[20]);
 #include <cstdint>
 #include <math.h>
 #include <string.h>
@@ -24,12 +40,6 @@ extern bool g_panelsVisible;
 #define LAYER_ENTRY_H 56
 #define MAX_STROKE_PTS 65536
 #define PEN_MODE_COUNT 13
-
-typedef enum {
-    csNone, csPressure, csVel, csDir, csRot, csTilt, csRelang,
-    csHtilt, csVtilt, csLenpx, csAcc, csXtilt, csYtilt,
-    csSTOP, csCrv, csIdir, csHVdir, csHVrot
-} csParams;
 
 typedef enum {
     eBrush, eSmudge, ePolyStripe, eDistort, eContrast, eSingleStamp
@@ -59,7 +69,6 @@ typedef enum {
 typedef struct { int16_t IntVal; uint8_t FVal; } PackedFloat;
 typedef struct { PackedFloat xpos, ypos; } d_PointF;
 typedef struct { d_PointF packpos1, packpos2; Vector2 pos1,pos2,pos3,pos4; } d_Stroke;
-typedef struct { float Pars[25]; } d_StrokePars;
 typedef struct { float basemax,basemin,clipmax,clipmin,crv,outmax,outmin; } cParam;
 
 typedef struct {
@@ -203,7 +212,7 @@ struct AppState {
 float PackedFloat_GetVal(PackedFloat* pf);
 void PackedFloat_SetVal(PackedFloat* pf, double val);
 float Dist2D(Vector2 pos1, Vector2 pos2);
-float AtanXY(float x, float y);
+float DirAng(float x, float y);
 float RngConv(float inval, float inmin, float inmax, float outmin, float outmax);
 
 // Document operations
@@ -273,8 +282,6 @@ extern BParam bpOpacity, bpSize, bpHardness, bpSpacing, bpCurvature, bpScatter;
 extern BParam bpCloneOpacity, bpQuickHue, bpQuickSat, bpQuickLit;
 extern BParam bpTexScale, bpTexFeather, bpTexThresh, bpTexBlendVal;
 extern BParam bpAngle, bpScaleRel, bpSizeMul, bpPower, bpPerspective, bpFocalOffset;
-
-extern d_StrokePars g_modPars;
 
 void Modulators_Init(void); void Modulators_Shutdown(void); void Modulators_SnapRunState(void);
 

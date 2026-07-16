@@ -2,6 +2,7 @@
 #include "repaint.h"
 #include "replay_recorder.h"
 #include "stroke_engine.h"
+#include "input_modulator.h"
 #include <math.h>
 #include <string.h>
 
@@ -15,9 +16,9 @@ static float ConfigRawVal(const BPConfig& cfg) {
     return n * (cfg.outMax - cfg.outMin) + cfg.outMin;
 }
 
-static float ModulateConfigVal(const BPConfig& cfg, const float modValues[csSTOP]) {
+static float ModulateConfigVal(const BPConfig& cfg, const ModulatorTable* mods) {
     float cpar = (cfg.modulatorId >= 0 && cfg.modulatorId < csSTOP)
-        ? modValues[cfg.modulatorId] : 1.0f;
+        ? mods->val[cfg.modulatorId] : 1.0f;
     float minN = powf(cfg.userMin, cfg.power);
     float maxN = powf(cfg.userMax, cfg.power);
     float rng = maxN - minN;
@@ -28,39 +29,39 @@ static float ModulateConfigVal(const BPConfig& cfg, const float modValues[csSTOP
 }
 
 ModulatedBrushConfig ResolveModulatedConfig(const UserBrushConfig& cfg, int toolMode,
-                                             float initAngle, const float modValues[csSTOP]) {
+                                             float initAngle, const ModulatorTable* mods) {
     float sizeMul = powf(5.0f, ConfigRawVal(cfg.sizeMul) / 128.0f - 1.0f);
 
     ModulatedBrushConfig out;
     memset(&out, 0, sizeof(out));
 
-    out.radOut       = ModulateConfigVal(cfg.size, modValues) * sizeMul;
-    out.radInRatio   = fminf(ModulateConfigVal(cfg.hardness, modValues), 1.0f);
-    out.scaleRel     = ModulateConfigVal(cfg.scaleRel, modValues);
-    out.resangle     = fmodf(initAngle + ModulateConfigVal(cfg.angle, modValues), 360.0f);
-    out.opacity      = ModulateConfigVal(cfg.opacity, modValues);
-    out.crv          = ModulateConfigVal(cfg.curvature, modValues);
-    out.cop          = (toolMode == eSmudge) ? ModulateConfigVal(cfg.cloneOpacity, modValues) : 0.0f;
+    out.radOut       = ModulateConfigVal(cfg.size, mods) * sizeMul;
+    out.radInRatio   = fminf(ModulateConfigVal(cfg.hardness, mods), 1.0f);
+    out.scaleRel     = ModulateConfigVal(cfg.scaleRel, mods);
+    out.resangle     = fmodf(initAngle + ModulateConfigVal(cfg.angle, mods), 360.0f);
+    out.opacity      = ModulateConfigVal(cfg.opacity, mods);
+    out.crv          = ModulateConfigVal(cfg.curvature, mods);
+    out.cop          = (toolMode == eSmudge) ? ModulateConfigVal(cfg.cloneOpacity, mods) : 0.0f;
     out.col          = HSLToRGB(
-        ModulateConfigVal(cfg.hue, modValues),
-        ModulateConfigVal(cfg.sat, modValues),
-        ModulateConfigVal(cfg.lit, modValues));
-    out.pwr          = ModulateConfigVal(cfg.power, modValues);
-    out.perspective  = ModulateConfigVal(cfg.perspective, modValues);
+        ModulateConfigVal(cfg.hue, mods),
+        ModulateConfigVal(cfg.sat, mods),
+        ModulateConfigVal(cfg.lit, mods));
+    out.pwr          = ModulateConfigVal(cfg.power, mods);
+    out.perspective  = ModulateConfigVal(cfg.perspective, mods);
 
-    float ts = ModulateConfigVal(cfg.texScale, modValues);
+    float ts = ModulateConfigVal(cfg.texScale, mods);
     if (g_texScaleMode == 1)
         out.texScale = ts * out.radOut * (WORLD_UNIT_PX / 128.0f);
     else
         out.texScale = ts;
 
-    out.texFeather   = ModulateConfigVal(cfg.texFeather,  modValues);
-    out.texThresh    = ModulateConfigVal(cfg.texThresh,   modValues);
-    out.texBlendVal  = ModulateConfigVal(cfg.texBlendVal, modValues);
+    out.texFeather   = ModulateConfigVal(cfg.texFeather,  mods);
+    out.texThresh    = ModulateConfigVal(cfg.texThresh,   mods);
+    out.texBlendVal  = ModulateConfigVal(cfg.texBlendVal, mods);
 
-    out.focalOffset  = ModulateConfigVal(cfg.focalOffset, modValues);
-    out.spacing      = ModulateConfigVal(cfg.spacing, modValues);
-    out.scatter      = ModulateConfigVal(cfg.scatter, modValues);
+    out.focalOffset  = ModulateConfigVal(cfg.focalOffset, mods);
+    out.spacing      = ModulateConfigVal(cfg.spacing, mods);
+    out.scatter      = ModulateConfigVal(cfg.scatter, mods);
 
     out.texBlendMode   = cfg.texBlendMode;
     out.texNoisemode   = cfg.texNoisemode;
@@ -90,11 +91,11 @@ ModulatedBrushConfig ResolveModulatedConfig(const UserBrushConfig& cfg, int tool
 }
 
 ModulatedBrushConfig ResolveModulatedConfigMax(const UserBrushConfig& cfg, int toolMode, float initAngle) {
-    float maxPars[csSTOP];
-    for (int i = 0; i < csSTOP; i++) maxPars[i] = 1.0f;
-    maxPars[csDir] = maxPars[csIdir] = maxPars[csCrv] = 0.5f;
-    maxPars[csHVdir] = maxPars[csRelang] = 0.5f;
-    return ResolveModulatedConfig(cfg, toolMode, initAngle, maxPars);
+    ModulatorTable tbl;
+    for (int i = 0; i < csSTOP; i++) tbl.val[i] = 1.0f;
+    tbl.val[csDir] = tbl.val[csIdir] = tbl.val[csCrv] = 0.5f;
+    tbl.val[csHVdir] = tbl.val[csRelang] = 0.5f;
+    return ResolveModulatedConfig(cfg, toolMode, initAngle, &tbl);
 }
 
 DabBrush MakeDabBrush(const ModulatedBrushConfig& mod, const float rad_out_px_override) {
@@ -160,9 +161,6 @@ int StrokeEngine_GeneratePreviewDabs(const d_RealBrush* baseBrush, int toolMode,
     float dirLen = sqrtf(dirX * dirX + dirY * dirY);
     dirX /= dirLen; dirY /= dirLen;
 
-    float savedPars[csSTOP];
-    memcpy(savedPars, g_modPars.Pars, sizeof(float) * csSTOP);
-
     cfg.bmidx          = baseBrush->bmidx;
     cfg.texBlendMode   = baseBrush->texBlendMode;
     cfg.texNoisemode   = baseBrush->texNoisemode;
@@ -185,13 +183,14 @@ int StrokeEngine_GeneratePreviewDabs(const d_RealBrush* baseBrush, int toolMode,
     Vector2 c3 = {mid.x - perpX, mid.y - perpY};
 
     // Direction at curve start and end — so modulation (esp. angle) follows the stroke
-    float startDir = AtanXY(c0.x - start.x, c0.y - start.y);
-    float endDir   = AtanXY(end.x - c3.x, end.y - c3.y);
+    float startDir = DirAng(c0.x - start.x, c0.y - start.y);
+    float endDir   = DirAng(end.x - c3.x, end.y - c3.y);
 
     // Main brush (start of curve)
-    g_modPars.Pars[csDir]  = RngConv(startDir, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
-    g_modPars.Pars[csIdir] = g_modPars.Pars[csDir];
-    ModulatedBrushConfig mod = ResolveModulatedConfig(cfg, toolMode, initialAngle, g_modPars.Pars);
+    ModulatorTable mt; InputModulator_GetAllSnapshot(&mt);
+    mt.val[csDir] = RngConv(startDir, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
+    mt.val[csIdir] = mt.val[csDir];
+    ModulatedBrushConfig mod = ResolveModulatedConfig(cfg, toolMode, initialAngle, &mt);
     float spacingVal = mod.spacing;
     mod.radOut *= WORLD_UNIT_PX;
     mod.jitRadOut *= WORLD_UNIT_PX;
@@ -199,9 +198,9 @@ int StrokeEngine_GeneratePreviewDabs(const d_RealBrush* baseBrush, int toolMode,
     DabBrush cbFull = MakeDabBrush(mod, mod.radOut);
 
     // End brush (1px, with end-direction angle)
-    g_modPars.Pars[csDir]  = RngConv(endDir, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
-    g_modPars.Pars[csIdir] = g_modPars.Pars[csDir];
-    ModulatedBrushConfig modEnd = ResolveModulatedConfig(cfg, toolMode, initialAngle, g_modPars.Pars);
+    mt.val[csDir] = RngConv(endDir, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
+    mt.val[csIdir] = mt.val[csDir];
+    ModulatedBrushConfig modEnd = ResolveModulatedConfig(cfg, toolMode, initialAngle, &mt);
     modEnd.radOut = 1.0f;
     DabBrush cbTiny = MakeDabBrush(modEnd, 1.0f);
 
@@ -263,7 +262,7 @@ int StrokeEngine_GeneratePreviewDabs(const d_RealBrush* baseBrush, int toolMode,
         float dy = pt.y - outBuf[i-1].y;
         float len = sqrtf(dx*dx + dy*dy);
         if (len > 0.001f) {
-            float dirAng = AtanXY(dx, dy);
+            float dirAng = DirAng(dx, dy);
             float dirVal = RngConv(dirAng, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
             // Compute angle modulation using the same formula as ResolveModulatedConfig
             float cpar = (cfg.angle.modulatorId >= 0 && cfg.angle.modulatorId < csSTOP)
@@ -278,7 +277,6 @@ int StrokeEngine_GeneratePreviewDabs(const d_RealBrush* baseBrush, int toolMode,
         }
     }
 
-    memcpy(g_modPars.Pars, savedPars, sizeof(float) * csSTOP);
     return total;
 }
 

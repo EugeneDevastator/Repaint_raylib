@@ -128,6 +128,7 @@ set(SOURCES
     src/http/upscale_client.cpp
     # ── sensors ───────────────────────────────────────────────────────
     src/sensors/tablet.cpp
+    src/sensors/input_modulator.cpp
     src/sensors/input_filter.cpp
     src/sensors/clipboard.cpp
     # ── drawing ───────────────────────────────────────────────────────

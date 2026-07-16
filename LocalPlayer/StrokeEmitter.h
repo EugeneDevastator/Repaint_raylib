@@ -44,6 +44,9 @@ private:
     float m_prevSegLen;
     float m_initDir;
     bool  m_initDirSet;
+    // Root modulators from previous segment (for SegmentData.fromRoot)
+    RootModulators m_prevRoot;
+    bool m_hasPrevRoot;
 
     int m_processedCount;
 

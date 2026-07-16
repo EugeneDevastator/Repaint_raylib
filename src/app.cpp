@@ -216,63 +216,74 @@ void UpdateUI(AppState* state) {
             if (g_recorder) g_replayPopupActive = true;
         }
 
-        // ── Clipboard copy ──────────────────────────────────────────
+        // ── Clipboard copy (two-stroke: Ctrl+C then Ctrl+C/S/F) ─────
         {
-            static double g_lastCopyCPress = 0.0;
+            static double g_copyArmedAt = 0.0;
+            static bool  g_copyArmed   = false;
+            static bool  g_justFired   = false;
             double now = GetTime();
 
-            if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyPressed(KEY_C)) {
-                if (g_lastCopyCPress > 0.0 && now - g_lastCopyCPress < 0.35) {
-                    // Ctrl+C,C — copy merged (composited) image
-                    int cw = DocOutPxW(&state->doc), ch = DocOutPxH(&state->doc);
-                    if (cw > 0 && ch > 0) {
-                        RenderTexture2D rt = Load16BitRT(cw, ch);
-                        if (rt.id > 0) {
-                            BeginTextureMode(rt); ClearBackground(BLANK); EndTextureMode();
-                            Quad dstQ;
-                            Xform_Identity(dstQ.xform.mat);
-                            dstQ.xform.ww = (float)cw; dstQ.xform.wh = (float)ch;
-                            dstQ.rt = rt;
-                            ViewportManager_CompositeLayersOntoQuad(&dstQ);
-                            rlSetBlendMode(RL_BLEND_ALPHA);
-                            Clipboard_CopyRT16(rt);
-                            UnloadRenderTexture(rt);
-                            DisplayInfoText("Copied merged");
+            // Second stroke: Ctrl+C, S, or F within 1s of arming
+            if (g_copyArmed && !g_justFired && now - g_copyArmedAt < 1.0) {
+                if (IsKeyDown(KEY_LEFT_CONTROL)) {
+                    if (IsKeyPressed(KEY_C)) {
+                        int cw = DocOutPxW(&state->doc), ch = DocOutPxH(&state->doc);
+                        if (cw > 0 && ch > 0) {
+                            RenderTexture2D rt = Load16BitRT(cw, ch);
+                            if (rt.id > 0) {
+                                BeginTextureMode(rt); ClearBackground(BLANK); EndTextureMode();
+                                Quad dstQ;
+                                Xform_Identity(dstQ.xform.mat);
+                                dstQ.xform.ww = (float)cw; dstQ.xform.wh = (float)ch;
+                                dstQ.rt = rt;
+                                ViewportManager_CompositeLayersOntoQuad(&dstQ);
+                                rlSetBlendMode(RL_BLEND_ALPHA);
+                                Clipboard_CopyRT16(rt);
+                                UnloadRenderTexture(rt);
+                                DisplayInfoText("Copied merged");
+                            }
                         }
+                        g_copyArmed = false; g_justFired = true;
                     }
-                    g_lastCopyCPress = 0.0;
-                } else {
-                    // Ctrl+C — copy active layer
-                    RenderTexture2D rt = LayerStack_GetRT(state->activeLayer);
-                    if (rt.id > 0) {
-                        Clipboard_CopyRT16(rt);
-                        g_lastCopyCPress = now;
-                        DisplayInfoText("Copied layer");
+                    else if (IsKeyPressed(KEY_S)) {
+                        RenderTexture2D rt = LayerStack_GetRT(state->activeLayer);
+                        if (rt.id > 0) {
+                            Clipboard_CopyRT16(rt);
+                            DisplayInfoText("Copied layer");
+                        }
+                        g_copyArmed = false; g_justFired = true;
+                    }
+                    else if (IsKeyPressed(KEY_F)) {
+                        time_t tn = time(NULL);
+                        struct tm* tm_local = localtime(&tn);
+                        const char* appDir = GetApplicationDirectory();
+                        char path[1024];
+                        snprintf(path, sizeof(path), "%sSnaps/snap_%04d%02d%02d_%02d%02d%02d.png",
+                                 appDir,
+                                 tm_local->tm_year + 1900, tm_local->tm_mon + 1, tm_local->tm_mday,
+                                 tm_local->tm_hour, tm_local->tm_min, tm_local->tm_sec);
+                        Image flat = ViewportManager_CompositeWithDither();
+                        if (flat.data) {
+                            if (ExportImage(flat, path)) {
+                                Clipboard_CopyFile(path);
+                                DisplayInfoText("Snap copied as file");
+                            }
+                            UnloadImage(flat);
+                        }
+                        g_copyArmed = false; g_justFired = true;
                     }
                 }
+            } else {
+                g_copyArmed = false;
             }
 
-            if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyPressed(KEY_F) &&
-                g_lastCopyCPress > 0.0 && now - g_lastCopyCPress < 0.35) {
-                // Ctrl+C,F — save snapshot + copy file reference
-                time_t tn = time(NULL);
-                struct tm* tm_local = localtime(&tn);
-                const char* appDir = GetApplicationDirectory();
-                char path[1024];
-                snprintf(path, sizeof(path), "%sSnaps/snap_%04d%02d%02d_%02d%02d%02d.png",
-                         appDir,
-                         tm_local->tm_year + 1900, tm_local->tm_mon + 1, tm_local->tm_mday,
-                         tm_local->tm_hour, tm_local->tm_min, tm_local->tm_sec);
-                Image flat = ViewportManager_CompositeWithDither();
-                if (flat.data) {
-                    if (ExportImage(flat, path)) {
-                        Clipboard_CopyFile(path);
-                        DisplayInfoText("Snap copied as file");
-                    }
-                    UnloadImage(flat);
-                }
-                g_lastCopyCPress = 0.0;
+            // First stroke: Ctrl+C arms the detector (no copy — just hint)
+            if (!g_justFired && IsKeyDown(KEY_LEFT_CONTROL) && IsKeyPressed(KEY_C) && !g_copyArmed) {
+                DisplayInfoText("C=merged  S=single  F=file");
+                g_copyArmed = true;
+                g_copyArmedAt = now;
             }
+            g_justFired = false;
         }
 
         // Toggle texture editing mode with T key
@@ -297,7 +308,8 @@ void UpdateUI(AppState* state) {
     CaptureBrushConfig(&brushCfg);
     brushCfg.toolMode = state->mode;
 
-    ModulatedBrushConfig mod = ResolveModulatedConfig(brushCfg, state->mode, state->initialAngle, g_modPars.Pars);
+    ModulatorTable mt; Modulator_GetTable(&mt);
+    ModulatedBrushConfig mod = ResolveModulatedConfig(brushCfg, state->mode, state->initialAngle, &mt);
 
     state->currentBrush.Realb.rad_out    = mod.radOut;
     state->currentBrush.Realb.radInRatio = mod.radInRatio;

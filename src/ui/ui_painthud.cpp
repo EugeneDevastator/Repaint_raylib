@@ -1,6 +1,7 @@
 #include "repaint.h"
 #include "rlgl.h"
 #include "external/glad.h"
+#include "input_modulator.h"
 #include <math.h>
 
 void PaintHudModule::DrawGL(const DrawRect& rect) {
@@ -51,6 +52,18 @@ void PaintHudModule::DrawGL(const DrawRect& rect) {
         float r = floorf(radPx);
         int segs = radPx > 150.0f ? 80 : (radPx > 50.0f ? 48 : 24);
         DrawCircleLinesV(cp, r, WHITE);
+
+        // Direction indicator: "L" shape outward at the direction angle
+        ModulatorTable _mt; InputModulator_GetAllSnapshot(&_mt);
+        float dirF = _mt.val[csDir];
+        float dirAng = dirF * (float)(M_PI * 2.0) - (float)M_PI;
+        float cosA = cosf(dirAng), sinA = sinf(dirAng);
+        float armExt = 10.0f;                       // extension past the ring
+        float tickLen = armExt * 1.3f;               // tick is 1.3x arm
+        Vector2 tip = {cp.x + cosA * (r + armExt), cp.y + sinA * (r + armExt)};
+        Vector2 tick = {tip.x + sinA * tickLen, tip.y - cosA * tickLen};  // outward (right side)
+        DrawLineEx(cp, tip, 1.0f, WHITE);            // arm from center
+        DrawLineEx(tip, tick, 1.0f, WHITE);          // perpendicular tick outward
     }
 
     rlDrawRenderBatchActive();

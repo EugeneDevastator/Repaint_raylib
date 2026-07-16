@@ -11,8 +11,6 @@ struct InputEntry {
 
     // Point + Begin: position
     float x, y;
-    float pressure, tiltX, tiltY, rotation;
-    float velocity;
     double timestamp;
 
     // Begin only: stroke context
@@ -20,8 +18,8 @@ struct InputEntry {
     float initAngle;
     int toolMode;
     TexSlotID targetSlot;
-    uint8_t userTexBucket;  // TM_BUCKET_USER typically, 0xFF = none
-    uint8_t userTexSlot;    // slot within bucket, 0xFF = none
+    uint8_t userTexBucket;
+    uint8_t userTexSlot;
     float worldToTexPx;
     RectXform destXform;
 };

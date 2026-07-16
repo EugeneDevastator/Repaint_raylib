@@ -1,4 +1,7 @@
 #include "repaint.h"
+#include "input_modulator.h"
+#include "raylib.h"
+#include "brush_draw.h"
 #include "raylib.h"
 #include "brush_draw.h"
 
@@ -23,9 +26,25 @@ BParam bpPower;
 BParam bpPerspective;
 BParam bpFocalOffset;
 
-d_StrokePars g_modPars;
+void Modulator_Init(void) {
+    InputModulator_Init();
+}
+
+void Modulator_GetTable(ModulatorTable* out) {
+    InputModulator_GetAllSnapshot(out);
+}
+
+void Modulator_ResetStroke(void) {
+    // Derived slots only — root values are managed by InputModulator
+}
+
+void Modulator_Restore(const ModulatorTable* saved) {
+    // No-op: Modulator_GetTable now returns snapshots, not mutable global state
+    (void)saved;
+}
 
 void Modulators_Init(void) {
+    Modulator_Init();
     BParam_Init(&bpOpacity, 0, "Opacity", 0.0f, 1.0f, 1.0f);
     bpOpacity.power = 2.0f;
     strncpy(bpOpacity.tooltip, "Overall opacity of the brush stroke", sizeof(bpOpacity.tooltip) - 1);
@@ -117,23 +136,6 @@ void Modulators_Init(void) {
     BParam_Init(&bpFocalOffset, 45, "Focal", -1.0f, 1.0f, 0.0f);
     strncpy(bpFocalOffset.tooltip, "Shifts radial gradient convergence point (-1..1, 0=center)", sizeof(bpFocalOffset.tooltip) - 1);
     BParam_SetIcon(&bpFocalOffset, "ctlfocal");
-    // Init global modulator defaults
-    for (int i = 0; i < csSTOP; i++) g_modPars.Pars[i] = 1.0f;
-    g_modPars.Pars[csDir]    = 0.5f;
-    g_modPars.Pars[csIdir]   = 0.5f;
-    g_modPars.Pars[csCrv]    = 1.0f;
-    g_modPars.Pars[csAcc]    = 1.0f;
-    g_modPars.Pars[csLenpx]  = 1.0f;
-    g_modPars.Pars[csHVdir]  = 0.5f;
-    g_modPars.Pars[csRot]    = 0.5f;
-    g_modPars.Pars[csTilt]   = 0.5f;
-    g_modPars.Pars[csRelang] = 0.5f;
-    g_modPars.Pars[csHtilt]  = 0.5f;
-    g_modPars.Pars[csVtilt]  = 0.5f;
-    g_modPars.Pars[csXtilt]  = 0.5f;
-    g_modPars.Pars[csYtilt]  = 0.5f;
-    g_modPars.Pars[csPressure] = 1.0f;
-    g_modPars.Pars[csHVrot]  = 0.5f;
 }
 
 void Modulators_SnapRunState(void) {
@@ -194,4 +196,27 @@ void CaptureBrushConfig(UserBrushConfig* cfg) {
     CaptureBP(bpSizeMul,     &cfg->sizeMul);
     CaptureBP(bpSpacing,     &cfg->spacing);
     CaptureBP(bpScatter,     &cfg->scatter);
+}
+
+void FillSliderMods(const UserBrushConfig& cfg, uint8_t mods[20]) {
+    mods[0]  = (uint8_t)cfg.size.modulatorId;
+    mods[1]  = (uint8_t)cfg.sizeMul.modulatorId;
+    mods[2]  = (uint8_t)cfg.hardness.modulatorId;
+    mods[3]  = (uint8_t)cfg.curvature.modulatorId;
+    mods[4]  = (uint8_t)cfg.spacing.modulatorId;
+    mods[5]  = (uint8_t)cfg.opacity.modulatorId;
+    mods[6]  = (uint8_t)cfg.angle.modulatorId;
+    mods[7]  = (uint8_t)cfg.scaleRel.modulatorId;
+    mods[8]  = (uint8_t)cfg.cloneOpacity.modulatorId;
+    mods[9]  = (uint8_t)cfg.scatter.modulatorId;
+    mods[10] = (uint8_t)cfg.power.modulatorId;
+    mods[11] = (uint8_t)cfg.perspective.modulatorId;
+    mods[12] = (uint8_t)cfg.hue.modulatorId;
+    mods[13] = (uint8_t)cfg.sat.modulatorId;
+    mods[14] = (uint8_t)cfg.lit.modulatorId;
+    mods[15] = (uint8_t)cfg.texScale.modulatorId;
+    mods[16] = (uint8_t)cfg.texFeather.modulatorId;
+    mods[17] = (uint8_t)cfg.texThresh.modulatorId;
+    mods[18] = (uint8_t)cfg.texBlendVal.modulatorId;
+    mods[19] = (uint8_t)cfg.focalOffset.modulatorId;
 }
