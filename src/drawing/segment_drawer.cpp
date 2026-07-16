@@ -242,9 +242,9 @@ static float JitterRadius(float unjitteredRad, float jitRange,
     return fmaxf(radMin, fminf(radMax, r));
 }
 
-// ── DrawLinear_old ─────────────────────────────────────────────────────
-int DrawLinear_old(const SegmentData& seg, int dabOffset, float initialRad,
-               DabPoint* outPoints, int maxOut, SegResult* res) {
+// ── V2: BuildSegment (world-space dab generation) ───────────────────
+int BuildSegment(const SegmentData& seg, int dabOffset, float initialRad,
+                 DabPoint* outPoints, int maxOut, SegResult* res) {
     if (!res) return 0;
     Vector2 from = seg.pos1;
     res->lastDabPos = from;
@@ -262,7 +262,6 @@ int DrawLinear_old(const SegmentData& seg, int dabOffset, float initialRad,
             outPoints[0].srcRad = seg.brushFrom.rad_out_px;
             outPoints[0].srcAngle = seg.brushFrom.resangle;
             outPoints[0].brush = seg.brushFrom;
-
         }
         res->lastDabPos = Vector2{from.x, from.y};
         res->lastSmudgeSrc = Vector2{from.x, from.y};
@@ -281,8 +280,6 @@ int DrawLinear_old(const SegmentData& seg, int dabOffset, float initialRad,
     float rFrom = seg.brushFrom.rad_out_px;
     float rTo   = seg.brush.rad_out_px;
 
-    // Pixel-perfect: snap start/end radii to integer + parity bias
-    // so spacing is computed from locked diameters, not fractional radius.
     if (seg.pixelPerfect && seg.ppBias >= 0.0f) {
         auto snapRad = [&](float r) {
             int ip = (int)fmaxf(0.5f, r);
@@ -317,52 +314,52 @@ int DrawLinear_old(const SegmentData& seg, int dabOffset, float initialRad,
     float x2r = dx / stdist, y2r = dy / stdist;
 
     float lastDabPos = 0.0f;
-    float lastDabRad = (initialRad > 0.0f) ? initialRad : rFrom;
-    res->lastRadOut = lastDabRad;
+    float lastDabRad = rFrom;
     int count = 0;
     float lastSrcX = seg.smudgeSrcX;
     float lastSrcY = seg.smudgeSrcY;
     float lastSrcRad = seg.brushFrom.rad_out_px;
     float lastSrcAngle = seg.brushFrom.resangle;
 
+    // First dab ALWAYS at the start position (arc=0) for geometrically
+    // perfect segment boundaries. The spacing loop follows from here.
+    Vector2 lastDabWorldPos = from;
+    if (outPoints && count < maxOut) {
+        outPoints[count].x = from.x; outPoints[count].y = from.y;
+        outPoints[count].srcX = lastSrcX; outPoints[count].srcY = lastSrcY;
+        outPoints[count].srcRad = lastSrcRad;
+        outPoints[count].srcAngle = lastSrcAngle;
+        outPoints[count].brush = seg.brushFrom;
+    }
+    count = 1;
+
     while (count < maxOut) {
-        // 1. Estimate next position using last (jittered) radius
         float tNext_est = lastDabPos / totalLen;
         float nextRadEst = rFrom + (rTo - rFrom) * tNext_est;
         float nextArc_est = lastDabPos + (lastDabRad + nextRadEst) * spacingMult;
         if (nextArc_est > totalLen) break;
 
-        // 2. Sample unjittered radius at estimated position
         float tNext = nextArc_est / totalLen;
         if (tNext > 1.0f) tNext = 1.0f;
         float nextRadUnJit = rFrom + (rTo - rFrom) * tNext;
 
-        // 3. Apply jitter to get ACTUAL next radius
         float jitRange = seg.brushFrom.jitRadOut;
         float nextRadJit = JitterRadius(nextRadUnJit, jitRange, seg.brushFrom.baseSeed, dabOffset + count);
 
-        // 4. Find exact position using jittered next radius
         float nextArc = lastDabPos + (lastDabRad + nextRadJit) * spacingMult;
-        if (nextArc <= lastDabPos + 0.5f) nextArc = lastDabPos + 0.5f; // prevent lock
+        if (nextArc <= lastDabPos + 0.5f) nextArc = lastDabPos + 0.5f;
         if (nextArc > totalLen) break;
 
-        // 5. Get curve position
         float arcPos = lastDabPos;
         Vector2 pos = WalkArc(curvePts, 65, arcPos, nextArc - lastDabPos, totalLen);
 
-        // 6. Build final brush
         float k = nextArc / totalLen;
         if (k > 1.0f) k = 1.0f;
         DabBrush dabCB = BlendBrushes(seg.brushFrom, seg.brush, k);
         dabCB.rad_out_px = nextRadUnJit;
-        // Per-dab jitter range — proportional to this dab's own radius
         float jitFrac = seg.brushFrom.jitRadOut / fmaxf(0.001f, seg.brushFrom.rad_out_px);
         dabCB.jitRadOut = fmaxf(0.0f, dabCB.rad_out_px * jitFrac);
 
-        // Per-dab angle: drive brush rotation from curve tangent.
-        // Note: this does NOT update csDir — the stroke direction modulator
-        // is set from the segment chord by the emitter (via Modulator module),
-        // which is far more stable than a per-dab tangent sample.
         float tx = 0, ty = 0;
         {
             float t = nextArc / totalLen;
@@ -373,7 +370,6 @@ int DrawLinear_old(const SegmentData& seg, int dabOffset, float initialRad,
             ty = curvePts[idx+1].y - curvePts[idx].y;
         }
 
-        // Scatter: shift perpendicular to travel (before jitter — use unjittered radius)
         float scatterRad = dabCB.scatter * dabCB.rad_out_px;
         Vector2 scatterPos = pos;
         if (scatterRad > 0.001f) {
@@ -389,10 +385,10 @@ int DrawLinear_old(const SegmentData& seg, int dabOffset, float initialRad,
             }
         }
         pos = scatterPos;
+        lastDabWorldPos = pos;
 
         JitterBrush(dabCB, seg.brushFrom.baseSeed, dabOffset + count);
 
-        // Pixel-perfect: lock radius parity (bias set per-stroke in emitter)
         if (seg.pixelPerfect && seg.ppBias >= 0.0f) {
             float r = fmaxf(0.5f, dabCB.rad_out_px);
             int ip = (int)r;
@@ -408,7 +404,6 @@ int DrawLinear_old(const SegmentData& seg, int dabOffset, float initialRad,
             outPoints[count].srcRad = lastSrcRad;
             outPoints[count].srcAngle = lastSrcAngle;
             outPoints[count].brush = dabCB;
-
         }
         lastSrcX = pos.x;
         lastSrcY = pos.y;
@@ -416,38 +411,33 @@ int DrawLinear_old(const SegmentData& seg, int dabOffset, float initialRad,
         lastSrcAngle = dabCB.resangle;
 
         lastDabPos = nextArc;
-        lastDabRad = dabCB.rad_out_px;  // JITTERED — actual placed size
+        lastDabRad = dabCB.rad_out_px;
         count++;
     }
 
     if (count > 0) {
         res->lastRadOut = lastDabRad;
-        if (isCurved) {
-            float t = (lastDabPos / totalLen);
-            if (t < 0) t = 0; if (t > 1) t = 1;
-            float idxF = t * 64;
-            int idx = (int)idxF;
-            float frac = idxF - idx;
-            if (idx < 0) idx = 0;
-            if (idx > 63) idx = 63;
-            Vector2 lp;
-            lp.x = curvePts[idx].x + (curvePts[idx+1].x - curvePts[idx].x) * frac;
-            lp.y = curvePts[idx].y + (curvePts[idx+1].y - curvePts[idx].y) * frac;
-            res->lastDabPos = lp;
-        } else {
-            res->lastDabPos = Vector2{from.x + lastDabPos * x2r, from.y + lastDabPos * y2r};
-        }
+        res->lastDabPos = lastDabWorldPos;
     }
     res->lastSmudgeSrc = Vector2{lastSrcX, lastSrcY};
     return count;
 }
 
+// ── V2: Correct segment start from previous segment's last dab ───────
+void CorrectSegmentFromInput(SegmentData* seg, const SegResult* prevResult) {
+    if (!seg || !prevResult) return;
+    seg->pos1 = prevResult->lastDabPos;
+    if (prevResult->lastRadOut > 0.0f)
+        seg->brushFrom.rad_out_px = prevResult->lastRadOut;
+    seg->smudgeSrcX = prevResult->lastSmudgeSrc.x;
+    seg->smudgeSrcY = prevResult->lastSmudgeSrc.y;
+}
 
-// ── DrawSegment ────────────────────────────────────────────────────
+// ── DrawSegment (DEPRECATED — uses BuildSegment internally) ─────────
 int DrawSegment(const SegmentData& dseg, RenderTexture2D rt, Texture2D brushTex, bool useTexture, bool seamless, int dabOffset, bool pixelPerfect) {
     static DabPoint pts[65536];
     SegResult r;
-    int cnt = DrawLinear_old(dseg, dabOffset, 0.0f, pts, 65536, &r);
+    int cnt = BuildSegment(dseg, dabOffset, 0.0f, pts, 65536, &r);
 
     for (int i = 0; i < cnt; i++)
         BrushBlend_ApplyStamp(rt, pts[i].brush, brushTex, useTexture,
@@ -455,12 +445,6 @@ int DrawSegment(const SegmentData& dseg, RenderTexture2D rt, Texture2D brushTex,
                               pts[i].srcRad, pts[i].srcAngle,
                               seamless, pixelPerfect);
     return cnt;
-}
-
-// ── V2: BuildSegment (world-space dab generation) ───────────────────
-int BuildSegment(const SegmentData& seg, int dabOffset, float initialRad,
-                 DabPoint* outBuf, int maxOut, SegResult* res) {
-    return DrawLinear_old(seg, dabOffset, initialRad, outBuf, maxOut, res);
 }
 
 // ── V2: RasterizeDab (world→texture pixel conversion) ───────────────
@@ -481,14 +465,12 @@ void RasterizeDab(RenderTexture2D rt, float worldToTexPx,
 
 void SegDrawer_SetSegmentStart(float startRad, Vector2 startPos, SegmentData* seg) {
     seg->pos1 = startPos;
-    if (startRad > 0.0f)
-        seg->brushFrom.rad_out_px = startRad;
 }
 
 void SegDrawer_ComputeSegmentEnd(const SegmentData& seg, int dabOffset, float initialRad,
                                   Vector2* outLastPos, float* outLastRad) {
     SegResult r;
-    DrawLinear_old(seg, dabOffset, initialRad, nullptr, 65536, &r);
+    BuildSegment(seg, dabOffset, initialRad, nullptr, 65536, &r);
     *outLastPos = r.lastDabPos;
     *outLastRad = r.lastRadOut;
 }

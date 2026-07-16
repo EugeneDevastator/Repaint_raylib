@@ -32,23 +32,30 @@ int StrokeThrottle::DrawPending(AppState* state) {
             m_layerWW = seg.layerWW;
             m_layerWH = seg.layerWH;
             m_worldToTexPx = seg.worldToTexPx;
-            // Angle/smudge carry-over removed — the emitter already provides
-            // continuous per-segment resangle and radius via m_modulated continuity.
-            if (m_hasPrevSmudge) {
-                seg.smudgeSrcX = m_prevSmudgeSrcX;
-                seg.smudgeSrcY = m_prevSmudgeSrcY;
-            }
+            // New stroke: reset carry-over state
+            if (seg.isStrokeStart) { m_hasPrevSmudge = false; m_prevResult = SegResult{}; }
+            if (m_hasPrevSmudge) CorrectSegmentFromInput(&seg, &m_prevResult);
 
             SegResult r;
-            extern bool g_useV2;
-            if (g_useV2)
-                m_dabCount = BuildSegment(seg, 0, 0.0f, m_dabBuf, DAB_CAP, &r);
-            else
-                m_dabCount = DrawLinear_old(seg, 0, 0.0f, m_dabBuf, DAB_CAP, &r);
+            m_dabCount = BuildSegment(seg, 0, 0.0f, m_dabBuf, DAB_CAP, &r);
 
+            if (m_dabCount > 0 && m_hasPrevSmudge) {
+                float dx = m_dabBuf[0].x - m_prevResult.lastDabPos.x;
+                float dy = m_dabBuf[0].y - m_prevResult.lastDabPos.y;
+                double dist = sqrt((double)dx*dx + (double)dy*dy);
+                if (dist > 0.001)
+                    fprintf(stderr, "SEAM_GAP prv=(%.6f,%.6f) first=(%.6f,%.6f) dist=%.10f\n",
+                        m_prevResult.lastDabPos.x, m_prevResult.lastDabPos.y,
+                        m_dabBuf[0].x, m_dabBuf[0].y, dist);
+            }
+            m_prevResult = r;
             m_prevSmudgeSrcX = r.lastSmudgeSrc.x;
             m_prevSmudgeSrcY = r.lastSmudgeSrc.y;
             m_hasPrevSmudge = m_dabCount > 0;
+            if (m_dabCount > 0 && m_dbgDabCount + 1 < DBG_PTS) {
+                m_dbgDabPos[m_dbgDabCount++] = Vector2{m_dabBuf[0].x, m_dabBuf[0].y};
+                m_dbgDabPos[m_dbgDabCount++] = Vector2{m_dabBuf[m_dabCount-1].x, m_dabBuf[m_dabCount-1].y};
+            }
 
             m_dabIdx = 0;
             m_segHead = (m_segHead + 1) % SEG_CAP;

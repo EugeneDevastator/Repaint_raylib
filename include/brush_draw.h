@@ -159,6 +159,8 @@ struct SegResult {
     float overdraw;
 };
 
+void CorrectSegmentFromInput(SegmentData* seg, const SegResult* prevResult);
+
 // V2: world-space dab generation (no pixel awareness, no rendering)
 int BuildSegment(const SegmentData& seg, int dabOffset, float initialRad,
                  DabPoint* outBuf, int maxOut, SegResult* res);
@@ -172,10 +174,6 @@ void RasterizeDab(RenderTexture2D rt, float worldToTexPx,
 DabBrush BlendBrushes(DabBrush from, DabBrush to, float k);
 
 void JitterBrush(DabBrush& b, uint16_t baseSeed, int dabIdx);
-
-// V1 (deprecated, kept for reference)
-int DrawLinear_old(const SegmentData& seg, int dabOffset, float initialRad,
-                   DabPoint* outPoints, int maxOut, SegResult* res);
 
 // V2: world-space dab generation (no pixel awareness, no rendering)
 int BuildSegment(const SegmentData& seg, int dabOffset, float initialRad,

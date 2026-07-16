@@ -14,6 +14,10 @@ public:
     int  DrawPending(AppState* state);
     int  GetBudget() const { return m_dynamicBudget; }
 
+    static const int DBG_PTS = 2048;
+    Vector2 m_dbgDabPos[DBG_PTS];
+    int m_dbgDabCount = 0;
+
 private:
     SegmentData m_segQ[SEG_CAP];
     int m_segHead = 0, m_segTail = 0;
@@ -29,6 +33,7 @@ private:
     float m_worldToTexPx;
     float m_prevSmudgeSrcX = 0.0f, m_prevSmudgeSrcY = 0.0f;
     bool  m_hasPrevSmudge = false;
+    SegResult m_prevResult;
 
     int m_dynamicBudget = 2 * 1024 * 1024;
     int m_minBudget = 10000;

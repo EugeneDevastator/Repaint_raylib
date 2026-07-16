@@ -6,6 +6,7 @@
 #include "stroke_engine.h"
 #include "input_modulator.h"
 #include "StrokeEmitter.h"
+#include "StrokeThrottle.h"
 #include "InputQueue.h"
 #include "tablet_platform.h"
 #include "network_broker.h"
@@ -344,15 +345,25 @@ void Viewport_DrawDebugOverlays(Viewport* vp, AppState* state) {
         }
     }
 
-    // Emitted segment endpoints (pos1→pos2 pairs)
+    // Emitted segment endpoints (pos1→pos2 pairs) — raw from emitter
     if (g_emitter) {
         for (int i = 0; i + 1 < g_emitter->m_segEpCount; i += 2) {
             Vector2 p1 = g_emitter->m_segEndpoints[i];
             Vector2 p2 = g_emitter->m_segEndpoints[i + 1];
+            DrawCircle(p1.x, p1.y, 2, (Color){255,255,0,60});
+            DrawCircle(p2.x, p2.y, 2, (Color){255,165,0,60});
+            DrawLineV(p1, p2, (Color){255,255,0,30});
+        }
+    }
+
+    // Actual rendered dab endpoints (corrected by throttle — first→last dab per segment)
+    if (g_throttle) {
+        for (int i = 0; i + 1 < g_throttle->m_dbgDabCount; i += 2) {
+            Vector2 p1 = g_throttle->m_dbgDabPos[i];
+            Vector2 p2 = g_throttle->m_dbgDabPos[i + 1];
             DrawCircle(p1.x, p1.y, 2, YELLOW);
             DrawCircle(p2.x, p2.y, 2, ORANGE);
-            DrawLineV(p1, p2, (Color){255, 255, 0, 80});
-            // Single-sided tickmark at segment end to show direction
+            DrawLineV(p1, p2, (Color){255, 255, 0, 120});
             float dx = p2.x - p1.x, dy = p2.y - p1.y;
             float len = sqrtf(dx*dx + dy*dy);
             if (len > 0.5f) {
@@ -367,7 +378,7 @@ void Viewport_DrawDebugOverlays(Viewport* vp, AppState* state) {
     for (int i = 0; i < vp->strokeLen && i < MAX_STROKE_PTS; i++)
         DrawCircle(vp->strokePts[i].x, vp->strokePts[i].y, 2, GREEN);
 
-    DrawText("BLUE=raw input  RED=spline  YEL/ORG=segment  GREEN=dabs  MAGENTA=perp (F3 toggle)", 10, 10, 14, WHITE);
+    DrawText("BLUE=input  RED=spline  YEL/ORG=rendered segs  GREEN=dabs  MAGENTA=dir  (dim=raw emitter)", 10, 10, 14, WHITE);
     EndMode2D();
 }
 
