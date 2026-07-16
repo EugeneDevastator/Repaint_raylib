@@ -314,7 +314,7 @@ int BuildSegment(const SegmentData& seg, int dabOffset, float initialRad,
     float x2r = dx / stdist, y2r = dy / stdist;
 
     float lastDabPos = 0.0f;
-    float lastDabRad = rFrom;
+    float lastDabRad = (initialRad > 0.0f) ? initialRad : rFrom;
     int count = 0;
     float lastSrcX = seg.smudgeSrcX;
     float lastSrcY = seg.smudgeSrcY;
@@ -322,16 +322,21 @@ int BuildSegment(const SegmentData& seg, int dabOffset, float initialRad,
     float lastSrcAngle = seg.brushFrom.resangle;
 
     // First dab ALWAYS at the start position (arc=0) for geometrically
-    // perfect segment boundaries. The spacing loop follows from here.
+    // perfect segment boundaries — unless chaining from a previous
+    // segment (initialRad > 0 carries the previous dab's radius).
     Vector2 lastDabWorldPos = from;
-    if (outPoints && count < maxOut) {
-        outPoints[count].x = from.x; outPoints[count].y = from.y;
-        outPoints[count].srcX = lastSrcX; outPoints[count].srcY = lastSrcY;
-        outPoints[count].srcRad = lastSrcRad;
-        outPoints[count].srcAngle = lastSrcAngle;
-        outPoints[count].brush = seg.brushFrom;
+    if (initialRad <= 0.0f) {
+        if (outPoints && count < maxOut) {
+            outPoints[count].x = from.x; outPoints[count].y = from.y;
+            outPoints[count].srcX = lastSrcX; outPoints[count].srcY = lastSrcY;
+            outPoints[count].srcRad = lastSrcRad;
+            outPoints[count].srcAngle = lastSrcAngle;
+            outPoints[count].brush = seg.brushFrom;
+        }
+        fprintf(stderr, "BLD_FIRST arc0 pos=(%.3f,%.3f) r=%.3f\n",
+            from.x, from.y, seg.brushFrom.rad_out_px);
+        count = 1;
     }
-    count = 1;
 
     while (count < maxOut) {
         float tNext_est = lastDabPos / totalLen;
@@ -405,6 +410,10 @@ int BuildSegment(const SegmentData& seg, int dabOffset, float initialRad,
             outPoints[count].srcAngle = lastSrcAngle;
             outPoints[count].brush = dabCB;
         }
+        if (initialRad > 0.0f && count == 0) {
+            fprintf(stderr, "BLD_FIRST chain pos=(%.3f,%.3f) r=%.3f rFrom=%.3f rTo=%.3f\n",
+                pos.x, pos.y, dabCB.rad_out_px, rFrom, rTo);
+        }
         lastSrcX = pos.x;
         lastSrcY = pos.y;
         lastSrcRad = dabCB.rad_out_px;
@@ -423,14 +432,52 @@ int BuildSegment(const SegmentData& seg, int dabOffset, float initialRad,
     return count;
 }
 
-// ── V2: Correct segment start from previous segment's last dab ───────
+// ── Correction helpers ──────────────────────────────────────────────
+
+Vector2 FindNextSegmentStart(const SegResult& prevResult, const DabBrush& brushFrom,
+                             const SegmentData& virtualSeg) {
+    float dx = virtualSeg.pos2.x - virtualSeg.pos1.x;
+    float dy = virtualSeg.pos2.y - virtualSeg.pos1.y;
+    float segLen = sqrtf(dx*dx + dy*dy);
+    if (segLen < 0.001f) return virtualSeg.pos1;
+
+    float dirX = dx / segLen;
+    float dirY = dy / segLen;
+
+    float t = (prevResult.lastDabPos.x - virtualSeg.pos1.x) * dirX +
+              (prevResult.lastDabPos.y - virtualSeg.pos1.y) * dirY;
+    if (t < 0.0f) t = 0.0f;
+    if (t > segLen) t = segLen;
+
+    return Vector2{
+        virtualSeg.pos1.x + dirX * t,
+        virtualSeg.pos1.y + dirY * t
+    };
+}
+
+float ResolveFirstDabRadius(const DabBrush& brushFrom, const SegmentData& virtualSeg) {
+    return brushFrom.rad_out_px;
+}
+
+// ── Correct segment start from previous segment's last dab ───────
 void CorrectSegmentFromInput(SegmentData* seg, const SegResult* prevResult) {
     if (!seg || !prevResult) return;
-    seg->pos1 = prevResult->lastDabPos;
-    if (prevResult->lastRadOut > 0.0f)
-        seg->brushFrom.rad_out_px = prevResult->lastRadOut;
+    float nextRad = ResolveFirstDabRadius(seg->brushFrom, *seg);
+    seg->brushFrom.rad_out_px = nextRad;
+    Vector2 nextPos = FindNextSegmentStart(*prevResult, seg->brushFrom, *seg);
+    seg->pos1 = nextPos;
     seg->smudgeSrcX = prevResult->lastSmudgeSrc.x;
     seg->smudgeSrcY = prevResult->lastSmudgeSrc.y;
+
+    {
+        float dx = nextPos.x - prevResult->lastDabPos.x;
+        float dy = nextPos.y - prevResult->lastDabPos.y;
+        float dist = sqrtf(dx*dx + dy*dy);
+        fprintf(stderr, "CORR lastPos=(%.3f,%.3f) lastR=%.3f nextR=%.3f startPos=(%.3f,%.3f) dist=%.3f\n",
+            prevResult->lastDabPos.x, prevResult->lastDabPos.y,
+            prevResult->lastRadOut, nextRad,
+            nextPos.x, nextPos.y, dist);
+    }
 }
 
 // ── DrawSegment (DEPRECATED — uses BuildSegment internally) ─────────
@@ -470,7 +517,7 @@ void SegDrawer_SetSegmentStart(float startRad, Vector2 startPos, SegmentData* se
 void SegDrawer_ComputeSegmentEnd(const SegmentData& seg, int dabOffset, float initialRad,
                                   Vector2* outLastPos, float* outLastRad) {
     SegResult r;
-    BuildSegment(seg, dabOffset, initialRad, nullptr, 65536, &r);
+    BuildSegment(seg, dabOffset, 0.0f, nullptr, 65536, &r);
     *outLastPos = r.lastDabPos;
     *outLastRad = r.lastRadOut;
 }

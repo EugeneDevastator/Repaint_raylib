@@ -5,8 +5,6 @@
 #include "texture_manager.h"
 #include "raylib.h"
 
-extern bool g_useV2;
-
 StrokeThrottle* g_throttle = nullptr;
 
 void StrokeThrottle::Push(const SegmentData& seg) {
@@ -37,21 +35,36 @@ int StrokeThrottle::DrawPending(AppState* state) {
             if (m_hasPrevSmudge) CorrectSegmentFromInput(&seg, &m_prevResult);
 
             SegResult r;
-            m_dabCount = BuildSegment(seg, 0, 0.0f, m_dabBuf, DAB_CAP, &r);
+            float chainedRad = m_hasPrevSmudge ? m_prevResult.lastRadOut : 0.0f;
+            m_dabCount = BuildSegment(seg, 0, chainedRad, m_dabBuf, DAB_CAP, &r);
 
-            if (m_dabCount > 0 && m_hasPrevSmudge) {
-                float dx = m_dabBuf[0].x - m_prevResult.lastDabPos.x;
-                float dy = m_dabBuf[0].y - m_prevResult.lastDabPos.y;
-                double dist = sqrt((double)dx*dx + (double)dy*dy);
-                if (dist > 0.001)
-                    fprintf(stderr, "SEAM_GAP prv=(%.6f,%.6f) first=(%.6f,%.6f) dist=%.10f\n",
-                        m_prevResult.lastDabPos.x, m_prevResult.lastDabPos.y,
-                        m_dabBuf[0].x, m_dabBuf[0].y, dist);
+            {
+                float est = seg.brushFrom.rad_out_px;
+                float rTo = seg.brush.rad_out_px;
+                float prR = m_prevResult.lastRadOut;
+                if (m_dabCount > 0) {
+                    float act = m_dabBuf[0].brush.rad_out_px;
+                    fprintf(stderr, "SEG cnt=%2d ch=%d est=%.3f act=%.3f rTo=%.3f prR=%.3f jit=%.3f sp=%.3f len=%.1f\n",
+                        m_dabCount, m_hasPrevSmudge ? 1 : 0,
+                        est, act, rTo, prR,
+                        seg.brushFrom.jitRadOut, seg.brushFrom.spacing,
+                        sqrtf((seg.pos2.x-seg.pos1.x)*(seg.pos2.x-seg.pos1.x) +
+                              (seg.pos2.y-seg.pos1.y)*(seg.pos2.y-seg.pos1.y)));
+                } else {
+                    fprintf(stderr, "SEG cnt=0  ch=%d est=%.3f rTo=%.3f prR=%.3f sp=%.3f len=%.1f\n",
+                        m_hasPrevSmudge ? 1 : 0,
+                        est, rTo, prR,
+                        seg.brushFrom.spacing,
+                        sqrtf((seg.pos2.x-seg.pos1.x)*(seg.pos2.x-seg.pos1.x) +
+                              (seg.pos2.y-seg.pos1.y)*(seg.pos2.y-seg.pos1.y)));
+                }
             }
+
             m_prevResult = r;
             m_prevSmudgeSrcX = r.lastSmudgeSrc.x;
             m_prevSmudgeSrcY = r.lastSmudgeSrc.y;
-            m_hasPrevSmudge = m_dabCount > 0;
+            if (m_dabCount > 0)
+                m_hasPrevSmudge = true;
             if (m_dabCount > 0 && m_dbgDabCount + 1 < DBG_PTS) {
                 m_dbgDabPos[m_dbgDabCount++] = Vector2{m_dabBuf[0].x, m_dabBuf[0].y};
                 m_dbgDabPos[m_dbgDabCount++] = Vector2{m_dabBuf[m_dabCount-1].x, m_dabBuf[m_dabCount-1].y};
@@ -84,13 +97,8 @@ int StrokeThrottle::DrawPending(AppState* state) {
             }
 
             if (rt.id > 0) {
-                if (g_useV2)
-                    RasterizeDab(rt, m_worldToTexPx, pt,
-                                 brushTex, useTexture, m_seamless, m_pixelPerfect);
-                else
-                    BrushBlend_ApplyStamp(rt, pt.brush, brushTex, useTexture,
-                        pt.x, pt.y, pt.srcX, pt.srcY, pt.srcRad, pt.srcAngle,
-                        m_seamless, m_pixelPerfect);
+                RasterizeDab(rt, m_worldToTexPx, pt,
+                             brushTex, useTexture, m_seamless, m_pixelPerfect);
             }
 
             pixelBudget -= cost;

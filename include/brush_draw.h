@@ -160,6 +160,9 @@ struct SegResult {
 };
 
 void CorrectSegmentFromInput(SegmentData* seg, const SegResult* prevResult);
+Vector2 FindNextSegmentStart(const SegResult& prevResult, const DabBrush& brushFrom,
+                             const SegmentData& virtualSeg);
+float ResolveFirstDabRadius(const DabBrush& brushFrom, const SegmentData& virtualSeg);
 
 // V2: world-space dab generation (no pixel awareness, no rendering)
 int BuildSegment(const SegmentData& seg, int dabOffset, float initialRad,
@@ -174,15 +177,5 @@ void RasterizeDab(RenderTexture2D rt, float worldToTexPx,
 DabBrush BlendBrushes(DabBrush from, DabBrush to, float k);
 
 void JitterBrush(DabBrush& b, uint16_t baseSeed, int dabIdx);
-
-// V2: world-space dab generation (no pixel awareness, no rendering)
-int BuildSegment(const SegmentData& seg, int dabOffset, float initialRad,
-                 DabPoint* outBuf, int maxOut, SegResult* res);
-
-// V2: the ONLY place where world→texture pixel conversion happens
-void RasterizeDab(RenderTexture2D rt, float worldW, float worldH,
-                  const DabPoint& worldPt,
-                  Texture2D brushTex, bool useTex,
-                  bool seamless, bool pixelPerfect);
 
 #endif
