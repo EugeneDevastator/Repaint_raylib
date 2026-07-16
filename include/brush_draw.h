@@ -141,6 +141,9 @@ struct SegmentData {
     // Modulation at segment endpoints (informational — DrawLinear does not read)
     RootModulators fromRoot, toRoot;
     uint8_t sliderMods[20];  // BParam index → csSlot (modulatorId)
+    // Layer world-extent (for uniform world→pixel conversion in RasterizeDab)
+    float layerWW, layerWH;
+    float worldToTexPx;  // fallback scale factor (legacy compat)
 };
 
 int DrawSegment(const SegmentData& dseg, RenderTexture2D rt, Texture2D brushTex, bool useTexture, bool seamless, int dabOffset, bool pixelPerfect = false);
@@ -156,11 +159,32 @@ struct SegResult {
     float overdraw;
 };
 
+// V2: world-space dab generation (no pixel awareness, no rendering)
+int BuildSegment(const SegmentData& seg, int dabOffset, float initialRad,
+                 DabPoint* outBuf, int maxOut, SegResult* res);
+
+// V2: the ONLY place where world→texture pixel conversion happens
+void RasterizeDab(RenderTexture2D rt, float worldToTexPx,
+                  const DabPoint& worldPt,
+                  Texture2D brushTex, bool useTex,
+                  bool seamless, bool pixelPerfect);
+
 DabBrush BlendBrushes(DabBrush from, DabBrush to, float k);
 
 void JitterBrush(DabBrush& b, uint16_t baseSeed, int dabIdx);
 
-int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
-               DabPoint* outPoints, int maxOut, SegResult* res);
+// V1 (deprecated, kept for reference)
+int DrawLinear_old(const SegmentData& seg, int dabOffset, float initialRad,
+                   DabPoint* outPoints, int maxOut, SegResult* res);
+
+// V2: world-space dab generation (no pixel awareness, no rendering)
+int BuildSegment(const SegmentData& seg, int dabOffset, float initialRad,
+                 DabPoint* outBuf, int maxOut, SegResult* res);
+
+// V2: the ONLY place where world→texture pixel conversion happens
+void RasterizeDab(RenderTexture2D rt, float worldW, float worldH,
+                  const DabPoint& worldPt,
+                  Texture2D brushTex, bool useTex,
+                  bool seamless, bool pixelPerfect);
 
 #endif

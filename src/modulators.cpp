@@ -50,7 +50,7 @@ void Modulators_Init(void) {
     strncpy(bpOpacity.tooltip, "Overall opacity of the brush stroke", sizeof(bpOpacity.tooltip) - 1);
     BParam_SetIcon(&bpOpacity, "ctlop");
 
-    BParam_Init(&bpSize, 1, "Size", 0.0f, 1.0f, 0.5f);
+    BParam_Init(&bpSize, 1, "Size", 0.0f, 256.0f, 128.0f);
     strncpy(bpSize.tooltip, "Outer radius of the brush tip in world units (256px per wu)", sizeof(bpSize.tooltip) - 1);
     BParam_SetIcon(&bpSize, "ctlrad");
 

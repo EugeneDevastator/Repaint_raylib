@@ -77,7 +77,7 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
     }
 
     if (isFirstDabPainted) {
-        DabBrush cb = MakeDabBrush(m_modulated, m_brushFrom.rad_out);
+        DabBrush cb = MakeDabBrush(m_modulated, m_modulated.radOut);
         memset(&m_pendingFirstDabSeg, 0, sizeof(m_pendingFirstDabSeg));
         m_pendingFirstDabSeg.pos1 = m_pendingFirstDabSeg.pos2 = start;
         m_pendingFirstDabSeg.ctrl0 = m_pendingFirstDabSeg.ctrl3 = m_pendingFirstDabSeg.pos1;
@@ -94,6 +94,9 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
         m_pendingFirstDabSeg.userTexSlot = m_userTexSlot;
         m_pendingFirstDabSeg.dabOffset  = 0;
         m_pendingFirstDabSeg.initAngle  = e.initAngle;
+        m_pendingFirstDabSeg.layerWW    = m_destXform.ww;
+        m_pendingFirstDabSeg.layerWH    = m_destXform.wh;
+        m_pendingFirstDabSeg.worldToTexPx = m_worldToTexPx;
         m_hasPendingFirstDab = true;
         m_lastDabRad = m_modulated.radOut;
     }
@@ -141,10 +144,10 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
     }
 
     ModulatedBrushConfig modTo = ResolveModulatedConfig(m_config, toolMode, initAngle, &mt);
-    modTo.radOut *= m_worldToTexPx;
-    modTo.jitRadOut *= m_worldToTexPx;
 
-    DabBrush cbFrom = MakeDabBrush(modFrom, m_brushFrom.rad_out);
+    // V2: both brush endpoints in consistent world units.
+    // Pixel scaling happens later in RasterizeDab via layerWW/layerWH.
+    DabBrush cbFrom = MakeDabBrush(modFrom, modFrom.radOut);
     DabBrush cbTo   = MakeDabBrush(modTo, modTo.radOut);
 
     float hLen = segLen * 0.33f;
@@ -188,6 +191,9 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
     m_prevRoot      = root;
     m_hasPrevRoot   = true;
     FillSliderMods(m_config, dseg.sliderMods);
+    dseg.layerWW = m_destXform.ww;
+    dseg.layerWH = m_destXform.wh;
+    dseg.worldToTexPx = m_worldToTexPx;
 
     SegDrawer_SetSegmentStart(m_lastDabRad, m_lastDabPos, &dseg);
     if (!m_emittedAny) dseg.isStrokeStart = 1;
@@ -275,7 +281,7 @@ void StrokeEmitter::handlePoint(const InputEntry& e) {
             // Flush pending first dab with the segment's direction
             if (m_hasPendingFirstDab) {
 
-                DabBrush cb = MakeDabBrush(m_modulated, m_brushFrom.rad_out);
+                DabBrush cb = MakeDabBrush(m_modulated, m_modulated.radOut);
                 m_pendingFirstDabSeg.brushFrom = m_pendingFirstDabSeg.brush = cb;
                 m_throttle->Push(m_pendingFirstDabSeg);
                 if (g_recorder) g_recorder->on_segment(m_pendingFirstDabSeg);
@@ -406,4 +412,5 @@ void StrokeEmitter::ProcessInputQueue() {
         }
     }
 }
+
 

@@ -209,7 +209,6 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         if (state->undo) state->undo->Snapshot(state, targetSlot);
 
         float origRad = state->currentBrush.Realb.rad_out;
-        state->currentBrush.Realb.rad_out *= worldToTexPx;
         TabletPlatform_ClearMousePos();
 
         if (isBrushSmudge) {
@@ -231,7 +230,6 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             int n = hasTablet ? tabletN : 1;
             if (!hasTablet) { mouseBuf[0] = mousePos.x; mouseBuf[1] = mousePos.y; }
             float origRad = state->currentBrush.Realb.rad_out;
-            state->currentBrush.Realb.rad_out *= worldToTexPx;
             for (int i = 0; i < n; i++) {
                 Vector2 screenPos = {mouseBuf[i*2], mouseBuf[i*2+1]};
                 Vector2 worldPos = GetScreenToWorld2D(screenPos, state->camera);
@@ -289,7 +287,6 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             Vector2 start = vp->lineStartPos;
             Vector2 end   = canvasPos;
             float origRad = state->currentBrush.Realb.rad_out;
-            state->currentBrush.Realb.rad_out *= worldToTexPx;
 
             // First dab: Begin+End → handleEnd !m_emittedAny pushes single stamp
             InputEntry be;

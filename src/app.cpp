@@ -92,6 +92,7 @@ void HudSetActive(AppState* state, int newHud) {
 
 bool g_seamlessPaint = false;
 bool g_seamlessPreview = false;
+bool g_useV2 = true;              // V2 pipeline toggle (BuildSegment + RasterizeDab)
 int g_texScaleMode = 0;
 int g_texPanelAreaY = 0;
 UndoManager* g_undoManager = nullptr;

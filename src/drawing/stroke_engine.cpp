@@ -154,7 +154,7 @@ int StrokeEngine_GeneratePreviewDabs(const d_RealBrush* baseBrush, int toolMode,
     UserBrushConfig cfg;
     CaptureBrushConfig(&cfg);
 
-    float radOut = baseBrush->rad_out * WORLD_UNIT_PX;
+    float radOut = baseBrush->rad_out;  // already in pixel units (outMax=256)
     float segLen = fmaxf(radOut * 2.0f, 80.0f);
     // Fixed stroke direction — initialAngle only affects brush rotation, not geometry
     float dirX = 1.0f, dirY = -1.0f;
@@ -192,8 +192,6 @@ int StrokeEngine_GeneratePreviewDabs(const d_RealBrush* baseBrush, int toolMode,
     mt.val[csIdir] = mt.val[csDir];
     ModulatedBrushConfig mod = ResolveModulatedConfig(cfg, toolMode, initialAngle, &mt);
     float spacingVal = mod.spacing;
-    mod.radOut *= WORLD_UNIT_PX;
-    mod.jitRadOut *= WORLD_UNIT_PX;
     mod.spacing = spacingVal;
     DabBrush cbFull = MakeDabBrush(mod, mod.radOut);
 
@@ -227,7 +225,7 @@ int StrokeEngine_GeneratePreviewDabs(const d_RealBrush* baseBrush, int toolMode,
     seed.initAngle = initialAngle;
     {
         SegResult r;
-        int cnt = DrawLinear(seed, 0, 0.0f, outBuf, maxOut, &r);
+        int cnt = DrawLinear_old(seed, 0, 0.0f, outBuf, maxOut, &r);
         total += cnt;
     }
 
@@ -251,7 +249,7 @@ int StrokeEngine_GeneratePreviewDabs(const d_RealBrush* baseBrush, int toolMode,
     s.smudgeSrcY = cy;
     s.initAngle = initialAngle;
     SegResult r;
-    int cnt = DrawLinear(s, total, 0.0f, outBuf + total, maxOut - total, &r);
+    int cnt = DrawLinear_old(s, total, 0.0f, outBuf + total, maxOut - total, &r);
     total += cnt;
 
     // Per-dab angle fixup — recompute resangle from actual curve direction
@@ -281,3 +279,4 @@ int StrokeEngine_GeneratePreviewDabs(const d_RealBrush* baseBrush, int toolMode,
 }
 
 // (StrokeEngine_DrawPreview removed — callers use StrokeEngine_GeneratePreviewDabs + incremental render)
+

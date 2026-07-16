@@ -8,7 +8,7 @@ void PaintHudModule::DrawGL(const DrawRect& rect) {
     // Skip during color picking — XOR overlay corrupts screen readback
     if (g_activeHud != HUD_NONE || g_colorPicking) return;
     Vector2 mp = GetMousePosition();
-    float radPx = state->currentBrush.Realb.rad_out * WORLD_UNIT_PX * state->camera.zoom;
+    float radPx = state->currentBrush.Realb.rad_out * state->camera.zoom;
 
     // ── Line tool XOR preview ──────────────────────────────────────
     if (state->mode == ePolyStripe && viewport.wasMouseDown) {

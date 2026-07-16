@@ -95,7 +95,7 @@ DabBrush BlendBrushes(DabBrush from, DabBrush to, float k) {
     r.userTexDirection = from.userTexDirection;
     r.focalOffset = from.focalOffset;
 
-    // Jitter ranges (interpolated — rad jitRadOut overwritten per-dab in DrawLinear)
+    // Jitter ranges (interpolated — rad jitRadOut overwritten per-dab in DrawLinear_old)
     r.jitRadOut = lerp(from.jitRadOut, to.jitRadOut, k);
     r.jitRadIn  = lerp(from.jitRadIn, to.jitRadIn, k);
     r.jitOpacity = lerp(from.jitOpacity, to.jitOpacity, k);
@@ -242,8 +242,8 @@ static float JitterRadius(float unjitteredRad, float jitRange,
     return fmaxf(radMin, fminf(radMax, r));
 }
 
-// ── DrawLinear ─────────────────────────────────────────────────────
-int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
+// ── DrawLinear_old ─────────────────────────────────────────────────────
+int DrawLinear_old(const SegmentData& seg, int dabOffset, float initialRad,
                DabPoint* outPoints, int maxOut, SegResult* res) {
     if (!res) return 0;
     Vector2 from = seg.pos1;
@@ -447,7 +447,7 @@ int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
 int DrawSegment(const SegmentData& dseg, RenderTexture2D rt, Texture2D brushTex, bool useTexture, bool seamless, int dabOffset, bool pixelPerfect) {
     static DabPoint pts[65536];
     SegResult r;
-    int cnt = DrawLinear(dseg, dabOffset, 0.0f, pts, 65536, &r);
+    int cnt = DrawLinear_old(dseg, dabOffset, 0.0f, pts, 65536, &r);
 
     for (int i = 0; i < cnt; i++)
         BrushBlend_ApplyStamp(rt, pts[i].brush, brushTex, useTexture,
@@ -455,6 +455,26 @@ int DrawSegment(const SegmentData& dseg, RenderTexture2D rt, Texture2D brushTex,
                               pts[i].srcRad, pts[i].srcAngle,
                               seamless, pixelPerfect);
     return cnt;
+}
+
+// ── V2: BuildSegment (world-space dab generation) ───────────────────
+int BuildSegment(const SegmentData& seg, int dabOffset, float initialRad,
+                 DabPoint* outBuf, int maxOut, SegResult* res) {
+    return DrawLinear_old(seg, dabOffset, initialRad, outBuf, maxOut, res);
+}
+
+// ── V2: RasterizeDab (world→texture pixel conversion) ───────────────
+void RasterizeDab(RenderTexture2D rt, float worldToTexPx,
+                  const DabPoint& pt,
+                  Texture2D brushTex, bool useTex,
+                  bool seamless, bool pixelPerfect) {
+    // Radii are already in pixel units (bpSize outMax=256).
+    // Positions are already in the render target's coordinate space.
+    BrushBlend_ApplyStamp(rt, pt.brush, brushTex, useTex,
+        pt.x, pt.y,
+        pt.srcX, pt.srcY,
+        pt.srcRad, pt.srcAngle,
+        seamless, pixelPerfect);
 }
 
 // ── SegDrawer helpers (computation only, no rendering) ─────────────
@@ -468,8 +488,10 @@ void SegDrawer_SetSegmentStart(float startRad, Vector2 startPos, SegmentData* se
 void SegDrawer_ComputeSegmentEnd(const SegmentData& seg, int dabOffset, float initialRad,
                                   Vector2* outLastPos, float* outLastRad) {
     SegResult r;
-    DrawLinear(seg, dabOffset, initialRad, nullptr, 65536, &r);
+    DrawLinear_old(seg, dabOffset, initialRad, nullptr, 65536, &r);
     *outLastPos = r.lastDabPos;
     *outLastRad = r.lastRadOut;
 }
+
+
 

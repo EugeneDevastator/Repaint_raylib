@@ -25,6 +25,10 @@ private:
     TexSlotID m_targetSlot;
     uint8_t m_userTexBucket, m_userTexSlot;
     bool m_seamless, m_pixelPerfect;
+    float m_layerWW, m_layerWH;
+    float m_worldToTexPx;
+    float m_prevSmudgeSrcX = 0.0f, m_prevSmudgeSrcY = 0.0f;
+    bool  m_hasPrevSmudge = false;
 
     int m_dynamicBudget = 2 * 1024 * 1024;
     int m_minBudget = 10000;

@@ -5,6 +5,8 @@
 #include "texture_manager.h"
 #include "raylib.h"
 
+extern bool g_useV2;
+
 StrokeThrottle* g_throttle = nullptr;
 
 void StrokeThrottle::Push(const SegmentData& seg) {
@@ -27,11 +29,26 @@ int StrokeThrottle::DrawPending(AppState* state) {
             m_userTexSlot = seg.userTexSlot;
             m_seamless = seg.seamless != 0;
             m_pixelPerfect = seg.pixelPerfect != 0;
+            m_layerWW = seg.layerWW;
+            m_layerWH = seg.layerWH;
+            m_worldToTexPx = seg.worldToTexPx;
             // Angle/smudge carry-over removed — the emitter already provides
-            // continuous per-segment resangle via m_modulated continuity.
+            // continuous per-segment resangle and radius via m_modulated continuity.
+            if (m_hasPrevSmudge) {
+                seg.smudgeSrcX = m_prevSmudgeSrcX;
+                seg.smudgeSrcY = m_prevSmudgeSrcY;
+            }
 
             SegResult r;
-            m_dabCount = DrawLinear(seg, 0, 0.0f, m_dabBuf, DAB_CAP, &r);
+            extern bool g_useV2;
+            if (g_useV2)
+                m_dabCount = BuildSegment(seg, 0, 0.0f, m_dabBuf, DAB_CAP, &r);
+            else
+                m_dabCount = DrawLinear_old(seg, 0, 0.0f, m_dabBuf, DAB_CAP, &r);
+
+            m_prevSmudgeSrcX = r.lastSmudgeSrc.x;
+            m_prevSmudgeSrcY = r.lastSmudgeSrc.y;
+            m_hasPrevSmudge = m_dabCount > 0;
 
             m_dabIdx = 0;
             m_segHead = (m_segHead + 1) % SEG_CAP;
@@ -59,10 +76,15 @@ int StrokeThrottle::DrawPending(AppState* state) {
                 }
             }
 
-            if (rt.id > 0)
-                BrushBlend_ApplyStamp(rt, pt.brush, brushTex, useTexture,
-                    pt.x, pt.y, pt.srcX, pt.srcY, pt.srcRad, pt.srcAngle,
-                    m_seamless, m_pixelPerfect);
+            if (rt.id > 0) {
+                if (g_useV2)
+                    RasterizeDab(rt, m_worldToTexPx, pt,
+                                 brushTex, useTexture, m_seamless, m_pixelPerfect);
+                else
+                    BrushBlend_ApplyStamp(rt, pt.brush, brushTex, useTexture,
+                        pt.x, pt.y, pt.srcX, pt.srcY, pt.srcRad, pt.srcAngle,
+                        m_seamless, m_pixelPerfect);
+            }
 
             pixelBudget -= cost;
             m_dabIdx++;
@@ -84,3 +106,4 @@ int StrokeThrottle::DrawPending(AppState* state) {
 
     return drawn;
 }
+
