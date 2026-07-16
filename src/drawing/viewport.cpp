@@ -288,17 +288,19 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             Vector2 end   = canvasPos;
             float origRad = state->currentBrush.Realb.rad_out;
 
-            // First dab: Begin+End → handleEnd !m_emittedAny pushes single stamp
-            InputEntry be;
-            FillBeginEntry(be, state, ePolyStripe, start, adjustedAngle,
-                           targetSlot, worldToTexPx, destXform);
-            g_inputQueue.AddEntry(be);
-            InputEntry ee;
-            memset(&ee, 0, sizeof(ee)); ee.type = InputEntry::End;
-            g_inputQueue.AddEntry(ee);
-
-            if (Dist2D(start, end) > 1.0f) {
-                // Drag: push second Begin+Point*3+End for the line segment
+            if (Dist2D(start, end) <= 1.0f) {
+                // Click only (no drag): single stamp via Begin+End
+                InputEntry be;
+                FillBeginEntry(be, state, ePolyStripe, start, adjustedAngle,
+                               targetSlot, worldToTexPx, destXform);
+                g_inputQueue.AddEntry(be);
+                InputEntry ee;
+                memset(&ee, 0, sizeof(ee)); ee.type = InputEntry::End;
+                g_inputQueue.AddEntry(ee);
+            } else {
+                // Drag: Begin+Point*3+End — the first segment's pending
+                // first dab handles the start position.
+                InputEntry be;
                 FillBeginEntry(be, state, ePolyStripe, start, adjustedAngle,
                                targetSlot, worldToTexPx, destXform);
                 g_inputQueue.AddEntry(be);
@@ -312,6 +314,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
                     pe.timestamp = GetTime();
                     g_inputQueue.AddEntry(pe);
                 }
+                InputEntry ee;
                 memset(&ee, 0, sizeof(ee)); ee.type = InputEntry::End;
                 g_inputQueue.AddEntry(ee);
             }
