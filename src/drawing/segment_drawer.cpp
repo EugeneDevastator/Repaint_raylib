@@ -464,7 +464,7 @@ int BuildSegment(const SegmentData& seg, int dabOffset, float initialRad,
             dabCB.rad_out_px = (float)ip + seg.ppBias;
         }
 
-        res->firstDabPos = pos;
+        if (count == 0) res->firstDabPos = pos;
         res->lastDabPos = pos;
 
         if (outPoints) {

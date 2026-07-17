@@ -335,11 +335,8 @@ void Viewport_DrawDebugOverlays(Viewport* vp, AppState* state) {
     if (g_emitter) {
         for (int i = 0; i < g_emitter->m_segDebugCount && i < StrokeEmitter::DBG_SEG_PTS / 2; i++) {
             if (!g_emitter->m_segHadDab[i]) continue;
-            DrawCircle(g_emitter->m_segEndpoints[i * 2].x,     g_emitter->m_segEndpoints[i * 2].y,     2, YELLOW);
-            DrawCircle(g_emitter->m_segEndpoints[i * 2 + 1].x, g_emitter->m_segEndpoints[i * 2 + 1].y, 2, YELLOW);
-            DrawLineV(g_emitter->m_segEndpoints[i * 2], g_emitter->m_segEndpoints[i * 2 + 1], (Color){255, 255, 0, 50});
-            DrawCircle(g_emitter->m_segFirstDab[i].x, g_emitter->m_segFirstDab[i].y, 3, SKYBLUE);
             DrawCircle(g_emitter->m_segLastDab[i].x,  g_emitter->m_segLastDab[i].y,  4, ORANGE);
+            DrawCircle(g_emitter->m_segFirstDab[i].x, g_emitter->m_segFirstDab[i].y, 3, YELLOW);
         }
     }
     EndMode2D();
