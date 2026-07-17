@@ -61,6 +61,7 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
     memset(m_splinePts, 0, sizeof(m_splinePts));
     m_splinePts[0] = start;
     m_segEpCount = 0;
+    m_segDebugCount = 0;
 
     ModulatorTable mt2; Modulator_GetTable(&mt2);
     m_modulated = ResolveModulatedConfig(m_config, e.toolMode, e.initAngle, &mt2);
@@ -196,17 +197,23 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
     SegDrawer_SetSegmentStart(m_lastDabRad, m_lastDabPos, &dseg);
     if (!m_emittedAny) dseg.isStrokeStart = 1;
 
-    if (m_segEpCount + 1 < DBG_SEG_PTS) {
-        m_segEndpoints[m_segEpCount++] = dseg.pos1;
-        m_segEndpoints[m_segEpCount++] = dseg.pos2;
-    }
-
     m_throttle->Push(dseg);
 
     if (g_recorder) g_recorder->on_segment(dseg);
     if (g_broker) g_broker->on_segment(dseg);
 
-    SegDrawer_ComputeSegmentEnd(dseg, 0, m_lastDabRad, &m_lastDabPos, &m_lastDabRad);
+    SegResult segRes;
+    int dabCount = DrawLinear(dseg, 0, m_lastDabRad, nullptr, 65536, &segRes);
+    m_lastDabPos = segRes.lastDabPos;
+    m_lastDabRad = segRes.lastRadOut;
+    if (dabCount > 0 && m_segDebugCount < DBG_SEG_PTS / 2) {
+        m_segFirstDab[m_segDebugCount] = segRes.firstDabPos;
+        m_segLastDab[m_segDebugCount]  = m_lastDabPos;
+        m_segEndpoints[m_segDebugCount * 2] = dseg.pos1;
+        m_segEndpoints[m_segDebugCount * 2 + 1] = dseg.pos2;
+        m_segHadDab[m_segDebugCount] = true;
+        m_segDebugCount++;
+    }
     if (g_pixelPerfect) {
         m_lastDabPos.x = roundf(m_lastDabPos.x);
         m_lastDabPos.y = roundf(m_lastDabPos.y);

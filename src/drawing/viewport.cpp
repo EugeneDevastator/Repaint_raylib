@@ -332,43 +332,13 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
 void Viewport_DrawDebugOverlays(Viewport* vp, AppState* state) {
     if (!vp->debugShowStamps) return;
     BeginMode2D(state->camera);
-
-    // Raw input points (paintPos every frame)
-    for (int i = 0; i < vp->inputLen && i < MAX_STROKE_PTS; i++)
-        DrawCircle(vp->inputPts[i].x, vp->inputPts[i].y, 3, BLUE);
-
-    // Spline buffer points (throttled Catmull-Rom control points)
     if (g_emitter) {
-        for (int i = 0; i < g_emitter->m_splineCount; i++) {
-            DrawCircle(g_emitter->m_splinePts[i].x, g_emitter->m_splinePts[i].y, 4, RED);
-            DrawCircleLines(g_emitter->m_splinePts[i].x, g_emitter->m_splinePts[i].y, 4, RED);
+        for (int i = 0; i < g_emitter->m_segDebugCount && i < StrokeEmitter::DBG_SEG_PTS / 2; i++) {
+            if (!g_emitter->m_segHadDab[i]) continue;
+            DrawCircle(g_emitter->m_segFirstDab[i].x, g_emitter->m_segFirstDab[i].y, 3, YELLOW);
+            DrawCircle(g_emitter->m_segLastDab[i].x,  g_emitter->m_segLastDab[i].y,  3, ORANGE);
         }
     }
-
-    // Emitted segment endpoints (pos1→pos2 pairs)
-    if (g_emitter) {
-        for (int i = 0; i + 1 < g_emitter->m_segEpCount; i += 2) {
-            Vector2 p1 = g_emitter->m_segEndpoints[i];
-            Vector2 p2 = g_emitter->m_segEndpoints[i + 1];
-            DrawCircle(p1.x, p1.y, 2, YELLOW);
-            DrawCircle(p2.x, p2.y, 2, ORANGE);
-            DrawLineV(p1, p2, (Color){255, 255, 0, 80});
-            // Single-sided tickmark at segment end to show direction
-            float dx = p2.x - p1.x, dy = p2.y - p1.y;
-            float len = sqrtf(dx*dx + dy*dy);
-            if (len > 0.5f) {
-                float tsz = 14.0f;
-                Vector2 tick = {p2.x - dy/len * tsz, p2.y + dx/len * tsz};
-                DrawLineV(p2, tick, MAGENTA);
-            }
-        }
-    }
-
-    // Dab positions (actual stamp locations)
-    for (int i = 0; i < vp->strokeLen && i < MAX_STROKE_PTS; i++)
-        DrawCircle(vp->strokePts[i].x, vp->strokePts[i].y, 2, GREEN);
-
-    DrawText("BLUE=raw input  RED=spline  YEL/ORG=segment  GREEN=dabs  MAGENTA=perp (F3 toggle)", 10, 10, 14, WHITE);
     EndMode2D();
 }
 

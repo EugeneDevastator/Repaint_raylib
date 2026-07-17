@@ -212,7 +212,7 @@ static Vector2 CubicBezier(Vector2 p0, Vector2 c0, Vector2 c1, Vector2 p1, float
 
 // Walk along a pre-computed polyline (curvePts[0..n-1]) by `step` pixels
 // starting from arc position `curPos`. Returns the new position and advances arcPos.
-static Vector2 WalkArc(Vector2* pts, int n, float& arcPos, float step, float totalLen) {
+static Vector2 WalkArc(const Vector2* pts, int n, float& arcPos, float step, float totalLen) {
     float target = arcPos + step;
     if (target >= totalLen) { arcPos = totalLen; return pts[n-1]; }
 
@@ -240,6 +240,46 @@ static float JitterRadius(float unjitteredRad, float jitRange,
     float radMin = fmaxf(0.5f, unjitteredRad - jitRange);
     float radMax = fmaxf(radMin + 0.001f, unjitteredRad + jitRange);
     return fmaxf(radMin, fminf(radMax, r));
+}
+
+// ── EstimateSegmentStart (pure function) ──────────────────────────
+Vector2 EstimateSegmentStart(SegmentData seg, float initialRad) {
+    Vector2 from = seg.pos1;
+    Vector2 to = seg.pos2;
+    bool isCurved = (seg.ctrl0.x != from.x || seg.ctrl0.y != from.y ||
+                     seg.ctrl3.x != to.x   || seg.ctrl3.y != to.y);
+    float spacingMult = fmaxf(0.0f, seg.brushFrom.spacing);
+    float rFrom = seg.brushFrom.rad_out_px;
+    if (seg.pixelPerfect && seg.ppBias >= 0.0f) {
+        int ip = (int)fmaxf(0.5f, rFrom);
+        if (seg.ppBias == 0.0f && ip < 1) ip = 1;
+        rFrom = (float)ip + seg.ppBias;
+    }
+    float lastRad = (initialRad > 0.0f) ? initialRad : rFrom;
+    float startArc = (lastRad + rFrom) * spacingMult;
+
+    Vector2 pts[65];
+    float totalLen;
+    if (isCurved) {
+        totalLen = 0;
+        for (int i = 0; i <= 64; i++) {
+            float t = (float)i / 64.0f;
+            pts[i] = CubicBezier(from, seg.ctrl0, seg.ctrl3, to, t);
+            if (i > 0)
+                totalLen += sqrtf((pts[i].x - pts[i-1].x) * (pts[i].x - pts[i-1].x) +
+                                   (pts[i].y - pts[i-1].y) * (pts[i].y - pts[i-1].y));
+        }
+    } else {
+        float dx = to.x - from.x, dy = to.y - from.y;
+        totalLen = sqrtf(dx*dx + dy*dy);
+        for (int i = 0; i <= 64; i++) {
+            float t = (float)i / 64.0f;
+            pts[i] = Vector2{from.x + dx * t, from.y + dy * t};
+        }
+    }
+    if (startArc >= totalLen) return to;
+    float tmp = 0.0f;
+    return WalkArc(pts, 65, tmp, startArc, totalLen);
 }
 
 // ── DrawLinear ─────────────────────────────────────────────────────
@@ -271,28 +311,11 @@ int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
 
     if (stdist < 0.001f) return 0;
 
-    bool isCurved = (seg.ctrl0.x != from.x || seg.ctrl0.y != from.y ||
-                     seg.ctrl3.x != to.x   || seg.ctrl3.y != to.y);
-
-    float spacingMult = seg.brushFrom.spacing;
-    if (spacingMult < 0.0f) spacingMult = 0.0f;
-
+    float spacingMult = fmaxf(0.0f, seg.brushFrom.spacing);
     float rFrom = seg.brushFrom.rad_out_px;
     float rTo   = seg.brush.rad_out_px;
-
-    // Pixel-perfect: snap start/end radii to integer + parity bias
-    // so spacing is computed from locked diameters, not fractional radius.
-    if (seg.pixelPerfect && seg.ppBias >= 0.0f) {
-        auto snapRad = [&](float r) {
-            int ip = (int)fmaxf(0.5f, r);
-            if (seg.ppBias == 0.0f && ip < 1) ip = 1;
-            return (float)ip + seg.ppBias;
-        };
-        rFrom = snapRad(rFrom);
-        rTo   = snapRad(rTo);
-    }
-
-    // Pre-compute curve polyline (65 points for 64 subdivisions)
+    bool isCurved = (seg.ctrl0.x != from.x || seg.ctrl0.y != from.y ||
+                     seg.ctrl3.x != to.x   || seg.ctrl3.y != to.y);
     Vector2 curvePts[65];
     float totalLen = stdist;
     if (isCurved) {
@@ -311,12 +334,54 @@ int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
             curvePts[i] = Vector2{from.x + dx * t, from.y + dy * t};
         }
     }
+    float x2r = (to.x - from.x) / stdist;
+    float y2r = (to.y - from.y) / stdist;
+    if (seg.pixelPerfect && seg.ppBias >= 0.0f) {
+        auto snapRad = [&](float r) {
+            int ip = (int)fmaxf(0.5f, r);
+            if (seg.ppBias == 0.0f && ip < 1) ip = 1;
+            return (float)ip + seg.ppBias;
+        };
+        rFrom = snapRad(rFrom);
+        rTo   = snapRad(rTo);
+    }
+Vector2 startpos = EstimateSegmentStart(seg, initialRad);
+    return BuildSegment(seg, dabOffset, initialRad, outPoints, maxOut, res,
+                        startpos,
+                        spacingMult, rFrom, rTo, isCurved, curvePts,
+                        totalLen, x2r, y2r);
+}
 
-    float dx = to.x - from.x, dy = to.y - from.y;
-    float x2r = dx / stdist, y2r = dy / stdist;
-
+// ── BuildSegment ──────────────────────────────────────────────────
+int BuildSegment(const SegmentData& seg, int dabOffset, float initialRad,
+                  DabPoint* outPoints, int maxOut, SegResult* res,
+                  Vector2 startPos, float spacingMult, float rFrom, float rTo,
+                  bool isCurved, const Vector2* curvePts,
+                  float totalLen, float x2r, float y2r) {
+    Vector2 from = seg.pos1;
+    Vector2 to = seg.pos2;
+    float stdist = sqrtf((to.x - from.x) * (to.x - from.x) + (to.y - from.y) * (to.y - from.y));
+    // Convert startPos to arc distance
+    float startArc = 0.0f;
+    if (isCurved) {
+        float walked = 0.0f;
+        for (int i = 1; i <= 64; i++) {
+            float dx = curvePts[i].x - curvePts[i-1].x;
+            float dy = curvePts[i].y - curvePts[i-1].y;
+            float segLen = sqrtf(dx*dx + dy*dy);
+            if (segLen > 0.0001f) {
+                float t = ((startPos.x - curvePts[i-1].x) * dx + (startPos.y - curvePts[i-1].y) * dy) / (segLen * segLen);
+                if (t >= 0.0f && t <= 1.0f) { startArc = walked + t * segLen; break; }
+            }
+            walked += segLen;
+            if (i == 64) startArc = totalLen;
+        }
+    } else if (stdist > 0.001f) {
+        startArc = ((startPos.x - from.x) * (to.x - from.x) + (startPos.y - from.y) * (to.y - from.y)) / stdist;
+    }
     float lastDabPos = 0.0f;
     float lastDabRad = (initialRad > 0.0f) ? initialRad : rFrom;
+    res->firstDabPos = Vector2{0, 0};
     res->lastRadOut = lastDabRad;
     int count = 0;
     float lastSrcX = seg.smudgeSrcX;
@@ -399,6 +464,8 @@ int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
             dabCB.rad_out_px = (float)ip + seg.ppBias;
         }
 
+        if (count == 0) res->firstDabPos = pos;
+
         if (outPoints) {
             outPoints[count].x = pos.x;
             outPoints[count].y = pos.y;
@@ -463,10 +530,11 @@ void SegDrawer_SetSegmentStart(float startRad, Vector2 startPos, SegmentData* se
         seg->brushFrom.rad_out_px = startRad;
 }
 
-void SegDrawer_ComputeSegmentEnd(const SegmentData& seg, int dabOffset, float initialRad,
-                                  Vector2* outLastPos, float* outLastRad) {
+int SegDrawer_ComputeSegmentEnd(const SegmentData& seg, int dabOffset, float initialRad,
+                                 Vector2* outLastPos, float* outLastRad) {
     SegResult r;
-    DrawLinear(seg, dabOffset, initialRad, nullptr, 65536, &r);
+    int cnt = DrawLinear(seg, dabOffset, initialRad, nullptr, 65536, &r);
     *outLastPos = r.lastDabPos;
     *outLastRad = r.lastRadOut;
+    return cnt;
 }
