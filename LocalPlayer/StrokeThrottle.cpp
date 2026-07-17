@@ -88,7 +88,7 @@ int StrokeThrottle::DrawPending(AppState* state) {
             drawn++;
             frameDabs++;
         }
-        if (frameDabs == 0) break;
+        if (frameDabs == 0 && m_dabCount > 0) break;
     }
 
     if (drawn > 0) {

@@ -464,7 +464,8 @@ int BuildSegment(const SegmentData& seg, int dabOffset, float initialRad,
             dabCB.rad_out_px = (float)ip + seg.ppBias;
         }
 
-        if (count == 0) res->firstDabPos = pos;
+        res->firstDabPos = pos;
+        res->lastDabPos = pos;
 
         if (outPoints) {
             outPoints[count].x = pos.x;
@@ -487,21 +488,6 @@ int BuildSegment(const SegmentData& seg, int dabOffset, float initialRad,
 
     if (count > 0) {
         res->lastRadOut = lastDabRad;
-        if (isCurved) {
-            float t = (lastDabPos / totalLen);
-            if (t < 0) t = 0; if (t > 1) t = 1;
-            float idxF = t * 64;
-            int idx = (int)idxF;
-            float frac = idxF - idx;
-            if (idx < 0) idx = 0;
-            if (idx > 63) idx = 63;
-            Vector2 lp;
-            lp.x = curvePts[idx].x + (curvePts[idx+1].x - curvePts[idx].x) * frac;
-            lp.y = curvePts[idx].y + (curvePts[idx+1].y - curvePts[idx].y) * frac;
-            res->lastDabPos = lp;
-        } else {
-            res->lastDabPos = Vector2{from.x + lastDabPos * x2r, from.y + lastDabPos * y2r};
-        }
     }
     res->lastSmudgeSrc = Vector2{lastSrcX, lastSrcY};
     return count;
