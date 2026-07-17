@@ -51,7 +51,7 @@ ModulatedBrushConfig ResolveModulatedConfig(const UserBrushConfig& cfg, int tool
 
     float ts = ModulateConfigVal(cfg.texScale, mods);
     if (g_texScaleMode == 1)
-        out.texScale = ts * out.radOut * (WORLD_UNIT_PX / 128.0f);
+        out.texScale = ts * out.radOut / 127.5f;
     else
         out.texScale = ts;
 
@@ -154,7 +154,7 @@ int StrokeEngine_GeneratePreviewDabs(const d_RealBrush* baseBrush, int toolMode,
     UserBrushConfig cfg;
     CaptureBrushConfig(&cfg);
 
-    float radOut = baseBrush->rad_out * WORLD_UNIT_PX;
+    float radOut = baseBrush->rad_out;
     float segLen = fmaxf(radOut * 2.0f, 80.0f);
     // Fixed stroke direction — initialAngle only affects brush rotation, not geometry
     float dirX = 1.0f, dirY = -1.0f;
@@ -192,8 +192,6 @@ int StrokeEngine_GeneratePreviewDabs(const d_RealBrush* baseBrush, int toolMode,
     mt.val[csIdir] = mt.val[csDir];
     ModulatedBrushConfig mod = ResolveModulatedConfig(cfg, toolMode, initialAngle, &mt);
     float spacingVal = mod.spacing;
-    mod.radOut *= WORLD_UNIT_PX;
-    mod.jitRadOut *= WORLD_UNIT_PX;
     mod.spacing = spacingVal;
     DabBrush cbFull = MakeDabBrush(mod, mod.radOut);
 

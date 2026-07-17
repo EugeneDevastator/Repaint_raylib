@@ -281,9 +281,7 @@ void ViewportHUD_Draw(AppState* state) {
             zoomBrush.seed = g_previewBaseSeed;
 
             // Build preview Quad: zoom-dependent screen corners so the world region
-            // stays at PREVIEW_SZ units regardless of zoom. This matches the canvas
-            // density — the brush dabs at canvas-pixel size (WORLD_UNIT_PX) line up
-            // 1:1 with the canvas background in the preview.
+            // stays at PREVIEW_SZ units regardless of zoom.
             float pScrSz = (float)PREVIEW_SZ * state->camera.zoom;
             float pX = vpBounds.x + vpBounds.width  * 0.5f - pScrSz * 0.5f;
             float pY = vpBounds.y + vpBounds.height * 0.5f - pScrSz * 0.5f;
@@ -324,7 +322,7 @@ void ViewportHUD_Draw(AppState* state) {
             g_previewCount = StrokeEngine_GeneratePreviewDabs(&zoomBrush, state->mode,
                 state->initialAngle, PREVIEW_SZ * 0.5f, PREVIEW_SZ * 0.5f,
                 g_previewDabs, 4096);
-            // The dab radius is in canvas-pixel space (WORLD_UNIT_PX). The preview
+            // The dab radius is in world units space. The preview
             // displays the RT at PREVIEW_SZ × zoom screen pixels, so the effective
             // canvas→screen scale is zoom.  Keep the dabs at canvas-pixel size so
             // they match the brush mark already in the composite / canvas texture.

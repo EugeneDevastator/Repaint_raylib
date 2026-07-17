@@ -663,7 +663,7 @@ void App_Init(AppState* state) {
     state->initialAngle = 0.0f;
 
     state->currentBrush.Realb.radInRatio = 1.0f;
-    state->currentBrush.Realb.rad_out = 20.0f / WORLD_UNIT_PX;
+    state->currentBrush.Realb.rad_out = 20.0f;
     state->currentBrush.Realb.opacity = 1.0f;
     state->currentBrush.Realb.resangle = 0.0f;
     state->currentBrush.Realb.crv = 0.0f;

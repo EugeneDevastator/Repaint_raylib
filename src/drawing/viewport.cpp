@@ -142,7 +142,8 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
     // Compute destination transform (world → destPixel) and radius scaling
     RectXform destXform = {};
     Xform_Identity(destXform.mat);
-    float worldToTexPx   = WORLD_UNIT_PX;
+    float worldToTexPx   = 1;
+    float layerScale     = 1.0f;
     TexSlotID targetSlot;
     bool  isTexMode = (state->editTexMode && TM_IsValid(state->editTexSlot));
     if (!isTexMode) {
@@ -168,7 +169,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             float avgDiv = 0.0f;
             if (lp->xform.ww > 0.0f) avgDiv += lp->xform.ww / texW;
             if (lp->xform.wh > 0.0f) avgDiv += lp->xform.wh / texH;
-            if (avgDiv > 0.001f) worldToTexPx = WORLD_UNIT_PX / (avgDiv * 0.5f);
+            if (avgDiv > 0.001f) { worldToTexPx = 1 / (avgDiv * 0.5f); layerScale = worldToTexPx; }
             // Subtrack layer rotation so stamps stay upright in world space
             float layerRot = atan2f(lp->xform.mat[3], lp->xform.mat[0]) * (180.0f / (float)M_PI);
             adjustedAngle -= layerRot;
@@ -209,7 +210,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
         if (state->undo) state->undo->Snapshot(state, targetSlot);
 
         float origRad = state->currentBrush.Realb.rad_out;
-        state->currentBrush.Realb.rad_out *= worldToTexPx;
+        state->currentBrush.Realb.rad_out *= layerScale;
         TabletPlatform_ClearMousePos();
 
         if (isBrushSmudge) {
@@ -231,7 +232,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             int n = hasTablet ? tabletN : 1;
             if (!hasTablet) { mouseBuf[0] = mousePos.x; mouseBuf[1] = mousePos.y; }
             float origRad = state->currentBrush.Realb.rad_out;
-            state->currentBrush.Realb.rad_out *= worldToTexPx;
+            state->currentBrush.Realb.rad_out *= layerScale;
             for (int i = 0; i < n; i++) {
                 Vector2 screenPos = {mouseBuf[i*2], mouseBuf[i*2+1]};
                 Vector2 worldPos = GetScreenToWorld2D(screenPos, state->camera);
@@ -249,7 +250,7 @@ void Viewport_HandleInput(Viewport* vp, AppState* state) {
             CaptureBrushConfig(&cfg);
             ModulatorTable mt; Modulator_GetTable(&mt);
             float sv = ResolveModulatedConfig(cfg, state->mode, 0.0f, &mt).spacing;
-            float scaledRad = state->currentBrush.Realb.rad_out * worldToTexPx;
+            float scaledRad = state->currentBrush.Realb.rad_out * layerScale;
             float spacing = scaledRad * 2.0f * sv;
             if (spacing < 2.0f) spacing = 2.0f;
             if (vp->broker) {
