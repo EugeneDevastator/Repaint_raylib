@@ -116,7 +116,14 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
     ModulatorTable mt;
     Modulator_GetTable(&mt);
 
-    if (segLen > 0.5f) {
+    // Use exit tangent (p2 - ctrl3) for direction modulation so the
+    // segment-end brush rotation anticipates the next segment's entry.
+    float exDx = p2.x - ctrl3.x, exDy = p2.y - ctrl3.y;
+    float exLen = sqrtf(exDx*exDx + exDy*exDy);
+    if (exLen > 0.5f) {
+        float exDir = DirAng(exDx, exDy);
+        mt.val[csDir] = RngConv(exDir, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
+    } else if (segLen > 0.5f) {
         float dirAng = DirAng(segDx, segDy);
         mt.val[csDir] = RngConv(dirAng, -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
     }
@@ -151,7 +158,24 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
 
     DabBrush cbFrom = MakeDabBrush(modFrom, m_brushFrom.rad_out);
     DabBrush cbTo   = MakeDabBrush(modTo, modTo.radOut);
-    if (!m_emittedAny) cbFrom.resangle = cbTo.resangle;
+    if (!m_emittedAny) {
+        // Override modFrom with entry tangent direction so the first
+        // segment lerps from entry → exit tangent instead of stale input csDir.
+        float c0dx = ctrl0.x - p1.x, c0dy = ctrl0.y - p1.y;
+        float c0len = sqrtf(c0dx*c0dx + c0dy*c0dy);
+        if (c0len > 0.5f) {
+            ModulatorTable mtFrom;
+            Modulator_GetTable(&mtFrom);
+            mtFrom.val[csDir] = RngConv(DirAng(c0dx, c0dy), -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
+            ModulatedBrushConfig modFromFixed = ResolveModulatedConfig(m_config, toolMode, initAngle, &mtFrom);
+            cbFrom = MakeDabBrush(modFromFixed, m_brushFrom.rad_out);
+        }
+        float enDir = (c0len > 0.001f) ? DirAng(c0dx, c0dy) * 180.0f / (float)M_PI : -999.0f;
+        float exDir = (exLen > 0.5f) ? DirAng(exDx, exDy) * 180.0f / (float)M_PI : -999.0f;
+        float chDir = DirAng(segDx, segDy) * 180.0f / (float)M_PI;
+        printf("[SEG1] initAngle=%.1f  chordDir=%.1f  enDir=%.1f  exDir=%.1f  csDir=%.3f  cbFrom.res=%.1f  cbTo.res=%.1f\n",
+               initAngle, chDir, enDir, exDir, mt.val[csDir], cbFrom.resangle, cbTo.resangle);
+    }
 
     float hLen = segLen * 0.33f;
     Vector2 c0dir = {ctrl0.x - p1.x, ctrl0.y - p1.y};
