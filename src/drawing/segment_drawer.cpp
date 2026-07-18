@@ -424,9 +424,6 @@ int BuildSegment(const SegmentData& seg, int dabOffset, float initialRad,
         dabCB.jitRadOut = fmaxf(0.0f, dabCB.rad_out_px * jitFrac);
 
         // Per-dab angle: drive brush rotation from curve tangent.
-        // Note: this does NOT update csDir — the stroke direction modulator
-        // is set from the segment chord by the emitter (via Modulator module),
-        // which is far more stable than a per-dab tangent sample.
         float tx = 0, ty = 0;
         {
             float t = nextArc / totalLen;
@@ -435,6 +432,16 @@ int BuildSegment(const SegmentData& seg, int dabOffset, float initialRad,
             if (idx < 0) idx = 0; if (idx > 63) idx = 63;
             tx = curvePts[idx+1].x - curvePts[idx].x;
             ty = curvePts[idx+1].y - curvePts[idx].y;
+        }
+        // Per-dab angle correction: curve tangent vs lerped chord
+        // Only when angle is modulated (start ≠ end resangle)
+        float tlen = sqrtf(tx*tx + ty*ty);
+        if (fabs(seg.brushFrom.resangle - seg.brush.resangle) > 0.001f && tlen > 0.001f) {
+            float curveDir = DirAng(tx, ty) * 180.0f / (float)M_PI;
+            float lerpedChordDir = dabCB.resangle - seg.initAngle - 180.0f;
+            float correction = curveDir - lerpedChordDir;
+            correction = fmodf(correction + 180.0f, 360.0f) - 180.0f;
+            dabCB.resangle = fmodf(dabCB.resangle + correction + 360.0f, 360.0f);
         }
 
         // Scatter: shift perpendicular to travel (before jitter — use unjittered radius)

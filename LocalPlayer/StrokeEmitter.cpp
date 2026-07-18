@@ -151,6 +151,7 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
 
     DabBrush cbFrom = MakeDabBrush(modFrom, m_brushFrom.rad_out);
     DabBrush cbTo   = MakeDabBrush(modTo, modTo.radOut);
+    if (!m_emittedAny) cbFrom.resangle = cbTo.resangle;
 
     float hLen = segLen * 0.33f;
     Vector2 c0dir = {ctrl0.x - p1.x, ctrl0.y - p1.y};
@@ -247,7 +248,6 @@ void StrokeEmitter::handlePoint(const InputEntry& e) {
         Vector2 c0 = {m_lastDabPos.x + dir.x * hLen, m_lastDabPos.y + dir.y * hLen};
         Vector2 c3 = {pos.x - dir.x * hLen, pos.y - dir.y * hLen};
         emitSegment(m_lastDabPos, pos, c0, c3, m_brushFrom, m_initAngle, m_toolMode, m_modulated);
-        m_modulated = modNow;
         return;
     }
 
@@ -310,7 +310,6 @@ void StrokeEmitter::handlePoint(const InputEntry& e) {
             if (t1l > 0.001f) { c0.x = p1.x + t1.x/t1l * hLen; c0.y = p1.y + t1.y/t1l * hLen; }
             if (t2l > 0.001f) { c3.x = p2.x - t2.x/t2l * hLen; c3.y = p2.y - t2.y/t2l * hLen; }
             emitSegment(p1, p2, c0, c3, m_brushFrom, m_initAngle, m_toolMode, m_modulated);
-            m_modulated = modNow;
         }
         m_processedCount = seg + 1;
     }
