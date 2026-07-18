@@ -211,6 +211,8 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
         m_segLastDab[m_segDebugCount]  = m_lastDabPos;
         m_segEndpoints[m_segDebugCount * 2] = dseg.pos1;
         m_segEndpoints[m_segDebugCount * 2 + 1] = dseg.pos2;
+        m_segCtrl0[m_segDebugCount] = dseg.ctrl0;
+        m_segCtrl3[m_segDebugCount] = dseg.ctrl3;
         m_segHadDab[m_segDebugCount] = true;
         m_segDebugCount++;
     }

@@ -22,6 +22,8 @@ public:
     int m_segEpCount = 0;
     Vector2 m_segFirstDab[DBG_SEG_PTS / 2];
     Vector2 m_segLastDab[DBG_SEG_PTS / 2];
+    Vector2 m_segCtrl0[DBG_SEG_PTS / 2];
+    Vector2 m_segCtrl3[DBG_SEG_PTS / 2];
     bool    m_segHadDab[DBG_SEG_PTS / 2];
     int m_segDebugCount = 0;
     Vector2 m_splinePts[256];
