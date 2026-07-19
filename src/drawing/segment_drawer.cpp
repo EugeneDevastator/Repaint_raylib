@@ -328,6 +328,7 @@ int BuildSegment(const SegmentData& seg, int dabOffset, const DabBrush* prevLast
     float stdist = sqrtf((to.x - from.x) * (to.x - from.x) + (to.y - from.y) * (to.y - from.y));
     float lastDabPos = 0.0f;
     float lastDabRad = (prevLastDab) ? prevLastDab->rad_out_px : rFrom;
+    int jitBase = dabOffset - ((prevLastDab) ? 1 : 0);
     res->firstDabPos = Vector2{0, 0};
     res->lastRadOut = lastDabRad;
     int count = 0;
@@ -335,6 +336,13 @@ int BuildSegment(const SegmentData& seg, int dabOffset, const DabBrush* prevLast
     float lastSrcY = seg.smudgeSrcY;
     float lastSrcRad = seg.brushFrom.rad_out_px;
     float lastSrcAngle = seg.brushFrom.resangle;
+
+    // Provided first dab — use its state as starting point, skip output
+    if (prevLastDab) {
+        lastSrcX = from.x;
+        lastSrcY = from.y;
+        count = 1;
+    }
 
     while (count < maxOut) {
         // 1. Estimate next position using last (jittered) radius
@@ -350,7 +358,7 @@ int BuildSegment(const SegmentData& seg, int dabOffset, const DabBrush* prevLast
 
         // 3. Apply jitter to get ACTUAL next radius
         float jitRange = seg.brushFrom.jitRadOut;
-        float nextRadJit = JitterRadius(nextRadUnJit, jitRange, seg.brushFrom.baseSeed, dabOffset + count);
+        float nextRadJit = JitterRadius(nextRadUnJit, jitRange, seg.brushFrom.baseSeed, jitBase + count);
 
         // 4. Find exact position using jittered next radius
         float nextArc = lastDabPos + (lastDabRad + nextRadJit) * spacingMult;
@@ -411,7 +419,7 @@ int BuildSegment(const SegmentData& seg, int dabOffset, const DabBrush* prevLast
         }
         pos = scatterPos;
 
-        JitterBrush(dabCB, seg.brushFrom.baseSeed, dabOffset + count);
+        JitterBrush(dabCB, seg.brushFrom.baseSeed, jitBase + count);
 
         // Pixel-perfect: lock radius parity (bias set per-stroke in emitter)
         if (seg.pixelPerfect && seg.ppBias >= 0.0f) {
@@ -434,15 +442,13 @@ int BuildSegment(const SegmentData& seg, int dabOffset, const DabBrush* prevLast
             outPoints[oi].srcAngle = lastSrcAngle;
             outPoints[oi].brush = dabCB;
         }
-        if (!(count == 0 && prevLastDab)) {
-            lastSrcX = pos.x;
-            lastSrcY = pos.y;
-            lastSrcRad = dabCB.rad_out_px;
-            lastSrcAngle = dabCB.resangle;
+        lastSrcX = pos.x;
+        lastSrcY = pos.y;
+        lastSrcRad = dabCB.rad_out_px;
+        lastSrcAngle = dabCB.resangle;
 
-            lastDabPos = nextArc;
-            lastDabRad = dabCB.rad_out_px;
-        }
+        lastDabPos = nextArc;
+        lastDabRad = dabCB.rad_out_px;
         count++;
     }
 

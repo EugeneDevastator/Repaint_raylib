@@ -339,6 +339,7 @@ void Viewport_DrawDebugOverlays(Viewport* vp, AppState* state) {
             Vector2 p2 = g_emitter->m_segEndpoints[i * 2 + 1];
             Vector2 c0 = g_emitter->m_segCtrl0[i];
             Vector2 c3 = g_emitter->m_segCtrl3[i];
+            DrawLineV(p1, p2, BLACK);
             DrawLineV(p1, c0, GREEN);
             DrawLineV(c3, p2, ORANGE);
             DrawCircle(g_emitter->m_segLastDab[i].x,  g_emitter->m_segLastDab[i].y,  4, ORANGE);
