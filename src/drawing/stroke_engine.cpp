@@ -86,6 +86,7 @@ ModulatedBrushConfig ResolveModulatedConfig(const UserBrushConfig& cfg, int tool
     out.jitLit     = cfg.lit.jitter     * (cfg.lit.outMax - cfg.lit.outMin);
     out.jitCloneOp = cfg.cloneOpacity.jitter;
     out.jitFocal   = cfg.focalOffset.jitter;
+    out.jitAngle   = cfg.angle.jitter   * (cfg.angle.outMax - cfg.angle.outMin);
 
     return out;
 }
@@ -143,6 +144,7 @@ DabBrush MakeDabBrush(const ModulatedBrushConfig& mod, const float rad_out_px_ov
     cb.jitLit     = mod.jitLit;
     cb.jitCloneOp = mod.jitCloneOp;
     cb.jitFocal   = mod.jitFocal;
+    cb.jitAngle   = mod.jitAngle;
     cb.scatter    = mod.scatter;
 
     return cb;

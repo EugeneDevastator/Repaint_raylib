@@ -79,7 +79,7 @@ struct ModulatedBrushConfig {
     float userTexOriginX, userTexOriginY, userTexDirection;
     uint16_t baseSeed;
     float jitRadOut, jitRadIn, jitOpacity, jitCrv, jitX2y;
-    float jitHue, jitSat, jitLit, jitCloneOp, jitFocal;
+    float jitHue, jitSat, jitLit, jitCloneOp, jitFocal, jitAngle;
     float scatter;
 };
 
@@ -115,6 +115,7 @@ struct DabBrush {
     float jitHue, jitSat, jitLit;
     float jitCloneOp;
     float jitFocal;
+    float jitAngle;
     float scatter;
     uint16_t baseSeed;
 };

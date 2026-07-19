@@ -106,6 +106,7 @@ DabBrush BlendBrushes(DabBrush from, DabBrush to, float k) {
     r.jitLit    = lerp(from.jitLit, to.jitLit, k);
     r.jitCloneOp = from.jitCloneOp;
     r.jitFocal  = lerp(from.jitFocal, to.jitFocal, k);
+    r.jitAngle  = lerp(from.jitAngle, to.jitAngle, k);
     r.baseSeed  = from.baseSeed;
     r.scatter   = from.scatter;
     return r;
@@ -145,6 +146,11 @@ void JitterBrush(DabBrush& b, uint16_t baseSeed, int dabIdx) {
     b.focalOffset += dr * b.jitFocal;
     if (b.focalOffset < -1.0f) b.focalOffset = -1.0f;
     if (b.focalOffset > 1.0f)  b.focalOffset = 1.0f;
+
+    // Angle jitter
+    b.resangle += dr * b.jitAngle;
+    b.resangle = fmodf(b.resangle, 360.0f);
+    if (b.resangle < 0) b.resangle += 360.0f;
 
     // Color jitter: HSL
     float hue, sat, lit;
