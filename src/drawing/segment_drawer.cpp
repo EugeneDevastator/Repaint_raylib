@@ -322,6 +322,7 @@ int BuildSegment(const SegmentData& seg, int dabOffset, const DabBrush* prevLast
     float stdist = sqrtf((to.x - from.x) * (to.x - from.x) + (to.y - from.y) * (to.y - from.y));
     float lastDabPos = 0.0f;
     float lastDabRad = (prevLastDab) ? prevLastDab->rad_out_px : rFrom;
+    int jitBase = dabOffset - ((prevLastDab) ? 1 : 0);
     res->firstDabPos = Vector2{0, 0};
     res->lastRadOut = lastDabRad;
     int count = 0;
@@ -363,7 +364,7 @@ int BuildSegment(const SegmentData& seg, int dabOffset, const DabBrush* prevLast
 
         // 3. Apply jitter to get ACTUAL next radius
         float jitRange = seg.brushFrom.jitRadOut;
-        float nextRadJit = JitterRadius(nextRadUnJit, jitRange, seg.brushFrom.baseSeed, dabOffset + count);
+        float nextRadJit = JitterRadius(nextRadUnJit, jitRange, seg.brushFrom.baseSeed, jitBase + count);
 
         // 4. Find exact position using jittered next radius
         float nextArc = lastDabPos + (lastDabRad + nextRadJit) * spacingMult;
@@ -421,7 +422,7 @@ int BuildSegment(const SegmentData& seg, int dabOffset, const DabBrush* prevLast
         }
         pos = scatterPos;
 
-        JitterBrush(dabCB, seg.brushFrom.baseSeed, dabOffset + count);
+        JitterBrush(dabCB, seg.brushFrom.baseSeed, jitBase + count);
 
         // Pixel-perfect: lock radius parity (bias set per-stroke in emitter)
         if (seg.pixelPerfect && seg.ppBias >= 0.0f) {
