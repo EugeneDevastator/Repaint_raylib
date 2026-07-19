@@ -411,6 +411,9 @@ int BuildSegment(const SegmentData& seg, int dabOffset, const DabBrush* prevLast
             dabCB.resangle = fmodf(dabCB.resangle + correction + 360.0f, 360.0f);
         }
 
+        // Save pre-scatter position for segment continuity
+        Vector2 preScatterPos = pos;
+
         // Scatter: shift perpendicular to travel (before jitter — use unjittered radius)
         float scatterRad = dabCB.scatter * dabCB.rad_out_px;
         Vector2 scatterPos = pos;
@@ -438,8 +441,8 @@ int BuildSegment(const SegmentData& seg, int dabOffset, const DabBrush* prevLast
             dabCB.rad_out_px = (float)ip + seg.ppBias;
         }
 
-        if (count == 0) res->firstDabPos = pos;
-        res->lastDabPos = pos;
+        if (count == 0) res->firstDabPos = preScatterPos;
+        res->lastDabPos = preScatterPos;
 
         if (outPoints) {
             outPoints[count].x = pos.x;
