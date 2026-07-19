@@ -495,6 +495,7 @@ int BuildSegment(const SegmentData& seg, int dabOffset, float initialRad,
 
     if (count > 0) {
         res->lastRadOut = lastDabRad;
+        res->lastResangle = lastSrcAngle;
     }
     res->lastSmudgeSrc = Vector2{lastSrcX, lastSrcY};
     return count;

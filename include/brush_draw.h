@@ -154,6 +154,7 @@ struct SegResult {
     Vector2 firstDabPos;
     Vector2 lastSmudgeSrc;
     float lastRadOut;
+    float lastResangle;
     float overdraw;
 };
 

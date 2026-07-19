@@ -170,11 +170,6 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
             ModulatedBrushConfig modFromFixed = ResolveModulatedConfig(m_config, toolMode, initAngle, &mtFrom);
             cbFrom = MakeDabBrush(modFromFixed, m_brushFrom.rad_out);
         }
-        float enDir = (c0len > 0.001f) ? DirAng(c0dx, c0dy) * 180.0f / (float)M_PI : -999.0f;
-        float exDir = (exLen > 0.5f) ? DirAng(exDx, exDy) * 180.0f / (float)M_PI : -999.0f;
-        float chDir = DirAng(segDx, segDy) * 180.0f / (float)M_PI;
-        printf("[SEG1] initAngle=%.1f  chordDir=%.1f  enDir=%.1f  exDir=%.1f  csDir=%.3f  cbFrom.res=%.1f  cbTo.res=%.1f\n",
-               initAngle, chDir, enDir, exDir, mt.val[csDir], cbFrom.resangle, cbTo.resangle);
     }
 
     float hLen = segLen * 0.33f;
@@ -247,6 +242,11 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
     }
 
     m_modulated = modTo;
+    if (dabCount > 0) m_modulated.resangle = segRes.lastResangle;
+    if (m_emittedAny)
+        printf("[SEG] modFrom.res=%.1f  cbFrom.res=%.1f  cbTo.res=%.1f  lastRes=%.1f  modTo.res=%.1f  final.res=%.1f\n",
+               modFrom.resangle, cbFrom.resangle, cbTo.resangle,
+               segRes.lastResangle, modTo.resangle, m_modulated.resangle);
     m_emittedAny = true;
 }
 
