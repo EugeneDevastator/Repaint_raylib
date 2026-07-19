@@ -328,7 +328,6 @@ int BuildSegment(const SegmentData& seg, int dabOffset, const DabBrush* prevLast
     float stdist = sqrtf((to.x - from.x) * (to.x - from.x) + (to.y - from.y) * (to.y - from.y));
     float lastDabPos = 0.0f;
     float lastDabRad = (prevLastDab) ? prevLastDab->rad_out_px : rFrom;
-    int jitBase = dabOffset - ((prevLastDab) ? 1 : 0);
     res->firstDabPos = Vector2{0, 0};
     res->lastRadOut = lastDabRad;
     int count = 0;
@@ -336,25 +335,6 @@ int BuildSegment(const SegmentData& seg, int dabOffset, const DabBrush* prevLast
     float lastSrcY = seg.smudgeSrcY;
     float lastSrcRad = seg.brushFrom.rad_out_px;
     float lastSrcAngle = seg.brushFrom.resangle;
-
-    // Place first dab from prevLastDab at segment start (overlap)
-    if (prevLastDab) {
-        if (outPoints) {
-            outPoints[0].x = from.x;
-            outPoints[0].y = from.y;
-            outPoints[0].srcX = seg.smudgeSrcX;
-            outPoints[0].srcY = seg.smudgeSrcY;
-            outPoints[0].srcRad = prevLastDab->rad_out_px;
-            outPoints[0].srcAngle = prevLastDab->resangle;
-            outPoints[0].brush = *prevLastDab;
-        }
-        res->firstDabPos = from;
-        res->lastDabPos = from;
-        res->lastDabBrush = *prevLastDab;
-        lastSrcX = from.x;
-        lastSrcY = from.y;
-        count = 1;
-    }
 
     while (count < maxOut) {
         // 1. Estimate next position using last (jittered) radius
@@ -370,7 +350,7 @@ int BuildSegment(const SegmentData& seg, int dabOffset, const DabBrush* prevLast
 
         // 3. Apply jitter to get ACTUAL next radius
         float jitRange = seg.brushFrom.jitRadOut;
-        float nextRadJit = JitterRadius(nextRadUnJit, jitRange, seg.brushFrom.baseSeed, jitBase + count);
+        float nextRadJit = JitterRadius(nextRadUnJit, jitRange, seg.brushFrom.baseSeed, dabOffset + count);
 
         // 4. Find exact position using jittered next radius
         float nextArc = lastDabPos + (lastDabRad + nextRadJit) * spacingMult;
@@ -431,7 +411,7 @@ int BuildSegment(const SegmentData& seg, int dabOffset, const DabBrush* prevLast
         }
         pos = scatterPos;
 
-        JitterBrush(dabCB, seg.brushFrom.baseSeed, jitBase + count);
+        JitterBrush(dabCB, seg.brushFrom.baseSeed, dabOffset + count);
 
         // Pixel-perfect: lock radius parity (bias set per-stroke in emitter)
         if (seg.pixelPerfect && seg.ppBias >= 0.0f) {
@@ -441,25 +421,28 @@ int BuildSegment(const SegmentData& seg, int dabOffset, const DabBrush* prevLast
             dabCB.rad_out_px = (float)ip + seg.ppBias;
         }
 
-        if (count == 0) res->firstDabPos = preScatterPos;
+        if (count == 0 && !prevLastDab) res->firstDabPos = preScatterPos;
         res->lastDabPos = preScatterPos;
 
-        if (outPoints) {
-            outPoints[count].x = pos.x;
-            outPoints[count].y = pos.y;
-            outPoints[count].srcX = lastSrcX;
-            outPoints[count].srcY = lastSrcY;
-            outPoints[count].srcRad = lastSrcRad;
-            outPoints[count].srcAngle = lastSrcAngle;
-            outPoints[count].brush = dabCB;
+        if (outPoints && (count > 0 || !prevLastDab)) {
+            int oi = count - (prevLastDab ? 1 : 0);
+            outPoints[oi].x = pos.x;
+            outPoints[oi].y = pos.y;
+            outPoints[oi].srcX = lastSrcX;
+            outPoints[oi].srcY = lastSrcY;
+            outPoints[oi].srcRad = lastSrcRad;
+            outPoints[oi].srcAngle = lastSrcAngle;
+            outPoints[oi].brush = dabCB;
         }
-        lastSrcX = pos.x;
-        lastSrcY = pos.y;
-        lastSrcRad = dabCB.rad_out_px;
-        lastSrcAngle = dabCB.resangle;
+        if (!(count == 0 && prevLastDab)) {
+            lastSrcX = pos.x;
+            lastSrcY = pos.y;
+            lastSrcRad = dabCB.rad_out_px;
+            lastSrcAngle = dabCB.resangle;
 
-        lastDabPos = nextArc;
-        lastDabRad = dabCB.rad_out_px;  // JITTERED — actual placed size
+            lastDabPos = nextArc;
+            lastDabRad = dabCB.rad_out_px;
+        }
         count++;
     }
 
@@ -467,13 +450,8 @@ int BuildSegment(const SegmentData& seg, int dabOffset, const DabBrush* prevLast
         res->lastRadOut = lastDabRad;
         res->lastResangle = lastSrcAngle;
     }
-    if (prevLastDab)
-        printf("[OVERLAP] startPos=(%.1f,%.1f) prevAng=%.1f  firstDab=(%.1f,%.1f) lastDab=(%.1f,%.1f) lastAng=%.1f\n",
-               from.x, from.y, prevLastDab->resangle,
-               res->firstDabPos.x, res->firstDabPos.y,
-               res->lastDabPos.x, res->lastDabPos.y, res->lastResangle);
     res->lastSmudgeSrc = Vector2{lastSrcX, lastSrcY};
-    return count;
+    return count - ((prevLastDab) ? 1 : 0);
 }
 
 
