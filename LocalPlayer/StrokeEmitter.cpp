@@ -223,7 +223,7 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
     if (g_broker) g_broker->on_segment(dseg);
 
     SegResult segRes;
-    int dabCount = DrawLinear(dseg, 0, m_lastDabRad, nullptr, 65536, &segRes);
+    int dabCount = DrawLinear(dseg, 0, nullptr, nullptr, 65536, &segRes);
     m_lastDabPos = segRes.lastDabPos;
     m_lastDabRad = segRes.lastRadOut;
     if (dabCount > 0 && m_segDebugCount < DBG_SEG_PTS / 2) {
@@ -242,11 +242,10 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
     }
 
     m_modulated = modTo;
-    if (dabCount > 0) m_modulated.resangle = segRes.lastResangle;
-    if (m_emittedAny)
-        printf("[SEG] modFrom.res=%.1f  cbFrom.res=%.1f  cbTo.res=%.1f  lastRes=%.1f  modTo.res=%.1f  final.res=%.1f\n",
-               modFrom.resangle, cbFrom.resangle, cbTo.resangle,
-               segRes.lastResangle, modTo.resangle, m_modulated.resangle);
+    if (dabCount > 0) {
+        m_modulated.resangle = segRes.lastResangle;
+        m_prevLastDabBrush = segRes.lastDabBrush;
+    }
     m_emittedAny = true;
 }
 

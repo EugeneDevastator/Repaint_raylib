@@ -225,7 +225,7 @@ int StrokeEngine_GeneratePreviewDabs(const d_RealBrush* baseBrush, int toolMode,
     seed.initAngle = initialAngle;
     {
         SegResult r;
-        int cnt = DrawLinear(seed, 0, 0.0f, outBuf, maxOut, &r);
+        int cnt = DrawLinear(seed, 0, nullptr, outBuf, maxOut, &r);
         total += cnt;
     }
 
@@ -249,7 +249,7 @@ int StrokeEngine_GeneratePreviewDabs(const d_RealBrush* baseBrush, int toolMode,
     s.smudgeSrcY = cy;
     s.initAngle = initialAngle;
     SegResult r;
-    int cnt = DrawLinear(s, total, 0.0f, outBuf + total, maxOut - total, &r);
+    int cnt = DrawLinear(s, total, nullptr, outBuf + total, maxOut - total, &r);
     total += cnt;
 
     // Per-dab angle fixup — recompute resangle from actual curve direction

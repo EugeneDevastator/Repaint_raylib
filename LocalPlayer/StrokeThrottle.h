@@ -28,6 +28,7 @@ private:
 
     float m_lastSegEndAngle = 0.0f;
     bool  m_hasPrevAngle = false;
+    DabBrush m_prevDabBrush;
     float m_prevSmudgeSrcX = 0.0f, m_prevSmudgeSrcY = 0.0f;
     bool  m_hasPrevSmudge = false;
     int m_dynamicBudget = 2 * 1024 * 1024;

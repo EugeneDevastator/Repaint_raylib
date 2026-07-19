@@ -155,6 +155,7 @@ struct SegResult {
     Vector2 lastSmudgeSrc;
     float lastRadOut;
     float lastResangle;
+    DabBrush lastDabBrush;
     float overdraw;
 };
 
@@ -162,15 +163,13 @@ DabBrush BlendBrushes(DabBrush from, DabBrush to, float k);
 
 void JitterBrush(DabBrush& b, uint16_t baseSeed, int dabIdx);
 
-Vector2 EstimateSegmentStart(SegmentData seg, float initialRad);
-
-int BuildSegment(const SegmentData& seg, int dabOffset, float initialRad,
+int BuildSegment(const SegmentData& seg, int dabOffset, const DabBrush* prevLastDab,
                   DabPoint* outPoints, int maxOut, SegResult* res,
-                  Vector2 startPos, float spacingMult, float rFrom, float rTo,
+                  float spacingMult, float rFrom, float rTo,
                   bool isCurved, const Vector2* curvePts,
                   float totalLen, float x2r, float y2r);
 
-int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
+int DrawLinear(const SegmentData& seg, int dabOffset, const DabBrush* prevLastDab,
                DabPoint* outPoints, int maxOut, SegResult* res);
 
 #endif

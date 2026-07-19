@@ -37,6 +37,7 @@ private:
     UserBrushConfig m_config;
     ModulatedBrushConfig m_modulated;
     bool m_emittedAny;
+    DabBrush m_prevLastDabBrush;
     uint16_t m_seed;
     TexSlotID m_targetSlot;
     uint8_t m_userTexBucket;

@@ -37,7 +37,9 @@ int StrokeThrottle::DrawPending(AppState* state) {
             }
 
             SegResult r;
-            m_dabCount = DrawLinear(seg, 0, 0.0f, m_dabBuf, DAB_CAP, &r);
+            if (seg.isStrokeStart) { m_dabCount = 0; memset(&m_prevDabBrush, 0, sizeof(m_prevDabBrush)); }
+            const DabBrush* prevDab = (m_dabCount > 0) ? &m_prevDabBrush : nullptr;
+            m_dabCount = DrawLinear(seg, 0, prevDab, m_dabBuf, DAB_CAP, &r);
 
             m_prevSmudgeSrcX = r.lastSmudgeSrc.x;
             m_prevSmudgeSrcY = r.lastSmudgeSrc.y;
@@ -50,6 +52,7 @@ int StrokeThrottle::DrawPending(AppState* state) {
                 m_hasPrevAngle = true;
             }
 
+            if (m_dabCount > 0) m_prevDabBrush = m_dabBuf[m_dabCount - 1].brush;
             if (m_dabCount >= DAB_CAP)
                 printf("[THR] WARNING: dabs hit DAB_CAP (%d)!\n", DAB_CAP);
             m_dabIdx = 0;

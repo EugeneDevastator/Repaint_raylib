@@ -242,48 +242,8 @@ static float JitterRadius(float unjitteredRad, float jitRange,
     return fmaxf(radMin, fminf(radMax, r));
 }
 
-// ── EstimateSegmentStart (pure function) ──────────────────────────
-Vector2 EstimateSegmentStart(SegmentData seg, float initialRad) {
-    Vector2 from = seg.pos1;
-    Vector2 to = seg.pos2;
-    bool isCurved = (seg.ctrl0.x != from.x || seg.ctrl0.y != from.y ||
-                     seg.ctrl3.x != to.x   || seg.ctrl3.y != to.y);
-    float spacingMult = fmaxf(0.0f, seg.brushFrom.spacing);
-    float rFrom = seg.brushFrom.rad_out_px;
-    if (seg.pixelPerfect && seg.ppBias >= 0.0f) {
-        int ip = (int)fmaxf(0.5f, rFrom);
-        if (seg.ppBias == 0.0f && ip < 1) ip = 1;
-        rFrom = (float)ip + seg.ppBias;
-    }
-    float lastRad = (initialRad > 0.0f) ? initialRad : rFrom;
-    float startArc = (lastRad + rFrom) * spacingMult;
-
-    Vector2 pts[65];
-    float totalLen;
-    if (isCurved) {
-        totalLen = 0;
-        for (int i = 0; i <= 64; i++) {
-            float t = (float)i / 64.0f;
-            pts[i] = CubicBezier(from, seg.ctrl0, seg.ctrl3, to, t);
-            if (i > 0)
-                totalLen += sqrtf((pts[i].x - pts[i-1].x) * (pts[i].x - pts[i-1].x) +
-                                   (pts[i].y - pts[i-1].y) * (pts[i].y - pts[i-1].y));
-        }
-    } else {
-        float dx = to.x - from.x, dy = to.y - from.y;
-        totalLen = sqrtf(dx*dx + dy*dy);
-        for (int i = 0; i <= 64; i++) {
-            float t = (float)i / 64.0f;
-            pts[i] = Vector2{from.x + dx * t, from.y + dy * t};
-        }
-    }
-    if (startArc >= totalLen) return to;
-    float tmp = 0.0f;
-    return WalkArc(pts, 65, tmp, startArc, totalLen);
-}
-
 // ── DrawLinear ─────────────────────────────────────────────────────
-int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
+int DrawLinear(const SegmentData& seg, int dabOffset, const DabBrush* prevLastDab,
                DabPoint* outPoints, int maxOut, SegResult* res) {
     if (!res) return 0;
     Vector2 from = seg.pos1;
@@ -345,42 +305,23 @@ int DrawLinear(const SegmentData& seg, int dabOffset, float initialRad,
         rFrom = snapRad(rFrom);
         rTo   = snapRad(rTo);
     }
-Vector2 startpos = EstimateSegmentStart(seg, initialRad);
-    return BuildSegment(seg, dabOffset, initialRad, outPoints, maxOut, res,
-                        startpos,
+
+    return BuildSegment(seg, dabOffset, prevLastDab, outPoints, maxOut, res,
                         spacingMult, rFrom, rTo, isCurved, curvePts,
                         totalLen, x2r, y2r);
 }
 
 // ── BuildSegment ──────────────────────────────────────────────────
-int BuildSegment(const SegmentData& seg, int dabOffset, float initialRad,
+int BuildSegment(const SegmentData& seg, int dabOffset, const DabBrush* prevLastDab,
                   DabPoint* outPoints, int maxOut, SegResult* res,
-                  Vector2 startPos, float spacingMult, float rFrom, float rTo,
+                  float spacingMult, float rFrom, float rTo,
                   bool isCurved, const Vector2* curvePts,
                   float totalLen, float x2r, float y2r) {
     Vector2 from = seg.pos1;
     Vector2 to = seg.pos2;
     float stdist = sqrtf((to.x - from.x) * (to.x - from.x) + (to.y - from.y) * (to.y - from.y));
-    // Convert startPos to arc distance
-    float startArc = 0.0f;
-    if (isCurved) {
-        float walked = 0.0f;
-        for (int i = 1; i <= 64; i++) {
-            float dx = curvePts[i].x - curvePts[i-1].x;
-            float dy = curvePts[i].y - curvePts[i-1].y;
-            float segLen = sqrtf(dx*dx + dy*dy);
-            if (segLen > 0.0001f) {
-                float t = ((startPos.x - curvePts[i-1].x) * dx + (startPos.y - curvePts[i-1].y) * dy) / (segLen * segLen);
-                if (t >= 0.0f && t <= 1.0f) { startArc = walked + t * segLen; break; }
-            }
-            walked += segLen;
-            if (i == 64) startArc = totalLen;
-        }
-    } else if (stdist > 0.001f) {
-        startArc = ((startPos.x - from.x) * (to.x - from.x) + (startPos.y - from.y) * (to.y - from.y)) / stdist;
-    }
     float lastDabPos = 0.0f;
-    float lastDabRad = (initialRad > 0.0f) ? initialRad : rFrom;
+    float lastDabRad = (prevLastDab) ? prevLastDab->rad_out_px : rFrom;
     res->firstDabPos = Vector2{0, 0};
     res->lastRadOut = lastDabRad;
     int count = 0;
@@ -388,6 +329,25 @@ int BuildSegment(const SegmentData& seg, int dabOffset, float initialRad,
     float lastSrcY = seg.smudgeSrcY;
     float lastSrcRad = seg.brushFrom.rad_out_px;
     float lastSrcAngle = seg.brushFrom.resangle;
+
+    // Place first dab from prevLastDab at segment start (overlap)
+    if (prevLastDab) {
+        if (outPoints) {
+            outPoints[0].x = from.x;
+            outPoints[0].y = from.y;
+            outPoints[0].srcX = seg.smudgeSrcX;
+            outPoints[0].srcY = seg.smudgeSrcY;
+            outPoints[0].srcRad = prevLastDab->rad_out_px;
+            outPoints[0].srcAngle = prevLastDab->resangle;
+            outPoints[0].brush = *prevLastDab;
+        }
+        res->firstDabPos = from;
+        res->lastDabPos = from;
+        res->lastDabBrush = *prevLastDab;
+        lastSrcX = from.x;
+        lastSrcY = from.y;
+        count = 1;
+    }
 
     while (count < maxOut) {
         // 1. Estimate next position using last (jittered) radius
@@ -497,6 +457,11 @@ int BuildSegment(const SegmentData& seg, int dabOffset, float initialRad,
         res->lastRadOut = lastDabRad;
         res->lastResangle = lastSrcAngle;
     }
+    if (prevLastDab)
+        printf("[OVERLAP] startPos=(%.1f,%.1f) prevAng=%.1f  firstDab=(%.1f,%.1f) lastDab=(%.1f,%.1f) lastAng=%.1f\n",
+               from.x, from.y, prevLastDab->resangle,
+               res->firstDabPos.x, res->firstDabPos.y,
+               res->lastDabPos.x, res->lastDabPos.y, res->lastResangle);
     res->lastSmudgeSrc = Vector2{lastSrcX, lastSrcY};
     return count;
 }
@@ -506,7 +471,7 @@ int BuildSegment(const SegmentData& seg, int dabOffset, float initialRad,
 int DrawSegment(const SegmentData& dseg, RenderTexture2D rt, Texture2D brushTex, bool useTexture, bool seamless, int dabOffset, bool pixelPerfect) {
     static DabPoint pts[65536];
     SegResult r;
-    int cnt = DrawLinear(dseg, dabOffset, 0.0f, pts, 65536, &r);
+    int cnt = DrawLinear(dseg, dabOffset, nullptr, pts, 65536, &r);
 
     for (int i = 0; i < cnt; i++)
         BrushBlend_ApplyStamp(rt, pts[i].brush, brushTex, useTexture,
@@ -526,8 +491,9 @@ void SegDrawer_SetSegmentStart(float startRad, Vector2 startPos, SegmentData* se
 
 int SegDrawer_ComputeSegmentEnd(const SegmentData& seg, int dabOffset, float initialRad,
                                  Vector2* outLastPos, float* outLastRad) {
+    (void)initialRad;
     SegResult r;
-    int cnt = DrawLinear(seg, dabOffset, initialRad, nullptr, 65536, &r);
+    int cnt = DrawLinear(seg, dabOffset, nullptr, nullptr, 65536, &r);
     *outLastPos = r.lastDabPos;
     *outLastRad = r.lastRadOut;
     return cnt;
