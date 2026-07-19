@@ -424,10 +424,16 @@ int BuildSegment(const SegmentData& seg, int dabOffset, const DabBrush* prevLast
     int outCount = 0;
     for (int i = 0; i < count; i++) {
         DabPlacement& dp = s_place[i];
+        bool isOverlap = (i == 0 && prevLastDab);
         float k = dp.t;
         if (k > 1.0f) k = 1.0f;
 
-        DabBrush dabCB = BlendBrushes(seg.brushFrom, seg.brush, k);
+        DabBrush dabCB;
+        if (isOverlap) {
+            dabCB = *prevLastDab;
+        } else {
+            dabCB = BlendBrushes(seg.brushFrom, seg.brush, k);
+        }
         dabCB.rad_out_px = dp.radUnJit;
 
         // Per-dab jitter range — proportional to this dab's own radius
@@ -436,7 +442,7 @@ int BuildSegment(const SegmentData& seg, int dabOffset, const DabBrush* prevLast
 
         // Per-dab angle correction from curve tangent
         float tlen = sqrtf(dp.dir.x * dp.dir.x + dp.dir.y * dp.dir.y);
-        if (fabs(seg.brushFrom.resangle - seg.brush.resangle) > 0.001f && tlen > 0.001f) {
+        if (!isOverlap && fabs(seg.brushFrom.resangle - seg.brush.resangle) > 0.001f && tlen > 0.001f) {
             float curveDir = DirAng(dp.dir.x, dp.dir.y) * 180.0f / (float)M_PI;
             float lerpedChordDir = dabCB.resangle - seg.initAngle - 180.0f;
             float correction = curveDir - lerpedChordDir;
@@ -446,7 +452,6 @@ int BuildSegment(const SegmentData& seg, int dabOffset, const DabBrush* prevLast
 
         // Pre-scatter position
         Vector2 preScatterPos = dp.pos;
-        bool isOverlap = (i == 0 && prevLastDab);
 
         // Scatter: shift perpendicular to travel (skip for virtual overlap)
         float scatterRad = dabCB.scatter * dabCB.rad_out_px;
