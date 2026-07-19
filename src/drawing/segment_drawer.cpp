@@ -345,15 +345,23 @@ int BuildSegment(const SegmentData& seg, int dabOffset, const DabBrush* prevLast
     }
 
     while (count < maxOut) {
-        // 1. Estimate next position using last (jittered) radius
-        float tNext_est = lastDabPos / totalLen;
-        float nextRadEst = rFrom + (rTo - rFrom) * tNext_est;
-        float nextArc_est = lastDabPos + (lastDabRad + nextRadEst) * spacingMult;
+        // 1. Analytical next position (accounts for radius gradient)
+        float slope = (rTo - rFrom) / totalLen;
+        float rAtLast = rFrom + slope * lastDabPos;
+        float denom = 1.0f - spacingMult * slope;
+        float step;
+        if (fabsf(denom) < 0.0001f)
+            step = (lastDabRad + rAtLast) * spacingMult;
+        else
+            step = spacingMult * (lastDabRad + rAtLast) / denom;
+        float minStep = spacingMult * 2.0f * fminf(lastDabRad, rAtLast);
+        if (step < minStep) step = minStep;
+        if (step < 1.0f) step = 1.0f;
+        float nextArc_est = lastDabPos + step;
         if (nextArc_est > totalLen) break;
 
-        // 2. Sample unjittered radius at estimated position
+        // 2. Un-jittered radius at analytical position
         float tNext = nextArc_est / totalLen;
-        if (tNext > 1.0f) tNext = 1.0f;
         float nextRadUnJit = rFrom + (rTo - rFrom) * tNext;
 
         // 3. Apply jitter to get ACTUAL next radius
