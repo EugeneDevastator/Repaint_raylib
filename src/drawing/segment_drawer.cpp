@@ -329,35 +329,26 @@ struct DabPlacement {
 #define DAB_PLACE_CAP 65536
 static DabPlacement s_place[DAB_PLACE_CAP];
 
-int BuildSegment(const SegmentData& seg, int dabOffset, const DabBrush* prevLastDab,
-                  DabPoint* outPoints, int maxOut, SegResult* res,
-                  float spacingMult, float rFrom, float rTo,
-                  bool isCurved, const Vector2* curvePts,
-                  float totalLen, float x2r, float y2r) {
-    Vector2 from = seg.pos1;
-    Vector2 to = seg.pos2;
-    float stdist = sqrtf((to.x - from.x) * (to.x - from.x) + (to.y - from.y) * (to.y - from.y));
+// ── BuildPlacements: Pass 1 — spatial data along the spline ──────
+static int BuildPlacements(const SegmentData& seg, const DabBrush* prevLastDab,
+                            int dabOffset, int jitBase, int maxOut,
+                            float rFrom, float rTo, float spacingMult,
+                            float totalLen, float x2r, float y2r,
+                            const Vector2* curvePts, Vector2 from) {
     float lastDabPos = 0.0f;
     float lastDabRad = (prevLastDab) ? prevLastDab->rad_out_px : rFrom;
-    int jitBase = dabOffset - ((prevLastDab) ? 1 : 0);
     int count = 0;
 
-    // ── Pass 1: compute spatial placement data ──────────────────────
     while (count < maxOut && count < DAB_PLACE_CAP) {
-        // Virtual overlap: previous segment's last dab at arc 0
         if (count == 0 && prevLastDab) {
             s_place[0].pos      = from;
             s_place[0].t        = 0.0f;
-            if (stdist > 0.001f)
-                s_place[0].dir  = Vector2{x2r, y2r};
-            else
-                s_place[0].dir  = Vector2{1.0f, 0.0f};
+            s_place[0].dir      = Vector2{x2r, y2r};
             s_place[0].radUnJit = prevLastDab->rad_out_px;
             count = 1;
             continue;
         }
 
-        // 1. Analytical next position (accounts for radius gradient)
         float slope = (rTo - rFrom) / totalLen;
         float rAtLast = rFrom + slope * lastDabPos;
         float denom = 1.0f - spacingMult * slope;
@@ -372,24 +363,19 @@ int BuildSegment(const SegmentData& seg, int dabOffset, const DabBrush* prevLast
         float nextArc_est = lastDabPos + step;
         if (nextArc_est > totalLen) break;
 
-        // 2. Un-jittered radius at analytical position
         float tNext = nextArc_est / totalLen;
         float nextRadUnJit = rFrom + (rTo - rFrom) * tNext;
 
-        // 3. Apply jitter to get ACTUAL next radius
         float jitRange = seg.brushFrom.jitRadOut;
         float nextRadJit = JitterRadius(nextRadUnJit, jitRange, seg.brushFrom.baseSeed, jitBase + count);
 
-        // 4. Final arc using jittered radius
         float nextArc = lastDabPos + (lastDabRad + nextRadJit) * spacingMult;
         if (nextArc <= lastDabPos + 0.5f) nextArc = lastDabPos + 0.5f;
         if (nextArc > totalLen) break;
 
-        // 5. Get curve position
         float arcPos = lastDabPos;
         Vector2 pos = WalkArc(curvePts, 65, arcPos, nextArc - lastDabPos, totalLen);
 
-        // 6. Curve tangent for scatter direction
         float t = nextArc / totalLen;
         if (t < 0) t = 0; if (t > 1) t = 1;
         int idx = (int)(t * 64);
@@ -397,7 +383,6 @@ int BuildSegment(const SegmentData& seg, int dabOffset, const DabBrush* prevLast
         float tx = curvePts[idx+1].x - curvePts[idx].x;
         float ty = curvePts[idx+1].y - curvePts[idx].y;
 
-        // Store placement
         s_place[count].pos     = pos;
         s_place[count].t       = nextArc / totalLen;
         s_place[count].dir     = Vector2{tx, ty};
@@ -407,6 +392,21 @@ int BuildSegment(const SegmentData& seg, int dabOffset, const DabBrush* prevLast
         lastDabRad = nextRadJit;
         count++;
     }
+    return count;
+}
+
+int BuildSegment(const SegmentData& seg, int dabOffset, const DabBrush* prevLastDab,
+                  DabPoint* outPoints, int maxOut, SegResult* res,
+                  float spacingMult, float rFrom, float rTo,
+                  bool isCurved, const Vector2* curvePts,
+                  float totalLen, float x2r, float y2r) {
+    Vector2 from = seg.pos1;
+    int jitBase = dabOffset - ((prevLastDab) ? 1 : 0);
+
+    // ── Pass 1: compute spatial placement data ──────────────────────
+    int count = BuildPlacements(seg, prevLastDab, dabOffset, jitBase, maxOut,
+                                rFrom, rTo, spacingMult, totalLen, x2r, y2r,
+                                curvePts, from);
 
     // ── Pass 2: build brushes and write output ──────────────────────
     float lastSrcX = seg.smudgeSrcX;
@@ -440,13 +440,16 @@ int BuildSegment(const SegmentData& seg, int dabOffset, const DabBrush* prevLast
         float jitFrac = seg.brushFrom.jitRadOut / fmaxf(0.001f, seg.brushFrom.rad_out_px);
         dabCB.jitRadOut = fmaxf(0.0f, dabCB.rad_out_px * jitFrac);
 
-        // Per-dab angle correction from curve tangent
+        // Per-dab angle correction: follow curve tangent with capped step
         float tlen = sqrtf(dp.dir.x * dp.dir.x + dp.dir.y * dp.dir.y);
         if (!isOverlap && fabs(seg.brushFrom.resangle - seg.brush.resangle) > 0.001f && tlen > 0.001f) {
             float curveDir = DirAng(dp.dir.x, dp.dir.y) * 180.0f / (float)M_PI;
             float lerpedChordDir = dabCB.resangle - seg.initAngle - 180.0f;
             float correction = curveDir - lerpedChordDir;
             correction = fmodf(correction + 180.0f, 360.0f) - 180.0f;
+            float cap = 5.0f;
+            if (correction >  cap) correction =  cap;
+            if (correction < -cap) correction = -cap;
             dabCB.resangle = fmodf(dabCB.resangle + correction + 360.0f, 360.0f);
         }
 

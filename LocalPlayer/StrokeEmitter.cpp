@@ -224,6 +224,11 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
 
     SegResult segRes;
     int dabCount = DrawLinear(dseg, 0, nullptr, nullptr, 65536, &segRes);
+    if (dabCount > 0)
+        printf("[BND] prev_lastRes=%.1f  modFrom.res=%.1f  modTo.res=%.1f  lastRes=%.1f  tlen=%.0f\n",
+            (m_emittedAny ? m_modulated.resangle : -1.0f),
+            modFrom.resangle, modTo.resangle, segRes.lastResangle,
+            sqrtf((dseg.pos2.x-dseg.pos1.x)*(dseg.pos2.x-dseg.pos1.x)+(dseg.pos2.y-dseg.pos1.y)*(dseg.pos2.y-dseg.pos1.y)));
     m_lastDabPos = segRes.lastDabPos;
     m_lastDabRad = segRes.lastRadOut;
     if (dabCount > 0 && m_segDebugCount < DBG_SEG_PTS / 2) {
