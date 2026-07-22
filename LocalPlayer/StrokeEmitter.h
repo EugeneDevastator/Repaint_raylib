@@ -14,6 +14,7 @@ public:
 
     Vector2 m_lastDabPos;
     float m_lastDabRad;
+    float m_phase = 0.0f;
     float m_ppBias = -1.0f;
     bool isFirstDabPainted = true;
 
@@ -37,7 +38,6 @@ private:
     UserBrushConfig m_config;
     ModulatedBrushConfig m_modulated;
     bool m_emittedAny;
-    DabBrush m_prevLastDabBrush;
     uint16_t m_seed;
     TexSlotID m_targetSlot;
     uint8_t m_userTexBucket;

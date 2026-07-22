@@ -339,11 +339,13 @@ void Viewport_DrawDebugOverlays(Viewport* vp, AppState* state) {
             Vector2 p2 = g_emitter->m_segEndpoints[i * 2 + 1];
             Vector2 c0 = g_emitter->m_segCtrl0[i];
             Vector2 c3 = g_emitter->m_segCtrl3[i];
-            DrawLineV(p1, p2, BLACK);
+            DrawLineV(p1, p2, (Color){60, 60, 60, 100});
             DrawLineV(p1, c0, GREEN);
             DrawLineV(c3, p2, ORANGE);
-            DrawCircle(g_emitter->m_segLastDab[i].x,  g_emitter->m_segLastDab[i].y,  4, ORANGE);
-            DrawCircle(g_emitter->m_segFirstDab[i].x, g_emitter->m_segFirstDab[i].y, 3, YELLOW);
+            DrawCircle(p1.x, p1.y, 3, LIGHTGRAY);
+            DrawCircle(p2.x, p2.y, 3, WHITE);
+            DrawCircle(c0.x, c0.y, 2, (Color){0, 200, 0, 180});
+            DrawCircle(c3.x, c3.y, 2, (Color){255, 160, 0, 180});
         }
     }
     EndMode2D();

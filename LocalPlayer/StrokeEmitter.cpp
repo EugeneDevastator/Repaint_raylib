@@ -51,6 +51,7 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
                      e.x * m[3] + e.y * m[4] + m[5]};
     m_lastDabPos = start;
     m_lastDabRad = 0;
+    m_phase = 0.0f;
     m_prevSegPos = start;
     m_prevSegDir = Vector2{0, 0};
     m_prevSegLen = 0;
@@ -158,42 +159,13 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
 
     DabBrush cbFrom = MakeDabBrush(modFrom, m_brushFrom.rad_out);
     DabBrush cbTo   = MakeDabBrush(modTo, modTo.radOut);
-    if (!m_emittedAny) {
-        // Override modFrom with entry tangent direction so the first
-        // segment lerps from entry → exit tangent instead of stale input csDir.
-        float c0dx = ctrl0.x - p1.x, c0dy = ctrl0.y - p1.y;
-        float c0len = sqrtf(c0dx*c0dx + c0dy*c0dy);
-        if (c0len > 0.5f) {
-            ModulatorTable mtFrom;
-            Modulator_GetTable(&mtFrom);
-            mtFrom.val[csDir] = RngConv(DirAng(c0dx, c0dy), -(float)M_PI, (float)M_PI, 0.0f, 1.0f);
-            ModulatedBrushConfig modFromFixed = ResolveModulatedConfig(m_config, toolMode, initAngle, &mtFrom);
-            cbFrom = MakeDabBrush(modFromFixed, m_brushFrom.rad_out);
-        }
-    }
-
-    float hLen = segLen * 0.33f;
-    Vector2 c0dir = {ctrl0.x - p1.x, ctrl0.y - p1.y};
-    float c0l = sqrtf(c0dir.x*c0dir.x + c0dir.y*c0dir.y);
-    Vector2 actualCtrl0 = m_lastDabPos;
-    if (c0l > 0.001f) {
-        actualCtrl0.x = m_lastDabPos.x + c0dir.x/c0l * hLen;
-        actualCtrl0.y = m_lastDabPos.y + c0dir.y/c0l * hLen;
-    }
-    Vector2 c3dir = {ctrl3.x - p2.x, ctrl3.y - p2.y};
-    float c3l = sqrtf(c3dir.x*c3dir.x + c3dir.y*c3dir.y);
-    Vector2 actualCtrl3 = p2;
-    if (c3l > 0.001f) {
-        actualCtrl3.x = p2.x + c3dir.x/c3l * hLen;
-        actualCtrl3.y = p2.y + c3dir.y/c3l * hLen;
-    }
 
     SegmentData dseg;
     memset(&dseg, 0, sizeof(dseg));
-    dseg.pos1      = m_lastDabPos;
+    dseg.pos1      = p1;
     dseg.pos2      = p2;
-    dseg.ctrl0     = actualCtrl0;
-    dseg.ctrl3     = actualCtrl3;
+    dseg.ctrl0     = ctrl0;
+    dseg.ctrl3     = ctrl3;
     dseg.brushFrom = cbFrom;
     dseg.brush     = cbTo;
     dseg.tool      = (uint8_t)toolMode;
@@ -214,7 +186,6 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
     m_hasPrevRoot   = true;
     FillSliderMods(m_config, dseg.sliderMods);
 
-    SegDrawer_SetSegmentStart(m_lastDabRad, m_lastDabPos, &dseg);
     if (!m_emittedAny) dseg.isStrokeStart = 1;
 
     m_throttle->Push(dseg);
@@ -223,14 +194,10 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
     if (g_broker) g_broker->on_segment(dseg);
 
     SegResult segRes;
-    int dabCount = DrawLinear(dseg, 0, nullptr, nullptr, 65536, &segRes);
-    if (dabCount > 0)
-        printf("[BND] prev_lastRes=%.1f  modFrom.res=%.1f  modTo.res=%.1f  lastRes=%.1f  tlen=%.0f\n",
-            (m_emittedAny ? m_modulated.resangle : -1.0f),
-            modFrom.resangle, modTo.resangle, segRes.lastResangle,
-            sqrtf((dseg.pos2.x-dseg.pos1.x)*(dseg.pos2.x-dseg.pos1.x)+(dseg.pos2.y-dseg.pos1.y)*(dseg.pos2.y-dseg.pos1.y)));
-    m_lastDabPos = segRes.lastDabPos;
-    m_lastDabRad = segRes.lastRadOut;
+    int dabCount = DrawLinear(dseg, 0, m_phase, nullptr, 65536, &segRes);
+    m_phase = segRes.endPhase;
+    m_lastDabPos = (dabCount > 0) ? segRes.lastDabPos : dseg.pos2;
+    m_lastDabRad = (dabCount > 0) ? segRes.lastRadOut : dseg.brush.rad_out_px;
     if (dabCount > 0 && m_segDebugCount < DBG_SEG_PTS / 2) {
         m_segFirstDab[m_segDebugCount] = segRes.firstDabPos;
         m_segLastDab[m_segDebugCount]  = m_lastDabPos;
@@ -249,7 +216,6 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
     m_modulated = modTo;
     if (dabCount > 0) {
         m_modulated.resangle = segRes.lastResangle;
-        m_prevLastDabBrush = segRes.lastDabBrush;
     }
     m_emittedAny = true;
 }
@@ -266,8 +232,7 @@ void StrokeEmitter::handlePoint(const InputEntry& e) {
 
     if (g_strokeSmoothingMode == SMOOTH_MODE_LINEAR) {
         float lineLen = Dist2D(m_lastDabPos, pos);
-        float threshold = (g_strokeThrottle > 0.0f) ? fmaxf(g_strokeThrottle, 0.5f)
-                           : modNow.radOut * 0.5f * m_worldToTexPx;
+        float threshold = (g_strokeThrottle > 0.0f) ? fmaxf(g_strokeThrottle, 0.5f) : 2.0f;
         if (threshold < 0.5f) threshold = 0.5f;
         if (lineLen < threshold) return;
         float hLen = lineLen * 0.33f;
@@ -283,7 +248,7 @@ void StrokeEmitter::handlePoint(const InputEntry& e) {
     if (g_strokeSmoothingMode == SMOOTH_MODE_SMOOTH) {
         threshold = fmaxf(g_strokeThrottle, 0.5f);
     } else if (g_strokeThrottle <= 0.0f) {
-        threshold = modNow.radOut * 0.5f * m_worldToTexPx;
+        threshold = 2.0f;
         if (threshold < 0.5f) threshold = 0.5f;
     } else {
         threshold = fmaxf(g_strokeThrottle, 0.5f);
@@ -349,8 +314,9 @@ void StrokeEmitter::flushSmoothing(const d_RealBrush& brush, float initAngle, in
     for (int seg = m_processedCount; seg <= N - 2; seg++) {
         Vector2 p0, p1, p2, p3;
         if (seg == 0) {
-            p0 = m_splinePts[0]; p1 = m_splinePts[0];
+            p1 = m_splinePts[0];
             p2 = m_splinePts[1]; p3 = (N > 2) ? m_splinePts[2] : m_splinePts[1];
+            p0 = Vector2{p1.x - (p3.x - p1.x) * 0.33f, p1.y - (p3.y - p1.y) * 0.33f};
         } else if (seg >= N - 2) {
             p0 = m_splinePts[seg - 1];
             p1 = m_splinePts[seg];

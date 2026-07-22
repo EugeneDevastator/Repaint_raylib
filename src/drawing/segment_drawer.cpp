@@ -249,7 +249,7 @@ static float JitterRadius(float unjitteredRad, float jitRange,
 }
 
 // ── DrawLinear ─────────────────────────────────────────────────────
-int DrawLinear(const SegmentData& seg, int dabOffset, const DabBrush* prevLastDab,
+int DrawLinear(const SegmentData& seg, int dabOffset, float phase,
                DabPoint* outPoints, int maxOut, SegResult* res) {
     if (!res) return 0;
     Vector2 from = seg.pos1;
@@ -312,7 +312,7 @@ int DrawLinear(const SegmentData& seg, int dabOffset, const DabBrush* prevLastDa
         rTo   = snapRad(rTo);
     }
 
-    return BuildSegment(seg, dabOffset, prevLastDab, outPoints, maxOut, res,
+    return BuildSegment(seg, dabOffset, phase, outPoints, maxOut, res,
                         spacingMult, rFrom, rTo, isCurved, curvePts,
                         totalLen, x2r, y2r);
 }
@@ -330,55 +330,54 @@ struct DabPlacement {
 static DabPlacement s_place[DAB_PLACE_CAP];
 
 // ── BuildPlacements: Pass 1 — spatial data along the spline ──────
-static int BuildPlacements(const SegmentData& seg, const DabBrush* prevLastDab,
-                            int dabOffset, int jitBase, int maxOut,
+static int BuildPlacements(const SegmentData& seg, float* inOutPhase,
+                            int dabOffset, int maxOut,
                             float rFrom, float rTo, float spacingMult,
                             float totalLen, float x2r, float y2r,
                             const Vector2* curvePts, Vector2 from) {
-    float lastDabPos = 0.0f;
-    float lastDabRad = (prevLastDab) ? prevLastDab->rad_out_px : rFrom;
+    float lastDabArc = 0.0f;
+    float lastDabRad = rFrom;
+    float phase = *inOutPhase;
     int count = 0;
+    int seedIdx = 0;
 
     while (count < maxOut && count < DAB_PLACE_CAP) {
-        if (count == 0 && prevLastDab) {
-            s_place[0].pos      = from;
-            s_place[0].t        = 0.0f;
-            s_place[0].dir      = Vector2{x2r, y2r};
-            s_place[0].radUnJit = prevLastDab->rad_out_px;
-            count = 1;
-            continue;
-        }
-
-        float slope = (rTo - rFrom) / totalLen;
-        float rAtLast = rFrom + slope * lastDabPos;
-        float denom = 1.0f - spacingMult * slope;
-        float step;
-        if (fabsf(denom) < 0.0001f)
-            step = (lastDabRad + rAtLast) * spacingMult;
-        else
-            step = spacingMult * (lastDabRad + rAtLast) / denom;
+        float rAtLast = rFrom + (rTo - rFrom) * lastDabArc / totalLen;
+        float step = (lastDabRad + rAtLast) * spacingMult;
         float minStep = spacingMult * 2.0f * fminf(lastDabRad, rAtLast);
         if (step < minStep) step = minStep;
         if (step < 1.0f) step = 1.0f;
-        float nextArc_est = lastDabPos + step;
-        if (nextArc_est > totalLen) break;
+        if (lastDabArc + step > totalLen) break;
 
-        float tNext = nextArc_est / totalLen;
+        if (phase >= step) {
+            phase -= step;
+            lastDabArc += step;
+            float t = lastDabArc / totalLen;
+            float r = rFrom + (rTo - rFrom) * t;
+            float jr = seg.brushFrom.jitRadOut;
+            lastDabRad = JitterRadius(r, jr, seg.brushFrom.baseSeed, dabOffset + seedIdx);
+            seedIdx++;
+            continue;
+        }
+
+        float estArc = lastDabArc + step;
+        float tNext = estArc / totalLen;
         float nextRadUnJit = rFrom + (rTo - rFrom) * tNext;
 
         float jitRange = seg.brushFrom.jitRadOut;
-        float nextRadJit = JitterRadius(nextRadUnJit, jitRange, seg.brushFrom.baseSeed, jitBase + count);
+        float nextRadJit = JitterRadius(nextRadUnJit, jitRange, seg.brushFrom.baseSeed, dabOffset + seedIdx);
 
-        float nextArc = lastDabPos + (lastDabRad + nextRadJit) * spacingMult;
-        if (nextArc <= lastDabPos + 0.5f) nextArc = lastDabPos + 0.5f;
+        float nextArc = lastDabArc + (lastDabRad + nextRadJit) * spacingMult - phase;
+        phase = 0.0f;
+        if (nextArc <= lastDabArc + 0.5f) nextArc = lastDabArc + 0.5f;
         if (nextArc > totalLen) break;
 
-        float arcPos = lastDabPos;
-        Vector2 pos = WalkArc(curvePts, 65, arcPos, nextArc - lastDabPos, totalLen);
+        float arcPos = lastDabArc;
+        Vector2 pos = WalkArc(curvePts, 65, arcPos, nextArc - lastDabArc, totalLen);
 
         float t = nextArc / totalLen;
         if (t < 0) t = 0; if (t > 1) t = 1;
-        int idx = (int)(t * 64);
+        int idx = (int)(t * 64 - 0.0001f);
         if (idx < 0) idx = 0; if (idx > 63) idx = 63;
         float tx = curvePts[idx+1].x - curvePts[idx].x;
         float ty = curvePts[idx+1].y - curvePts[idx].y;
@@ -388,23 +387,24 @@ static int BuildPlacements(const SegmentData& seg, const DabBrush* prevLastDab,
         s_place[count].dir     = Vector2{tx, ty};
         s_place[count].radUnJit = nextRadUnJit;
 
-        lastDabPos = nextArc;
+        lastDabArc = nextArc;
         lastDabRad = nextRadJit;
+        seedIdx++;
         count++;
     }
+    *inOutPhase = phase + (totalLen - lastDabArc);
     return count;
 }
 
-int BuildSegment(const SegmentData& seg, int dabOffset, const DabBrush* prevLastDab,
+int BuildSegment(const SegmentData& seg, int dabOffset, float phase,
                   DabPoint* outPoints, int maxOut, SegResult* res,
                   float spacingMult, float rFrom, float rTo,
                   bool isCurved, const Vector2* curvePts,
                   float totalLen, float x2r, float y2r) {
     Vector2 from = seg.pos1;
-    int jitBase = dabOffset - ((prevLastDab) ? 1 : 0);
 
     // ── Pass 1: compute spatial placement data ──────────────────────
-    int count = BuildPlacements(seg, prevLastDab, dabOffset, jitBase, maxOut,
+    int count = BuildPlacements(seg, &phase, dabOffset, maxOut,
                                 rFrom, rTo, spacingMult, totalLen, x2r, y2r,
                                 curvePts, from);
 
@@ -416,50 +416,29 @@ int BuildSegment(const SegmentData& seg, int dabOffset, const DabBrush* prevLast
     res->firstDabPos = Vector2{0, 0};
     res->lastDabPos = from;
     res->lastRadOut = rFrom;
-    if (prevLastDab) {
-        lastSrcX = from.x;
-        lastSrcY = from.y;
-    }
+    res->endPhase = phase;
 
-    int outCount = 0;
     for (int i = 0; i < count; i++) {
         DabPlacement& dp = s_place[i];
-        bool isOverlap = (i == 0 && prevLastDab);
         float k = dp.t;
         if (k > 1.0f) k = 1.0f;
 
-        DabBrush dabCB;
-        if (isOverlap) {
-            dabCB = *prevLastDab;
-        } else {
-            dabCB = BlendBrushes(seg.brushFrom, seg.brush, k);
-        }
+        DabBrush dabCB = BlendBrushes(seg.brushFrom, seg.brush, k);
         dabCB.rad_out_px = dp.radUnJit;
 
-        // Per-dab jitter range — proportional to this dab's own radius
-        float jitFrac = seg.brushFrom.jitRadOut / fmaxf(0.001f, seg.brushFrom.rad_out_px);
-        dabCB.jitRadOut = fmaxf(0.0f, dabCB.rad_out_px * jitFrac);
+        // Analytical bezier tangent for dab angle
+        float mt = 1.0f - k;
+        float ctx = 3*mt*mt*(seg.ctrl0.x - seg.pos1.x) + 6*mt*k*(seg.ctrl3.x - seg.ctrl0.x) + 3*k*k*(seg.pos2.x - seg.ctrl3.x);
+        float cty = 3*mt*mt*(seg.ctrl0.y - seg.pos1.y) + 6*mt*k*(seg.ctrl3.y - seg.ctrl0.y) + 3*k*k*(seg.pos2.y - seg.ctrl3.y);
+        float ctlen = sqrtf(ctx*ctx + cty*cty);
+        if (ctlen > 0.001f)
+            dabCB.resangle = fmodf(seg.initAngle + DirAng(ctx, cty) * 180.0f / (float)M_PI + 90.0f, 360.0f);
 
-        // Per-dab angle correction: follow curve tangent with capped step
-        float tlen = sqrtf(dp.dir.x * dp.dir.x + dp.dir.y * dp.dir.y);
-        if (!isOverlap && fabs(seg.brushFrom.resangle - seg.brush.resangle) > 0.001f && tlen > 0.001f) {
-            float curveDir = DirAng(dp.dir.x, dp.dir.y) * 180.0f / (float)M_PI;
-            float lerpedChordDir = dabCB.resangle - seg.initAngle - 180.0f;
-            float correction = curveDir - lerpedChordDir;
-            correction = fmodf(correction + 180.0f, 360.0f) - 180.0f;
-            float cap = 5.0f;
-            if (correction >  cap) correction =  cap;
-            if (correction < -cap) correction = -cap;
-            dabCB.resangle = fmodf(dabCB.resangle + correction + 360.0f, 360.0f);
-        }
-
-        // Pre-scatter position
         Vector2 preScatterPos = dp.pos;
-
-        // Scatter: shift perpendicular to travel (skip for virtual overlap)
         float scatterRad = dabCB.scatter * dabCB.rad_out_px;
         Vector2 pos = dp.pos;
-        if (!isOverlap && scatterRad > 0.001f && tlen > 0.001f) {
+        float tlen = sqrtf(dp.dir.x * dp.dir.x + dp.dir.y * dp.dir.y);
+        if (scatterRad > 0.001f && tlen > 0.001f) {
             uint16_t segMix = (uint16_t)((int)seg.pos1.x * 73) ^ (uint16_t)((int)seg.pos1.y * 137);
             uint16_t seed = seg.brushFrom.baseSeed + segMix + (uint16_t)(i * 13 + 37);
             float raw = RawRnd(seed, 1024);
@@ -469,32 +448,26 @@ int BuildSegment(const SegmentData& seg, int dabOffset, const DabBrush* prevLast
             pos.y += ( dp.dir.x / tlen) * off;
         }
 
-        if (!isOverlap)
-            JitterBrush(dabCB, seg.brushFrom.baseSeed, jitBase + i);
+        JitterBrush(dabCB, seg.brushFrom.baseSeed, dabOffset + i);
 
-        if (!isOverlap && seg.pixelPerfect && seg.ppBias >= 0.0f) {
+        if (seg.pixelPerfect && seg.ppBias >= 0.0f) {
             float r = fmaxf(0.5f, dabCB.rad_out_px);
             int ip = (int)r;
             if (seg.ppBias == 0.0f && ip < 1) ip = 1;
             dabCB.rad_out_px = (float)ip + seg.ppBias;
         }
 
-        if (i == 0 && !prevLastDab) res->firstDabPos = preScatterPos;
-        else if (i == 1 && prevLastDab) res->firstDabPos = preScatterPos;
+        if (i == 0) res->firstDabPos = preScatterPos;
         res->lastDabPos = preScatterPos;
 
-        if (i > 0 || !prevLastDab) {
-            if (outPoints) {
-                int oi = outCount;
-                outPoints[oi].x = pos.x;
-                outPoints[oi].y = pos.y;
-                outPoints[oi].srcX = lastSrcX;
-                outPoints[oi].srcY = lastSrcY;
-                outPoints[oi].srcRad = lastSrcRad;
-                outPoints[oi].srcAngle = lastSrcAngle;
-                outPoints[oi].brush = dabCB;
-            }
-            outCount++;
+        if (outPoints) {
+            outPoints[i].x = pos.x;
+            outPoints[i].y = pos.y;
+            outPoints[i].srcX = lastSrcX;
+            outPoints[i].srcY = lastSrcY;
+            outPoints[i].srcRad = lastSrcRad;
+            outPoints[i].srcAngle = lastSrcAngle;
+            outPoints[i].brush = dabCB;
         }
         lastSrcX = pos.x;
         lastSrcY = pos.y;
@@ -507,7 +480,7 @@ int BuildSegment(const SegmentData& seg, int dabOffset, const DabBrush* prevLast
         res->lastResangle = lastSrcAngle;
     }
     res->lastSmudgeSrc = Vector2{lastSrcX, lastSrcY};
-    return outCount;
+    return count;
 }
 
 
@@ -515,7 +488,7 @@ int BuildSegment(const SegmentData& seg, int dabOffset, const DabBrush* prevLast
 int DrawSegment(const SegmentData& dseg, RenderTexture2D rt, Texture2D brushTex, bool useTexture, bool seamless, int dabOffset, bool pixelPerfect) {
     static DabPoint pts[65536];
     SegResult r;
-    int cnt = DrawLinear(dseg, dabOffset, nullptr, pts, 65536, &r);
+    int cnt = DrawLinear(dseg, dabOffset, 0.0f, pts, 65536, &r);
 
     for (int i = 0; i < cnt; i++)
         BrushBlend_ApplyStamp(rt, pts[i].brush, brushTex, useTexture,
@@ -535,9 +508,8 @@ void SegDrawer_SetSegmentStart(float startRad, Vector2 startPos, SegmentData* se
 
 int SegDrawer_ComputeSegmentEnd(const SegmentData& seg, int dabOffset, float initialRad,
                                  Vector2* outLastPos, float* outLastRad) {
-    (void)initialRad;
     SegResult r;
-    int cnt = DrawLinear(seg, dabOffset, nullptr, nullptr, 65536, &r);
+    int cnt = DrawLinear(seg, dabOffset, 0.0f, nullptr, 65536, &r);
     *outLastPos = r.lastDabPos;
     *outLastRad = r.lastRadOut;
     return cnt;
