@@ -293,11 +293,10 @@ void StrokeEmitter::handlePoint(const InputEntry& e) {
         if (seg == 0) {
             p1 = m_splinePts[0];
             p2 = m_splinePts[1]; p3 = m_splinePts[2];
-            // Reflect exit handle direction to get entry (Python smooth_joint_handle)
             Vector2 extDir = {p3.x - p1.x, p3.y - p1.y};
             float extLen = sqrtf(extDir.x*extDir.x + extDir.y*extDir.y);
             if (extLen > 0.001f)
-                p0 = Vector2{p1.x - extDir.x/extLen * Dist2D(p1,p2) * 0.33f, p1.y - extDir.y/extLen * Dist2D(p1,p2) * 0.33f};
+                p0 = Vector2{p1.x + extDir.x/extLen * Dist2D(p1,p2) * 0.33f, p1.y + extDir.y/extLen * Dist2D(p1,p2) * 0.33f};
             else
                 p0 = p1;
         } else {
@@ -334,7 +333,7 @@ void StrokeEmitter::flushSmoothing(const d_RealBrush& brush, float initAngle, in
             Vector2 extDir = {p3.x - p1.x, p3.y - p1.y};
             float extLen = sqrtf(extDir.x*extDir.x + extDir.y*extDir.y);
             if (extLen > 0.001f)
-                p0 = Vector2{p1.x - extDir.x/extLen * Dist2D(p1,p2) * 0.33f, p1.y - extDir.y/extLen * Dist2D(p1,p2) * 0.33f};
+                p0 = Vector2{p1.x + extDir.x/extLen * Dist2D(p1,p2) * 0.33f, p1.y + extDir.y/extLen * Dist2D(p1,p2) * 0.33f};
             else
                 p0 = p1;
         } else if (seg >= N - 2) {
@@ -345,7 +344,7 @@ void StrokeEmitter::flushSmoothing(const d_RealBrush& brush, float initAngle, in
             Vector2 inDir = {p2.x - p0.x, p2.y - p0.y};
             float inLen = sqrtf(inDir.x*inDir.x + inDir.y*inDir.y);
             float hLen = Dist2D(p1, p2) * 0.33f;
-            p3 = (inLen > 0.001f) ? Vector2{p2.x + inDir.x/inLen * hLen, p2.y + inDir.y/inLen * hLen} : p2;
+            p3 = (inLen > 0.001f) ? Vector2{p2.x - inDir.x/inLen * hLen, p2.y - inDir.y/inLen * hLen} : p2;
         } else {
             p0 = m_splinePts[seg - 1];
             p1 = m_splinePts[seg];
