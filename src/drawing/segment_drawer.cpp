@@ -349,7 +349,7 @@ static int BuildPlacements(const SegmentData& seg, float* inOutPhase,
         if (step < 1.0f) step = 1.0f;
         if (lastDabArc + step > totalLen) break;
 
-        if (phase >= step) {
+        if (phase > step) {
             phase -= step;
             lastDabArc += step;
             float t = lastDabArc / totalLen;
@@ -367,7 +367,7 @@ static int BuildPlacements(const SegmentData& seg, float* inOutPhase,
 
         float nextArc = lastDabArc + (lastDabRad + nextRadUnJit) * spacingMult - phase;
         phase = 0.0f;
-        if (nextArc <= lastDabArc + 0.5f) nextArc = lastDabArc + 0.5f;
+        if (nextArc <= lastDabArc + 0.5f && nextArc - lastDabArc > 0.001f) nextArc = lastDabArc + 0.5f;
         if (nextArc > totalLen) break;
 
         float arcPos = lastDabArc;
