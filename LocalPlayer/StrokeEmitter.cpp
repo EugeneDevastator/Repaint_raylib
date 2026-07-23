@@ -293,7 +293,13 @@ void StrokeEmitter::handlePoint(const InputEntry& e) {
         if (seg == 0) {
             p1 = m_splinePts[0];
             p2 = m_splinePts[1]; p3 = m_splinePts[2];
-            p0 = Vector2{p1.x - (p2.x - p1.x), p1.y - (p2.y - p1.y)};
+            // Reflect exit handle direction to get entry (Python smooth_joint_handle)
+            Vector2 extDir = {p3.x - p1.x, p3.y - p1.y};
+            float extLen = sqrtf(extDir.x*extDir.x + extDir.y*extDir.y);
+            if (extLen > 0.001f)
+                p0 = Vector2{p1.x - extDir.x/extLen * Dist2D(p1,p2) * 0.33f, p1.y - extDir.y/extLen * Dist2D(p1,p2) * 0.33f};
+            else
+                p0 = p1;
         } else {
             p0 = m_splinePts[seg - 1];
             p1 = m_splinePts[seg];
@@ -325,12 +331,21 @@ void StrokeEmitter::flushSmoothing(const d_RealBrush& brush, float initAngle, in
         if (seg == 0) {
             p1 = m_splinePts[0];
             p2 = m_splinePts[1]; p3 = (N > 2) ? m_splinePts[2] : m_splinePts[1];
-            p0 = Vector2{p1.x - (p2.x - p1.x), p1.y - (p2.y - p1.y)};
+            Vector2 extDir = {p3.x - p1.x, p3.y - p1.y};
+            float extLen = sqrtf(extDir.x*extDir.x + extDir.y*extDir.y);
+            if (extLen > 0.001f)
+                p0 = Vector2{p1.x - extDir.x/extLen * Dist2D(p1,p2) * 0.33f, p1.y - extDir.y/extLen * Dist2D(p1,p2) * 0.33f};
+            else
+                p0 = p1;
         } else if (seg >= N - 2) {
             p0 = m_splinePts[seg - 1];
             p1 = m_splinePts[seg];
             p2 = m_splinePts[seg + 1];
-            p3 = m_splinePts[seg + 1];
+            // Extend p3 past p2 in the incoming direction (from p0 to p2)
+            Vector2 inDir = {p2.x - p0.x, p2.y - p0.y};
+            float inLen = sqrtf(inDir.x*inDir.x + inDir.y*inDir.y);
+            float hLen = Dist2D(p1, p2) * 0.33f;
+            p3 = (inLen > 0.001f) ? Vector2{p2.x + inDir.x/inLen * hLen, p2.y + inDir.y/inLen * hLen} : p2;
         } else {
             p0 = m_splinePts[seg - 1];
             p1 = m_splinePts[seg];
