@@ -353,9 +353,7 @@ static int BuildPlacements(const SegmentData& seg, float* inOutPhase,
             phase -= step;
             lastDabArc += step;
             float t = lastDabArc / totalLen;
-            float r = rFrom + (rTo - rFrom) * t;
-            float jr = seg.brushFrom.jitRadOut;
-            lastDabRad = JitterRadius(r, jr, seg.brushFrom.baseSeed, dabOffset + seedIdx);
+            lastDabRad = rFrom + (rTo - rFrom) * t;
             seedIdx++;
             continue;
         }
@@ -367,7 +365,7 @@ static int BuildPlacements(const SegmentData& seg, float* inOutPhase,
         float jitRange = seg.brushFrom.jitRadOut;
         float nextRadJit = JitterRadius(nextRadUnJit, jitRange, seg.brushFrom.baseSeed, dabOffset + seedIdx);
 
-        float nextArc = lastDabArc + (lastDabRad + nextRadJit) * spacingMult - phase;
+        float nextArc = lastDabArc + (lastDabRad + nextRadUnJit) * spacingMult - phase;
         phase = 0.0f;
         if (nextArc <= lastDabArc + 0.5f) nextArc = lastDabArc + 0.5f;
         if (nextArc > totalLen) break;
@@ -388,7 +386,7 @@ static int BuildPlacements(const SegmentData& seg, float* inOutPhase,
         s_place[count].radUnJit = nextRadUnJit;
 
         lastDabArc = nextArc;
-        lastDabRad = nextRadJit;
+        lastDabRad = nextRadUnJit;
         seedIdx++;
         count++;
     }
