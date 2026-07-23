@@ -230,10 +230,16 @@ void StrokeEmitter::handlePoint(const InputEntry& e) {
     ModulatorTable mt2; Modulator_GetTable(&mt2);
     ModulatedBrushConfig modNow = ResolveModulatedConfig(m_config, m_toolMode, m_initAngle, &mt2);
 
+    // ── Dab-count threshold: emit segment when we have enough room ──
+    float estSpacing = modNow.radOut * 2.0f * modNow.spacing;
+    if (estSpacing < 1.0f) estSpacing = 1.0f;
+    int minDabs = (g_strokeThrottle > 0.0f) ? (int)g_strokeThrottle : 1;
+    if (minDabs < 1) minDabs = 1;
+    float threshold = estSpacing * (float)minDabs;
+
     if (g_strokeSmoothingMode == SMOOTH_MODE_LINEAR) {
+        // ── LINEAR mode: emit single straight segment ───────────────
         float lineLen = Dist2D(m_lastDabPos, pos);
-        float threshold = (g_strokeThrottle > 0.0f) ? fmaxf(g_strokeThrottle, 0.5f) : 2.0f;
-        if (threshold < 0.5f) threshold = 0.5f;
         if (lineLen < threshold) return;
         float hLen = lineLen * 0.33f;
         Vector2 dir = {pos.x - m_lastDabPos.x, pos.y - m_lastDabPos.y};
@@ -244,20 +250,11 @@ void StrokeEmitter::handlePoint(const InputEntry& e) {
         return;
     }
 
-    float threshold;
-    if (g_strokeSmoothingMode == SMOOTH_MODE_SMOOTH) {
-        threshold = fmaxf(g_strokeThrottle, 0.5f);
-    } else if (g_strokeThrottle <= 0.0f) {
-        threshold = 2.0f;
-        if (threshold < 0.5f) threshold = 0.5f;
-    } else {
-        threshold = fmaxf(g_strokeThrottle, 0.5f);
-    }
-
+    // ── SMOOTH mode: accumulate spline points, emit Catmull-Rom segments ──
     if (Dist2D(m_splinePts[m_splineCount - 1], pos) >= threshold) {
-        if (m_splineCount < 256) {
+        if (m_splineCount < 256)
             m_splinePts[m_splineCount++] = pos;
-        } else {
+        else {
             memmove(m_splinePts, m_splinePts + 1, sizeof(Vector2) * 255);
             m_splinePts[255] = pos;
             if (m_processedCount > 0) m_processedCount--;
@@ -266,7 +263,6 @@ void StrokeEmitter::handlePoint(const InputEntry& e) {
 
     int N = m_splineCount;
 
-    // First real segment: correct modFrom to prevent stale csDir propagation
     if (m_processedCount == 0 && N >= 3) {
         Vector2 firstDx = {m_splinePts[1].x - m_splinePts[0].x,
                            m_splinePts[1].y - m_splinePts[0].y};
