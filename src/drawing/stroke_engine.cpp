@@ -7,7 +7,7 @@
 #include <string.h>
 
 int g_strokeSmoothingMode = SMOOTH_MODE_SMOOTH;
-float g_strokeThrottle = 0.0f;
+float g_strokeThrottle = 1.0f;
 ICommandBroker* g_broker = nullptr;
 
 static float ConfigRawVal(const BPConfig& cfg) {

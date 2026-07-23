@@ -279,8 +279,9 @@ void StrokeEmitter::handlePoint(const InputEntry& e) {
     for (int seg = m_processedCount; seg <= N - 3; seg++) {
         Vector2 p0, p1, p2, p3;
         if (seg == 0) {
-            p0 = m_splinePts[0]; p1 = m_splinePts[0];
+            p1 = m_splinePts[0];
             p2 = m_splinePts[1]; p3 = m_splinePts[2];
+            p0 = Vector2{p1.x - (p2.x - p1.x), p1.y - (p2.y - p1.y)};
         } else {
             p0 = m_splinePts[seg - 1];
             p1 = m_splinePts[seg];
@@ -312,7 +313,7 @@ void StrokeEmitter::flushSmoothing(const d_RealBrush& brush, float initAngle, in
         if (seg == 0) {
             p1 = m_splinePts[0];
             p2 = m_splinePts[1]; p3 = (N > 2) ? m_splinePts[2] : m_splinePts[1];
-            p0 = Vector2{p1.x - (p3.x - p1.x) * 0.33f, p1.y - (p3.y - p1.y) * 0.33f};
+            p0 = Vector2{p1.x - (p2.x - p1.x), p1.y - (p2.y - p1.y)};
         } else if (seg >= N - 2) {
             p0 = m_splinePts[seg - 1];
             p1 = m_splinePts[seg];

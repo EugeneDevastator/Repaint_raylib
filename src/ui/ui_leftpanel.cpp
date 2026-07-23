@@ -211,7 +211,7 @@ void LeftPanel_Draw(AppState* state) {
 
     ImGui::Text("Throttle");
     ImGui::SetNextItemWidth(-15);
-    ImGui::SliderFloat("##thr", &g_strokeThrottle, 0.0f, 512.0f, "%.0f");
+    ImGui::SliderFloat("##thr", &g_strokeThrottle, 1.0f, 512.0f, "%.0f");
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("Higher values = fewer segment endpoints = smoother curved strokes");
 
