@@ -1,0 +1,54 @@
+SavedInputPoint{
+worldx, worldy
+Modulator_values_table
+}
+
+BrushParamModel{
+min, max, modulationtype, jitter
+}
+
+EndpointBrush{
+// container with final values, modulation applied.
+// can contain some modulation options.
+initAngle,
+BrushParamModel radius;
+BrushParamModel scatter;
+BrushParamModel spacing;
+Modulation values table
+}
+
+SegmentEndpoint{
+vec2 worldpos;
+float phaseShift;
+int16 randomseed
+int16 randomoffset; // sequence number number of last undrawn dab
+RootModulationTable; // values of root modulators
+}
+
+RawSegment{
+SegmentEndpoint A,B;
+vec2 worldCurveA, worldCurveB
+}
+
+DabPlacement{ // represents core segment dab-placement geometry
+int randomhash;
+int sequenceNum; // for random
+vec2 worldPos;
+float radius; // world units;
+float lerpValue; // 0-1 along the segment arc
+float worldAngle; // base angle default to rotation along the spline
+}
+
+// returned by the segment builder.
+DabbedSegment{
+DabPlacement[] dabs;
+EndpointBrush brushfrom, brushto;
+}	
+
+ISegmentDrawer{ // this will mask our throttled version, and the drawer itself.
+void Draw(DabbedSegment seg)
+}
+
+for replay and network purposes - assume that we track each user state in the stroke engine.
+users emit inputs and pass over network only RawSegments, and user state.
+										 
