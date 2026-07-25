@@ -1,33 +1,57 @@
 SavedInputPoint{
-worldx, worldy
-Modulator_values_table
+vec2 WorldPos;
+RootModulatedValues rootMods;
 }
 
 BrushParamModel{
-min, max, modulationtype, jitter
+min, max, modulationtype, jittervalue
+}
+
+BrushUserModelPacked{    // send over network, saved in replay between strokes.
+BrushParamModel radius,scatter, etc..
+float initialAngle;
+bool option1,option2..
+int texture_id
+}
+
+// network and replay packed data;
+SegmentEndpoint{
+vec2 worldpos;
+RootModulationTable rootMods; // values of root modulators
+// does not have brush model, because it is in the stroke
+// order of commads is:
+// set userbrushmodel
+// add segments to queue
+// on stroke end - collect entire stroke for storage.
+}
+
+
+// in theory self contained segment that is passable over network, needs user state to fully resolve brush model.
+PackedSegment{ 
+SegmentEndpoint A,B;
+vec2 worldCurveA, worldCurveB
+int16 tick.
+}
+struct SegmentDelta{  // generated as iterative information relying on previous segments.
+int firstDabSequenceNumber;
+float phaseShift;
+}
+
+
+// runtime and local data;
+struct StoredStroke{
+UserBrushModel startmodel;
+PackedSegment[] segments;
+int randomSeed;
+BrushUserModelPacked modelSnapshot;
 }
 
 EndpointBrush{
 // container with final values, modulation applied.
-// can contain some modulation options.
-initAngle,
 BrushParamModel radius;
 BrushParamModel scatter;
 BrushParamModel spacing;
 Modulation values table
-}
-
-SegmentEndpoint{
-vec2 worldpos;
-float phaseShift;
-int16 randomseed
-int16 randomoffset; // sequence number number of last undrawn dab
-RootModulationTable; // values of root modulators
-}
-
-RawSegment{
-SegmentEndpoint A,B;
-vec2 worldCurveA, worldCurveB
 }
 
 DabPlacement{ // represents core segment dab-placement geometry
@@ -45,10 +69,101 @@ DabPlacement[] dabs;
 EndpointBrush brushfrom, brushto;
 }	
 
+
+IInputSampler {
+    PackedSegment Estimate(vec2 pos, RootModulationTable rootMods, PackedSegment? previous);
+}
+
+IStrokeEngine {
+    void StartStroke(CurrentUserState, targetQuadId);
+    void AddInput(x, y, RootModulationTable);  // calls IInputSampler internally
+    void AddSegment(PackedSegment);  // adds from network. skipping input interpol
+	PackedSegment DequeueSegment();
+    SegmentDelta LastSegmentDelta;
+    int EarliestPendingTick;
+}
+
+PaintManager
+{
+has list of per-user stroke engines.
+handles inputs and ties all of the components together.
+receives inputs from local user, forwards them to network if needed.
+typical loop:{
+	Me.StrokeEngine.addinput
+	if(segDrawer.CanDraw){
+		for each stroke engine // find engine with smallest EarliestPendingTick, dequeue from it
+
+		var seg = strokeEngine.Dequeue
+		var segGeo = segmentBuilder.Build(seg)	
+		segDrawer.Draw(segGeo);
+		}
+		
+}
+
+// local singletones / engines independent of user state.
+
+ISegmentBuilder{
+bool HasSegmentAnyDabs(PackedSegment seg);
+void SetSegmentParams(PackedSegment &modified, const PackedSegment previous); // will set spline phase. and dab start.
+DabbedSegment BuildSegment(PackedSegment seg); // problem - need previous dabbed segment to build it.
+}
+
+
 ISegmentDrawer{ // this will mask our throttled version, and the drawer itself.
 void Draw(DabbedSegment seg)
+bool CanDraw();
 }
 
 for replay and network purposes - assume that we track each user state in the stroke engine.
-users emit inputs and pass over network only RawSegments, and user state.
+users emit inputs and pass over network only PackedSegments, and user state.
 										 
+										 
+										 
+										 
+										 
+										 
+										 
+										 Clade:
+										 Recommendation for Your Scenario
+The fix is small and structural.
+
+phaseShift and firstDabSequenceNumber don't belong in PackedSegment. They're builder continuity state, not segment identity.
+
+Restructure like this:
+Code Block
+PackedSegment {
+    SegmentEndpoint A, B;
+    vec2 worldCurveA, worldCurveB;
+    // NO phaseShift, NO firstDabSequenceNumber
+}
+
+SegmentContinuity {
+    float phaseShift;         // arc remainder from previous segment
+    int nextDabSequenceNumber;
+}
+ISegmentBuilder becomes:
+
+Code Block
+ISegmentBuilder {
+    // Pure function — no hidden state dependency
+    DabbedSegment BuildSegment(
+        PackedSegment seg,
+        SegmentContinuity continuity  // explicit, not derived by unpacking
+    );
+    
+    // Returns continuity for next segment — caller owns it
+    SegmentContinuity GetContinuity(DabbedSegment built);
+    
+    bool HasSegmentAnyDabs(PackedSegment seg, SegmentContinuity continuity);
+}
+IStrokeEngine owns and tracks SegmentContinuity internally per stroke. It's local runtime state, not packed/transmitted.
+
+Code Block
+IStrokeEngine {
+    void StartStroke(BrushUserModelPacked, targetQuadId);
+    void AddInput(x, y, rootModulatorValues);
+    PackedSegment DequeueSegment();  // clean — no continuity embedded
+    
+    // internal:
+    // SegmentContinuity currentContinuity — updated after each build
+}
