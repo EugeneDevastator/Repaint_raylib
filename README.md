@@ -11,7 +11,10 @@ Here are most recent working releases from the main.
 | Platform | Download |
 |----------|----------|
 | Windows-x64  | [repaint-windows.zip](https://github.com/EugeneDevastator/Repaint_raylib/releases/download/latest/repaint-windows.zip) |
+| Windows-x86 (32-bit) | [repaint-windows-32.zip](https://github.com/EugeneDevastator/Repaint_raylib/releases/download/latest/repaint-windows-32.zip) |
 | Linux    | [repaint-linux.zip](https://github.com/EugeneDevastator/Repaint_raylib/releases/download/latest/repaint-linux.zip) |
+| Linux-i686 (32-bit) | [repaint-linux-32.zip](https://github.com/EugeneDevastator/Repaint_raylib/releases/download/latest/repaint-linux-32.zip) |
+| macOS    | [repaint-mac-full.zip](https://github.com/EugeneDevastator/Repaint_raylib/releases/download/latest/repaint-mac-full.zip) |
 
 **Source code** is licensed under AGPL v3: 
 

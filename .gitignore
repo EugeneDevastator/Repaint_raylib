@@ -11,3 +11,6 @@ __pycache__/*
 /LCM/.thumb_cache
 /LCM/.thumb_cache/*
 /NNModelServer/models
+/dist/nnserver-windows/
+/NNModelServer/onnx/
+/repaint_pt/

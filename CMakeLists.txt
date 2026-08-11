@@ -6,6 +6,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-exceptions -fno-rtti")
 
+# C++ matting server uses prebuilt ONNX Runtime, which only ships for Windows
+# (x86/x64). Everywhere else the workflow bundles the Python-based server.
+option(BUILD_NNSERVER "Build the C++ ONNX Runtime matting server" ${WIN32})
+
 # ── dependencies ──────────────────────────────────────────────────────────────
 include(FetchContent)
 
@@ -153,6 +157,8 @@ if(WIN32)
     if(MINGW)
         target_link_options(repaint PRIVATE "-Wl,--allow-multiple-definition")
     endif()
+elseif(APPLE)
+    target_sources(repaint PRIVATE src/sensors/tablet_osx.cpp src/sensors/platform_utils_lnx.cpp src/sensors/clipboard_lnx.cpp)
 else()
     target_sources(repaint PRIVATE src/sensors/tablet_lnx.cpp src/sensors/platform_utils_lnx.cpp src/sensors/clipboard_lnx.cpp)
 endif()
@@ -186,6 +192,9 @@ if(WIN32)
     if(MINGW)
         target_link_options(tablet-calibrator PRIVATE "-Wl,--allow-multiple-definition")
     endif()
+elseif(APPLE)
+    target_sources(tablet-calibrator PRIVATE src/sensors/tablet_osx.cpp src/sensors/platform_utils_lnx.cpp)
+    target_link_libraries(tablet-calibrator PRIVATE m pthread)
 else()
     target_sources(tablet-calibrator PRIVATE src/sensors/tablet_lnx.cpp src/sensors/platform_utils_lnx.cpp)
     target_link_libraries(tablet-calibrator PRIVATE m pthread dl)
@@ -194,6 +203,7 @@ endif()
 target_link_libraries(tablet-calibrator PRIVATE raylib)
 
 # ── nnserver (standalone matting inference server) ─────────────────────────────
+if(BUILD_NNSERVER)
 set(NNSERVER_VERSION  "1.21.0" CACHE STRING "ONNX Runtime version")
 set(NNSERVER_SOURCES
     NNModelServer/nnserver.cpp
@@ -222,7 +232,11 @@ if(WIN32)
 
     if(NOT EXISTS "${ORT_INCLUDE_DIR}/onnxruntime_c_api.h")
         message(STATUS "Downloading ONNX Runtime ${NNSERVER_VERSION}...")
-        set(_ort_url "https://github.com/microsoft/onnxruntime/releases/download/v${NNSERVER_VERSION}/onnxruntime-win-x64-${NNSERVER_VERSION}.zip")
+        if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+            set(_ort_url "https://github.com/microsoft/onnxruntime/releases/download/v${NNSERVER_VERSION}/onnxruntime-win-x86-${NNSERVER_VERSION}.zip")
+        else()
+            set(_ort_url "https://github.com/microsoft/onnxruntime/releases/download/v${NNSERVER_VERSION}/onnxruntime-win-x64-${NNSERVER_VERSION}.zip")
+        endif()
         set(_ort_zip "${CMAKE_BINARY_DIR}/onnxruntime.zip")
         file(DOWNLOAD "${_ort_url}" "${_ort_zip}" SHOW_PROGRESS)
         file(ARCHIVE_EXTRACT INPUT "${_ort_zip}" DESTINATION "${ORT_ROOT}-tmp")
@@ -277,6 +291,7 @@ if(WIN32)
 else()
     target_link_libraries(nnserver PRIVATE pthread dl)
 endif()
+endif() # BUILD_NNSERVER
 
 # ── platform linking ──────────────────────────────────────────────────────────
 if(UNIX AND NOT APPLE)
