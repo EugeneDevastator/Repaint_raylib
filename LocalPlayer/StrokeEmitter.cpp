@@ -51,7 +51,6 @@ void StrokeEmitter::handleBegin(const InputEntry& e) {
                      e.x * m[3] + e.y * m[4] + m[5]};
     m_lastDabPos = start;
     m_lastDabRad = 0;
-    m_phase = 0.0f;
     m_prevSegPos = start;
     m_prevSegDir = Vector2{0, 0};
     m_prevSegLen = 0;
@@ -187,25 +186,36 @@ void StrokeEmitter::emitSegment(Vector2 p1, Vector2 p2, Vector2 ctrl0, Vector2 c
     FillSliderMods(m_config, dseg.sliderMods);
 
     if (!m_emittedAny) dseg.isStrokeStart = 1;
+    if (m_emittedAny) dseg.brushFrom.rad_out_px = m_lastDabRad;
 
-    m_throttle->Push(dseg);
-
-    if (g_recorder) g_recorder->on_segment(dseg);
-    if (g_broker) g_broker->on_segment(dseg);
+    // Always push isStrokeStart segments so throttle resets properly
+    if (dseg.isStrokeStart) {
+        m_throttle->Push(dseg);
+        if (g_recorder) g_recorder->on_segment(dseg);
+    }
 
     SegResult segRes;
-    int dabCount = DrawLinear(dseg, 0, m_phase, nullptr, 65536, &segRes);
-    m_phase = segRes.endPhase;
-    m_lastDabPos = (dabCount > 0) ? segRes.lastDabPos : dseg.pos2;
-    m_lastDabRad = (dabCount > 0) ? segRes.lastRadOut : dseg.brush.rad_out_px;
-    if (dabCount > 0 && m_segDebugCount < DBG_SEG_PTS / 2) {
-        m_segFirstDab[m_segDebugCount] = segRes.firstDabPos;
-        m_segLastDab[m_segDebugCount]  = m_lastDabPos;
-        m_segEndpoints[m_segDebugCount * 2] = dseg.pos1;
-        m_segEndpoints[m_segDebugCount * 2 + 1] = dseg.pos2;
-        m_segCtrl0[m_segDebugCount] = dseg.ctrl0;
-        m_segCtrl3[m_segDebugCount] = dseg.ctrl3;
-        m_segHadDab[m_segDebugCount] = true;
+    int dabCount = DrawLinear(dseg, 0, 0.0f, nullptr, 65536, &segRes);
+    if (dabCount > 0) {
+        m_lastDabPos = segRes.lastDabPos;
+        m_lastDabRad = segRes.lastRadOut;
+
+        // Don't double-push isStrokeStart
+        if (!dseg.isStrokeStart) {
+            m_throttle->Push(dseg);
+            if (g_recorder) g_recorder->on_segment(dseg);
+        }
+        if (g_broker) g_broker->on_segment(dseg);
+        printf("[SEG] dabs=%d\n", dabCount);
+
+        int di = m_segDebugCount % 50;
+        m_segFirstDab[di] = segRes.firstDabPos;
+        m_segLastDab[di]  = m_lastDabPos;
+        m_segEndpoints[di * 2] = dseg.pos1;
+        m_segEndpoints[di * 2 + 1] = dseg.pos2;
+        m_segCtrl0[di] = dseg.ctrl0;
+        m_segCtrl3[di] = dseg.ctrl3;
+        m_segHadDab[di] = true;
         m_segDebugCount++;
     }
     if (g_pixelPerfect) {
@@ -230,46 +240,29 @@ void StrokeEmitter::handlePoint(const InputEntry& e) {
     ModulatorTable mt2; Modulator_GetTable(&mt2);
     ModulatedBrushConfig modNow = ResolveModulatedConfig(m_config, m_toolMode, m_initAngle, &mt2);
 
-    // ── Dab-count threshold: emit segment when we have enough room ──
-    float estSpacing = modNow.radOut * 2.0f * modNow.spacing;
-    if (estSpacing < 1.0f) estSpacing = 1.0f;
-    int minDabs = (g_strokeThrottle > 0.0f) ? (int)g_strokeThrottle : 1;
-    if (minDabs < 1) minDabs = 1;
-    float threshold = estSpacing * (float)minDabs;
-    float maxLen   = threshold * 2.0f;
+    // ── Throttle: pixel distance before emitting a new segment ──
+    float step = fmaxf(g_strokeThrottle, 1.0f);
 
     if (g_strokeSmoothingMode == SMOOTH_MODE_LINEAR) {
-        // ── LINEAR mode: emit single straight segment ───────────────
         float lineLen = Dist2D(m_lastDabPos, pos);
-        if (lineLen < threshold) return;
+        if (lineLen < step) return;
+        float hLen = lineLen * 0.33f;
         Vector2 dir = {pos.x - m_lastDabPos.x, pos.y - m_lastDabPos.y};
         if (lineLen > 0.001f) { dir.x /= lineLen; dir.y /= lineLen; }
-        if (lineLen > maxLen) {
-            pos.x = m_lastDabPos.x + dir.x * maxLen;
-            pos.y = m_lastDabPos.y + dir.y * maxLen;
-            lineLen = maxLen;
-        }
-        float hLen = lineLen * 0.33f;
         Vector2 c0 = {m_lastDabPos.x + dir.x * hLen, m_lastDabPos.y + dir.y * hLen};
         Vector2 c3 = {pos.x - dir.x * hLen, pos.y - dir.y * hLen};
         emitSegment(m_lastDabPos, pos, c0, c3, m_brushFrom, m_initAngle, m_toolMode, m_modulated);
         return;
     }
 
-    // ── SMOOTH mode: accumulate spline points, emit Catmull-Rom segments ──
-    float dist = Dist2D(m_splinePts[m_splineCount - 1], pos);
-    if (dist >= threshold) {
-        Vector2 dir2 = {pos.x - m_splinePts[m_splineCount - 1].x,
-                        pos.y - m_splinePts[m_splineCount - 1].y};
-        if (dist > 0.001f) { dir2.x /= dist; dir2.y /= dist; }
-        float remaining = dist;
-        Vector2 cur = m_splinePts[m_splineCount - 1];
-        while (remaining >= threshold && m_splineCount < 256) {
-            float step = (remaining > maxLen) ? maxLen : remaining;
-            cur.x += dir2.x * step;
-            cur.y += dir2.y * step;
-            m_splinePts[m_splineCount++] = cur;
-            remaining -= step;
+    // ── SMOOTH mode: accumulate spline points ──
+    if (Dist2D(m_splinePts[m_splineCount - 1], pos) >= step) {
+        if (m_splineCount < 256)
+            m_splinePts[m_splineCount++] = pos;
+        else {
+            memmove(m_splinePts, m_splinePts + 1, sizeof(Vector2) * 255);
+            m_splinePts[255] = pos;
+            if (m_processedCount > 0) m_processedCount--;
         }
     }
 

@@ -1,0 +1,158 @@
+## The Single Answer: SDL2 + WebGPU (via wgpu-native or Dawn)
+
+---
+
+### Why This Stack
+
+SDL3 for window + lifecycle, raw input per platform.
+
+Reason	Detail
+Android	SDL3 handles Activity, surface lifecycle, JNI — this is genuinely hard to do yourself
+Window creation	Solved problem, no reason to own it
+WebGPU surface	SDL3 has SDL_GetWindowWGPUSurface in progress; for now HWND/NSWindow extraction works same as SDL2
+Wacom	You're writing this per-platform no matter what
+Raw input	You're writing this per-platform no matter what
+The architecture becomes:
+
+Code Block
+SDL3                    — window, lifecycle, Android glue
+WebGPU (wgpu-native)    — rendering, all platforms
+Per-platform raw input  — WM_INPUT / evdev / IOHIDManager / Android InputEvent
+Per-platform tablet     — Wintab or WM_POINTER / XInput2 / IOKit / Android Stylus API
+SDL sits at the bottom doing exactly one job it's genuinely good at. Everything above it is yours.
+
+WebGPU gives you:
+- Runs on Vulkan (Linux, Android), Metal (iOS), DX12 (Windows) — one API, driver handles translation
+- Runs on old hardware via Vulkan compatibility layers (MoltenVK on older iOS, ANGLE on old Android)
+- Shader language (WGSL) compiles to SPIR-V / MSL / HLSL — write once
+- Command buffer model is correct for your heavy shader painting — encode on any cadence, submit when ready
+- No context fragility
+
+---
+
+### vs. Your Current Raylib Single-Thread Model
+
+| | Raylib (current) | SDL2 + WebGPU |
+|---|---|---|
+| Input rate | Frame-locked | Hardware rate, timestamped |
+| Tablet | You fight Raylib | SDL2 stays out of your way |
+| Shader painting | OpenGL, single context | Command buffers, explicit submission |
+| Cross-platform | Good | Better on mobile/old hardware |
+| Old hardware | OpenGL 3.3 floor | Vulkan compat layers go lower |
+| Dev cost | Low | Medium — WebGPU API is verbose |
+| Thread model | Single thread, fine | Single thread still fine, multithreading available when you need it |
+
+The honest cost: WebGPU is more code than Raylib. You lose Raylib's convenience wrappers. You gain control over every submission, which is exactly what heavy shader painting needs.
+
+---
+
+### The Migration Path
+
+Keep your tablet header — it plugs into SDL2 cleanly.  
+Replace Raylib's render loop with WebGPU command encoding.  
+SDL2 event loop replaces `PollInputEvents()`.
+
+Your existing queue pipeline architecture maps directly onto WebGPU's submission model — you were already thinking in the right shape.
+
+
+
+GitHub Actions Build Matrix
+yaml
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: macos-latest
+            target: aarch64-apple-darwin   # Apple Silicon
+          - os: macos-latest
+            target: x86_64-apple-darwin    # Intel Mac
+    
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: cmake --build . --config Release
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-${{ matrix.target }}
+          path: build/your_app*
+iOS and Android need separate workflows — Xcode for iOS, NDK for Android. They don't build on the same runners as desktop.
+
+
+# Inputs
+
+## High-Rate Input by Platform
+
+### Windows (what you just built)
+- **`WM_INPUT` / Raw Input API** — what you're using. Gets every hardware report at full rate (125–8000Hz mouse, 133–200Hz typical tablet)
+- **DirectInput** — older, still works, similar rate
+- **Windows Ink / Pointer API (`WM_POINTER`)** — for tablets specifically, gives pressure/tilt/stylus ID at full digitizer rate (~200Hz Wacom, up to 1000Hz on some hardware)
+
+---
+
+### Linux
+- **`/dev/input/eventX` directly** — read raw kernel events, no compositor in the way. Full hardware rate. `libevdev` wraps this cleanly
+- **X11 `XInput2`** — `XISelectEvents` with `XI_RawMotion` — bypasses window focus/coalescing, gets raw deltas at hardware rate
+- **Wayland `zwp_relative_pointer_v1`** — protocol extension for raw relative motion, compositor still mediates but at hardware rate if compositor cooperates
+- **Tablet specifically: `libwacom` + `XInput2` or evdev** — Wacom/tablet devices expose pressure, tilt, tool type through `XInput2` valuators or directly via evdev
+
+---
+
+### macOS
+- **`NSEvent` with `addLocalMonitorForEvents`** — coalesced, not full rate
+- **`IOHIDManager` / IOKit** — the real answer. Direct HID device access, full hardware rate, no coalescing. Works for mouse and tablets
+- **`CGEventTap`** — system-wide event tap, better than NSEvent but still goes through CoreGraphics event stream which can coalesce
+- **Tablet: `NSEvent` has pressure/tilt built in** — but rate is limited by event delivery. For full Wacom rate you need IOKit or the Wacom SDK
+
+---
+
+### Summary Table
+
+| OS | Best API | Rate | Notes |
+|---|---|---|---|
+| Windows | `WM_INPUT` | full HW | what you have |
+| Windows tablet | `WM_POINTER` | full HW | pressure/tilt/stylus |
+| Linux | `libevdev` / evdev direct | full HW | most reliable |
+| Linux X11 | `XInput2 XI_RawMotion` | full HW | no evdev access needed |
+| Linux Wayland | `zwp_relative_pointer_v1` | compositor-limited | still usually full rate |
+| macOS | `IOHIDManager` | full HW | most complex API |
+| macOS tablet | IOKit or Wacom SDK | full HW | NSEvent not enough |
+
+---
+
+### Cross-Platform Libraries That Handle This
+
+- **SDL3** (not SDL2) — `SDL_GetMouseState` + high-res events improved, but still not raw on all platforms
+- **GLFW** — same limitation as SDL2, coalesces
+- **`libinput`** — Linux only, sits above evdev, good tablet support
+- **Wacom's own SDK** — Windows/Mac, gives you everything the driver knows
+
+---
+
+### The Pattern Is Always The Same
+
+Every platform has a "polite" event API (SDL, NSEvent, X11 basic) that coalesces, and a "raw" API one layer below that doesn't. For anything requiring actual input fidelity — drawing apps, games, research — you always need the raw layer. The polite APIs are for UI.
+
+
+SDL3 for window + lifecycle, raw input per platform.
+
+Reason	Detail
+Android	SDL3 handles Activity, surface lifecycle, JNI — this is genuinely hard to do yourself
+Window creation	Solved problem, no reason to own it
+WebGPU surface	SDL3 has SDL_GetWindowWGPUSurface in progress; for now HWND/NSWindow extraction works same as SDL2
+Wacom	You're writing this per-platform no matter what
+Raw input	You're writing this per-platform no matter what
+The architecture becomes:
+
+Code Block
+SDL3                    — window, lifecycle, Android glue
+WebGPU (wgpu-native)    — rendering, all platforms
+Per-platform raw input  — WM_INPUT / evdev / IOHIDManager / Android InputEvent
+Per-platform tablet     — Wintab or WM_POINTER / XInput2 / IOKit / Android Stylus API
+SDL sits at the bottom doing exactly one job it's genuinely good at. Everything above it is yours.
