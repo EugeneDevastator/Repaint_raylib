@@ -4,6 +4,7 @@
 #include "stroke_engine.h"
 #include "input_modulator.h"
 #include <math.h>
+#include <stdlib.h>
 #include <string.h>
 
 int g_strokeSmoothingMode = SMOOTH_MODE_SMOOTH;
