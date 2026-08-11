@@ -1,6 +1,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 
 #include "brush_draw.h"
 #include "RaylibUtils.h"
