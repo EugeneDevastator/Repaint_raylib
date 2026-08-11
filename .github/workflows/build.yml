@@ -71,10 +71,105 @@ jobs:
         with:
           name: app-windows
           path: repaint-windows.zip
+
+  app-windows-32:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW32
+          install: mingw-w64-i686-gcc mingw-w64-i686-cmake mingw-w64-i686-make zip
+
+      - name: Configure
+        shell: msys2 {0}
+        run: cmake --preset win32-release -DCMAKE_MAKE_PROGRAM=mingw32-make
+
+      - name: Build
+        shell: msys2 {0}
+        run: cmake --build build/win32-release --target repaint --parallel
+
+      - name: Package
+        shell: msys2 {0}
+        run: |
+          mkdir -p dist/repaint-windows-32
+          cp build/win32-release/bin/repaint.exe dist/repaint-windows-32/
+          cp "$MINGW_PREFIX/bin/libwinpthread-1.dll"  dist/repaint-windows-32/
+          cp "$MINGW_PREFIX/bin/libgcc_s_dw2-1.dll"   dist/repaint-windows-32/
+          cp "$MINGW_PREFIX/bin/libstdc++-6.dll"       dist/repaint-windows-32/
+          cp -r shaders   dist/repaint-windows-32/ 2>/dev/null || true
+          cp -r resources dist/repaint-windows-32/ 2>/dev/null || true
+          cd dist && zip -r ../repaint-windows-32.zip repaint-windows-32
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-windows-32
+          path: repaint-windows-32.zip
+
+  app-linux-32:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build in i386 container
+        run: |
+          docker run --platform linux/386 --rm \
+            -v "$PWD":/src -w /src i386/ubuntu:22.04 bash -c "
+              set -e
+              apt-get update
+              apt-get install -y build-essential cmake pkg-config zip \
+                libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev \
+                libxi-dev libxrender-dev libxfixes-dev libxext-dev \
+                libgl1-mesa-dev
+              cmake -B build/linux32 -DCMAKE_BUILD_TYPE=Release
+              cmake --build build/linux32 --target repaint --parallel
+            "
+
+      - name: Package
+        run: |
+          mkdir -p dist/repaint-linux-32
+          cp build/linux32/bin/repaint dist/repaint-linux-32/
+          cp -r shaders dist/repaint-linux-32/ 2>/dev/null || true
+          cp -r resources dist/repaint-linux-32/ 2>/dev/null || true
+          cd dist && zip -r ../repaint-linux-32.zip repaint-linux-32
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-linux-32
+          path: repaint-linux-32.zip
+
+  app-mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake --preset mac-release
+
+      - name: Build
+        run: cmake --build build/mac-release --target repaint --parallel
+
+      - name: Package
+        run: |
+          mkdir -p dist/repaint-mac
+          cp build/mac-release/bin/repaint dist/repaint-mac/
+          cp -r shaders dist/repaint-mac/ 2>/dev/null || true
+          cp -r resources dist/repaint-mac/ 2>/dev/null || true
+          cd dist && zip -r ../repaint-mac.zip repaint-mac
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-mac
+          path: repaint-mac.zip
+
   release:
     needs:
       - app-linux
       - app-windows
+      - app-windows-32
+      - app-linux-32
+      - app-mac
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
@@ -86,6 +181,15 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: app-windows
+      - uses: actions/download-artifact@v4
+        with:
+          name: app-windows-32
+      - uses: actions/download-artifact@v4
+        with:
+          name: app-linux-32
+      - uses: actions/download-artifact@v4
+        with:
+          name: app-mac
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
@@ -96,3 +200,6 @@ jobs:
           files: |
             repaint-linux.zip
             repaint-windows.zip
+            repaint-windows-32.zip
+            repaint-linux-32.zip
+            repaint-mac.zip
